@@ -48,13 +48,31 @@ fn recalculateAndReschedule(
             }
             return;
         },
+        .wire => |*wire| {
+            // Wire relays the first non-null input to the output
+            // If multiple inputs are connected, the wire takes the first defined state
+            for (wire.inputs.items) |maybe_input_component| {
+                if (maybe_input_component) |input_comp| {
+                    if (input_comp.output_state != .undefined) {
+                        calculated_state = input_comp.output_state;
+                        break;
+                    }
+                }
+            }
+        },
         .input_pin_gate => return,
     }
 
     if (component.output_state != calculated_state) {
         log.info(" - Component (id={d}, type={s}) output changed from {s} -> {s}. Scheduling new event.", .{ component.id, @tagName(component.kind), @tagName(component.output_state), @tagName(calculated_state) });
+
+        const delay = switch (component.kind) {
+            .wire => WIRE_PROPAGATION_DELAY,
+            else => PROPAGATION_DELAY,
+        };
+
         try queue.add(.{
-            .timestamp = current_time + PROPAGATION_DELAY,
+            .timestamp = current_time + delay,
             .component = component,
             .new_state = calculated_state,
         });
@@ -87,7 +105,7 @@ pub const Event = struct {
     }
 };
 
-pub const ComponentType = enum { input_pin_gate, not_gate, led, and_gate };
+pub const ComponentType = enum { input_pin_gate, not_gate, led, and_gate, wire };
 
 pub const Component = struct {
     id: u32,
@@ -100,6 +118,7 @@ pub const Component = struct {
         not_gate: struct { inputs: [1]?*Component = .{null} },
         led: struct { inputs: [1]?*Component = .{null}, state: State = .undefined },
         and_gate: struct { inputs: [2]?*Component = .{ null, null } },
+        wire: struct { inputs: std.ArrayList(?*Component) },
     };
 
     pub fn init(id: u32, kind: Kind) !*Component {
@@ -108,18 +127,19 @@ pub const Component = struct {
         var outputs = try std.ArrayList(std.ArrayList(*Component)).initCapacity(memory.allocator, 1);
 
         switch (kind) {
-            .input_pin_gate, .not_gate, .and_gate => {
+            .input_pin_gate, .not_gate, .and_gate, .wire => {
                 try outputs.append(memory.allocator, try std.ArrayList(*Component).initCapacity(memory.allocator, 0));
             },
-            .led => {
-                // LEDs have no outputs, so we don't add anything
-            },
+            .led => {},
         }
 
         self.* = .{ .id = id, .output_state = .undefined, .kind = kind, .outputs = outputs };
 
         switch (self.kind) {
             .and_gate => |*gate| gate.inputs = .{ null, null },
+            .wire => |*wire| {
+                wire.inputs = .{};
+            },
             else => {},
         }
 
@@ -132,6 +152,14 @@ pub const Component = struct {
         }
 
         self.outputs.deinit(memory.allocator);
+
+        switch (self.kind) {
+            .wire => |*wire| {
+                wire.inputs.deinit(memory.allocator);
+            },
+            else => {},
+        }
+
         memory.allocator.destroy(self);
     }
 };
@@ -161,6 +189,7 @@ pub fn assertValidInputPin(component: *Component, pin: u32) !void {
         .not_gate => |gate| gate.inputs.len,
         .and_gate => |gate| gate.inputs.len,
         .led => |led| led.inputs.len,
+        .wire => |wire| wire.inputs.items.len,
         .input_pin_gate => 0,
     };
     if (pin >= inputs_len) return error.InvalidInputPin;
@@ -218,6 +247,12 @@ pub const Circuit = struct {
             .and_gate => |*gate| {
                 try assertValidInputPin(to, to_pin);
                 gate.inputs[to_pin] = from;
+            },
+            .wire => |*wire| {
+                while (wire.inputs.items.len <= to_pin) {
+                    try wire.inputs.append(memory.allocator, null);
+                }
+                wire.inputs.items[to_pin] = from;
             },
             .input_pin_gate => return error.InvalidConnection,
         }
