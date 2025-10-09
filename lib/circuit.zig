@@ -231,13 +231,13 @@ pub const Circuit = struct {
     event_queue: EventQueue,
     next_id: u32 = 0,
     current_time: Timestamp = 0,
-    listener: *const fn (component: *Component, new_state: State) void = undefined,
+    listener: ?*const fn (component: *Component, new_state: State) void = null,
 
     pub fn init() !Circuit {
         return .{
             .nodes = try std.ArrayList(*Component).initCapacity(memory.allocator, 0),
             .event_queue = EventQueue.init(),
-            .listener = undefined,
+            .listener = null,
         };
     }
 
@@ -250,7 +250,9 @@ pub const Circuit = struct {
     }
 
     pub fn notifyStateChange(self: *Circuit, component: *Component, new_state: State) void {
-        self.listener(component, new_state);
+        if (self.listener) |listener| {
+            listener(component, new_state);
+        }
     }
 
     pub fn createComponent(self: *Circuit, kind: Component.Kind) !*Component {

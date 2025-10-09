@@ -1,6 +1,7 @@
 const std = @import("std");
 const transport = @import("transport.zig");
 const memory = @import("memory.zig");
+const log = @import("log.zig");
 
 const Circuit = @import("circuit.zig").Circuit;
 const State = @import("circuit.zig").State;
@@ -15,13 +16,10 @@ var next_component_id: i32 = 1;
 export var state_snapshot: *[]u8 = undefined;
 export var state_snapshot_len: usize = 0;
 
-extern fn onStateChange(component: i32, state: i32) void;
+extern fn onStateChange() void;
 
-fn notifyStateChange(_: *Component, new_state: State) void {
-    // const component_id = components_hash_map.get(component.id);
-    // if (component_id == null) return;
-
-    onStateChange(0, State.toInt(new_state));
+fn notifyStateChange(_: *Component, _: State) void {
+    onStateChange();
 }
 
 export fn init() void {
@@ -136,4 +134,8 @@ export fn getComponentState(component_id: i32) i32 {
 
     const state = component.?.output_state;
     return State.toInt(state);
+}
+
+export fn freeLogMessage(ptr: *const u8, len: usize) void {
+    log.clearLogPointer(ptr, len);
 }

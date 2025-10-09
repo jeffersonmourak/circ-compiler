@@ -22,6 +22,7 @@ export type CircRenderWasmExports = {
     propagateEvent: (component: number, state: State) => void;
     getComponentState: (component: number) => State;
     memory: WebAssembly.Memory;
+    freeLogMessage: (ptr: number, len: number) => void;
 }
 
 export type CircRenderWasm<Exports> = WebAssembly.Instance & {
@@ -40,8 +41,33 @@ export async function initializeWasm(wasmPath: string): Promise<CircRenderer> {
 
         const { instance } = await WebAssembly.instantiate(wasmBuffer, {
             env: {
-                onStateChange: (component: number, state: number) => {
+                onStateChange: () => {
                     circRenderer.refreshState();
+                },
+                debugEnabled: () => true,
+                onDebugLog: (msgPointer: number, msgLen: number, logType: number) => {
+
+                    const { exports } = instance as CircRenderWasm<CircRenderWasmExports>;
+
+                    const msgBytes = exports.memory.buffer.slice(msgPointer, msgPointer + msgLen);
+                    const msg = new TextDecoder().decode(msgBytes);
+
+                    switch (logType) {
+                        case 0:
+                            console.log(msg);
+                            break;
+                        case 1:
+                            console.info(msg);
+                            break;
+                        case 2:
+                            console.warn(msg);
+                            break;
+                        case 3:
+                            console.error(msg);
+                            break;
+                    }
+
+                    exports.freeLogMessage(msgPointer, msgLen);
                 }
             }
         });
@@ -57,9 +83,7 @@ export async function initializeWasm(wasmPath: string): Promise<CircRenderer> {
 
 export class CircRenderer {
     private wasmInstance: CircRenderWasm<CircRenderWasmExports>;
-
     private nodes: Map<number, ComponentKind> = new Map();
-
     private states: Map<number, State> = new Map();
 
     constructor(wasmInstance: CircRenderWasm<CircRenderWasmExports>) {
