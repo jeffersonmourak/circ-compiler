@@ -2,7 +2,7 @@ const std = @import("std");
 const memory = @import("memory.zig");
 const transport = @import("transport.zig");
 
-const log = std.log.scoped(.log);
+const log = @import("log.zig");
 
 const PROPAGATION_DELAY: Timestamp = 5;
 const WIRE_PROPAGATION_DELAY: Timestamp = 1;
@@ -91,6 +91,20 @@ pub const State = enum {
             else => undefined,
         };
     }
+
+    pub fn fromInt(int: i32) State {
+        if (int == 0) return .low;
+        if (int == 1) return .high;
+        return .undefined;
+    }
+
+    pub fn toInt(self: State) i32 {
+        return switch (self) {
+            .low => 0,
+            .high => 1,
+            else => 2,
+        };
+    }
 };
 
 pub const Timestamp = u64;
@@ -106,6 +120,17 @@ pub const Event = struct {
 };
 
 pub const ComponentType = enum { input_pin_gate, not_gate, led, and_gate, wire };
+
+pub fn toKind(kind: u8) !Component.Kind {
+    return switch (kind) {
+        0 => .input_pin_gate,
+        1 => .not_gate,
+        2 => .led,
+        3 => .and_gate,
+        4 => .wire,
+        else => return error.InvalidComponentKind,
+    };
+}
 
 pub const Component = struct {
     id: u32,
@@ -206,11 +231,13 @@ pub const Circuit = struct {
     event_queue: EventQueue,
     next_id: u32 = 0,
     current_time: Timestamp = 0,
+    listener: *const fn (component: *Component, new_state: State) void = undefined,
 
     pub fn init() !Circuit {
         return .{
             .nodes = try std.ArrayList(*Component).initCapacity(memory.allocator, 0),
             .event_queue = EventQueue.init(),
+            .listener = undefined,
         };
     }
 
@@ -220,6 +247,10 @@ pub const Circuit = struct {
         }
         self.nodes.deinit(memory.allocator);
         self.event_queue.deinit();
+    }
+
+    pub fn notifyStateChange(self: *Circuit, component: *Component, new_state: State) void {
+        self.listener(component, new_state);
     }
 
     pub fn createComponent(self: *Circuit, kind: Component.Kind) !*Component {
@@ -272,6 +303,8 @@ pub const Circuit = struct {
                 for (output_list.items) |output| {
                     log.info("  -> Notifying downstream component id={d}", .{output.id});
                     try recalculateAndReschedule(output, &self.event_queue, self.current_time);
+
+                    self.notifyStateChange(output, output.output_state);
                 }
             }
         }

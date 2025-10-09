@@ -22,6 +22,9 @@ pub fn build(b: *std.Build) void {
         .optimize = .ReleaseSmall,
     });
 
+    // Set export symbols for WASM
+    wasm_mod.export_symbol_names = &.{ "init", "deinit", "createComponent", "connect", "propagateEvent", "propagate", "getComponentState" };
+
     const wasm_lib = b.addExecutable(.{
         .name = "circ-renderer-lib-wasm",
         .root_module = wasm_mod,

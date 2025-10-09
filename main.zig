@@ -8,7 +8,7 @@ const Component = @import("lib/circuit.zig").Component;
 const log = std.log.scoped(.log);
 
 pub fn main() !void {
-    defer _ = memory.gpa.deinit();
+    defer memory.deinit();
 
     var circuit = try Circuit.init();
     defer circuit.deinit();
