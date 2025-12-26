@@ -114,7 +114,7 @@ fn wasmLog(comptime _: @Type(.enum_literal)) type {
     };
 }
 
-pub const log = if (true or is_wasm)
+pub const log = if (is_wasm)
     wasmLog(.log)
 else
     std.log.scoped(.log);

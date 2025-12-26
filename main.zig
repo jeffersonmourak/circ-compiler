@@ -15,18 +15,18 @@ pub fn main() !void {
 
     const input1 = try circuit.createComponent(.{ .input_pin_gate = .{} });
     const input2 = try circuit.createComponent(.{ .input_pin_gate = .{} });
-    const and1 = try circuit.createComponent(.{ .and_gate = .{ .inputs = .{ null, null } } });
-    const wire1 = try circuit.createComponent(.{ .wire = .{ .inputs = .{} } });
-    const wire2 = try circuit.createComponent(.{ .wire = .{ .inputs = .{} } });
+    const and1 = try circuit.createComponent(.{ .and_gate = .{} });
+    const wire1 = try circuit.createComponent(.{ .wire = .{} });
+    const wire2 = try circuit.createComponent(.{ .wire = .{} });
     const led1 = try circuit.createComponent(.{ .led = .{} });
     const led2 = try circuit.createComponent(.{ .led = .{} });
 
-    try circuit.connect(input1, 0, and1, 0);
-    try circuit.connect(input2, 0, and1, 1);
-    try circuit.connect(and1, 0, wire1, 0);
-    try circuit.connect(wire1, 0, led1, 0);
-    try circuit.connect(wire1, 0, wire2, 0);
-    try circuit.connect(wire2, 0, led2, 0);
+    try circuit.connect(input1.port("out"), and1.port("a"));
+    try circuit.connect(input2.port("out"), and1.port("b"));
+    try circuit.connect(and1.port("out"), wire1.port("in"));
+    try circuit.connect(wire1.port("out"), led1.port("in"));
+    try circuit.connect(wire1.port("out"), wire2.port("in"));
+    try circuit.connect(wire2.port("out"), led2.port("in"));
 
     log.info("Circuit: (InputA, InputB) -> AND -> WIRE -> LED", .{});
     log.info("Initial LED state: {s}\n", .{@tagName(led1.output_state)});

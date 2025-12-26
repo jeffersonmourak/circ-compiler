@@ -74,13 +74,13 @@ export fn createComponent(kind_int: u8) i32 {
             };
         },
         3 => {
-            component = circuit.createComponent(.{ .and_gate = .{ .inputs = .{ null, null } } }) catch {
+            component = circuit.createComponent(.{ .and_gate = .{} }) catch {
                 memory.allocator.destroy(component);
                 return -1;
             };
         },
         4 => {
-            component = circuit.createComponent(.{ .wire = .{ .inputs = .{} } }) catch {
+            component = circuit.createComponent(.{ .wire = .{} }) catch {
                 memory.allocator.destroy(component);
                 return -1;
             };
@@ -100,15 +100,15 @@ export fn createComponent(kind_int: u8) i32 {
     return next_component_id - 1;
 }
 
-export fn connect(component1_id: i32, pin1: u32, component2_id: i32, pin2: u32) void {
+export fn connect(component1_id: i32, component2_id: i32) void {
     const component1 = components_hash_map.get(component1_id);
     const component2 = components_hash_map.get(component2_id);
 
     if (component1 == null or component2 == null) return;
 
-    circuit.connect(component1.?, pin1, component2.?, pin2) catch {
-        return;
-    };
+    // circuit.connect(component1.?, pin1, component2.?, pin2) catch {
+    //     return;
+    // };
 }
 
 export fn propagateEvent(component_id: i32, state_int: i32) void {

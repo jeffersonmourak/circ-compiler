@@ -7,6 +7,21 @@ const log = @import("log.zig");
 const PROPAGATION_DELAY: Timestamp = 5;
 const WIRE_PROPAGATION_DELAY: Timestamp = 1;
 
+const IN_PORT_NAME = "in";
+const OUT_PORT_NAME = "out";
+
+fn calculateDominantState(input_comp_list: std.ArrayList(*Component)) State {
+    var dominant_state: State = .undefined;
+    for (input_comp_list.items) |input_comp| {
+        if (input_comp.output_state == .high) {
+            return .high;
+        }
+
+        dominant_state = input_comp.output_state;
+    }
+    return dominant_state;
+}
+
 fn recalculateAndReschedule(
     component: *Component,
     queue: *EventQueue,
@@ -16,47 +31,46 @@ fn recalculateAndReschedule(
 
     switch (component.kind) {
         .not_gate => |gate| {
-            if (gate.inputs[0]) |input_comp| {
-                calculated_state = input_comp.output_state.flip();
+            if (gate.inputs.get(IN_PORT_NAME)) |input_comp_list| {
+                calculated_state = calculateDominantState(input_comp_list);
             }
         },
         .and_gate => |gate| {
-            var result: State = .high;
-            for (gate.inputs) |maybe_input_component| {
-                if (maybe_input_component) |input_comp| {
-                    if (input_comp.output_state == .low) {
-                        result = .low;
-                        break;
-                    }
-                    if (input_comp.output_state == .undefined) {
-                        result = .undefined;
-                    }
-                } else {
-                    result = .undefined;
-                    break;
-                }
+            const aPortComponents = gate.inputs.get("a") orelse return error.InvalidInputPort;
+
+            const bPortComponents = gate.inputs.get("b") orelse return error.InvalidInputPort;
+
+            const aValue = calculateDominantState(aPortComponents);
+            const bValue = calculateDominantState(bPortComponents);
+
+            if (aValue == .low or bValue == .low) {
+                calculated_state = .low;
+            } else {
+                calculated_state = .high;
             }
-            calculated_state = result;
         },
         .led => |*led_internals| {
-            if (led_internals.inputs[0]) |input_comp| {
-                const current_led_state = component.output_state;
-                if (current_led_state != input_comp.output_state) {
-                    component.output_state = input_comp.output_state;
-                    log.info("💡 LED (id={d}) state is now {s}", .{ component.id, @tagName(component.output_state) });
-                }
+            const inputPortComponents = led_internals.inputs.get(IN_PORT_NAME) orelse return error.InvalidInputPort;
+
+            const inputState = calculateDominantState(inputPortComponents);
+
+            const currentLedState = component.output_state;
+            if (currentLedState != inputState) {
+                component.output_state = inputState;
+                log.info("💡 LED (id={d}) state is now {s}", .{ component.id, @tagName(component.output_state) });
             }
             return;
         },
         .wire => |*wire| {
             // Wire relays the first non-null input to the output
             // If multiple inputs are connected, the wire takes the first defined state
-            for (wire.inputs.items) |maybe_input_component| {
-                if (maybe_input_component) |input_comp| {
-                    if (input_comp.output_state != .undefined) {
-                        calculated_state = input_comp.output_state;
-                        break;
-                    }
+
+            const inputs = wire.inputs.get(IN_PORT_NAME) orelse return error.InvalidInputPort;
+
+            for (inputs.items) |input_comp| {
+                if (input_comp.output_state != .undefined) {
+                    calculated_state = calculateDominantState(inputs);
+                    break;
                 }
             }
         },
@@ -132,38 +146,52 @@ pub fn toKind(kind: u8) !Component.Kind {
     };
 }
 
+pub const ComponentPortReference = struct { *Component, []const u8 };
+
 pub const Component = struct {
     id: u32,
     kind: Kind,
     output_state: State = .undefined,
-    outputs: std.ArrayList(std.ArrayList(*Component)),
+    outputs: std.StringHashMap(std.ArrayList(*Component)),
 
     const Kind = union(ComponentType) {
         input_pin_gate: struct { state: State = .undefined },
-        not_gate: struct { inputs: [1]?*Component = .{null} },
-        led: struct { inputs: [1]?*Component = .{null}, state: State = .undefined },
-        and_gate: struct { inputs: [2]?*Component = .{ null, null } },
-        wire: struct { inputs: std.ArrayList(?*Component) },
+        not_gate: struct { inputs: std.StringHashMap(std.ArrayList(*Component)) = std.StringHashMap(std.ArrayList(*Component)).init(memory.allocator) },
+        led: struct { inputs: std.StringHashMap(std.ArrayList(*Component)) = std.StringHashMap(std.ArrayList(*Component)).init(memory.allocator), state: State = .undefined },
+        and_gate: struct { inputs: std.StringHashMap(std.ArrayList(*Component)) = std.StringHashMap(std.ArrayList(*Component)).init(memory.allocator) },
+        wire: struct { inputs: std.StringHashMap(std.ArrayList(*Component)) = std.StringHashMap(std.ArrayList(*Component)).init(memory.allocator) },
     };
 
     pub fn init(id: u32, kind: Kind) !*Component {
         const self = try memory.allocator.create(Component);
 
-        var outputs = try std.ArrayList(std.ArrayList(*Component)).initCapacity(memory.allocator, 1);
+        var outputsMap: std.StringHashMap(std.ArrayList(*Component)) = std.StringHashMap(std.ArrayList(*Component)).init(memory.allocator);
 
         switch (kind) {
             .input_pin_gate, .not_gate, .and_gate, .wire => {
-                try outputs.append(memory.allocator, try std.ArrayList(*Component).initCapacity(memory.allocator, 0));
+                const result = try outputsMap.getOrPut("out");
+
+                if (!result.found_existing) {
+                    result.value_ptr.* = try std.ArrayList(*Component).initCapacity(memory.allocator, 0);
+                }
             },
             .led => {},
         }
 
-        self.* = .{ .id = id, .output_state = .undefined, .kind = kind, .outputs = outputs };
+        self.* = .{ .id = id, .output_state = .undefined, .kind = kind, .outputs = outputsMap };
 
         switch (self.kind) {
-            .and_gate => |*gate| gate.inputs = .{ null, null },
+            .and_gate => |*gate| {
+                gate.inputs = std.StringHashMap(std.ArrayList(*Component)).init(memory.allocator);
+            },
             .wire => |*wire| {
-                wire.inputs = .{};
+                wire.inputs = std.StringHashMap(std.ArrayList(*Component)).init(memory.allocator);
+            },
+            .not_gate => |*gate| {
+                gate.inputs = std.StringHashMap(std.ArrayList(*Component)).init(memory.allocator);
+            },
+            .led => |*led| {
+                led.inputs = std.StringHashMap(std.ArrayList(*Component)).init(memory.allocator);
             },
             else => {},
         }
@@ -172,20 +200,49 @@ pub const Component = struct {
     }
 
     pub fn deinit(self: *Component) void {
-        for (self.outputs.items) |*pin_connections| {
-            pin_connections.deinit(memory.allocator);
+        var outputsIterator = self.outputs.valueIterator();
+        while (outputsIterator.next()) |list| {
+            list.deinit(memory.allocator);
         }
-
-        self.outputs.deinit(memory.allocator);
+        self.outputs.deinit();
 
         switch (self.kind) {
             .wire => |*wire| {
-                wire.inputs.deinit(memory.allocator);
+                var wireInputsIterator = wire.inputs.valueIterator();
+                while (wireInputsIterator.next()) |list| {
+                    list.deinit(memory.allocator);
+                }
+                wire.inputs.deinit();
             },
-            else => {},
+            .not_gate => |*gate| {
+                var notGateInputsIterator = gate.inputs.valueIterator();
+                while (notGateInputsIterator.next()) |list| {
+                    list.deinit(memory.allocator);
+                }
+                gate.inputs.deinit();
+            },
+            .and_gate => |*gate| {
+                var andGateInputsIterator = gate.inputs.valueIterator();
+                while (andGateInputsIterator.next()) |list| {
+                    list.deinit(memory.allocator);
+                }
+                gate.inputs.deinit();
+            },
+            .led => |*led| {
+                var ledInputsIterator = led.inputs.valueIterator();
+                while (ledInputsIterator.next()) |list| {
+                    list.deinit(memory.allocator);
+                }
+                led.inputs.deinit();
+            },
+            .input_pin_gate => {},
         }
 
         memory.allocator.destroy(self);
+    }
+
+    pub fn port(self: *Component, portName: []const u8) ComponentPortReference {
+        return .{ self, portName };
     }
 };
 
@@ -220,10 +277,8 @@ pub fn assertValidInputPin(component: *Component, pin: u32) !void {
     if (pin >= inputs_len) return error.InvalidInputPin;
 }
 
-pub fn assertValidOutputPin(component: *Component, pin: u32) !void {
-    if (pin >= component.outputs.items.len) {
-        return error.InvalidOutputPin;
-    }
+pub fn assertValidOutputPin(component: *Component, portName: []const u8) !void {
+    _ = component.outputs.get(portName) orelse return error.InvalidOutputPort;
 }
 
 pub const Circuit = struct {
@@ -262,30 +317,49 @@ pub const Circuit = struct {
         return new_component;
     }
 
-    pub fn connect(self: *Circuit, from: *Component, from_pin: u32, to: *Component, to_pin: u32) !void {
+    pub fn connect(self: *Circuit, from: ComponentPortReference, to: ComponentPortReference) !void {
         _ = self;
 
-        try assertValidOutputPin(from, from_pin);
-        try from.outputs.items[from_pin].append(memory.allocator, to);
+        const fromComponent, const fromPort = from;
+        const toComponent, const toPort = to;
 
-        switch (to.kind) {
+        try assertValidOutputPin(fromComponent, fromPort);
+
+        const fromPortResult = try fromComponent.outputs.getOrPut(fromPort);
+        if (!fromPortResult.found_existing) {
+            return error.InvalidOutputPort;
+        }
+
+        try fromPortResult.value_ptr.*.append(memory.allocator, toComponent);
+
+        switch (toComponent.kind) {
             .not_gate => |*gate| {
-                try assertValidInputPin(to, to_pin);
-                gate.inputs[to_pin] = from;
+                const toPortResult = try gate.inputs.getOrPut(toPort);
+                if (!toPortResult.found_existing) {
+                    toPortResult.value_ptr.* = try std.ArrayList(*Component).initCapacity(memory.allocator, 0);
+                }
+                try toPortResult.value_ptr.*.append(memory.allocator, fromComponent);
             },
             .led => |*led| {
-                try assertValidInputPin(to, to_pin);
-                led.inputs[to_pin] = from;
+                const toPortResult = try led.inputs.getOrPut(toPort);
+                if (!toPortResult.found_existing) {
+                    toPortResult.value_ptr.* = try std.ArrayList(*Component).initCapacity(memory.allocator, 0);
+                }
+                try toPortResult.value_ptr.*.append(memory.allocator, fromComponent);
             },
             .and_gate => |*gate| {
-                try assertValidInputPin(to, to_pin);
-                gate.inputs[to_pin] = from;
+                const toPortResult = try gate.inputs.getOrPut(toPort);
+                if (!toPortResult.found_existing) {
+                    toPortResult.value_ptr.* = try std.ArrayList(*Component).initCapacity(memory.allocator, 0);
+                }
+                try toPortResult.value_ptr.*.append(memory.allocator, fromComponent);
             },
             .wire => |*wire| {
-                while (wire.inputs.items.len <= to_pin) {
-                    try wire.inputs.append(memory.allocator, null);
+                const toPortResult = try wire.inputs.getOrPut(toPort);
+                if (!toPortResult.found_existing) {
+                    toPortResult.value_ptr.* = try std.ArrayList(*Component).initCapacity(memory.allocator, 0);
                 }
-                wire.inputs.items[to_pin] = from;
+                try toPortResult.value_ptr.*.append(memory.allocator, fromComponent);
             },
             .input_pin_gate => return error.InvalidConnection,
         }
@@ -301,7 +375,8 @@ pub const Circuit = struct {
             log.info("[Time: {d}] Updating component id={d} to {s}", .{ self.current_time, component.id, @tagName(event.new_state) });
             component.output_state = event.new_state;
 
-            for (component.outputs.items) |output_list| {
+            var outputsIterator = component.outputs.valueIterator();
+            while (outputsIterator.next()) |output_list| {
                 for (output_list.items) |output| {
                     log.info("  -> Notifying downstream component id={d}", .{output.id});
                     try recalculateAndReschedule(output, &self.event_queue, self.current_time);
