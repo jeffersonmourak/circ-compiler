@@ -1,7 +1,12 @@
 // build.zig
 const std = @import("std");
 
+const GRAMMAR_FILE = "lib/grammar/proto-circ.peg";
+
 pub fn build(b: *std.Build) void {
+    //
+    // Build the application
+    //
     const target = b.standardTargetOptions(.{});
     const wasm_target = b.resolveTargetQuery(.{
         .cpu_arch = .wasm32,
@@ -10,8 +15,53 @@ pub fn build(b: *std.Build) void {
 
     const optimize = b.standardOptimizeOption(.{});
 
+    const parser_gen = b.step("parser:gen", "Generate C Parser");
+
+    const generate_parser_cmd = b.addSystemCommand(&.{
+        "langlang",
+        "-grammar",
+        GRAMMAR_FILE,
+        "-disable-capture-spaces",
+        "-output-language",
+        "c",
+        "-output-path",
+        "lib/parser.c",
+        "-c-header-path",
+        "lib/parser.h",
+    });
+
+    parser_gen.dependOn(&generate_parser_cmd.step);
+
+    const parser_lib = b.addLibrary(.{
+        .linkage = .static,
+        .name = "parser",
+        .root_module = b.createModule(.{
+            .root_source_file = null,
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+
+    parser_lib.addCSourceFile(.{
+        .file = b.path("lib/parser.c"),
+        .flags = &.{},
+    });
+
+    parser_lib.addIncludePath(b.path("."));
+    parser_lib.linkLibC();
+    // parser_lib.step.dependOn(&generate_parser_cmd.step);
+
+    //
+    // Build the application
+    //
     const exe_debug_mod = b.createModule(.{
         .root_source_file = b.path("main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const compiler_mod = b.createModule(.{
+        .root_source_file = b.path("lib/compiler.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -30,6 +80,12 @@ pub fn build(b: *std.Build) void {
         .root_module = wasm_mod,
     });
 
+    wasm_lib.addIncludePath(b.path("./lib"));
+    wasm_lib.addLibraryPath(b.path("./lib"));
+
+    // wasm_lib.linkSystemLibrary("parser");
+    // wasm_lib.linkLibC();
+
     wasm_lib.entry = .disabled;
     wasm_lib.rdynamic = false;
 
@@ -40,7 +96,45 @@ pub fn build(b: *std.Build) void {
         .root_module = exe_debug_mod,
     });
 
+    exe.addIncludePath(b.path("./lib"));
+
+    exe.linkLibrary(parser_lib);
+
+    exe.linkLibC();
+
     b.installArtifact(exe);
+
+    const compiler = b.addExecutable(.{
+        .name = "compiler",
+        .root_module = compiler_mod,
+    });
+
+    compiler.addIncludePath(b.path("./lib"));
+
+    compiler.linkLibrary(parser_lib);
+
+    compiler.linkLibC();
+
+    b.installArtifact(compiler);
+
+    const compiler_run_cmd = b.addRunArtifact(compiler);
+    compiler_run_cmd.step.dependOn(b.getInstallStep());
+
+    if (b.args) |args| {
+        compiler_run_cmd.addArgs(args);
+    }
+
+    const compiler_step = b.step("compiler", "Build the compiler");
+
+    const compiler_cmd = b.addRunArtifact(compiler);
+    compiler_cmd.step.dependOn(b.getInstallStep());
+
+    // compiler_step.dependOn(&generate_parser_cmd.step);
+    compiler_step.dependOn(&compiler_cmd.step);
+
+    const compiler_run_step = b.step("compiler:run", "Run the compiler");
+    // compiler_run_step.dependOn(&generate_parser_cmd.step);
+    compiler_run_step.dependOn(&compiler_run_cmd.step);
 
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
@@ -50,6 +144,7 @@ pub fn build(b: *std.Build) void {
     }
 
     const run_step = b.step("run", "Run the application");
+    // run_step.dependOn(&generate_parser_cmd.step);
     run_step.dependOn(&run_cmd.step);
 
     const wasm_step = b.step("wasm", "Build the application for WebAssembly");
@@ -59,6 +154,7 @@ pub fn build(b: *std.Build) void {
         "wasm/circ-renderer-lib.wasm",
     );
 
+    // wasm_step.dependOn(&generate_parser_cmd.step);
     wasm_step.dependOn(&wasm_lib.step);
     wasm_step.dependOn(&install_wasm_step.step);
 

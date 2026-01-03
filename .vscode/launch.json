@@ -1,0 +1,21 @@
+{
+	// Use IntelliSense to learn about possible attributes.
+	// Hover to view descriptions of existing attributes.
+	// For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "Debug Compiler",
+			"type": "lldb",
+			"request": "launch",
+			"program": "${workspaceRoot}/./zig-out/bin/compiler",
+			"initCommands": [
+				"command script import ${workspaceRoot}/tools/lldb_pretty_printers.py",
+				"type category enable zig.lang",
+				"type category enable zig.std"
+			],
+			"args": ["./example/circuits/demo_input.circ"],
+			"cwd": "${workspaceRoot}"
+		}
+	]
+}
