@@ -164,4 +164,12 @@ pub fn build(b: *std.Build) void {
     );
 
     wasm_step.dependOn(&wasm_src_step.step);
+
+    const unit_tests = b.addTest(.{
+        .root_module = exe_debug_mod,
+    });
+
+    const run_unit_tests = b.addRunArtifact(unit_tests);
+    const test_step = b.step("test", "Run project test suite");
+    test_step.dependOn(&run_unit_tests.step);
 }
