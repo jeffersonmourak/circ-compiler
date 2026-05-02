@@ -215,3 +215,11 @@
 **Tests:** no new dedicated tests in this slice (per plan), but `zig build test` now compiles `circ-compile` as a test-step dependency and passed; additionally ran `zig build circ-compile`, result pass
 **Next slice:** Implement Phase 6 Slice 6.3 CLI integration tests for default compile mode (`tests/cli/integration_test.zig`).
 **Notes:** Added `compileWithStderrWriter(...)` in orchestrator previously to keep expected failing subprocess output silent in tests; CLI production path still uses real stderr via `compile(...)`.
+
+## 2026-05-01 — Phase 6 — Slice 6.3 integration tests for default mode
+
+**What shipped:** Added end-to-end CLI integration coverage in `tests/cli/integration_test.zig` that invokes the real `zig-out/bin/circ-compile` binary via subprocess. The suite now verifies default compile happy path, hard-error failure, warning pass-through, warnings-as-errors failure, missing input handling, unknown flag handling, and `--build-dir` preservation behavior.
+**Files touched:** `tests/cli/integration_test.zig`, `build.zig`, `DOCS/STATUS.md`
+**Tests:** added 7 CLI integration tests (default mode matrix) in `tests/cli/integration_test.zig`, wired the test target into `zig build test`, ran `zig build test`, result pass
+**Next slice:** Implement Phase 6 Slice 6.4 integration tests for `--emit-zig` mode.
+**Notes:** The integration tests trigger `zig build circ-compile` before execution so the CLI binary path is deterministic (`zig-out/bin/circ-compile`) regardless of prior manual build state.

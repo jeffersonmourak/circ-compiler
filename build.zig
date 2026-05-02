@@ -707,11 +707,20 @@ pub fn build(b: *std.Build) void {
     circ_compile_exe.linkLibC();
     b.installArtifact(circ_compile_exe);
     const circ_compile_step = b.step("circ-compile", "Build circ-compile CLI");
-    circ_compile_step.dependOn(&circ_compile_exe.step);
+    circ_compile_step.dependOn(b.getInstallStep());
     const cli_args_tests = b.addTest(.{
         .root_module = cli_args_mod,
     });
     const run_cli_args_tests = b.addRunArtifact(cli_args_tests);
+    const cli_integration_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/cli/integration_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const cli_integration_tests = b.addTest(.{
+        .root_module = cli_integration_tests_mod,
+    });
+    const run_cli_integration_tests = b.addRunArtifact(cli_integration_tests);
     const test_step = b.step("test", "Run project test suite");
     test_step.dependOn(&run_unit_tests.step);
     test_step.dependOn(&run_golden_tests.step);
@@ -734,4 +743,5 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_orchestrator_main_tests.step);
     test_step.dependOn(&run_cli_args_tests.step);
     test_step.dependOn(&circ_compile_exe.step);
+    test_step.dependOn(&run_cli_integration_tests.step);
 }
