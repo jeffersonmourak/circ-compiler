@@ -1,0 +1,4 @@
+input a, b
+and gate(a=a, b=b)
+output out1(in=gate.out)
+output out2(in=a)

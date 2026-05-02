@@ -3,7 +3,7 @@ const std = @import("std");
 const Component = @import("circuit.zig").Component;
 const Circuit = @import("circuit.zig").Circuit;
 
-fn kindByte(kind: Component.Kind) u8 {
+fn kindByte(kind: anytype) u8 {
     return switch (kind) {
         .input_pin_gate => 0,
         .not_gate => 1,

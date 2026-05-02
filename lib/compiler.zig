@@ -32,5 +32,5 @@ pub fn main() !void {
         return error.ParsingFailed;
     }
 
-    try translate(tree);
+    _ = try translate(std.heap.page_allocator, tree, 0);
 }

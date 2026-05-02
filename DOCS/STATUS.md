@@ -55,3 +55,11 @@
 **Tests:** added `test "ast nodes carry span data"` in `lib/syntax/ast.zig`, ran `zig test lib/syntax/ast.zig` and `zig build test`, result pass
 **Next slice:** Implement Phase 2 Slice 2.2 parse-tree to AST translation using the new typed AST.
 **Notes:** `SignalSource.anonymous` is represented as `*const ComponentInstance` to avoid recursive-by-value type cycles while preserving inline-component structure.
+
+## 2026-05-01 — Phase 2 — Slice 2.2 parse tree to typed AST
+
+**What shipped:** Rewrote parser translation to produce `ast.File` from langlang parse trees with spans populated from parser ranges, including imports, input declarations, output declarations, component instances, bus-port mappings, named references, and anonymous inline components. Added deterministic AST dump helper plus fixture-based golden tests, introduced new `tests/fixtures/expected-ast/` goldens, and updated test/build wiring to execute translator fixtures under `zig build test`.
+**Files touched:** `lib/syntax/translate.zig`, `lib/syntax/nodes/declaration.zig`, `lib/compiler.zig`, `lib/transport.zig`, `build.zig`, `tests/helpers/ast_dump.zig`, `tests/syntax/translate_test.zig`, `tests/README.md`, `tests/fixtures/circuits/empty_ish.circ`, `tests/fixtures/circuits/and_two_inputs.circ`, `tests/fixtures/circuits/anonymous_nested.circ`, `tests/fixtures/circuits/with_import.circ`, `tests/fixtures/circuits/multi_output.circ`, `tests/fixtures/expected-ast/empty_ish.txt`, `tests/fixtures/expected-ast/and_two_inputs.txt`, `tests/fixtures/expected-ast/anonymous_nested.txt`, `tests/fixtures/expected-ast/with_import.txt`, `tests/fixtures/expected-ast/multi_output.txt`, `DOCS/STATUS.md`
+**Tests:** added fixture-driven translator golden test in `tests/syntax/translate_test.zig`, generated AST goldens with `UPDATE_GOLDENS=1 zig build test`, ran `zig build test`, result pass
+**Next slice:** Implement Phase 2 Slice 2.3 IR type layer under `lib/ir/` with construction/readback tests.
+**Notes:** During slice work, `lib/transport.zig` was adjusted to avoid referencing private `Component.Kind` in non-test builds; this unblocks `zig build compiler:run` while preserving existing kind-byte behavior.

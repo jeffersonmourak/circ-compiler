@@ -178,7 +178,40 @@ pub fn build(b: *std.Build) void {
         }),
     });
     const run_golden_tests = b.addRunArtifact(golden_tests);
+    const translate_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/syntax/translate_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const translate_mod = b.createModule(.{
+        .root_source_file = b.path("lib/syntax/translate.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    translate_mod.addIncludePath(b.path("."));
+    translate_mod.addIncludePath(b.path("./lib"));
+    translate_tests_mod.addImport("translate", translate_mod);
+    translate_tests_mod.addImport("golden", b.createModule(.{
+        .root_source_file = b.path("tests/helpers/golden.zig"),
+        .target = target,
+        .optimize = optimize,
+    }));
+    const ast_dump_mod = b.createModule(.{
+        .root_source_file = b.path("tests/helpers/ast_dump.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    translate_tests_mod.addImport("ast_dump", ast_dump_mod);
+    const translate_tests = b.addTest(.{
+        .root_module = translate_tests_mod,
+    });
+    translate_tests.addIncludePath(b.path("."));
+    translate_tests.addIncludePath(b.path("./lib"));
+    translate_tests.linkLibrary(parser_lib);
+    translate_tests.linkLibC();
+    const run_translate_tests = b.addRunArtifact(translate_tests);
     const test_step = b.step("test", "Run project test suite");
     test_step.dependOn(&run_unit_tests.step);
     test_step.dependOn(&run_golden_tests.step);
+    test_step.dependOn(&run_translate_tests.step);
 }

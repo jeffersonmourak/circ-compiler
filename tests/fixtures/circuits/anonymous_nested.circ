@@ -1,0 +1,3 @@
+input a
+and gate(a=not(in=a).out, b=a)
+output result(in=gate.out)

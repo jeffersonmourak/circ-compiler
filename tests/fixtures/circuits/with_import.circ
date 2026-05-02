@@ -1,0 +1,4 @@
+import dep "dep.circ"
+input a
+dep sub(a=a)
+output out(in=sub.out)
