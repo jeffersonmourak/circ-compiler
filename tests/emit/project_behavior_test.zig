@@ -306,3 +306,30 @@ test "Phase 9 stress: deep hierarchy 256 leaf NOTs" {
     });
 }
 
+test "canonical: half adder project (sum, carry truth table)" {
+    try runFixture(.{
+        .name = "half_adder",
+        .root_path = "tests/fixtures/projects/half_adder/root.circ",
+        .source_name = "root.circ",
+        .spec_path = "tests/fixtures/expected-wasm/projects/half_adder.txt",
+    });
+}
+
+test "canonical: full adder project (two half-adders + or)" {
+    try runFixture(.{
+        .name = "full_adder",
+        .root_path = "tests/fixtures/projects/full_adder/root.circ",
+        .source_name = "root.circ",
+        .spec_path = "tests/fixtures/expected-wasm/projects/full_adder.txt",
+    });
+}
+
+test "canonical: 4-bit AND/OR network project" {
+    try runFixture(.{
+        .name = "and_or_network",
+        .root_path = "tests/fixtures/projects/and_or_network/root.circ",
+        .source_name = "root.circ",
+        .spec_path = "tests/fixtures/expected-wasm/projects/and_or_network.txt",
+    });
+}
+

@@ -1,0 +1,10 @@
+# Full adder truth table — sum = a XOR b XOR cin, cout = majority(a, b, cin)
+# Built from two half-adders plus an OR over the carries.
+a=0 b=0 cin=0 => sum=0 cout=0
+a=0 b=0 cin=1 => sum=1 cout=0
+a=0 b=1 cin=0 => sum=1 cout=0
+a=0 b=1 cin=1 => sum=0 cout=1
+a=1 b=0 cin=0 => sum=1 cout=0
+a=1 b=0 cin=1 => sum=0 cout=1
+a=1 b=1 cin=0 => sum=0 cout=1
+a=1 b=1 cin=1 => sum=1 cout=1

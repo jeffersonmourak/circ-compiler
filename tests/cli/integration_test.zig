@@ -240,6 +240,16 @@ test "cli inspect error fixture exits 1 and matches golden stdout" {
     try expectStdoutMatchesFixture(result.stdout, "tests/fixtures/expected-inspect/error_undeclared.txt");
 }
 
+test "cli inspect canonical half_adder project root matches golden" {
+    try buildCli();
+    var result = try run(&.{ "zig-out/bin/circ-compile", "tests/fixtures/projects/half_adder/root.circ", "--inspect" });
+    defer result.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(@as(i32, 0), exitCode(result.term));
+    try std.testing.expectEqual(@as(usize, 0), result.stderr.len);
+    try expectStdoutMatchesFixture(result.stdout, "tests/fixtures/expected-inspect/canonical_half_adder_root.txt");
+}
+
 test "cli inspect rejects -o flag" {
     try buildCli();
     var result = try run(&.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/inverter.circ", "--inspect", "-o", "ignored.txt" });

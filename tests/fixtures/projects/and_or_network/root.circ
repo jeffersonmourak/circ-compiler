@@ -1,0 +1,10 @@
+import bit_and "and_pair.circ"
+input a0, a1, a2, a3, b0, b1, b2, b3
+bit_and p0(a=a0, b=b0)
+bit_and p1(a=a1, b=b1)
+bit_and p2(a=a2, b=b2)
+bit_and p3(a=a3, b=b3)
+or o01(a=p0.out, b=p1.out)
+or o23(a=p2.out, b=p3.out)
+or o0123(a=o01.out, b=o23.out)
+output out(in=o0123.out)

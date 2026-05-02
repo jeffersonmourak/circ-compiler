@@ -1,0 +1,65 @@
+=== Parse Tree ===
+File [f0:1:1-7:28]
+Imports (1)
+  Import alias=half_adder path=half_adder.circ [f0:1:1-1:36]
+Inputs (1)
+  Input a, b, cin [f0:2:7-2:16]
+Outputs (2)
+  Output sum [f0:6:1-6:23]
+    NamedRef ha2.sum [f0:6:15-6:22]
+  Output cout [f0:7:1-7:28]
+    NamedRef cout_or.out [f0:7:16-7:27]
+Components (3)
+  Component type=half_adder instance=ha1 [f0:3:1-3:25]
+    Port a [f0:3:16-3:17]
+      NamedRef a.out [f0:3:18-3:19]
+    Port b [f0:3:21-3:22]
+      NamedRef b.out [f0:3:23-3:24]
+  Component type=half_adder instance=ha2 [f0:4:1-4:33]
+    Port a [f0:4:16-4:17]
+      NamedRef ha1.sum [f0:4:18-4:25]
+    Port b [f0:4:27-4:28]
+      NamedRef cin.out [f0:4:29-4:32]
+  Component type=or instance=cout_or [f0:5:1-5:37]
+    Port a [f0:5:12-5:13]
+      NamedRef ha1.carry [f0:5:14-5:23]
+    Port b [f0:5:25-5:26]
+      NamedRef ha2.carry [f0:5:27-5:36]
+
+
+=== Resolved IR ===
+Module file_id=0
+Imports (1)
+  alias=half_adder path=half_adder.circ
+Inputs (3)
+  id=0 name=a component=0
+  id=1 name=b component=1
+  id=2 name=cin component=2
+Outputs (2)
+  id=0 name=sum driver=4.sum
+  id=1 name=cout driver=5.out
+Components (8)
+  id=0 name=a kind=primitive:input_pin
+  id=1 name=b kind=primitive:input_pin
+  id=2 name=cin kind=primitive:input_pin
+  id=3 name=ha1 kind=sub_circuit_ref:half_adder
+  id=4 name=ha2 kind=sub_circuit_ref:half_adder
+  id=5 name=cout_or kind=unresolved_name:or
+  id=6 name=sum kind=primitive:output_pin
+  id=7 name=cout kind=primitive:output_pin
+Connections (8)
+  0.out -> 3.a
+  1.out -> 3.b
+  3.sum -> 4.a
+  2.out -> 4.b
+  3.carry -> 5.a
+  4.carry -> 5.b
+  4.sum -> 6.in
+  5.out -> 7.in
+
+
+=== Diagnostics ===
+tests/fixtures/projects/full_adder/root.circ:5:1: error: E001: undeclared name 'or'
+
+=== Summary ===
+1 errors, 0 warnings

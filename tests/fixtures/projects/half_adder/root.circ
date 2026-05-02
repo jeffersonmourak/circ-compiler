@@ -1,0 +1,5 @@
+import half_adder "half_adder.circ"
+input a, b
+half_adder ha(a=a, b=b)
+output sum(in=ha.sum)
+output carry(in=ha.carry)

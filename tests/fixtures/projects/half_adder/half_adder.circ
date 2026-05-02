@@ -1,0 +1,5 @@
+input a, b
+xor s(a=a, b=b)
+and c(a=a, b=b)
+output sum(in=s.out)
+output carry(in=c.out)

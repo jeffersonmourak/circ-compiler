@@ -398,3 +398,21 @@
 **Next slice:** Phase **9.4** — canonical **`half_adder`**, **`full_adder`**, **`and_or_network`** projects per **`PHASE_9_HARDENING.md`**.
 
 **Notes — code coverage checklist (v0):** **`E001`–`E013`**, **`W001`–`W003`** each have at least one dedicated snapshot row in **`codes_snapshot_test`** (single-file or project) *or* are covered as below. **`E008`**: canonical snapshot uses **`E008_simple_loop.circ`**; **`E008_wire_loop`** / **`E008_two_cycles`** remain in **`loop_passes_test`**. **`W002`**: project snapshot **`W002_dangling_subcircuit_output`**; single-file **`W002_dangling_output.circ`** snapshot documents reserved single-file behavior. **`E007`**: co-occurs with **`E004`** on the current minimal driverless-output fixture. Resolver **`import_cycle_test`** still has extra **`E010`** graph cases not duplicated as project goldens.
+
+## 2026-05-02 — Phase 9 — Slice 9.4 canonical end-to-end project fixtures
+
+**What shipped:** Three canonical multi-file project fixtures under **`tests/fixtures/projects/`** with truth-table behaviour specs and project-pipeline tests in **`tests/emit/project_behavior_test.zig`**:
+
+- **`half_adder/`** — **`half_adder.circ`** (`xor`+`and`) and **`root.circ`** that imports it, surfacing `sum`/`carry`. Spec covers all 4 input combinations.
+- **`full_adder/`** — same **`half_adder.circ`** plus **`root.circ`** that composes two half-adder instances and an **`or`** over their carries (sum from inner half-adder, **`cout`** from the OR). Spec covers all 8 input combinations.
+- **`and_or_network/`** — **`and_pair.circ`** (`a` AND `b`) plus **`root.circ`** with eight inputs `a0..a3, b0..b3`, instantiating four pairs (aliased `bit_and` to avoid the `and`-keyword collision the existing **`and_pair`** project already documents) and OR-tree-reducing the four results. Spec covers boundary + interior combinations.
+
+Also added **`tests/fixtures/expected-inspect/canonical_half_adder_root.txt`** and a CLI test **`cli inspect canonical half_adder project root matches golden`** in **`tests/cli/integration_test.zig`** locking down **`--inspect`** on a multi-file project root that resolves cleanly in single-file mode (uses only a user **`half_adder`** sub-circuit alias). Per the open question in **`PHASE_9_HARDENING.md`**, inspect goldens for **`full_adder/root.circ`** and **`and_or_network/root.circ`** are intentionally **not** shipped: those roots instantiate **`or`** directly, and **`--inspect`** is single-file by design (anchor: **`cmd/circ-compile/main.zig:133`** skips project resolution in inspect mode), so the built-in **`or`** surfaces as **`E001`** in the inspect dump. Pinning that would lock in a CLI quirk rather than a feature.
+
+**Files touched:** `tests/fixtures/projects/half_adder/{half_adder,root}.circ`, `tests/fixtures/projects/full_adder/{half_adder,root}.circ`, `tests/fixtures/projects/and_or_network/{and_pair,root}.circ`, `tests/fixtures/expected-wasm/projects/{half_adder,full_adder,and_or_network}.txt`, `tests/fixtures/expected-inspect/canonical_half_adder_root.txt`, `tests/emit/project_behavior_test.zig`, `tests/cli/integration_test.zig`, `DOCS/STATUS.md`
+
+**Tests:** `canonical: half adder project (sum, carry truth table)`, `canonical: full adder project (two half-adders + or)`, `canonical: 4-bit AND/OR network project`, `cli inspect canonical half_adder project root matches golden`; full **`zig build test`** — result **pass**
+
+**Next slice:** Phase **9.5** — regression fixtures (audit STATUS log for fixed-mid-phase bugs) plus the smoke perf test on **`stress_grid_10x10.circ`** per **`PHASE_9_HARDENING.md`**.
+
+**Notes:** Found and worked around the `and_pair` ambiguity once more — instantiating a `and_*`-prefixed sub-circuit gets parsed as the **`and`** built-in followed by the rest of the identifier (grammar lists **`'and'`** ahead of **`Identifier`** in **`ComponentType`** at **`lib/grammar/proto-circ.peg:7`**). Existing **`and_pair`** project aliases the import to **`paired_and`**; the new **`and_or_network`** uses **`bit_and`** for the same reason. No new behavioural bug — already-known parser ordering. **`full_adder/root.circ`** uses component name **`cout_or`** to dodge the `cout` output/component name overlap pattern the **`full_adder_ha_or`** fixture also avoids.

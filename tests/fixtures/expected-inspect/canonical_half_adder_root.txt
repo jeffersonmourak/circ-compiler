@@ -1,0 +1,47 @@
+=== Parse Tree ===
+File [f0:1:1-5:26]
+Imports (1)
+  Import alias=half_adder path=half_adder.circ [f0:1:1-1:36]
+Inputs (1)
+  Input a, b [f0:2:7-2:11]
+Outputs (2)
+  Output sum [f0:4:1-4:22]
+    NamedRef ha.sum [f0:4:15-4:21]
+  Output carry [f0:5:1-5:26]
+    NamedRef ha.carry [f0:5:17-5:25]
+Components (1)
+  Component type=half_adder instance=ha [f0:3:1-3:24]
+    Port a [f0:3:15-3:16]
+      NamedRef a.out [f0:3:17-3:18]
+    Port b [f0:3:20-3:21]
+      NamedRef b.out [f0:3:22-3:23]
+
+
+=== Resolved IR ===
+Module file_id=0
+Imports (1)
+  alias=half_adder path=half_adder.circ
+Inputs (2)
+  id=0 name=a component=0
+  id=1 name=b component=1
+Outputs (2)
+  id=0 name=sum driver=2.sum
+  id=1 name=carry driver=2.carry
+Components (5)
+  id=0 name=a kind=primitive:input_pin
+  id=1 name=b kind=primitive:input_pin
+  id=2 name=ha kind=sub_circuit_ref:half_adder
+  id=3 name=sum kind=primitive:output_pin
+  id=4 name=carry kind=primitive:output_pin
+Connections (4)
+  0.out -> 2.a
+  1.out -> 2.b
+  2.sum -> 3.in
+  2.carry -> 4.in
+
+
+=== Diagnostics ===
+
+
+=== Summary ===
+0 errors, 0 warnings
