@@ -1,10 +1,10 @@
-# circ-renderer-z Documentation
+# circ-compiler Documentation
 
 A digital logic circuit simulator written in Zig, compiled to WebAssembly for use in the browser.
 
 ## What it does
 
-`circ-renderer-z` simulates digital logic circuits in real time using an event-driven propagation model. Circuits are built programmatically by creating components (gates, pins, LEDs) and connecting their ports. When an input pin changes state, the simulator propagates the signal through the graph with per-gate delays and notifies the host when outputs settle.
+`circ-compiler` simulates digital logic circuits in real time using an event-driven propagation model. Circuits are built programmatically by creating components (gates, pins, LEDs) and connecting their ports. When an input pin changes state, the simulator propagates the signal through the graph with per-gate delays and notifies the host when outputs settle.
 
 ## Documents
 

@@ -1,19 +1,19 @@
 {
-	"name": "circ-renderer",
+	"name": "circ-compiler",
 	"version": "0.0.1",
 	"description": "\"Logisim Circ file render and pseudo-simulator.",
 	"module": "src/index.ts",
 	"type": "module",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/jeffersonmourak/circ-renderer.git"
+		"url": "git+https://github.com/jeffersonmourak/circ-compiler.git"
 	},
 	"author": "Jefferson Oliveira <jeffersonmourak@gmail.com>",
-	"license": "CC-BY-4.0",
+	"license": "GPL-3.0",
 	"bugs": {
-		"url": "https://github.com/jeffersonmourak/circ-renderer/issues"
+		"url": "https://github.com/jeffersonmourak/circ-compiler/issues"
 	},
-	"homepage": "https://github.com/jeffersonmourak/circ-renderer#readme",
+	"homepage": "https://github.com/jeffersonmourak/circ-compiler#readme",
 	"devDependencies": {
 		"@types/lodash": "^4.17.13",
 		"@types/bun": "latest",

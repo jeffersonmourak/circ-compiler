@@ -1,6 +1,6 @@
 # Architecture
 
-`circ-renderer-z` is a digital logic circuit simulator compiled to WebAssembly. The project is structured as three distinct layers that communicate across the Zig/JavaScript boundary.
+`circ-compiler` is a digital logic circuit simulator compiled to WebAssembly. The project is structured as three distinct layers that communicate across the Zig/JavaScript boundary.
 
 ## Layer Overview
 

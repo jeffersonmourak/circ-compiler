@@ -66,7 +66,7 @@ test "file info and debug path emitters fixtures" {
         const emitted_file_info = try file_info.emitFileInfoConstants(allocator, &ir_module, .{
             .source_name = fixture.source_name,
             .compile_timestamp = "2026-05-01T22:00:00Z",
-            .compiler_version = "circ-renderer-z/dev",
+            .compiler_version = "circ-compiler/dev",
         });
         try golden.expectGolden(emitted_file_info, fixture.expected_file_info_path);
 
@@ -86,7 +86,7 @@ test "file info blob round trip" {
     const encoded = try file_info.encodeFileInfoBlob(allocator, &ir_module, .{
         .source_name = "and_two_inputs.circ",
         .compile_timestamp = "2026-05-01T22:00:00Z",
-        .compiler_version = "circ-renderer-z/dev",
+        .compiler_version = "circ-compiler/dev",
     });
     const decoded = try file_info_format.decodeFileInfo(allocator, encoded);
     defer {
@@ -98,7 +98,7 @@ test "file info blob round trip" {
     try std.testing.expectEqual(@as(u32, 0), decoded.file_id);
     try std.testing.expectEqualStrings("and_two_inputs.circ", decoded.source_name);
     try std.testing.expectEqualStrings("2026-05-01T22:00:00Z", decoded.compile_timestamp);
-    try std.testing.expectEqualStrings("circ-renderer-z/dev", decoded.compiler_version);
+    try std.testing.expectEqualStrings("circ-compiler/dev", decoded.compiler_version);
     try std.testing.expectEqual(@as(u32, 4), decoded.component_count);
     try std.testing.expectEqual(@as(u32, 3), decoded.connection_count);
     try std.testing.expectEqual(@as(usize, 2), decoded.inputs.len);

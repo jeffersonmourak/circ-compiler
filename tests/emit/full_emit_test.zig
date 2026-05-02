@@ -57,7 +57,7 @@ test "full emitter fixture files" {
         const emitted = try emit_main.emitModuleSource(allocator, &ir_module, .{
             .source_name = fixture.source_name,
             .compile_timestamp = "2026-05-01T22:00:00Z",
-            .compiler_version = "circ-renderer-z/dev",
+            .compiler_version = "circ-compiler/dev",
         });
 
         golden.expectGolden(emitted, fixture.expected_path) catch |err| {

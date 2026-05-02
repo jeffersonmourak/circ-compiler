@@ -1,6 +1,6 @@
-# circ-renderer-z
+# circ-compiler
 
-`circ-renderer-z` compiles `.circ` digital-logic source files into self-contained WebAssembly modules. Each compiled `.wasm` embeds the simulation engine plus circuit-specific construction code and exposes a fixed pull-based runtime API (`init`, `run`, `setPin`, `getOutputState`, …) usable from any host that supports WebAssembly. The compiler is written in Zig and ships as a single CLI: `circ-compile`.
+`circ-compiler` compiles `.circ` digital-logic source files into self-contained WebAssembly modules. Each compiled `.wasm` embeds the simulation engine plus circuit-specific construction code and exposes a fixed pull-based runtime API (`init`, `run`, `setPin`, `getOutputState`, …) usable from any host that supports WebAssembly. The compiler is written in Zig and ships as a single CLI: `circ-compile`.
 
 ## What it does
 
@@ -80,4 +80,4 @@ Hard errors block emission — partial or "best-effort" artifacts are never prod
 
 ## License
 
-[Creative Commons Attribution 4.0 International](LICENSE).
+[GNU General Public License v3.0](LICENSE).

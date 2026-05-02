@@ -137,7 +137,7 @@ fn runBehaviorFixture(fixture: BehaviorFixture) !void {
     const emitted_source = try emit_main.emitModuleSource(allocator, &ir_module, .{
         .source_name = fixture.source_name,
         .compile_timestamp = "2026-05-01T22:00:00Z",
-        .compiler_version = "circ-renderer-z/dev",
+        .compiler_version = "circ-compiler/dev",
     });
 
     const stdout = try wasm_run.compileAndRun(allocator, emitted_source, script_and_expected.script);

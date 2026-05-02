@@ -1,6 +1,6 @@
 # Implementation entry-point
 
-You are continuing the implementation of the `.circ` compiler for `circ-renderer-z` — a Zig CLI that consumes a `.circ` source file and produces a self-contained `.wasm` artifact simulating that specific circuit. Most of the planning is done. Your job is to pick up where the codebase is, finish the next reviewable slice, and stop for human review.
+You are continuing the implementation of the `.circ` compiler for `circ-compiler` — a Zig CLI that consumes a `.circ` source file and produces a self-contained `.wasm` artifact simulating that specific circuit. Most of the planning is done. Your job is to pick up where the codebase is, finish the next reviewable slice, and stop for human review.
 
 ## What is being built
 

@@ -200,7 +200,7 @@ fn run() !u8 {
             break :blk emit_main.emitProjectSource(allocator, project, .{
                 .source_name = std.fs.path.basename(args.input_path),
                 .compile_timestamp = "2026-05-01T22:00:00Z",
-                .compiler_version = "circ-renderer-z/dev",
+                .compiler_version = "circ-compiler/dev",
             }) catch |err| {
                 try stderr_writer.print("emission failed: {s}\n", .{@errorName(err)});
                 return 1;
@@ -209,7 +209,7 @@ fn run() !u8 {
         break :blk emit_main.emitModuleSource(allocator, &ir_module, .{
             .source_name = std.fs.path.basename(args.input_path),
             .compile_timestamp = "2026-05-01T22:00:00Z",
-            .compiler_version = "circ-renderer-z/dev",
+            .compiler_version = "circ-compiler/dev",
         }) catch |err| {
             try stderr_writer.print("emission failed: {s}\n", .{@errorName(err)});
             return 1;

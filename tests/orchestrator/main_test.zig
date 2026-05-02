@@ -24,7 +24,7 @@ fn buildEmittedSource(allocator: std.mem.Allocator, source_path: []const u8, sou
     return emit_main.emitModuleSource(allocator, &ir_module, .{
         .source_name = source_name,
         .compile_timestamp = "2026-05-01T22:00:00Z",
-        .compiler_version = "circ-renderer-z/dev",
+        .compiler_version = "circ-compiler/dev",
     });
 }
 

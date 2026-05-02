@@ -161,7 +161,7 @@ fn runFixture(fixture: Fixture) !void {
     const emitted = try emit_main.emitProjectSource(allocator, &project, .{
         .source_name = fixture.source_name,
         .compile_timestamp = "2026-05-01T22:00:00Z",
-        .compiler_version = "circ-renderer-z/dev",
+        .compiler_version = "circ-compiler/dev",
     });
 
     const stdout = try wasm_run.compileAndRun(allocator, emitted, script_and_expected.script);
