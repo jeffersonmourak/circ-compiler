@@ -1,0 +1,1 @@
+tests/fixtures/circuits/W001_unused_input.circ:1:10: warning: W001: input 'b' is declared but never used

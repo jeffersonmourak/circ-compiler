@@ -1,0 +1,2 @@
+tests/fixtures/circuits/errors_and_warnings.circ:1:10: warning: W001: input 'b' is declared but never used
+tests/fixtures/circuits/errors_and_warnings.circ:2:1: error: E001: undeclared name 'mystery'

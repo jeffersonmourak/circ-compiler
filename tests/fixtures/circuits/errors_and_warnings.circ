@@ -1,0 +1,3 @@
+input a, b
+mystery u1(in=a)
+output out(in=u1.out)

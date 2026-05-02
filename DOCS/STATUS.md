@@ -111,3 +111,11 @@
 **Tests:** added `test "combinational loop pass fixtures"` in `tests/validator/loop_passes_test.zig`, generated expected diagnostics with `UPDATE_GOLDENS=1 zig build test`, ran `zig build test`, result pass
 **Next slice:** Implement Phase 3 Slice 3.5 warning passes (`W001`, `W002`) and top-level validator driver.
 **Notes:** Loop diagnostics include `note:` lines naming each cycle node (`component <id>`), and cycle deduping is keyed by sorted component-id sets to avoid duplicate reports from DFS back-edge permutations.
+
+## 2026-05-01 — Phase 3 — Slice 3.5 warning pass and validator driver
+
+**What shipped:** Added dead-code warning pass (`W001`) with single-file `W002` intentionally reserved/no-op, and introduced a top-level validator driver that orchestrates all passes in pipeline order. Added validator end-to-end fixture tests for warning-only, reserved-W002 behavior, clean output, and mixed error+warning accumulation.
+**Files touched:** `lib/validator/passes/dead_code.zig`, `lib/validator/run.zig`, `tests/validator/run_test.zig`, `tests/fixtures/circuits/W001_unused_input.circ`, `tests/fixtures/circuits/W002_dangling_output.circ`, `tests/fixtures/circuits/clean_warning.circ`, `tests/fixtures/circuits/errors_and_warnings.circ`, `tests/fixtures/expected-diagnostics/W001_unused_input.txt`, `tests/fixtures/expected-diagnostics/W002_dangling_output.txt`, `tests/fixtures/expected-diagnostics/clean_warning.txt`, `tests/fixtures/expected-diagnostics/errors_and_warnings.txt`, `build.zig`, `DOCS/STATUS.md`
+**Tests:** added `test "validator run fixtures"` in `tests/validator/run_test.zig`, generated diagnostics snapshots with `UPDATE_GOLDENS=1 zig build test`, ran `zig build test`, result pass
+**Next slice:** Begin Phase 4 emission work from the active Phase 4 plan.
+**Notes:** In single-file mode `W002` remains intentionally silent (reserved for Phase 7 multi-file context) per the phase plan’s open-question recommendation.
