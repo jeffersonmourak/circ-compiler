@@ -39,3 +39,11 @@
 **Tests:** added `test "output_pin: passes input through"` in `lib/circuit.zig`, ran `zig build test`, result pass
 **Next slice:** Implement Phase 1 Slice 1.3 transport snapshot encoding support for `output_pin`.
 **Notes:** `output_pin` now uses `WIRE_PROPAGATION_DELAY` in scheduling, matching the phase delay decision.
+
+## 2026-05-01 — Phase 1 — Slice 1.3 transport output_pin encoding
+
+**What shipped:** Added explicit transport kind-byte mapping including `output_pin` and wired `encodeState` through that mapping so encoded snapshots recognize the new primitive. Added a transport test that constructs a single `output_pin`, encodes state bytes, and asserts the expected state/kind/id-byte layout.
+**Files touched:** `lib/transport.zig`, `DOCS/STATUS.md`
+**Tests:** added `test "transport: encodes output_pin state"` in `lib/transport.zig`, ran `zig build test`, result pass
+**Next slice:** Begin Phase 2 parser and AST/IR work from the active Phase 2 plan.
+**Notes:** Phase 1 baseline slices (1.1 to 1.3) are now implemented and passing as a set.
