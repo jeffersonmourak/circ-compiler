@@ -1,0 +1,4 @@
+import w3 "w3.circ"
+input in
+w3 x(in=in)
+output out(in=x.out)

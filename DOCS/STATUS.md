@@ -362,3 +362,15 @@
 **Next slice:** Phase 9 per **`DOCS/PLANS_PROMPT.md`** (integration hardening).
 
 **Notes:** Phase **8** slices **8.1–8.5** are implemented in-repo; **`git`** commit remains for human review.
+
+## 2026-05-02 — Phase 9 — Slice 9.1 edge-case fixtures and harness coverage
+
+**What shipped:** Phase **9.1** edge fixtures under **`tests/fixtures/circuits/edge_*.circ`** (parse-empty file, IO-only circuit, LED + output, single **`xor`** macro, five-level nested anonymous NOTs behind a **`wire`**, 8→1 AND fan-in, 20-way NOT fan-out), WASM behaviour specs, and **`tests/fixtures/projects/deep_subcircuit_chain/`** (leaf + four passthrough wrappers + root). **`translate_test`** now asserts **`edge_parse_empty.circ`** yields **`error.ParsingFailed`**. **`behavior_test`** / **`project_behavior_test`** run the new specs; **`LED`** now registers a real **`out`** fan-out list in **`Component.init`** (fixing silent **`buildCircuit`** failure for **`led → output_pin`**). Port validation treats **`led`** like other primitives with a **`.out`** driver. **`edge_deep_anonymous`** uses a **`wire`** wrapper because **`output …(in=<anonymous …>)`** does not yet materialize inner **`in`** wires in the resolver (existing limitation).
+
+**Files touched:** `lib/circuit.zig`, `lib/validator/passes/port_validation.zig`, `tests/fixtures/circuits/edge_*.circ`, `tests/fixtures/expected-wasm/edge_*.txt`, `tests/fixtures/projects/deep_subcircuit_chain/*.circ`, `tests/fixtures/expected-wasm/projects/deep_subcircuit_chain.txt`, `tests/syntax/translate_test.zig`, `tests/emit/behavior_test.zig`, `tests/emit/project_behavior_test.zig`, `DOCS/STATUS.md`
+
+**Tests:** new **`translate`** / **`behavior`** / **`project behavior`** cases; **`led: registers out port and drives downstream output_pin`** in **`lib/circuit.zig`**; ran **`zig build test`**, result **pass**
+
+**Next slice:** Phase **9.2** stress fixtures (**`stress_chain_100`**, **`stress_grid_10x10`**, **`stress_deep_subcircuit`**) per **`PHASE_9_HARDENING.md`**.
+
+**Notes:** Empty **`.circ`** sources fail at parse with **`ParsingFailed`** (not **`InvalidProgram`**). Human **`git add` + commit** for this slice and prior untracked edge files as appropriate.

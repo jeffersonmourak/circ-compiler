@@ -1,0 +1,4 @@
+import wrap "w4.circ"
+input a
+wrap u(in=a)
+output out(in=u.out)

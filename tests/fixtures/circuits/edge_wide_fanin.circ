@@ -1,0 +1,9 @@
+input i1, i2, i3, i4, i5, i6, i7, i8
+and g1(a=i1, b=i2)
+and g2(a=g1.out, b=i3)
+and g3(a=g2.out, b=i4)
+and g4(a=g3.out, b=i5)
+and g5(a=g4.out, b=i6)
+and g6(a=g5.out, b=i7)
+and g7(a=g6.out, b=i8)
+output out(in=g7.out)

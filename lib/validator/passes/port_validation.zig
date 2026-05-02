@@ -34,8 +34,8 @@ fn isValidInputPort(component: ir.Component, port: []const u8) bool {
 fn isValidOutputPort(component: ir.Component, port: []const u8) bool {
     return switch (component.kind) {
         .primitive => |primitive| switch (primitive) {
-            .led => false,
-            else => std.mem.eql(u8, port, "out"),
+            // All primitives (including LED visualizer) expose `.out` as the driven signal.
+            .and_gate, .not_gate, .wire, .led, .output_pin, .input_pin => std.mem.eql(u8, port, "out"),
         },
         .sub_circuit_ref => true,
         .unresolved_name => true,

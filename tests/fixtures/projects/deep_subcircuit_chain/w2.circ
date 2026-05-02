@@ -1,0 +1,4 @@
+import w1 "w1.circ"
+input in
+w1 x(in=in)
+output out(in=x.out)

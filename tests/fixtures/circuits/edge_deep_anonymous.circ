@@ -1,0 +1,3 @@
+input a
+wire w(in=not(in=not(in=not(in=not(in=not(in=a).out).out).out).out).out)
+output out(in=w.out)

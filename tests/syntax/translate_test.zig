@@ -53,3 +53,12 @@ test "translate parse tree to typed ast fixtures" {
         };
     }
 }
+
+test "edge: completely empty .circ fails parse" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const source = try std.fs.cwd().readFileAlloc(allocator, "tests/fixtures/circuits/edge_parse_empty.circ", 1024);
+    const parsed = translate.parseSource(allocator, 0, source);
+    try std.testing.expectError(error.ParsingFailed, parsed);
+}

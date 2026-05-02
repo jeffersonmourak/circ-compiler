@@ -1,0 +1,3 @@
+input a, b
+xor x(a=a, b=b)
+output out(in=x.out)

@@ -1,0 +1,4 @@
+import leaf "leaf.circ"
+input in
+leaf x(in=in)
+output out(in=x.out)

@@ -183,3 +183,37 @@ test "behavior fixture: unused input" {
         .expected_path = "tests/fixtures/expected-wasm/unused_input.txt",
     });
 }
+
+const edge_behavior_fixtures = [_]BehaviorFixture{
+    .{
+        .source_path = "tests/fixtures/circuits/edge_empty_circuit.circ",
+        .source_name = "edge_empty_circuit.circ",
+        .expected_path = "tests/fixtures/expected-wasm/edge_empty_circuit.txt",
+    },
+    .{
+        .source_path = "tests/fixtures/circuits/edge_single_component.circ",
+        .source_name = "edge_single_component.circ",
+        .expected_path = "tests/fixtures/expected-wasm/edge_single_component.txt",
+    },
+    .{
+        .source_path = "tests/fixtures/circuits/edge_deep_anonymous.circ",
+        .source_name = "edge_deep_anonymous.circ",
+        .expected_path = "tests/fixtures/expected-wasm/edge_deep_anonymous.txt",
+    },
+    .{
+        .source_path = "tests/fixtures/circuits/edge_wide_fanin.circ",
+        .source_name = "edge_wide_fanin.circ",
+        .expected_path = "tests/fixtures/expected-wasm/edge_wide_fanin.txt",
+    },
+    .{
+        .source_path = "tests/fixtures/circuits/edge_wide_fanout.circ",
+        .source_name = "edge_wide_fanout.circ",
+        .expected_path = "tests/fixtures/expected-wasm/edge_wide_fanout.txt",
+    },
+};
+
+test "Phase 9 edge: single-file wasm fixtures" {
+    for (edge_behavior_fixtures) |fx| {
+        try runBehaviorFixture(fx);
+    }
+}

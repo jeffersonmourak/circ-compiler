@@ -279,3 +279,21 @@ test "composition: full adder from user half_adder plus xor, and, or macros" {
     });
 }
 
+test "Phase 9 edge: single built-in gate only (xor)" {
+    try runFixture(.{
+        .name = "edge_single_builtin",
+        .root_path = "tests/fixtures/circuits/edge_single_builtin.circ",
+        .source_name = "edge_single_builtin.circ",
+        .spec_path = "tests/fixtures/expected-wasm/edge_single_builtin.txt",
+    });
+}
+
+test "Phase 9 edge: deep sub-circuit import chain" {
+    try runFixture(.{
+        .name = "deep_subcircuit_chain",
+        .root_path = "tests/fixtures/projects/deep_subcircuit_chain/root.circ",
+        .source_name = "root.circ",
+        .spec_path = "tests/fixtures/expected-wasm/projects/deep_subcircuit_chain.txt",
+    });
+}
+

@@ -184,7 +184,7 @@ pub const Component = struct {
         var outputsMap: PortMap = PortMap.init(memory.allocator);
 
         switch (kind) {
-            .input_pin_gate, .not_gate, .and_gate, .wire, .output_pin => {
+            .input_pin_gate, .not_gate, .and_gate, .wire, .output_pin, .led => {
                 const output_port = switch (kind) {
                     .output_pin => OUTPUT_PIN_OUT_PORT_NAME,
                     else => OUT_PORT_NAME,
@@ -195,7 +195,6 @@ pub const Component = struct {
                     result.value_ptr.* = try std.ArrayList(*Component).initCapacity(memory.allocator, 0);
                 }
             },
-            .led => {},
         }
 
         self.* = .{ .id = id, .output_state = .undefined, .kind = kind, .outputs = outputsMap };
@@ -569,4 +568,21 @@ test "output_pin: passes input through" {
         try circuit.propagateEvent(upstream, .high);
         try std.testing.expectEqual(State.high, downstream.output_state);
     }
+}
+
+test "led: registers out port and drives downstream output_pin" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    const input = try circuit.createComponent(.{ .input_pin_gate = .{} });
+    const led = try circuit.createComponent(.{ .led = .{} });
+    const output_pin = try circuit.createComponent(.{ .output_pin = .{} });
+    try circuit.connect(input.port(OUT_PORT_NAME), led.port(IN_PORT_NAME));
+    try circuit.connect(led.port(OUT_PORT_NAME), output_pin.port(OUTPUT_PIN_IN_PORT_NAME));
+
+    try circuit.propagateEvent(input, .low);
+    try std.testing.expectEqual(State.low, led.output_state);
+
+    try circuit.propagateEvent(input, .high);
+    try std.testing.expectEqual(State.high, led.output_state);
 }

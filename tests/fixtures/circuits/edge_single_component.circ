@@ -1,0 +1,3 @@
+input a
+led l(in=a)
+output out(in=l.out)
