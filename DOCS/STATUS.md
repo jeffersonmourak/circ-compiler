@@ -167,3 +167,11 @@
 **Tests:** added `runtime embed manifest has non-empty content` and `runtime embed manifest contains expected names` in `tests/orchestrator/embed_test.zig`, ran `zig build test`, result pass
 **Next slice:** Implement Phase 5 Slice 5.2 workspace creation and runtime/emitted-source writing helpers in `lib/orchestrator/workspace.zig`.
 **Notes:** To satisfy Zig package-path rules for `@embedFile` while keeping `lib/orchestrator/embed.zig` as the manifest source, tests compile it through a workspace-root wrapper module (`orchestrator_embed_module.zig`).
+
+## 2026-05-01 — Phase 5 — Slice 5.2 workspace creation and runtime extraction
+
+**What shipped:** Added orchestrator workspace helpers in `lib/orchestrator/workspace.zig` for creating build workspaces (`createWorkspace`), materializing embedded runtime files (`writeRuntime`), and writing emitted source (`writeEmittedSource`). Workspace creation supports either a generated `/tmp/circ-compile-<rand>` path with `cleanup_on_success=true` or a caller-supplied override path with `cleanup_on_success=false`, and ensures the `src/` layout exists in both cases.
+**Files touched:** `lib/orchestrator/workspace.zig`, `tests/orchestrator/workspace_test.zig`, `build.zig`, `DOCS/STATUS.md`
+**Tests:** added unit tests in `tests/orchestrator/workspace_test.zig` for temp workspace creation, override behavior, runtime file write/byte-match against embed manifest, and emitted-source write path; ran `zig build test`, result pass
+**Next slice:** Implement Phase 5 Slice 5.3 subprocess wrapper in `lib/orchestrator/subprocess.zig` with success/failure capture and failure-header behavior.
+**Notes:** Workspace helpers intentionally handle both absolute and relative paths so test fixtures can use `std.testing.tmpDir()`-relative paths while production defaults remain absolute under `/tmp`.
