@@ -2,7 +2,7 @@
 
 `.circ` files describe a digital circuit as a set of named components and their connections. The format is a simple declarative DSL designed to map directly onto the simulation engine's component and connection model.
 
-> **Status**: The parser is implemented and parses this format correctly, but the compiler backend (which would emit circuit construction calls) is not yet connected. Currently `.circ` files are used as human-readable circuit blueprints; circuits must still be constructed programmatically via the WASM API.
+> **Status**: Parsing, semantic validation, and compilation to Zig/WASM exist for the supported surface below (`zig build`-produced WASM per sub-circuit and built-in macros).
 
 ## Syntax Overview
 
@@ -38,17 +38,28 @@ Declares one or more named input pins for the circuit. Input pins are driven ext
 
 `<type>` is the gate kind. Recognised types:
 
-| Type    | Ports         | Description           |
-|---------|---------------|-----------------------|
-| `and`   | `a`, `b`      | AND gate              |
-| `not`   | `in`          | NOT gate (inverter)   |
-| `led`   | `in`          | Output indicator      |
-| `wire`  | `in`          | Pass-through          |
+| Type    | Ports    | Description           |
+|---------|----------|-----------------------|
+| `and`   | `a`, `b` | AND gate              |
+| `not`   | `in`     | NOT gate (inverter)   |
+| `led`   | `in`     | Output indicator      |
+| `wire`  | `in`     | Pass-through          |
+
+**Built-in macro gates** expand at compile time to nested `and` / `not` (and optionally other macros). They use **`a`** and **`b`** as input ports and expose **`out`**. Unlike `and`/`not`, **no `import`** is required — the compiler behaves as if `import … from "<builtin>/<name>.circ"` were present.
+
+| Type   | Ports    | Expansion |
+|--------|----------|-----------|
+| `or`   | `a`, `b` | OR from `not`/`and`            |
+| `nand` | `a`, `b` | NAND                           |
+| `nor`  | `a`, `b` | NOR (uses internal `or` macro)|
+| `xor`  | `a`, `b` | XOR                            |
+| `xnor` | `a`, `b` | XNOR (uses internal `xor` macro)|
 
 `<input-port>` is the name of the port being driven (e.g. `a`, `b`, `in`).
 
 `<signal>` is one of:
-- `<instance-name>.out` — the output of a named component or input pin
+- `<instance-name>.out` — the output of a named component or primitive with a single implicit output `.out`.
+- `<instance-name>.<port>` — the output pin of an imported subcircuit that exposes `<port>` (`sum`, `carry`, etc.).
 - An inline component expression (see nested components below)
 
 ## Signal References

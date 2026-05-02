@@ -1,0 +1,8 @@
+import half_adder "half_adder.circ"
+input a, b, cin
+half_adder ha(a=a, b=b)
+xor sum_bit(a=ha.sum, b=cin)
+and carry_mid(a=ha.sum, b=cin)
+or cout_bit(a=ha.carry, b=carry_mid.out)
+output sum(in=sum_bit.out)
+output cout(in=cout_bit.out)

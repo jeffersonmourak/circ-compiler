@@ -260,3 +260,22 @@ test "built-in macros: truth tables (or nand nor xor xnor)" {
         try runFixture(fx);
     }
 }
+
+test "composition: full adder from built-in xor, and, or" {
+    try runFixture(.{
+        .name = "full_adder_from_builtins",
+        .root_path = "tests/fixtures/circuits/full_adder_from_builtins.circ",
+        .source_name = "full_adder_from_builtins.circ",
+        .spec_path = "tests/fixtures/expected-wasm/full_adder_from_builtins.txt",
+    });
+}
+
+test "composition: full adder from user half_adder plus xor, and, or macros" {
+    try runFixture(.{
+        .name = "full_adder_ha_or",
+        .root_path = "tests/fixtures/projects/full_adder_ha_or/root.circ",
+        .source_name = "root.circ",
+        .spec_path = "tests/fixtures/expected-wasm/projects/full_adder_ha_or.txt",
+    });
+}
+

@@ -1,0 +1,8 @@
+input a, b, cin
+xor s1(a=a, b=b)
+xor s2(a=s1.out, b=cin)
+and c1(a=a, b=b)
+and c2(a=s1.out, b=cin)
+or c3(a=c1.out, b=c2.out)
+output sum(in=s2.out)
+output cout(in=c3.out)

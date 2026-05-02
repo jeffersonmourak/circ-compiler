@@ -350,3 +350,15 @@
 **Next slice:** Phase 8 Slice 8.5 — full-adder + user/built-in composition fixtures and behaviour specs.
 
 **Notes:** No CLI change; single root **`.circ`** still uses the project pipeline (implicit built-ins from slice 8.3).
+
+## 2026-05-02 — Phase 8 — Slice 8.5 composition tests (built-ins + user sub-circuit)
+
+**What shipped:** Added **`tests/fixtures/circuits/full_adder_from_builtins.circ`** implementing a 1-bit full adder from **`xor`**, **`and`**, and **`or`** macros plus **`tests/fixtures/expected-wasm/full_adder_from_builtins.txt`** (all **8** input combinations). Added **`tests/fixtures/projects/full_adder_ha_or/`**: user **`half_adder`** (**`xor`**, **`and`** → outputs **`sum`**, **`carry`**) imported into **`root.circ`**, then **`xor`**, **`and`**, **`or`** macros finish **`sum`**/**`cout`**; behaviour spec **`tests/fixtures/expected-wasm/projects/full_adder_ha_or.txt`** matches the pure-macro truth table. **`tests/emit/project_behavior_test.zig`** runs both through the existing WASM harness. **`DOCS/circuit-format.md`** documents built-in **`or`**/**`nand`**/**`nor`**/**`xor`**/**`xnor`**, updates the status banner, documents **`<inst>.out`** vs **`<inst>.<output-name>`**, and summarizes built-in semantics.
+
+**Files touched:** composition fixtures/specs listed above; `tests/emit/project_behavior_test.zig`; `DOCS/circuit-format.md`; `DOCS/STATUS.md`
+
+**Tests:** **`composition: full adder from built-in xor, and, or`**, **`composition: full adder from user half_adder plus xor, and, or macros`**; **`zig build test`** — result **pass**
+
+**Next slice:** Phase 9 per **`DOCS/PLANS_PROMPT.md`** (integration hardening).
+
+**Notes:** Phase **8** slices **8.1–8.5** are implemented in-repo; **`git`** commit remains for human review.
