@@ -6,6 +6,12 @@ on:
     tags:
       - "v*" # use '*' if you publish non-v-prefixed tags
 
+env:
+  ZIG_VERSION: "0.15.1"
+
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ${{ matrix.runner }}
@@ -24,17 +30,93 @@ jobs:
             artifact_suffix: windows-x86_64
             binary: zig-out/bin/circ-compile.exe
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: mlugg/setup-zig@v2
-        with:
-          version: "0.15.1"
+      # Official tarball/zip (avoids third-party actions still on Node 20).
+      - name: Install Zig (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$(uname -s)/$(uname -m)" in
+            Linux/x86_64) zig_suffix=x86_64-linux ;;
+            Darwin/arm64) zig_suffix=aarch64-macos ;;
+            Darwin/x86_64) zig_suffix=x86_64-macos ;;
+            *) echo "::error::unsupported OS/arch $(uname -s)/$(uname -m)"; exit 1 ;;
+          esac
+          pkg="zig-${zig_suffix}-${ZIG_VERSION}"
+          curl -fsSL -o zig.tar.xz "https://ziglang.org/download/${ZIG_VERSION}/${pkg}.tar.xz"
+          tar -xf zig.tar.xz
+          echo "${PWD}/${pkg}" >> "${GITHUB_PATH}"
+
+      - name: Install Zig (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $pkg = "zig-x86_64-windows-${env:ZIG_VERSION}"
+          Invoke-WebRequest -Uri "https://ziglang.org/download/${env:ZIG_VERSION}/${pkg}.zip" -OutFile zig.zip
+          Expand-Archive -Path zig.zip -DestinationPath .
+          Add-Content -Path $env:GITHUB_PATH -Value (Join-Path (Get-Location) $pkg)
 
       - name: Build circ-compile
         run: zig build -Doptimize=ReleaseFast circ-compile
 
       - name: Upload binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: circ-compile-${{ github.ref_name }}-${{ matrix.artifact_suffix }}
           path: ${{ matrix.binary }}
+
+  release:
+    name: Draft GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: assets
+          pattern: circ-compile-${{ github.ref_name }}-*
+          merge-multiple: false
+
+      - name: Create draft release and upload binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          TAG="${{ github.ref_name }}"
+          dirs=(assets/circ-compile-${TAG}-*)
+          if (( ${#dirs[@]} == 0 )); then
+            echo "::error::No artifact directories under assets/ (expected circ-compile-${TAG}-*)"
+            ls -laR assets 2>/dev/null || true
+            exit 1
+          fi
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; uploading or replacing assets only."
+          else
+            gh release create "$TAG" \
+              --draft \
+              --title "Release ${TAG}" \
+              --notes "Draft release for **${TAG}**. Attached: Linux (x86_64), macOS (aarch64), Windows (x86_64) CLI builds."
+          fi
+
+          for dir in "${dirs[@]}"; do
+            [[ -d "$dir" ]] || continue
+            name="$(basename "$dir")"
+            if [[ -f "${dir}/circ-compile.exe" ]]; then
+              install -m 0755 "${dir}/circ-compile.exe" "./${name}.exe"
+              gh release upload "$TAG" "./${name}.exe" --clobber
+              rm -f "./${name}.exe"
+            elif [[ -f "${dir}/circ-compile" ]]; then
+              install -m 0755 "${dir}/circ-compile" "./${name}"
+              gh release upload "$TAG" "./${name}" --clobber
+              rm -f "./${name}"
+            else
+              echo "::error::Expected circ-compile or circ-compile.exe in ${dir}"; exit 1
+            fi
+          done
