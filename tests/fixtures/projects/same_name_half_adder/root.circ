@@ -1,0 +1,8 @@
+import half_a "path_a/half_adder.circ"
+import half_b "path_b/half_adder.circ"
+input a
+input b
+half_a u1(xa=a)
+half_b u2(xb=b)
+and comb(a=u1.sum_out, b=u2.sum_out)
+output out(in=comb.out)

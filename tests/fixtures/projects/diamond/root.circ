@@ -3,4 +3,5 @@ import right "right.circ"
 input a
 left l(in=a)
 right r(in=a)
-output out(in=l.out)
+and comb(a=l.out, b=r.out)
+output out(in=comb.out)

@@ -1,0 +1,4 @@
+import next "wrap4.circ"
+input tin
+next u(din=tin)
+output tout(in=u.dout)

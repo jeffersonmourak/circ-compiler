@@ -194,3 +194,30 @@ test "project behavior: nested_invert" {
         .spec_path = "tests/fixtures/expected-wasm/projects/nested_invert.txt",
     });
 }
+
+test "project behavior: diamond shared base" {
+    try runFixture(.{
+        .name = "diamond",
+        .root_path = "tests/fixtures/projects/diamond/root.circ",
+        .source_name = "root.circ",
+        .spec_path = "tests/fixtures/expected-wasm/projects/diamond.txt",
+    });
+}
+
+test "project behavior: deep_chain" {
+    try runFixture(.{
+        .name = "deep_chain",
+        .root_path = "tests/fixtures/projects/deep_chain/root.circ",
+        .source_name = "root.circ",
+        .spec_path = "tests/fixtures/expected-wasm/projects/deep_chain.txt",
+    });
+}
+
+test "project behavior: same_name_half_adder" {
+    try runFixture(.{
+        .name = "same_name_half_adder",
+        .root_path = "tests/fixtures/projects/same_name_half_adder/root.circ",
+        .source_name = "root.circ",
+        .spec_path = "tests/fixtures/expected-wasm/projects/same_name_half_adder.txt",
+    });
+}

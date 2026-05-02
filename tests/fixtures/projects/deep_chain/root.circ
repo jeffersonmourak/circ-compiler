@@ -1,0 +1,4 @@
+import top "wrap2.circ"
+input a
+top u(rin=a)
+output out(in=u.rout)

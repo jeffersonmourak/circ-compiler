@@ -1,0 +1,4 @@
+import mid "wrap3.circ"
+input rin
+mid u(tin=rin)
+output rout(in=u.tout)

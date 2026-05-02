@@ -6,6 +6,8 @@ fn updateModeEnabled() bool {
 }
 
 pub fn expectGolden(actual: []const u8, fixture_path: []const u8) !void {
+    if (std.fs.path.dirname(fixture_path)) |parent| try std.fs.cwd().makePath(parent);
+
     if (updateModeEnabled()) {
         try std.fs.cwd().writeFile(.{
             .sub_path = fixture_path,

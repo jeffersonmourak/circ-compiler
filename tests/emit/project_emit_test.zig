@@ -33,6 +33,24 @@ const fixtures = [_]Fixture{
         .source_name = "root.circ",
         .expected_path = "tests/fixtures/expected-zig/projects/nested_invert/main.zig",
     },
+    .{
+        .name = "diamond",
+        .root_path = "tests/fixtures/projects/diamond/root.circ",
+        .source_name = "root.circ",
+        .expected_path = "tests/fixtures/expected-zig/projects/diamond/main.zig",
+    },
+    .{
+        .name = "deep_chain",
+        .root_path = "tests/fixtures/projects/deep_chain/root.circ",
+        .source_name = "root.circ",
+        .expected_path = "tests/fixtures/expected-zig/projects/deep_chain/main.zig",
+    },
+    .{
+        .name = "same_name_half_adder",
+        .root_path = "tests/fixtures/projects/same_name_half_adder/root.circ",
+        .source_name = "root.circ",
+        .expected_path = "tests/fixtures/expected-zig/projects/same_name_half_adder/main.zig",
+    },
 };
 
 fn hasHardErrors(diagnostic_list: []const diagnostics.Diagnostic) bool {

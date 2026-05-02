@@ -1,0 +1,4 @@
+import inner "leaf.circ"
+input din
+inner u(cin=din)
+output dout(in=u.cout)

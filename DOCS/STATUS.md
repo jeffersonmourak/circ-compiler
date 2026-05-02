@@ -290,3 +290,16 @@
 **Next slice:** Phase 7 Slice 7.6 hardening fixtures (diamond / deep-chain / same-name aliases) plus harness coverage per Phase 7 plan.
 
 **Notes:** `emit_project` still uses **`threadlocal current_project`** for import-table lookups during Zig emission generation; callers are single-threaded today. Wired **`input_pin_gate`** ignores host **`setPin`** when **`in`** is connected (combinational dominance over wire); WASM only exposes **`setPin`** for root-listed inputs anyway.
+
+## 2026-05-01 — Phase 7 — Slice 7.6 hardening fixtures
+
+**What shipped:** Added Phase 7.6 regression projects under **`tests/fixtures/projects/`**: **`deep_chain/`** (five-file wrapper chain **`root`→`wrap2`→`wrap3`→`wrap4`→`leaf`**), **`same_name_half_adder/`** (two different **`half_adder.circ`** files in **`path_a/`** vs **`path_b/`**, root distinguishes them by import alias and builds **`out = a & ~b`**). **`diamond/root.circ`** now fans both branches through an **`and`** gate (**`out = l.out & r.out`**) so the shared **`base.circ`** is exercised without **`W002`** on the **`right`** leg. Wired **`tests/emit/project_emit_test.zig`** / **`project_behavior_test.zig`** entries plus **`tests/fixtures/expected-wasm/projects/{diamond,deep_chain,same_name_half_adder}.txt`** and matching **`tests/fixtures/expected-zig/projects/*/main.zig`** goldens. **`expectGolden`** now **`makePath`**'s fixture parents so **`UPDATE_GOLDENS=1`** can create nested **`expected-*`** paths.
+
+**Files touched:** `tests/fixtures/projects/diamond/root.circ`, `tests/fixtures/projects/deep_chain/*.circ`, `tests/fixtures/projects/same_name_half_adder/**/*.circ`, `tests/fixtures/expected-wasm/projects/diamond.txt`, `tests/fixtures/expected-wasm/projects/deep_chain.txt`, `tests/fixtures/expected-wasm/projects/same_name_half_adder.txt`, `tests/fixtures/expected-zig/projects/diamond/main.zig`, `tests/fixtures/expected-zig/projects/deep_chain/main.zig`, `tests/fixtures/expected-zig/projects/same_name_half_adder/main.zig`, `tests/emit/project_emit_test.zig`, `tests/emit/project_behavior_test.zig`, `tests/helpers/golden.zig`, `DOCS/STATUS.md`
+
+**Tests:** extended project emitter golden loop and wasm behavior matrix; **`zig build test`** result **pass**
+
+**Next slice:** Phase 9 start (suite hardening) or Phase 8 built-in macros per **`DOCS/PLANS_PROMPT.md`** index — **`DOCS/STATUS`** should reflect whichever phase is active once Phase 7 is committed as done.
+
+**Notes:** Phase 7 definition-of-done (**`DOCS/PLANS/PHASE_7_SUBCIRCUITS.md`**) is now satisfied by slices 7.1–7.6 in code + tests pending human **`git`** commit.
+

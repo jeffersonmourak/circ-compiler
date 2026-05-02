@@ -1,0 +1,3 @@
+input xb
+not inv(in=xb.out)
+output sum_out(in=inv.out)
