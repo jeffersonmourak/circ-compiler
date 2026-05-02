@@ -9,6 +9,8 @@ const WIRE_PROPAGATION_DELAY: Timestamp = 1;
 
 const IN_PORT_NAME = "in";
 const OUT_PORT_NAME = "out";
+const OUTPUT_PIN_IN_PORT_NAME = "in";
+const OUTPUT_PIN_OUT_PORT_NAME = "out";
 
 fn calculateDominantState(input_comp_list: std.ArrayList(*Component)) State {
     var dominant_state: State = .undefined;
@@ -74,6 +76,7 @@ fn recalculateAndReschedule(
                 }
             }
         },
+        .output_pin => return,
         .input_pin_gate => return,
     }
 
@@ -133,7 +136,7 @@ pub const Event = struct {
     }
 };
 
-pub const ComponentType = enum { input_pin_gate, not_gate, led, and_gate, wire };
+pub const ComponentType = enum { input_pin_gate, not_gate, led, and_gate, wire, output_pin };
 
 pub fn toKind(kind: u8) !Component.Kind {
     return switch (kind) {
@@ -142,6 +145,7 @@ pub fn toKind(kind: u8) !Component.Kind {
         2 => .led,
         3 => .and_gate,
         4 => .wire,
+        5 => .output_pin,
         else => return error.InvalidComponentKind,
     };
 }
@@ -149,27 +153,34 @@ pub fn toKind(kind: u8) !Component.Kind {
 pub const ComponentPortReference = struct { *Component, []const u8 };
 
 pub const Component = struct {
+    const PortMap = std.StringHashMap(std.ArrayList(*Component));
+
     id: u32,
     kind: Kind,
     output_state: State = .undefined,
-    outputs: std.StringHashMap(std.ArrayList(*Component)),
+    outputs: PortMap,
 
     const Kind = union(ComponentType) {
         input_pin_gate: struct { state: State = .undefined },
-        not_gate: struct { inputs: std.StringHashMap(std.ArrayList(*Component)) = std.StringHashMap(std.ArrayList(*Component)).init(memory.allocator) },
-        led: struct { inputs: std.StringHashMap(std.ArrayList(*Component)) = std.StringHashMap(std.ArrayList(*Component)).init(memory.allocator), state: State = .undefined },
-        and_gate: struct { inputs: std.StringHashMap(std.ArrayList(*Component)) = std.StringHashMap(std.ArrayList(*Component)).init(memory.allocator) },
-        wire: struct { inputs: std.StringHashMap(std.ArrayList(*Component)) = std.StringHashMap(std.ArrayList(*Component)).init(memory.allocator) },
+        not_gate: struct { inputs: PortMap = PortMap.init(memory.allocator) },
+        led: struct { inputs: PortMap = PortMap.init(memory.allocator), state: State = .undefined },
+        and_gate: struct { inputs: PortMap = PortMap.init(memory.allocator) },
+        wire: struct { inputs: PortMap = PortMap.init(memory.allocator) },
+        output_pin: struct { inputs: PortMap = PortMap.init(memory.allocator) },
     };
 
     pub fn init(id: u32, kind: Kind) !*Component {
         const self = try memory.allocator.create(Component);
 
-        var outputsMap: std.StringHashMap(std.ArrayList(*Component)) = std.StringHashMap(std.ArrayList(*Component)).init(memory.allocator);
+        var outputsMap: PortMap = PortMap.init(memory.allocator);
 
         switch (kind) {
-            .input_pin_gate, .not_gate, .and_gate, .wire => {
-                const result = try outputsMap.getOrPut("out");
+            .input_pin_gate, .not_gate, .and_gate, .wire, .output_pin => {
+                const output_port = switch (kind) {
+                    .output_pin => OUTPUT_PIN_OUT_PORT_NAME,
+                    else => OUT_PORT_NAME,
+                };
+                const result = try outputsMap.getOrPut(output_port);
 
                 if (!result.found_existing) {
                     result.value_ptr.* = try std.ArrayList(*Component).initCapacity(memory.allocator, 0);
@@ -191,7 +202,10 @@ pub const Component = struct {
                 gate.inputs = std.StringHashMap(std.ArrayList(*Component)).init(memory.allocator);
             },
             .led => |*led| {
-                led.inputs = std.StringHashMap(std.ArrayList(*Component)).init(memory.allocator);
+                led.inputs = PortMap.init(memory.allocator);
+            },
+            .output_pin => |*output_pin| {
+                output_pin.inputs = PortMap.init(memory.allocator);
             },
             else => {},
         }
@@ -235,6 +249,13 @@ pub const Component = struct {
                 }
                 led.inputs.deinit();
             },
+            .output_pin => |*output_pin| {
+                var outputPinInputsIterator = output_pin.inputs.valueIterator();
+                while (outputPinInputsIterator.next()) |list| {
+                    list.deinit(memory.allocator);
+                }
+                output_pin.inputs.deinit();
+            },
             .input_pin_gate => {},
         }
 
@@ -272,6 +293,7 @@ pub fn assertValidInputPin(component: *Component, pin: u32) !void {
         .and_gate => |gate| gate.inputs.len,
         .led => |led| led.inputs.len,
         .wire => |wire| wire.inputs.items.len,
+        .output_pin => |output_pin| output_pin.inputs.len,
         .input_pin_gate => 0,
     };
     if (pin >= inputs_len) return error.InvalidInputPin;
@@ -361,6 +383,13 @@ pub const Circuit = struct {
                 }
                 try toPortResult.value_ptr.*.append(memory.allocator, fromComponent);
             },
+            .output_pin => |*output_pin| {
+                const toPortResult = try output_pin.inputs.getOrPut(toPort);
+                if (!toPortResult.found_existing) {
+                    toPortResult.value_ptr.* = try std.ArrayList(*Component).initCapacity(memory.allocator, 0);
+                }
+                try toPortResult.value_ptr.*.append(memory.allocator, fromComponent);
+            },
             .input_pin_gate => return error.InvalidConnection,
         }
     }
@@ -420,3 +449,10 @@ pub const Circuit = struct {
         return buffer.toOwnedSlice(memory.allocator);
     }
 };
+
+test "output_pin kind exists and constructs" {
+    comptime {
+        const kind: Component.Kind = .{ .output_pin = .{} };
+        _ = kind;
+    }
+}

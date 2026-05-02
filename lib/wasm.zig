@@ -85,6 +85,12 @@ export fn createComponent(kind_int: u8) i32 {
                 return -1;
             };
         },
+        5 => {
+            component = circuit.createComponent(.{ .output_pin = .{} }) catch {
+                memory.allocator.destroy(component);
+                return -1;
+            };
+        },
         else => {
             memory.allocator.destroy(component);
             return -1;
