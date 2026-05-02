@@ -442,7 +442,33 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const emit_writer_mod = b.createModule(.{
+        .root_source_file = b.path("lib/emit/writer.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
     emit_build_fn_mod.addImport("ir_types", ir_types_mod);
+    emit_build_fn_mod.addImport("emit_writer", emit_writer_mod);
+    const emit_file_info_format_mod = b.createModule(.{
+        .root_source_file = b.path("lib/emit/file_info_format.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const emit_file_info_mod = b.createModule(.{
+        .root_source_file = b.path("lib/emit/file_info.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    emit_file_info_mod.addImport("ir_types", ir_types_mod);
+    emit_file_info_mod.addImport("file_info_format", emit_file_info_format_mod);
+    emit_file_info_mod.addImport("emit_writer", emit_writer_mod);
+    const emit_debug_paths_mod = b.createModule(.{
+        .root_source_file = b.path("lib/emit/debug_paths.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    emit_debug_paths_mod.addImport("ir_types", ir_types_mod);
+    emit_debug_paths_mod.addImport("emit_writer", emit_writer_mod);
     const emit_build_fn_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/emit/build_fn_test.zig"),
         .target = target,
@@ -466,6 +492,32 @@ pub fn build(b: *std.Build) void {
     emit_build_fn_tests.linkLibrary(parser_lib);
     emit_build_fn_tests.linkLibC();
     const run_emit_build_fn_tests = b.addRunArtifact(emit_build_fn_tests);
+    const emit_metadata_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/emit/metadata_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    emit_metadata_tests_mod.addImport("translate", translate_mod);
+    emit_metadata_tests_mod.addImport("resolver", resolver_mod);
+    emit_metadata_tests_mod.addImport("validator_run", validator_run_mod);
+    emit_metadata_tests_mod.addImport("diagnostics", validator_diagnostics_mod);
+    emit_metadata_tests_mod.addImport("ir_types", ir_types_mod);
+    emit_metadata_tests_mod.addImport("emit_file_info", emit_file_info_mod);
+    emit_metadata_tests_mod.addImport("emit_file_info_format", emit_file_info_format_mod);
+    emit_metadata_tests_mod.addImport("emit_debug_paths", emit_debug_paths_mod);
+    emit_metadata_tests_mod.addImport("golden", b.createModule(.{
+        .root_source_file = b.path("tests/helpers/golden.zig"),
+        .target = target,
+        .optimize = optimize,
+    }));
+    const emit_metadata_tests = b.addTest(.{
+        .root_module = emit_metadata_tests_mod,
+    });
+    emit_metadata_tests.addIncludePath(b.path("."));
+    emit_metadata_tests.addIncludePath(b.path("./lib"));
+    emit_metadata_tests.linkLibrary(parser_lib);
+    emit_metadata_tests.linkLibC();
+    const run_emit_metadata_tests = b.addRunArtifact(emit_metadata_tests);
     const test_step = b.step("test", "Run project test suite");
     test_step.dependOn(&run_unit_tests.step);
     test_step.dependOn(&run_golden_tests.step);
@@ -478,4 +530,5 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_validator_loop_tests.step);
     test_step.dependOn(&run_validator_run_tests.step);
     test_step.dependOn(&run_emit_build_fn_tests.step);
+    test_step.dependOn(&run_emit_metadata_tests.step);
 }

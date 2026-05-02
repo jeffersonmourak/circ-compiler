@@ -1,6 +1,6 @@
 const std = @import("std");
 const ir = @import("ir_types");
-const Writer = @import("writer.zig").Writer;
+const Writer = @import("emit_writer").Writer;
 
 fn componentVarName(allocator: std.mem.Allocator, writer: *Writer, component: ir.Component) ![]u8 {
     if (component.instance_name) |instance_name| {

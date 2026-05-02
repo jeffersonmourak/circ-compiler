@@ -127,3 +127,11 @@
 **Tests:** added `test "buildCircuit emitter fixtures"` in `tests/emit/build_fn_test.zig`, generated Zig snippet goldens with `UPDATE_GOLDENS=1 zig build test`, ran `zig build test`, result pass
 **Next slice:** Implement Phase 4 Slice 4.2 file-info and debug-paths emission modules with golden coverage.
 **Notes:** Build-function emission currently rejects unresolved/sub-circuit component kinds (`error.UnresolvedComponentName`, `error.UnsupportedSubCircuitInPhase4`) to keep Phase 4 single-file primitive-only constraints explicit.
+
+## 2026-05-01 — Phase 4 — Slice 4.2 file-info and debug-paths emission
+
+**What shipped:** Added a locked binary file-info encoding module with encode/decode helpers and emitted-file blob generation, plus a debug-paths emitter that outputs per-component source-path tables for single-file circuits. Added metadata emitter tests that golden-check file-info/debug-path snippets across fixtures and validate file-info blob round-trip decode for a representative circuit.
+**Files touched:** `lib/emit/file_info_format.zig`, `lib/emit/file_info.zig`, `lib/emit/debug_paths.zig`, `tests/emit/metadata_test.zig`, `tests/fixtures/expected-zig/empty_ish_file_info.zig`, `tests/fixtures/expected-zig/empty_ish_debug_paths.zig`, `tests/fixtures/expected-zig/and_two_inputs_file_info.zig`, `tests/fixtures/expected-zig/and_two_inputs_debug_paths.zig`, `tests/fixtures/expected-zig/anonymous_nested_file_info.zig`, `tests/fixtures/expected-zig/anonymous_nested_debug_paths.zig`, `build.zig`, `lib/emit/build_fn.zig`, `DOCS/STATUS.md`
+**Tests:** added `test "file info and debug path emitters fixtures"` and `test "file info blob round trip"` in `tests/emit/metadata_test.zig`, generated metadata goldens with `UPDATE_GOLDENS=1 zig build test`, ran `zig build test`, result pass
+**Next slice:** Implement Phase 4 Slice 4.3 runtime exports emission and top-level file stitching (`lib/emit/runtime.zig`, `lib/emit/main.zig`) with full-file golden coverage.
+**Notes:** `lib/emit/writer.zig` is now consumed via shared module import (`emit_writer`) to avoid Zig module-path collisions when multiple emitter modules are linked in one test target.
