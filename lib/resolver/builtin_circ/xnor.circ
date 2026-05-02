@@ -1,0 +1,5 @@
+// XNOR(a,b) = NOT(XOR(a,b))
+input a, b
+xor inner(a=a, b=b)
+not n(in=inner.out)
+output out(in=n.out)

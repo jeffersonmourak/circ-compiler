@@ -303,3 +303,16 @@
 
 **Notes:** Phase 7 definition-of-done (**`DOCS/PLANS/PHASE_7_SUBCIRCUITS.md`**) is now satisfied by slices 7.1–7.6 in code + tests pending human **`git`** commit.
 
+## 2026-05-01 — Phase 8 — Slice 8.1 built-in sources and embed table
+
+**What shipped:** Added five macro **`.circ`** sources under **`lib/resolver/builtin_circ/`** (comments use **`//`** to match the langlang grammar). Added **`lib/resolver/builtins.zig`** with **`@embedFile`** for each, a **`Name`** enum (public surface name **`or`** maps from tag **`or_gate`** to avoid Zig keyword clashes), **`table`**, **`sourceForName`**, and **`sourceForPathSuffix`**. **`tests/resolver/builtins_test.zig`** asserts every expected name is present with non-empty bytes and that each blob parses through **`translate.parseSource`** with at least one input pin, one **`output`**, and one component instance. **`build.zig`** wires **`resolver_builtins_mod`** and the new test step.
+
+**Files touched:** `lib/resolver/builtins.zig`, `lib/resolver/builtin_circ/*.circ`, `tests/resolver/builtins_test.zig`, `build.zig`, `DOCS/STATUS.md`
+
+**Tests:** `built-in embed table covers or nand nor xor xnor with non-empty sources`, `built-in sources parse with inputs, outputs, and component instances`; **`zig build test`** result **pass**
+
+**Next slice:** Phase 8 Slice 8.2 — dispatch **`<builtin>/`** paths in **`lib/resolver/file_loader.zig`** to the embed table.
+
+**Notes:** Zig 0.15 **`@embedFile`** must stay inside the module tree, so built-ins are vendored under **`lib/resolver/builtin_circ/`** rather than **`templates/builtins/`** until a root-level embed manifest is introduced. Slice 8.2 should load **`xor.circ`** expecting **`nor`**/**`nand`**/**`or`** identifiers in the grammar (already literals in **`proto-circ.peg`**).
+
+

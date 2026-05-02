@@ -1,0 +1,5 @@
+// NOR(a,b) = NOT(OR(a,b))
+input a, b
+or inner(a=a, b=b)
+not n(in=inner.out)
+output out(in=n.out)

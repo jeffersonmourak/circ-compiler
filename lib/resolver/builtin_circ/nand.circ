@@ -1,0 +1,5 @@
+// NAND(a,b) = NOT(AND(a,b))
+input a, b
+and inner(a=a, b=b)
+not n(in=inner.out)
+output out(in=n.out)

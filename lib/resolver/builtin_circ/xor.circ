@@ -1,0 +1,6 @@
+// XOR(a,b) = AND(OR(a,b), NAND(a,b))
+input a, b
+or o(a=a, b=b)
+nand n(a=a, b=b)
+and gate(a=o.out, b=n.out)
+output out(in=gate.out)

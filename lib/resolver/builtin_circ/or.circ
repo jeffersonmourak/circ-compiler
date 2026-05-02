@@ -1,0 +1,7 @@
+// OR(a,b) = NOT(AND(NOT(a), NOT(b)))
+input a, b
+not na(in=a)
+not nb(in=b)
+and inner(a=na.out, b=nb.out)
+not n(in=inner.out)
+output out(in=n.out)
