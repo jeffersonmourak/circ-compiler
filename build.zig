@@ -583,6 +583,21 @@ pub fn build(b: *std.Build) void {
     emit_behavior_tests.linkLibrary(parser_lib);
     emit_behavior_tests.linkLibC();
     const run_emit_behavior_tests = b.addRunArtifact(emit_behavior_tests);
+    const orchestrator_embed_mod = b.createModule(.{
+        .root_source_file = b.path("orchestrator_embed_module.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const orchestrator_embed_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/orchestrator/embed_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    orchestrator_embed_tests_mod.addImport("orchestrator_embed", orchestrator_embed_mod);
+    const orchestrator_embed_tests = b.addTest(.{
+        .root_module = orchestrator_embed_tests_mod,
+    });
+    const run_orchestrator_embed_tests = b.addRunArtifact(orchestrator_embed_tests);
     const test_step = b.step("test", "Run project test suite");
     test_step.dependOn(&run_unit_tests.step);
     test_step.dependOn(&run_golden_tests.step);
@@ -598,4 +613,5 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_emit_metadata_tests.step);
     test_step.dependOn(&run_emit_full_tests.step);
     test_step.dependOn(&run_emit_behavior_tests.step);
+    test_step.dependOn(&run_orchestrator_embed_tests.step);
 }

@@ -159,3 +159,11 @@
 **Tests:** replaced the single behavior test with fixture-backed tests (`behavior fixture: inverter`, `and gate`, `and of not`, `chain`, `unused input`) in `tests/emit/behavior_test.zig`, ran `zig build test`, result pass
 **Next slice:** Begin Phase 5 build orchestration from the active Phase 5 plan.
 **Notes:** The fixture parser intentionally ignores blank/comment lines, so `expected-wasm` specs remain human-editable while still producing strict deterministic assertions.
+
+## 2026-05-01 — Phase 5 — Slice 5.1 embed manifest and templates
+
+**What shipped:** Added production orchestration templates (`templates/build.zig`, `templates/main.zig`) and introduced the runtime embed manifest in `lib/orchestrator/embed.zig` with `@embedFile` records for build/main plus engine sources (`circuit`, `memory`, `log`, `transport`). Added orchestrator embed tests asserting non-empty embedded content and required manifest names.
+**Files touched:** `templates/build.zig`, `templates/main.zig`, `lib/orchestrator/embed.zig`, `tests/orchestrator/embed_test.zig`, `orchestrator_embed_module.zig`, `build.zig`, `DOCS/STATUS.md`
+**Tests:** added `runtime embed manifest has non-empty content` and `runtime embed manifest contains expected names` in `tests/orchestrator/embed_test.zig`, ran `zig build test`, result pass
+**Next slice:** Implement Phase 5 Slice 5.2 workspace creation and runtime/emitted-source writing helpers in `lib/orchestrator/workspace.zig`.
+**Notes:** To satisfy Zig package-path rules for `@embedFile` while keeping `lib/orchestrator/embed.zig` as the manifest source, tests compile it through a workspace-root wrapper module (`orchestrator_embed_module.zig`).
