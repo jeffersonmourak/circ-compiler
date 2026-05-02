@@ -151,3 +151,11 @@
 **Tests:** added `test "behavioral harness: inverter responds to pin toggles"` in `tests/emit/behavior_test.zig`, ran `UPDATE_GOLDENS=1 zig build test` during iteration for emission fixture sync, then ran `zig build test`, result pass
 **Next slice:** Implement Phase 4 Slice 4.5 behavioral fixture table coverage (`inverter`, `and_gate`, `and_of_not`, `chain`, `unused_input`) driven by the harness.
 **Notes:** Harness integration required runtime emitter compatibility fixes for Zig 0.15 (`callconv(.c)`, nullable ptr/len struct) and surfaced a functional NOT-gate issue in engine propagation (`not_gate` now correctly flips input state).
+
+## 2026-05-01 — Phase 4 — Slice 4.5 behavioral fixture matrix
+
+**What shipped:** Expanded behavioral coverage from a single inverter check to a fixture-driven matrix powered by `expected-wasm` specs. Added circuits and truth-table specs for `inverter`, `and_gate`, `and_of_not`, `chain`, and `unused_input`, and updated the behavioral test to parse fixture rows (`pin=state ... => pin=state ...`), map pin names to emitted component IDs via IR, execute each step through the wasm harness, and assert output lines deterministically.
+**Files touched:** `tests/emit/behavior_test.zig`, `tests/fixtures/circuits/and_gate.circ`, `tests/fixtures/circuits/and_of_not.circ`, `tests/fixtures/circuits/chain.circ`, `tests/fixtures/circuits/unused_input.circ`, `tests/fixtures/expected-wasm/inverter.txt`, `tests/fixtures/expected-wasm/and_gate.txt`, `tests/fixtures/expected-wasm/and_of_not.txt`, `tests/fixtures/expected-wasm/chain.txt`, `tests/fixtures/expected-wasm/unused_input.txt`, `tests/README.md`, `DOCS/STATUS.md`
+**Tests:** replaced the single behavior test with fixture-backed tests (`behavior fixture: inverter`, `and gate`, `and of not`, `chain`, `unused input`) in `tests/emit/behavior_test.zig`, ran `zig build test`, result pass
+**Next slice:** Begin Phase 5 build orchestration from the active Phase 5 plan.
+**Notes:** The fixture parser intentionally ignores blank/comment lines, so `expected-wasm` specs remain human-editable while still producing strict deterministic assertions.

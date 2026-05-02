@@ -1,0 +1,5 @@
+input a
+not n1(in=a)
+not n2(in=n1.out)
+not n3(in=n2.out)
+output out(in=n3.out)

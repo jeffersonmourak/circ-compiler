@@ -1,0 +1,5 @@
+input a
+input b
+not inv(in=b)
+and gate1(a=a, b=inv.out)
+output out(in=gate1.out)

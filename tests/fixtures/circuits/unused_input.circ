@@ -1,0 +1,3 @@
+input used
+input unused
+output out(in=used)
