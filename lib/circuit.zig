@@ -76,7 +76,10 @@ fn recalculateAndReschedule(
                 }
             }
         },
-        .output_pin => return,
+        .output_pin => |*output_pin| {
+            const inputs = output_pin.inputs.get(OUTPUT_PIN_IN_PORT_NAME) orelse return;
+            calculated_state = calculateDominantState(inputs);
+        },
         .input_pin_gate => return,
     }
 
@@ -84,7 +87,7 @@ fn recalculateAndReschedule(
         log.info(" - Component (id={d}, type={s}) output changed from {s} -> {s}. Scheduling new event.", .{ component.id, @tagName(component.kind), @tagName(component.output_state), @tagName(calculated_state) });
 
         const delay = switch (component.kind) {
-            .wire => WIRE_PROPAGATION_DELAY,
+            .wire, .output_pin => WIRE_PROPAGATION_DELAY,
             else => PROPAGATION_DELAY,
         };
 
@@ -454,5 +457,83 @@ test "output_pin kind exists and constructs" {
     comptime {
         const kind: Component.Kind = .{ .output_pin = .{} };
         _ = kind;
+    }
+}
+
+test "output_pin: passes input through" {
+    {
+        var circuit = try Circuit.init();
+        defer circuit.deinit();
+
+        const input = try circuit.createComponent(.{ .input_pin_gate = .{} });
+        const output_pin = try circuit.createComponent(.{ .output_pin = .{} });
+        try circuit.connect(input.port(OUT_PORT_NAME), output_pin.port(OUTPUT_PIN_IN_PORT_NAME));
+
+        try circuit.propagateEvent(input, .low);
+
+        try std.testing.expectEqual(State.low, output_pin.output_state);
+        try std.testing.expectEqual(@as(Timestamp, PROPAGATION_DELAY + WIRE_PROPAGATION_DELAY), circuit.current_time);
+    }
+
+    {
+        var circuit = try Circuit.init();
+        defer circuit.deinit();
+
+        const input = try circuit.createComponent(.{ .input_pin_gate = .{} });
+        const output_pin = try circuit.createComponent(.{ .output_pin = .{} });
+        try circuit.connect(input.port(OUT_PORT_NAME), output_pin.port(OUTPUT_PIN_IN_PORT_NAME));
+
+        try circuit.propagateEvent(input, .high);
+
+        try std.testing.expectEqual(State.high, output_pin.output_state);
+        try std.testing.expectEqual(@as(Timestamp, PROPAGATION_DELAY + WIRE_PROPAGATION_DELAY), circuit.current_time);
+    }
+
+    {
+        var circuit = try Circuit.init();
+        defer circuit.deinit();
+
+        const input = try circuit.createComponent(.{ .input_pin_gate = .{} });
+        const output_pin = try circuit.createComponent(.{ .output_pin = .{} });
+        try circuit.connect(input.port(OUT_PORT_NAME), output_pin.port(OUTPUT_PIN_IN_PORT_NAME));
+
+        try circuit.propagateEvent(input, .undefined);
+
+        try std.testing.expectEqual(State.undefined, output_pin.output_state);
+        try std.testing.expectEqual(@as(Timestamp, PROPAGATION_DELAY), circuit.current_time);
+    }
+
+    {
+        var circuit = try Circuit.init();
+        defer circuit.deinit();
+
+        const input = try circuit.createComponent(.{ .input_pin_gate = .{} });
+        const output_pin = try circuit.createComponent(.{ .output_pin = .{} });
+        try circuit.connect(input.port(OUT_PORT_NAME), output_pin.port(OUTPUT_PIN_IN_PORT_NAME));
+
+        try circuit.propagateEvent(input, .low);
+        try std.testing.expectEqual(State.low, output_pin.output_state);
+
+        try circuit.propagateEvent(input, .high);
+
+        try std.testing.expectEqual(State.high, output_pin.output_state);
+        try std.testing.expectEqual(@as(Timestamp, (PROPAGATION_DELAY + WIRE_PROPAGATION_DELAY) * 2), circuit.current_time);
+    }
+
+    {
+        var circuit = try Circuit.init();
+        defer circuit.deinit();
+
+        const input = try circuit.createComponent(.{ .input_pin_gate = .{} });
+        const output_pin_1 = try circuit.createComponent(.{ .output_pin = .{} });
+        const output_pin_2 = try circuit.createComponent(.{ .output_pin = .{} });
+        try circuit.connect(input.port(OUT_PORT_NAME), output_pin_1.port(OUTPUT_PIN_IN_PORT_NAME));
+        try circuit.connect(output_pin_1.port(OUTPUT_PIN_OUT_PORT_NAME), output_pin_2.port(OUTPUT_PIN_IN_PORT_NAME));
+
+        try circuit.propagateEvent(input, .high);
+
+        try std.testing.expectEqual(State.high, output_pin_1.output_state);
+        try std.testing.expectEqual(State.high, output_pin_2.output_state);
+        try std.testing.expectEqual(@as(Timestamp, PROPAGATION_DELAY + (WIRE_PROPAGATION_DELAY * 2)), circuit.current_time);
     }
 }
