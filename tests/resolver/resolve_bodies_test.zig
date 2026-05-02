@@ -31,7 +31,7 @@ test "resolve bodies links imported alias to sub_circuit_ref" {
     const allocator = arena.allocator();
 
     const project = try resolveProject(allocator, fixtureRoot("two_file"));
-    try std.testing.expectEqual(@as(usize, 2), project.files.len);
+    try std.testing.expectEqual(@as(usize, 7), project.files.len);
 
     const root_module = project.files[0];
     var linked = false;

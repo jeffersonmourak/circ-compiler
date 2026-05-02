@@ -1,6 +1,12 @@
 const std = @import("std");
 const diagnostics = @import("diagnostics");
+const file_loader = @import("file_loader");
 const scan_imports = @import("scan_imports");
+
+/// User `.circ` files cannot form semantic import cycles through the built-in macro library alone.
+fn participatesInImportCycles(file_paths: []const []const u8, importer: scan_imports.FileId) bool {
+    return !std.mem.startsWith(u8, file_paths[importer], file_loader.builtin_path_prefix);
+}
 
 pub const AnalyzeResult = struct {
     topo_order: []const scan_imports.FileId,
@@ -105,6 +111,7 @@ pub fn analyzeImports(
                 switch (self.states[target]) {
                     .white => try self.dfs(target),
                     .gray => {
+                        if (!participatesInImportCycles(self.file_paths, node)) break;
                         var start_idx: usize = 0;
                         while (start_idx < self.stack.items.len and self.stack.items[start_idx] != target) : (start_idx += 1) {}
                         if (start_idx < self.stack.items.len) {

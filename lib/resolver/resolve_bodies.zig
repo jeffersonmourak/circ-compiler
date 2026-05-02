@@ -3,6 +3,7 @@ const translate = @import("translate");
 const single_resolver = @import("resolver");
 const ir = @import("ir_types");
 const scan_imports = @import("scan_imports");
+const file_loader = @import("file_loader");
 
 fn toIrSpan(span: anytype) ir.Span {
     return .{
@@ -37,9 +38,11 @@ pub fn resolveBodies(
     @memset(resolved_modules, false);
 
     for (topo_order) |file_id| {
-        const source = try std.fs.cwd().readFileAlloc(allocator, file_paths[file_id], 16 * 1024 * 1024);
-        sources[file_id] = source;
-        const ast_file = try translate.parseSource(allocator, file_id, source);
+        const loaded = try file_loader.loadFile(allocator, file_paths[file_id]);
+        allocator.free(loaded.absolute_path);
+        sources[file_id] = loaded.source;
+
+        const ast_file = try translate.parseSource(allocator, file_id, sources[file_id]);
         const module = try single_resolver.resolve(allocator, ast_file, file_id);
 
         const components = @constCast(module.components);
@@ -57,7 +60,38 @@ pub fn resolveBodies(
             }
         }
 
-        modules[file_id] = module;
+        var merged_imports: std.ArrayList(ir.UnresolvedImport) = .{};
+        defer merged_imports.deinit(allocator);
+
+        try merged_imports.appendSlice(allocator, module.imports);
+        allocator.free(module.imports);
+
+        const implicit_span = ir.Span{
+            .file_id = module.file_id.value,
+            .start_line = 1,
+            .start_col = 1,
+            .end_line = 1,
+            .end_col = 1,
+        };
+
+        for (import_table) |entry| {
+            if (entry.importing_file != file_id or !entry.implicit_builtin) continue;
+            try merged_imports.append(allocator, .{
+                .alias = try allocator.dupe(u8, entry.alias),
+                .path = try allocator.dupe(u8, file_paths[entry.target_file]),
+                .span = implicit_span,
+                .implicit_builtin = true,
+            });
+        }
+
+        modules[file_id] = ir.Module{
+            .file_id = module.file_id,
+            .inputs = module.inputs,
+            .outputs = module.outputs,
+            .components = module.components,
+            .connections = module.connections,
+            .imports = try merged_imports.toOwnedSlice(allocator),
+        };
         resolved_modules[file_id] = true;
     }
 

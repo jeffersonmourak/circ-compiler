@@ -1,0 +1,3 @@
+import or "phony.circ"
+input a
+output out(in=a)

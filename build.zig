@@ -749,6 +749,7 @@ pub fn build(b: *std.Build) void {
     resolver_scan_imports_mod.addImport("translate", translate_mod);
     resolver_scan_imports_mod.addImport("diagnostics", validator_diagnostics_mod);
     resolver_scan_imports_mod.addImport("file_loader", resolver_file_loader_mod);
+    resolver_scan_imports_mod.addImport("builtins", resolver_builtins_mod);
     const resolver_scan_imports_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/resolver/scan_imports_test.zig"),
         .target = target,
@@ -771,6 +772,7 @@ pub fn build(b: *std.Build) void {
     });
     resolver_import_cycle_mod.addImport("diagnostics", validator_diagnostics_mod);
     resolver_import_cycle_mod.addImport("scan_imports", resolver_scan_imports_mod);
+    resolver_import_cycle_mod.addImport("file_loader", resolver_file_loader_mod);
     const resolver_import_cycle_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/resolver/import_cycle_test.zig"),
         .target = target,
@@ -796,6 +798,7 @@ pub fn build(b: *std.Build) void {
     resolver_resolve_bodies_mod.addImport("resolver", resolver_mod);
     resolver_resolve_bodies_mod.addImport("ir_types", ir_types_mod);
     resolver_resolve_bodies_mod.addImport("scan_imports", resolver_scan_imports_mod);
+    resolver_resolve_bodies_mod.addImport("file_loader", resolver_file_loader_mod);
     const resolver_resolve_bodies_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/resolver/resolve_bodies_test.zig"),
         .target = target,

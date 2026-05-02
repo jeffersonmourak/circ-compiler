@@ -30,6 +30,7 @@ pub fn run(
     diagnostic_list: *diagnostics.DiagnosticList,
 ) !void {
     for (module.imports) |import_decl| {
+        if (import_decl.implicit_builtin) continue;
         if (aliasIsUsed(module, import_decl.alias)) continue;
         const message = try std.fmt.allocPrint(
             allocator,

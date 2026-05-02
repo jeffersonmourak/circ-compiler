@@ -75,6 +75,7 @@ pub const UnresolvedImport = struct {
     alias: []const u8,
     path: []const u8,
     span: Span,
+    implicit_builtin: bool = false,
 };
 
 pub const ResolvedImport = struct {

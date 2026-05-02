@@ -30,6 +30,8 @@ pub const Name = enum {
     }
 };
 
+pub const builtin_vpath_prefix = "<builtin>/";
+
 pub const Entry = struct {
     name: Name,
     source: []const u8,
@@ -46,6 +48,23 @@ pub const table: []const Entry = &.{
 pub fn sourceForName(name: []const u8) ?[]const u8 {
     for (table) |entry| {
         if (std.mem.eql(u8, entry.name.slice(), name)) return entry.source;
+    }
+    return null;
+}
+
+pub fn isMacroImportAlias(alias: []const u8) bool {
+    for (table) |e| {
+        if (std.mem.eql(u8, e.name.slice(), alias)) return true;
+    }
+    return false;
+}
+
+/// Allocator-owned path like `"<builtin>/or.circ"`, or `null` if `alias` is not a macro.
+pub fn virtualPathForMacroAlias(allocator: std.mem.Allocator, alias: []const u8) !?[]const u8 {
+    for (table) |e| {
+        if (std.mem.eql(u8, e.name.slice(), alias)) {
+            return try std.fmt.allocPrint(allocator, "{s}{s}", .{ builtin_vpath_prefix, e.name.fileName() });
+        }
     }
     return null;
 }

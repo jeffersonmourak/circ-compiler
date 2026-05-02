@@ -7,7 +7,7 @@ fn readAbsoluteFileAlloc(allocator: std.mem.Allocator, path: []const u8) ![]u8 {
     return file.readToEndAlloc(allocator, 16 * 1024 * 1024);
 }
 
-pub const builtin_path_prefix = "<builtin>/";
+pub const builtin_path_prefix = builtins.builtin_vpath_prefix;
 
 pub const LoadedFile = struct {
     absolute_path: []u8,

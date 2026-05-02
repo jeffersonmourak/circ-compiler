@@ -2,6 +2,7 @@ const std = @import("std");
 const translate = @import("translate");
 const diagnostics = @import("diagnostics");
 const file_loader = @import("file_loader");
+const builtins = @import("builtins");
 
 pub const FileId = u32;
 
@@ -10,6 +11,7 @@ pub const ResolvedImport = struct {
     alias: []const u8,
     target_file: FileId,
     span: diagnostics.Span,
+    implicit_builtin: bool = false,
 };
 
 pub const ScanResult = struct {
@@ -27,10 +29,10 @@ pub const ScanResult = struct {
 };
 
 fn isBuiltinAlias(alias: []const u8) bool {
-    const builtins = [_][]const u8{
+    const reserved = [_][]const u8{
         "input", "output", "and", "not", "wire", "led", "input_pin", "output_pin",
     };
-    for (builtins) |name| {
+    for (reserved) |name| {
         if (std.mem.eql(u8, alias, name)) return true;
     }
     return false;
@@ -158,7 +160,6 @@ pub fn scanProjectImports(allocator: std.mem.Allocator, root_path: []const u8) !
                 );
                 continue;
             }
-            try alias_to_span.put(alias, import_span);
 
             const resolved_path = file_loader.resolveImportPath(allocator, file_path, import_decl.path.text) catch |err| {
                 if (err == error.FileNotFound) {
@@ -172,6 +173,23 @@ pub fn scanProjectImports(allocator: std.mem.Allocator, root_path: []const u8) !
                 }
                 return err;
             };
+
+            if (builtins.isMacroImportAlias(alias)) {
+                const expected_virt = (try builtins.virtualPathForMacroAlias(allocator, alias)) orelse unreachable;
+                defer allocator.free(expected_virt);
+                if (!std.mem.eql(u8, resolved_path, expected_virt)) {
+                    allocator.free(resolved_path);
+                    try appendImportAliasCollisionDiagnostic(
+                        allocator,
+                        &diagnostics_list,
+                        alias,
+                        import_span,
+                        null,
+                        "this alias refers to built-in macros; the import path must resolve to `<builtin>/<name>.circ` matching the compiler",
+                    );
+                    continue;
+                }
+            }
 
             const target_file_id = if (path_to_id.get(resolved_path)) |existing_id| blk: {
                 allocator.free(resolved_path);
@@ -192,6 +210,49 @@ pub fn scanProjectImports(allocator: std.mem.Allocator, root_path: []const u8) !
                 .alias = try allocator.dupe(u8, alias),
                 .target_file = target_file_id,
                 .span = import_span,
+                .implicit_builtin = false,
+            });
+            try alias_to_span.put(alias, import_span);
+        }
+
+        const implicit_span = diagnostics.Span{
+            .file_id = file_id,
+            .start_line = 1,
+            .start_col = 1,
+            .end_line = 1,
+            .end_col = 1,
+        };
+
+        for (builtins.table) |macro_entry| {
+            const alias = macro_entry.name.slice();
+            if (alias_to_span.get(alias)) |_| continue;
+
+            const builtin_path = try builtins.virtualPathForMacroAlias(allocator, alias) orelse continue;
+            defer allocator.free(builtin_path);
+
+            if (std.mem.eql(u8, file_path, builtin_path)) continue;
+
+            const target_file_id = if (path_to_id.get(builtin_path)) |existing_id| blk: {
+                break :blk existing_id;
+            } else blk: {
+                const new_id: FileId = @intCast(file_paths.items.len);
+                const path_owned = try allocator.dupe(u8, builtin_path);
+                errdefer allocator.free(path_owned);
+                try path_to_id.put(path_owned, new_id);
+                try file_paths.append(allocator, path_owned);
+                const loaded = try file_loader.loadFile(allocator, path_owned);
+                allocator.free(loaded.absolute_path);
+                try sources.append(allocator, loaded.source);
+                try queue.append(allocator, new_id);
+                break :blk new_id;
+            };
+
+            try import_table.append(allocator, .{
+                .importing_file = file_id,
+                .alias = try allocator.dupe(u8, alias),
+                .target_file = target_file_id,
+                .span = implicit_span,
+                .implicit_builtin = true,
             });
         }
     }

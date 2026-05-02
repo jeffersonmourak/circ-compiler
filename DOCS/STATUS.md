@@ -323,7 +323,18 @@
 
 **Tests:** file-loader suite above; **`zig build test`** result **pass**
 
-**Next slice:** Phase 8 Slice 8.3 — synthetic auto-import injection + **`W003`** exemption for implicit builtin imports (**`unused_import`** pass).
+**Next slice:** Phase 8 Slice 8.4 per **`DOCS/PLANS/PHASE_8_BUILTIN_MACROS.md`** ( **`circ-compile`** / remaining macro UX); Slice 8.3 is **`DOCS/STATUS.md`** 2026-05-01 entry.
 
 **Notes:** Invalid **``<builtin>/unknown.circ`** still surfaces as a hard **`loadFile`** error during scan (**`BuiltinNotFound`**) rather than **`E009`**; tightening diagnostics can wait until auto-import UX is finalized.
 
+## 2026-05-01 — Phase 8 — Slice 8.3 implicit built-in macro imports
+
+**What shipped:** After user imports per file, **`scan_imports`** appends **`implicit_builtin`** **`ResolvedImport`** rows for **`or`**/**`nand`**/**`nor`**/**`xor`**/**`xnor`** when that alias is not already declared—skipping only the self-edge (**`<builtin>/or.circ`** does not implicitly import **`or`**). User **`import`** of a macro alias must resolve to **``<builtin>/<name>.circ`** or **`E011`**. **`import_cycle`** excludes edges whose importer path starts with **`"<builtin>/"`** from **`E010`** detection but still traverses every edge for topo order so built-in compositions resolve before dependents. **`resolve_bodies`** loads bodies through **`file_loader.loadFile`** and merges implicit **`ir.UnresolvedImport`** rows (**`implicit_builtin: true`**). **`unused_import`** skips **`W003`** for implicit rows.
+
+**Files touched:** `lib/resolver/scan_imports.zig`, `lib/resolver/import_cycle.zig`, `lib/resolver/resolve_bodies.zig`, `lib/resolver/file_loader.zig`, `lib/ir/types.zig`, `lib/validator/passes/unused_import.zig`, `build.zig`, **`tests/fixtures/projects/macro_import_collision/`**, resolver tests listed below, regenerated **`tests/fixtures/expected-zig/projects/*/main.zig`**.
+
+**Tests:** macro wrong-path (**`E011`**) regression; **`scan_imports`** / **`resolve_bodies`** expectations updated for user + built-in file graph; **`UPDATE_GOLDENS=1 zig build test`** then **`zig build test`** — result **pass**
+
+**Next slice:** Phase 8 Slice 8.4 per **`DOCS/PLANS/PHASE_8_BUILTIN_MACROS.md`** (remaining macro pipeline / **`circ-compile`** UX).
+
+**Notes:** **`file_loader.builtin_path_prefix`** aliases **`builtins.builtin_vpath_prefix`** so the builtin virtual path stays single-sourced.
