@@ -1,0 +1,1 @@
+tests/fixtures/circuits/E001_undeclared.circ:2:1: error: E001: undeclared name 'mystery'

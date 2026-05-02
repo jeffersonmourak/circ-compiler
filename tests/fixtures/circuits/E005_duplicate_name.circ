@@ -1,0 +1,4 @@
+input a
+and dup(a=a, b=a)
+not dup(in=a)
+output out(in=dup.out)

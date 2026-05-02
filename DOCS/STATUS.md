@@ -87,3 +87,11 @@
 **Tests:** added diagnostic formatting/code-table tests in `tests/validator/diagnostics_test.zig`, ran `zig build test`, result pass
 **Next slice:** Implement Phase 3 Slice 3.2 name-resolution and name-collision passes with per-code fixtures.
 **Notes:** Diagnostic level uses `err`/`warning` internally to avoid Zig keyword conflicts while preserving formatted output text as `error`/`warning`.
+
+## 2026-05-01 — Phase 3 — Slice 3.2 name resolution and collision passes
+
+**What shipped:** Added validator pass implementations for unresolved names (`E001`), duplicate instance names (`E005`), and built-in shadowing (`E006`) with diagnostic notes for duplicate declarations. Added fixture-driven diagnostics tests that parse source, resolve IR, run the two passes, and compare deterministic diagnostics dumps against expected snapshots.
+**Files touched:** `lib/validator/passes/name_resolution.zig`, `lib/validator/passes/name_collision.zig`, `tests/validator/name_passes_test.zig`, `tests/fixtures/circuits/E001_undeclared.circ`, `tests/fixtures/circuits/E005_duplicate_name.circ`, `tests/fixtures/circuits/E006_shadows_builtin.circ`, `tests/fixtures/expected-diagnostics/E001_undeclared.txt`, `tests/fixtures/expected-diagnostics/E005_duplicate_name.txt`, `tests/fixtures/expected-diagnostics/E006_shadows_builtin.txt`, `tests/fixtures/expected-diagnostics/clean.txt`, `build.zig`, `lib/validator/diagnostics.zig`, `lib/ir/resolver.zig`, `DOCS/STATUS.md`
+**Tests:** added `test "name resolution and collision passes fixtures"` in `tests/validator/name_passes_test.zig`, generated expected diagnostics with `UPDATE_GOLDENS=1 zig build test`, ran `zig build test`, result pass
+**Next slice:** Implement Phase 3 Slice 3.3 port validation, multi-driver, required-input, and output-assignment passes.
+**Notes:** Name-pass diagnostics currently sort by source location and code for stable snapshots, with duplicate-name diagnostics including a `note:` line pointing to the first declaration span.

@@ -1,0 +1,2 @@
+tests/fixtures/circuits/E005_duplicate_name.circ:3:1: error: E005: duplicate instance name 'dup'
+  note: tests/fixtures/circuits/E005_duplicate_name.circ:2:1: first declared as 'dup' here

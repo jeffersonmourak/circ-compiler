@@ -1,9 +1,14 @@
 const std = @import("std");
-const SyntaxSpan = @import("span").Span;
 const codes = @import("codes");
 
 pub const DiagnosticCode = codes.DiagnosticCode;
-pub const Span = SyntaxSpan;
+pub const Span = struct {
+    file_id: u32,
+    start_line: u32,
+    start_col: u32,
+    end_line: u32,
+    end_col: u32,
+};
 
 pub const DiagnosticLevel = enum {
     err,

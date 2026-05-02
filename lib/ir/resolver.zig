@@ -1,6 +1,6 @@
 const std = @import("std");
 const ast = @import("translate").Ast;
-const ir = @import("types.zig");
+const ir = @import("ir_types");
 
 const PendingPorts = struct {
     component_id: ir.ComponentId,
