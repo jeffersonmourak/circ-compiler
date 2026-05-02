@@ -103,3 +103,11 @@
 **Tests:** added `test "structural validation passes fixtures"` in `tests/validator/structural_passes_test.zig`, generated diagnostics snapshots with `UPDATE_GOLDENS=1 zig build test`, ran `zig build test`, result pass
 **Next slice:** Implement Phase 3 Slice 3.4 combinational-loop detection pass and fixtures.
 **Notes:** `E007` fixture now parses as a single top-level declaration due translator support for non-sequence `Program` payloads; output driver absence is represented via `InvalidComponentId` and diagnosed in the output-assignment pass.
+
+## 2026-05-01 — Phase 3 — Slice 3.4 combinational-loop pass
+
+**What shipped:** Added a combinational-loop validation pass with cycle detection over the non-cycle-breaking connection graph, including explicit self-loop handling and cycle-note emission per participating component. Added fixture-driven loop tests for simple loop, wire-only loop, clean gated feedback, and multi-cycle reporting.
+**Files touched:** `lib/validator/passes/combinational_loop.zig`, `tests/validator/loop_passes_test.zig`, `tests/fixtures/circuits/E008_simple_loop.circ`, `tests/fixtures/circuits/E008_wire_loop.circ`, `tests/fixtures/circuits/clean_gated_feedback.circ`, `tests/fixtures/circuits/E008_two_cycles.circ`, `tests/fixtures/expected-diagnostics/E008_simple_loop.txt`, `tests/fixtures/expected-diagnostics/E008_wire_loop.txt`, `tests/fixtures/expected-diagnostics/clean_gated_feedback.txt`, `tests/fixtures/expected-diagnostics/E008_two_cycles.txt`, `build.zig`, `DOCS/STATUS.md`
+**Tests:** added `test "combinational loop pass fixtures"` in `tests/validator/loop_passes_test.zig`, generated expected diagnostics with `UPDATE_GOLDENS=1 zig build test`, ran `zig build test`, result pass
+**Next slice:** Implement Phase 3 Slice 3.5 warning passes (`W001`, `W002`) and top-level validator driver.
+**Notes:** Loop diagnostics include `note:` lines naming each cycle node (`component <id>`), and cycle deduping is keyed by sorted component-id sets to avoid duplicate reports from DFS back-edge permutations.

@@ -1,0 +1,2 @@
+wire w1(in=w2.out)
+wire w2(in=w1.out)

@@ -1,0 +1,4 @@
+not n1(in=w2.out)
+wire w1(in=n1.out)
+not n2(in=w1.out)
+wire w2(in=n2.out)

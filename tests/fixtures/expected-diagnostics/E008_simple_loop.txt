@@ -1,0 +1,2 @@
+tests/fixtures/circuits/E008_simple_loop.circ:1:1: error: E008: combinational loop detected
+  note: tests/fixtures/circuits/E008_simple_loop.circ:1:1: cycle includes component 0

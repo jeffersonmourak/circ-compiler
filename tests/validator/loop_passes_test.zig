@@ -1,0 +1,95 @@
+const std = @import("std");
+const translate = @import("translate");
+const resolver = @import("resolver");
+const diagnostics = @import("diagnostics");
+const combinational_loop = @import("combinational_loop");
+const golden = @import("golden");
+
+const Fixture = struct {
+    name: []const u8,
+    source_path: []const u8,
+    expected_path: []const u8,
+};
+
+const fixtures = [_]Fixture{
+    .{
+        .name = "E008 simple loop",
+        .source_path = "tests/fixtures/circuits/E008_simple_loop.circ",
+        .expected_path = "tests/fixtures/expected-diagnostics/E008_simple_loop.txt",
+    },
+    .{
+        .name = "E008 wire loop",
+        .source_path = "tests/fixtures/circuits/E008_wire_loop.circ",
+        .expected_path = "tests/fixtures/expected-diagnostics/E008_wire_loop.txt",
+    },
+    .{
+        .name = "clean gated feedback",
+        .source_path = "tests/fixtures/circuits/clean_gated_feedback.circ",
+        .expected_path = "tests/fixtures/expected-diagnostics/clean_gated_feedback.txt",
+    },
+    .{
+        .name = "E008 two cycles",
+        .source_path = "tests/fixtures/circuits/E008_two_cycles.circ",
+        .expected_path = "tests/fixtures/expected-diagnostics/E008_two_cycles.txt",
+    },
+};
+
+fn lessByLocation(_: void, lhs: diagnostics.Diagnostic, rhs: diagnostics.Diagnostic) bool {
+    if (lhs.span.start_line != rhs.span.start_line) return lhs.span.start_line < rhs.span.start_line;
+    if (lhs.span.start_col != rhs.span.start_col) return lhs.span.start_col < rhs.span.start_col;
+    return @intFromEnum(lhs.code) < @intFromEnum(rhs.code);
+}
+
+fn dumpDiagnostics(allocator: std.mem.Allocator, file_path: []const u8, diagnostic_list: []const diagnostics.Diagnostic) ![]u8 {
+    var out: std.ArrayList(u8) = .{};
+    errdefer out.deinit(allocator);
+    const writer = out.writer(allocator);
+
+    if (diagnostic_list.len == 0) {
+        try writer.writeAll("<clean>\n");
+        return out.toOwnedSlice(allocator);
+    }
+
+    for (diagnostic_list) |diagnostic| {
+        const line = try diagnostics.formatDiagnosticLine(allocator, file_path, diagnostic);
+        defer allocator.free(line);
+        try writer.writeAll(line);
+        try writer.writeByte('\n');
+
+        for (diagnostic.notes) |note| {
+            const note_line = try std.fmt.allocPrint(
+                allocator,
+                "  note: {s}:{d}:{d}: {s}",
+                .{ file_path, note.span.start_line, note.span.start_col, note.message },
+            );
+            defer allocator.free(note_line);
+            try writer.writeAll(note_line);
+            try writer.writeByte('\n');
+        }
+    }
+
+    return out.toOwnedSlice(allocator);
+}
+
+test "combinational loop pass fixtures" {
+    for (fixtures) |fixture| {
+        var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+        defer arena.deinit();
+        const allocator = arena.allocator();
+
+        const source = try std.fs.cwd().readFileAlloc(allocator, fixture.source_path, 1024 * 1024);
+        const ast_file = try translate.parseSource(allocator, 0, source);
+        const ir_module = try resolver.resolve(allocator, ast_file, 0);
+
+        var diagnostic_list = diagnostics.initDiagnosticList();
+        defer diagnostic_list.deinit(allocator);
+
+        try combinational_loop.run(allocator, &ir_module, &diagnostic_list);
+        std.mem.sort(diagnostics.Diagnostic, diagnostic_list.items, {}, lessByLocation);
+        const dump = try dumpDiagnostics(allocator, fixture.source_path, diagnostic_list.items);
+        golden.expectGolden(dump, fixture.expected_path) catch |err| {
+            std.debug.print("Loop fixture failed: {s}\n", .{fixture.name});
+            return err;
+        };
+    }
+}

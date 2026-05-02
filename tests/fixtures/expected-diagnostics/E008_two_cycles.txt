@@ -1,0 +1,6 @@
+tests/fixtures/circuits/E008_two_cycles.circ:1:1: error: E008: combinational loop detected
+  note: tests/fixtures/circuits/E008_two_cycles.circ:1:1: cycle includes component 0
+  note: tests/fixtures/circuits/E008_two_cycles.circ:2:1: cycle includes component 1
+tests/fixtures/circuits/E008_two_cycles.circ:3:1: error: E008: combinational loop detected
+  note: tests/fixtures/circuits/E008_two_cycles.circ:3:1: cycle includes component 2
+  note: tests/fixtures/circuits/E008_two_cycles.circ:4:1: cycle includes component 3

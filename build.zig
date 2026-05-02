@@ -315,6 +315,13 @@ pub fn build(b: *std.Build) void {
     });
     output_assignment_mod.addImport("diagnostics", validator_diagnostics_mod);
     output_assignment_mod.addImport("ir_types", ir_types_mod);
+    const combinational_loop_mod = b.createModule(.{
+        .root_source_file = b.path("lib/validator/passes/combinational_loop.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    combinational_loop_mod.addImport("diagnostics", validator_diagnostics_mod);
+    combinational_loop_mod.addImport("ir_types", ir_types_mod);
     const validator_name_passes_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/validator/name_passes_test.zig"),
         .target = target,
@@ -364,6 +371,28 @@ pub fn build(b: *std.Build) void {
     validator_structural_tests.linkLibrary(parser_lib);
     validator_structural_tests.linkLibC();
     const run_validator_structural_tests = b.addRunArtifact(validator_structural_tests);
+    const validator_loop_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/validator/loop_passes_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    validator_loop_tests_mod.addImport("translate", translate_mod);
+    validator_loop_tests_mod.addImport("resolver", resolver_mod);
+    validator_loop_tests_mod.addImport("diagnostics", validator_diagnostics_mod);
+    validator_loop_tests_mod.addImport("combinational_loop", combinational_loop_mod);
+    validator_loop_tests_mod.addImport("golden", b.createModule(.{
+        .root_source_file = b.path("tests/helpers/golden.zig"),
+        .target = target,
+        .optimize = optimize,
+    }));
+    const validator_loop_tests = b.addTest(.{
+        .root_module = validator_loop_tests_mod,
+    });
+    validator_loop_tests.addIncludePath(b.path("."));
+    validator_loop_tests.addIncludePath(b.path("./lib"));
+    validator_loop_tests.linkLibrary(parser_lib);
+    validator_loop_tests.linkLibC();
+    const run_validator_loop_tests = b.addRunArtifact(validator_loop_tests);
     const test_step = b.step("test", "Run project test suite");
     test_step.dependOn(&run_unit_tests.step);
     test_step.dependOn(&run_golden_tests.step);
@@ -373,4 +402,5 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_validator_tests.step);
     test_step.dependOn(&run_validator_name_passes_tests.step);
     test_step.dependOn(&run_validator_structural_tests.step);
+    test_step.dependOn(&run_validator_loop_tests.step);
 }
