@@ -647,6 +647,33 @@ pub fn build(b: *std.Build) void {
         .root_module = orchestrator_finalize_tests_mod,
     });
     const run_orchestrator_finalize_tests = b.addRunArtifact(orchestrator_finalize_tests);
+    const orchestrator_main_mod = b.createModule(.{
+        .root_source_file = b.path("lib/orchestrator/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    orchestrator_main_mod.addImport("orchestrator_workspace", orchestrator_workspace_mod);
+    orchestrator_main_mod.addImport("orchestrator_subprocess", orchestrator_subprocess_mod);
+    orchestrator_main_mod.addImport("orchestrator_finalize", orchestrator_finalize_mod);
+    const orchestrator_main_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/orchestrator/main_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    orchestrator_main_tests_mod.addImport("translate", translate_mod);
+    orchestrator_main_tests_mod.addImport("resolver", resolver_mod);
+    orchestrator_main_tests_mod.addImport("validator_run", validator_run_mod);
+    orchestrator_main_tests_mod.addImport("diagnostics", validator_diagnostics_mod);
+    orchestrator_main_tests_mod.addImport("emit_main", emit_main_mod);
+    orchestrator_main_tests_mod.addImport("orchestrator_main", orchestrator_main_mod);
+    const orchestrator_main_tests = b.addTest(.{
+        .root_module = orchestrator_main_tests_mod,
+    });
+    orchestrator_main_tests.addIncludePath(b.path("."));
+    orchestrator_main_tests.addIncludePath(b.path("./lib"));
+    orchestrator_main_tests.linkLibrary(parser_lib);
+    orchestrator_main_tests.linkLibC();
+    const run_orchestrator_main_tests = b.addRunArtifact(orchestrator_main_tests);
     const test_step = b.step("test", "Run project test suite");
     test_step.dependOn(&run_unit_tests.step);
     test_step.dependOn(&run_golden_tests.step);
@@ -666,4 +693,5 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_orchestrator_workspace_tests.step);
     test_step.dependOn(&run_orchestrator_subprocess_tests.step);
     test_step.dependOn(&run_orchestrator_finalize_tests.step);
+    test_step.dependOn(&run_orchestrator_main_tests.step);
 }

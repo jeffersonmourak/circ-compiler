@@ -191,3 +191,11 @@
 **Tests:** added finalize unit tests in `tests/orchestrator/finalize_test.zig` for successful copy, missing-artifact error (`error.MissingCompiledWasm`), cleanup delete-on-true, and cleanup no-op-on-false; ran `zig build test`, result pass
 **Next slice:** Implement Phase 5 Slice 5.5 top-level orchestrator `compile(...)` and subprocess-path end-to-end tests.
 **Notes:** `copyOutput` uses explicit file streaming rather than relying on path-specific stdlib copy helpers so relative and absolute workspace/output paths follow the same behavior in production and tests.
+
+## 2026-05-01 — Phase 5 — Slice 5.5 top-level orchestrator and e2e subprocess path
+
+**What shipped:** Added `lib/orchestrator/main.zig` exposing `compile(allocator, emitted_zig_source, options)` and composing workspace setup, runtime extraction, emitted-source write, subprocess build, artifact copy, and success cleanup policy into one orchestrated flow. Also added `compileWithStderrWriter(...)` for test-time stderr capture while keeping production `compile(...)` behavior unchanged (writes subprocess failure headers to stderr).
+**Files touched:** `lib/orchestrator/main.zig`, `tests/orchestrator/main_test.zig`, `build.zig`, `DOCS/STATUS.md`
+**Tests:** added orchestrator end-to-end tests in `tests/orchestrator/main_test.zig` for (1) successful compile producing wasm magic bytes with temp-dir cleanup, (2) override `build_dir` preservation with generated workspace contents, and (3) invalid Zig source failure preserving build dir; ran `zig build test`, result pass
+**Next slice:** Begin Phase 6 CLI surface work from the active Phase 6 plan.
+**Notes:** Failure-path tests use the writer-injected entrypoint to keep expected failing `zig build` stderr output captured/silent in test logs while still verifying preserve-on-failure behavior.
