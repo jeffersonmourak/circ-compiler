@@ -135,3 +135,11 @@
 **Tests:** added `test "file info and debug path emitters fixtures"` and `test "file info blob round trip"` in `tests/emit/metadata_test.zig`, generated metadata goldens with `UPDATE_GOLDENS=1 zig build test`, ran `zig build test`, result pass
 **Next slice:** Implement Phase 4 Slice 4.3 runtime exports emission and top-level file stitching (`lib/emit/runtime.zig`, `lib/emit/main.zig`) with full-file golden coverage.
 **Notes:** `lib/emit/writer.zig` is now consumed via shared module import (`emit_writer`) to avoid Zig module-path collisions when multiple emitter modules are linked in one test target.
+
+## 2026-05-01 — Phase 4 — Slice 4.3 runtime exports emission and full-file stitch
+
+**What shipped:** Added a runtime emitter that outputs all v0 exports (`init`, `deinit`, `reset`, `run`, `stop`, `setPin`, `getOutputState`, `getStateSnapshot`, `getTopology`, `getPendingEvents`, `getFileInfo`, `freeBuffer`) and emits per-circuit input/output id tables for pin validation. Added top-level module emitter stitching header/imports, `buildCircuit`, file-info blob, debug-path table, and runtime section into a full `compiled.zig` source string.
+**Files touched:** `lib/emit/runtime.zig`, `lib/emit/main.zig`, `tests/emit/full_emit_test.zig`, `tests/fixtures/expected-zig/empty_ish.zig`, `tests/fixtures/expected-zig/and_two_inputs.zig`, `tests/fixtures/expected-zig/anonymous_nested.zig`, `build.zig`, `DOCS/STATUS.md`
+**Tests:** added `test "full emitter fixture files"` in `tests/emit/full_emit_test.zig`, generated full-file emission goldens with `UPDATE_GOLDENS=1 zig build test`, ran `zig build test`, result pass
+**Next slice:** Implement Phase 4 Slice 4.4 behavioral harness (`tests/helpers/wasm_run.zig`, `tests/harness/build.zig`, `tests/harness/loader.js`) and first end-to-end wasm behavior test.
+**Notes:** `getTopology()` currently surfaces a static placeholder payload (`topology_blob`) while keeping the runtime export/wire format stable for the upcoming harness phase.
