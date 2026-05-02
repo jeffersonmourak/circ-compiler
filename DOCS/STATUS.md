@@ -315,4 +315,15 @@
 
 **Notes:** Zig 0.15 **`@embedFile`** must stay inside the module tree, so built-ins are vendored under **`lib/resolver/builtin_circ/`** rather than **`templates/builtins/`** until a root-level embed manifest is introduced. Slice 8.2 should load **`xor.circ`** expecting **`nor`**/**`nand`**/**`or`** identifiers in the grammar (already literals in **`proto-circ.peg`**).
 
+## 2026-05-01 — Phase 8 — Slice 8.2 virtual builtin path in file loader
+
+**What shipped:** **`loadFile`** now recognizes paths starting with **`builtin_path_prefix`** (`"<builtin>/"`), resolves the suffix via **`builtins.sourceForPathSuffix`**, duplicates embedded bytes into **`LoadedFile.source`**, and returns **`error.BuiltinNotFound`** for unknown filenames (distinct from disk **`FileNotFound`**). **`resolveImportPath`** duplicates **``<builtin>/...`** import paths verbatim (no **`realpath`** / base-dir join) so scanners can enqueue virtual builtin modules. Wired **`resolver_file_loader_mod.addImport("builtins", resolver_builtins_mod)`**. **`tests/resolver/file_loader_test.zig`** covers embed equality, **`BuiltinNotFound`**, disk regression, and builtin **`resolveImportPath`**.
+
+**Files touched:** `lib/resolver/file_loader.zig`, `build.zig`, `tests/resolver/file_loader_test.zig`, `DOCS/STATUS.md`
+
+**Tests:** file-loader suite above; **`zig build test`** result **pass**
+
+**Next slice:** Phase 8 Slice 8.3 — synthetic auto-import injection + **`W003`** exemption for implicit builtin imports (**`unused_import`** pass).
+
+**Notes:** Invalid **``<builtin>/unknown.circ`** still surfaces as a hard **`loadFile`** error during scan (**`BuiltinNotFound`**) rather than **`E009`**; tightening diagnostics can wait until auto-import UX is finalized.
 

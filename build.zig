@@ -740,6 +740,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    resolver_file_loader_mod.addImport("builtins", resolver_builtins_mod);
     const resolver_scan_imports_mod = b.createModule(.{
         .root_source_file = b.path("lib/resolver/scan_imports.zig"),
         .target = target,
@@ -827,6 +828,21 @@ pub fn build(b: *std.Build) void {
     resolver_builtins_tests.linkLibrary(parser_lib);
     resolver_builtins_tests.linkLibC();
     const run_resolver_builtins_tests = b.addRunArtifact(resolver_builtins_tests);
+    const resolver_file_loader_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/resolver/file_loader_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    resolver_file_loader_tests_mod.addImport("file_loader", resolver_file_loader_mod);
+    resolver_file_loader_tests_mod.addImport("builtins", resolver_builtins_mod);
+    const resolver_file_loader_tests = b.addTest(.{
+        .root_module = resolver_file_loader_tests_mod,
+    });
+    resolver_file_loader_tests.addIncludePath(b.path("."));
+    resolver_file_loader_tests.addIncludePath(b.path("./lib"));
+    resolver_file_loader_tests.linkLibrary(parser_lib);
+    resolver_file_loader_tests.linkLibC();
+    const run_resolver_file_loader_tests = b.addRunArtifact(resolver_file_loader_tests);
     const circ_compile_mod = b.createModule(.{
         .root_source_file = b.path("cmd/circ-compile/main.zig"),
         .target = target,
@@ -902,6 +918,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_resolver_import_cycle_tests.step);
     test_step.dependOn(&run_resolver_resolve_bodies_tests.step);
     test_step.dependOn(&run_resolver_builtins_tests.step);
+    test_step.dependOn(&run_resolver_file_loader_tests.step);
     test_step.dependOn(&run_validator_project_passes_tests.step);
 
     const emit_project_tests_mod = b.createModule(.{
