@@ -79,3 +79,11 @@
 **Tests:** added resolver fixture test `test "resolve ast to ir fixtures"` in `tests/ir/resolver_test.zig`, generated IR goldens with `UPDATE_GOLDENS=1 zig build test`, ran `zig build test`, result pass
 **Next slice:** Begin Phase 3 semantic validation from the active Phase 3 plan.
 **Notes:** `tests/helpers/golden.zig` now keeps expected-failure test paths silent, so the resolver/translator golden suites run without intentional stderr noise.
+
+## 2026-05-01 — Phase 3 — Slice 3.1 diagnostic types and code table
+
+**What shipped:** Added validator diagnostic foundations with stable code allocation and message table (`E001`-`E008`, `W001`-`W002`), plus diagnostic structures (`Diagnostic`, `DiagnosticNote`, `DiagnosticList`) and a formatter that emits `<file>:<line>:<col>: <level>: <code>: <message>`. This locks the diagnostic contract used by all validation passes.
+**Files touched:** `lib/validator/codes.zig`, `lib/validator/diagnostics.zig`, `tests/validator/diagnostics_test.zig`, `build.zig`, `DOCS/STATUS.md`
+**Tests:** added diagnostic formatting/code-table tests in `tests/validator/diagnostics_test.zig`, ran `zig build test`, result pass
+**Next slice:** Implement Phase 3 Slice 3.2 name-resolution and name-collision passes with per-code fixtures.
+**Notes:** Diagnostic level uses `err`/`warning` internally to avoid Zig keyword conflicts while preserving formatted output text as `error`/`warning`.

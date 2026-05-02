@@ -250,10 +250,38 @@ pub fn build(b: *std.Build) void {
     resolver_tests.linkLibrary(parser_lib);
     resolver_tests.linkLibC();
     const run_resolver_tests = b.addRunArtifact(resolver_tests);
+    const validator_codes_mod = b.createModule(.{
+        .root_source_file = b.path("lib/validator/codes.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const validator_diagnostics_mod = b.createModule(.{
+        .root_source_file = b.path("lib/validator/diagnostics.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    validator_diagnostics_mod.addImport("codes", validator_codes_mod);
+    validator_diagnostics_mod.addImport("span", b.createModule(.{
+        .root_source_file = b.path("lib/syntax/span.zig"),
+        .target = target,
+        .optimize = optimize,
+    }));
+    const validator_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/validator/diagnostics_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    validator_tests_mod.addImport("diagnostics", validator_diagnostics_mod);
+    validator_tests_mod.addImport("codes", validator_codes_mod);
+    const validator_tests = b.addTest(.{
+        .root_module = validator_tests_mod,
+    });
+    const run_validator_tests = b.addRunArtifact(validator_tests);
     const test_step = b.step("test", "Run project test suite");
     test_step.dependOn(&run_unit_tests.step);
     test_step.dependOn(&run_golden_tests.step);
     test_step.dependOn(&run_translate_tests.step);
     test_step.dependOn(&run_ir_types_tests.step);
     test_step.dependOn(&run_resolver_tests.step);
+    test_step.dependOn(&run_validator_tests.step);
 }
