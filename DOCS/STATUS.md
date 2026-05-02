@@ -207,3 +207,11 @@
 **Tests:** added parser unit tests in `lib/cli/args.zig` covering all planned happy-path and error-path argv shapes for Slice 6.1, wired parser tests into `zig build test`, ran `zig build test`, result pass
 **Next slice:** Implement Phase 6 Slice 6.2 CLI entry point and pipeline driver (`cmd/circ-compile/main.zig`) and wire the `circ-compile` executable target in root `build.zig`.
 **Notes:** Current parser behavior keeps `--inspect` without `-o` valid and does not yet enforce `-o` rejection in inspect mode; that mode-specific policy is deferred to later integration slices per the phase open question.
+
+## 2026-05-01 — Phase 6 — Slice 6.2 CLI entry point and pipeline driver
+
+**What shipped:** Added the user-facing CLI entry point at `cmd/circ-compile/main.zig` and wired a new `circ-compile` executable target in root `build.zig`. The driver now composes parse/read/translate/resolve/validate/emit/orchestrate across modes: default compile (`-o` -> wasm via orchestrator), `--emit-zig` (`-o` -> emitted Zig file), and `--inspect` (prints parse tree, resolved IR, diagnostics, and summary sections). It prints diagnostics in Phase 3 format (including notes), enforces exit code semantics (`0` success, `1` hard pipeline failures, `2` usage/input errors), and honors `--warnings-as-errors` for non-inspect modes.
+**Files touched:** `cmd/circ-compile/main.zig`, `lib/cli/inspect_dump.zig`, `build.zig`, `DOCS/STATUS.md`
+**Tests:** no new dedicated tests in this slice (per plan), but `zig build test` now compiles `circ-compile` as a test-step dependency and passed; additionally ran `zig build circ-compile`, result pass
+**Next slice:** Implement Phase 6 Slice 6.3 CLI integration tests for default compile mode (`tests/cli/integration_test.zig`).
+**Notes:** Added `compileWithStderrWriter(...)` in orchestrator previously to keep expected failing subprocess output silent in tests; CLI production path still uses real stderr via `compile(...)`.

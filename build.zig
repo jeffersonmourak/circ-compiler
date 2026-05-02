@@ -679,6 +679,35 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const cli_inspect_dump_mod = b.createModule(.{
+        .root_source_file = b.path("lib/cli/inspect_dump.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const circ_compile_mod = b.createModule(.{
+        .root_source_file = b.path("cmd/circ-compile/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    circ_compile_mod.addImport("cli_args", cli_args_mod);
+    circ_compile_mod.addImport("translate", translate_mod);
+    circ_compile_mod.addImport("resolver", resolver_mod);
+    circ_compile_mod.addImport("diagnostics", validator_diagnostics_mod);
+    circ_compile_mod.addImport("validator_run", validator_run_mod);
+    circ_compile_mod.addImport("emit_main", emit_main_mod);
+    circ_compile_mod.addImport("orchestrator_main", orchestrator_main_mod);
+    circ_compile_mod.addImport("inspect_dump", cli_inspect_dump_mod);
+    const circ_compile_exe = b.addExecutable(.{
+        .name = "circ-compile",
+        .root_module = circ_compile_mod,
+    });
+    circ_compile_exe.addIncludePath(b.path("."));
+    circ_compile_exe.addIncludePath(b.path("./lib"));
+    circ_compile_exe.linkLibrary(parser_lib);
+    circ_compile_exe.linkLibC();
+    b.installArtifact(circ_compile_exe);
+    const circ_compile_step = b.step("circ-compile", "Build circ-compile CLI");
+    circ_compile_step.dependOn(&circ_compile_exe.step);
     const cli_args_tests = b.addTest(.{
         .root_module = cli_args_mod,
     });
@@ -704,4 +733,5 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_orchestrator_finalize_tests.step);
     test_step.dependOn(&run_orchestrator_main_tests.step);
     test_step.dependOn(&run_cli_args_tests.step);
+    test_step.dependOn(&circ_compile_exe.step);
 }
