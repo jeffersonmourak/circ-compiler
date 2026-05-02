@@ -17,7 +17,7 @@ A digital logic circuit simulator written in Zig, compiled to WebAssembly for us
 | [circuit-format.md](circuit-format.md)       | `.circ` DSL syntax, grammar, file examples                              |
 | [decisions/](decisions/index.md)             | WIP architectural decisions for the `.circ` compiler                    |
 | [archive/plan-v0.md](archive/plan-v0.md)     | Archived v0 implementation plan (highlights; full bundle in git history) |
-| [ARCHIVE_PROMPT.md](ARCHIVE_PROMPT.md)       | How to archive a finished plan into `DOCS/archive/`                     |
+| [prompts/ARCHIVE.md](prompts/ARCHIVE.md)       | How to archive a finished plan into `DOCS/archive/`                     |
 
 ## Quick start
 
