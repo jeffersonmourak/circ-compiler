@@ -1,0 +1,35 @@
+=== Parse Tree ===
+File [f0:1:1-3:22]
+Imports (0)
+Inputs (1)
+  Input a [f0:1:7-1:8]
+Outputs (1)
+  Output out [f0:3:1-3:22]
+    NamedRef u1.out [f0:3:15-3:21]
+Components (1)
+  Component type=mystery instance=u1 [f0:2:1-2:17]
+    Port in [f0:2:12-2:14]
+      NamedRef a.out [f0:2:15-2:16]
+
+
+=== Resolved IR ===
+Module file_id=0
+Imports (0)
+Inputs (1)
+  id=0 name=a component=0
+Outputs (1)
+  id=0 name=out driver=1.out
+Components (3)
+  id=0 name=a kind=primitive:input_pin
+  id=1 name=u1 kind=unresolved_name:mystery
+  id=2 name=out kind=primitive:output_pin
+Connections (2)
+  0.out -> 1.in
+  1.out -> 2.in
+
+
+=== Diagnostics ===
+tests/fixtures/circuits/E001_undeclared.circ:2:1: error: E001: undeclared name 'mystery'
+
+=== Summary ===
+1 errors, 0 warnings

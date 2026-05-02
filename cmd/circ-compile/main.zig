@@ -43,6 +43,18 @@ fn parseErrorMessage(err: anyerror) []const u8 {
     };
 }
 
+fn countDiagnostics(diagnostic_list: []const diagnostics.Diagnostic) struct { errors: usize, warnings: usize } {
+    var errors: usize = 0;
+    var warnings: usize = 0;
+    for (diagnostic_list) |diagnostic| {
+        switch (diagnostic.level) {
+            .err => errors += 1,
+            .warning => warnings += 1,
+        }
+    }
+    return .{ .errors = errors, .warnings = warnings };
+}
+
 fn printDiagnosticSet(
     allocator: std.mem.Allocator,
     writer: anytype,
@@ -85,6 +97,10 @@ fn run() !u8 {
         try stderr_writer.print("usage error: {s}\n", .{parseErrorMessage(err)});
         return 2;
     };
+    if (args.mode == .inspect and args.output_path != null) {
+        try stderr_writer.writeAll("usage error: -o is not valid in --inspect mode\n");
+        return 2;
+    }
 
     const source = std.fs.cwd().readFileAlloc(allocator, args.input_path, 16 * 1024 * 1024) catch |err| {
         if (err == error.FileNotFound) {
@@ -111,7 +127,7 @@ fn run() !u8 {
     };
     defer diagnostic_list.deinit(allocator);
 
-    const counts = try printDiagnosticSet(allocator, stderr_writer, args.input_path, diagnostic_list.items);
+    const counts = countDiagnostics(diagnostic_list.items);
 
     if (args.mode == .inspect) {
         const ast_dump = try inspect_dump.dumpAstFile(allocator, ast_file);
@@ -128,6 +144,8 @@ fn run() !u8 {
         try stdout_writer.print("{d} errors, {d} warnings\n", .{ counts.errors, counts.warnings });
         return if (counts.errors > 0) 1 else 0;
     }
+
+    _ = try printDiagnosticSet(allocator, stderr_writer, args.input_path, diagnostic_list.items);
 
     if (counts.errors > 0 or (args.warnings_as_errors and counts.warnings > 0)) {
         return 1;

@@ -54,6 +54,12 @@ fn readFile(path: []const u8) ![]u8 {
     return std.fs.cwd().readFileAlloc(std.testing.allocator, path, 16 * 1024 * 1024);
 }
 
+fn expectStdoutMatchesFixture(actual: []const u8, fixture_path: []const u8) !void {
+    const expected = try readFile(fixture_path);
+    defer std.testing.allocator.free(expected);
+    try std.testing.expectEqualStrings(expected, actual);
+}
+
 test "cli default mode happy path writes wasm" {
     try buildCli();
     var tmp = std.testing.tmpDir(.{});
@@ -212,4 +218,33 @@ test "cli emit-zig rejects build-dir with usage error" {
 
     try std.testing.expectEqual(@as(i32, 2), exitCode(result.term));
     try std.testing.expect(std.mem.indexOf(u8, result.stderr, "--build-dir") != null);
+}
+
+test "cli inspect clean fixture exits 0 and matches golden stdout" {
+    try buildCli();
+    var result = try run(&.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/inverter.circ", "--inspect" });
+    defer result.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(@as(i32, 0), exitCode(result.term));
+    try std.testing.expectEqual(@as(usize, 0), result.stderr.len);
+    try expectStdoutMatchesFixture(result.stdout, "tests/fixtures/expected-inspect/clean_inverter.txt");
+}
+
+test "cli inspect error fixture exits 1 and matches golden stdout" {
+    try buildCli();
+    var result = try run(&.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/E001_undeclared.circ", "--inspect" });
+    defer result.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(@as(i32, 1), exitCode(result.term));
+    try std.testing.expectEqual(@as(usize, 0), result.stderr.len);
+    try expectStdoutMatchesFixture(result.stdout, "tests/fixtures/expected-inspect/error_undeclared.txt");
+}
+
+test "cli inspect rejects -o flag" {
+    try buildCli();
+    var result = try run(&.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/inverter.circ", "--inspect", "-o", "ignored.txt" });
+    defer result.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(@as(i32, 2), exitCode(result.term));
+    try std.testing.expect(std.mem.indexOf(u8, result.stderr, "-o is not valid in --inspect mode") != null);
 }

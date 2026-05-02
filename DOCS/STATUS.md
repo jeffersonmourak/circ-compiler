@@ -231,3 +231,11 @@
 **Tests:** added `cli emit-zig mode writes expected zig file`, `cli emit-zig hard error exits 1 and no output`, and `cli emit-zig rejects build-dir with usage error`; ran `zig build test`, result pass
 **Next slice:** Implement Phase 6 Slice 6.5 integration tests for `--inspect` mode (sectioned stdout golden checks and exit semantics).
 **Notes:** The emit-zig golden comparison now checks full-file equality against `tests/fixtures/expected-zig/and_two_inputs.zig`, locking the mode output contract beyond simple existence checks.
+
+## 2026-05-01 — Phase 6 — Slice 6.5 integration tests for --inspect mode
+
+**What shipped:** Added inspect-mode integration coverage in `tests/cli/integration_test.zig` and introduced inspect stdout golden fixtures under `tests/fixtures/expected-inspect/`. The CLI is now explicitly strict about inspect-only output (`-o` rejected with usage error), and inspect tests verify sectioned stdout layout/ordering, clean vs error exit semantics, and exact textual output via golden-file comparison.
+**Files touched:** `tests/cli/integration_test.zig`, `tests/fixtures/expected-inspect/clean_inverter.txt`, `tests/fixtures/expected-inspect/error_undeclared.txt`, `cmd/circ-compile/main.zig`, `DOCS/STATUS.md`
+**Tests:** added `cli inspect clean fixture exits 0 and matches golden stdout`, `cli inspect error fixture exits 1 and matches golden stdout`, and `cli inspect rejects -o flag`; ran `zig build test`, result pass
+**Next slice:** Begin Phase 7 sub-circuit support from the active Phase 7 plan.
+**Notes:** Inspect diagnostics are now emitted only in the inspect stdout section (not duplicated to stderr), which keeps inspect output script-friendly and aligns with the sectioned golden contract.

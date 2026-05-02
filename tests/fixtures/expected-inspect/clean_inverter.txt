@@ -1,0 +1,35 @@
+=== Parse Tree ===
+File [f0:1:1-3:23]
+Imports (0)
+Inputs (1)
+  Input a [f0:1:7-1:8]
+Outputs (1)
+  Output out [f0:3:1-3:23]
+    NamedRef inv.out [f0:3:15-3:22]
+Components (1)
+  Component type=not instance=inv [f0:2:1-2:14]
+    Port in [f0:2:9-2:11]
+      NamedRef a.out [f0:2:12-2:13]
+
+
+=== Resolved IR ===
+Module file_id=0
+Imports (0)
+Inputs (1)
+  id=0 name=a component=0
+Outputs (1)
+  id=0 name=out driver=1.out
+Components (3)
+  id=0 name=a kind=primitive:input_pin
+  id=1 name=inv kind=primitive:not_gate
+  id=2 name=out kind=primitive:output_pin
+Connections (2)
+  0.out -> 1.in
+  1.out -> 2.in
+
+
+=== Diagnostics ===
+
+
+=== Summary ===
+0 errors, 0 warnings
