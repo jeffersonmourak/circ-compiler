@@ -10,6 +10,7 @@ A digital logic circuit simulator written in Zig, compiled to WebAssembly for us
 
 | Document                                     | Contents                                                                |
 | -------------------------------------------- | ----------------------------------------------------------------------- |
+| [getting-started.md](getting-started.md)     | New-user walkthrough: install, first `.circ`, compile, load from Node   |
 | [architecture.md](architecture.md)           | Layer overview, component model, build targets, memory management       |
 | [simulation-engine.md](simulation-engine.md) | Zig API reference: types, functions, propagation algorithm, gate logic  |
 | [wasm-api.md](wasm-api.md)                   | WASM exports/imports, TypeScript SDK, integration example               |
