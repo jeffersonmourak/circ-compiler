@@ -258,3 +258,28 @@ test "cli inspect rejects -o flag" {
     try std.testing.expectEqual(@as(i32, 2), exitCode(result.term));
     try std.testing.expect(std.mem.indexOf(u8, result.stderr, "-o is not valid in --inspect mode") != null);
 }
+
+test "perf smoke: 100-component grid compiles under budget" {
+    if (std.process.hasEnvVarConstant("CIRC_SKIP_PERF")) return error.SkipZigTest;
+
+    try buildCli();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const output_path = try std.fmt.allocPrint(std.testing.allocator, ".zig-cache/tmp/{s}/perf.wasm", .{tmp.sub_path});
+    defer std.testing.allocator.free(output_path);
+
+    const start_ns = std.time.nanoTimestamp();
+    var result = try run(&.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/stress_grid_10x10.circ", "-o", output_path });
+    defer result.deinit(std.testing.allocator);
+    const elapsed_ns = std.time.nanoTimestamp() - start_ns;
+
+    try std.testing.expectEqual(@as(i32, 0), exitCode(result.term));
+    try expectFileExists(output_path);
+
+    const budget_ns: i128 = 30 * std.time.ns_per_s;
+    if (elapsed_ns >= budget_ns) {
+        std.debug.print("perf smoke: stress_grid_10x10 compile took {d}ms (budget 30000ms)\n", .{@divTrunc(elapsed_ns, std.time.ns_per_ms)});
+        return error.PerfBudgetExceeded;
+    }
+}

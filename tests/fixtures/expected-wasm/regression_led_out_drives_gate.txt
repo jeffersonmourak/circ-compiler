@@ -1,0 +1,6 @@
+# Phase 9.1 fix: LED.out fan-out list now exists, so led.out can drive a
+# downstream gate (not only output_pin). Verifies out = a AND b.
+a=0 b=0 => out=0
+a=0 b=1 => out=0
+a=1 b=0 => out=0
+a=1 b=1 => out=1

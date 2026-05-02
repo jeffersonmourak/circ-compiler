@@ -231,6 +231,20 @@ const stress_behavior_fixtures = [_]BehaviorFixture{
     },
 };
 
+const regression_behavior_fixtures = [_]BehaviorFixture{
+    .{
+        .source_path = "tests/fixtures/circuits/regression_led_out_drives_gate.circ",
+        .source_name = "regression_led_out_drives_gate.circ",
+        .expected_path = "tests/fixtures/expected-wasm/regression_led_out_drives_gate.txt",
+    },
+};
+
+test "Phase 9 regression: single-file wasm fixtures" {
+    for (regression_behavior_fixtures) |fx| {
+        try runBehaviorFixture(fx);
+    }
+}
+
 test "Phase 9 stress: large single-file wasm fixtures" {
     for (stress_behavior_fixtures) |fx| {
         try runBehaviorFixture(fx);

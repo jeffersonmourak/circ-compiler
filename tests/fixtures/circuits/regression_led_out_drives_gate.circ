@@ -1,0 +1,4 @@
+input a, b
+led l(in=a)
+and g(a=l.out, b=b)
+output out(in=g.out)

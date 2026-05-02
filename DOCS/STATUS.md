@@ -416,3 +416,26 @@ Also added **`tests/fixtures/expected-inspect/canonical_half_adder_root.txt`** a
 **Next slice:** Phase **9.5** — regression fixtures (audit STATUS log for fixed-mid-phase bugs) plus the smoke perf test on **`stress_grid_10x10.circ`** per **`PHASE_9_HARDENING.md`**.
 
 **Notes:** Found and worked around the `and_pair` ambiguity once more — instantiating a `and_*`-prefixed sub-circuit gets parsed as the **`and`** built-in followed by the rest of the identifier (grammar lists **`'and'`** ahead of **`Identifier`** in **`ComponentType`** at **`lib/grammar/proto-circ.peg:7`**). Existing **`and_pair`** project aliases the import to **`paired_and`**; the new **`and_or_network`** uses **`bit_and`** for the same reason. No new behavioural bug — already-known parser ordering. **`full_adder/root.circ`** uses component name **`cout_or`** to dodge the `cout` output/component name overlap pattern the **`full_adder_ha_or`** fixture also avoids.
+
+## 2026-05-02 — Phase 9 — Slice 9.5 regression fixtures and smoke perf test
+
+**What shipped (Part A — regression fixtures, best-effort).** Audited **`DOCS/STATUS.md`** for bug-fix entries from Phases 0–8 and surfaced the circuit-language fixes that warrant labeled regression coverage:
+
+- Phase 3 (line 101): resolver/translator preserves unresolved signal references into validation instead of crashing. **Already covered** by **`E001_undeclared.circ`** + the new **`codes_snapshot_test`** added in slice 9.3 — re-asserts every run through the validator pipeline.
+- Phase 7.5 (line 284): **`input_pin_gate`** wired-in fan-in propagation. **Already covered** by every project fixture (**`passthrough_chain`**, **`half_adder`**, etc.) plus the in-engine regression test **`input_pin_gate wired-in propagation`** in **`lib/circuit.zig`**.
+- Phase 9.1 (line 368): **`LED`** registers a real **`out`** fan-out list in **`Component.init`**. The existing **`edge_single_component.circ`** drives **`led → output_pin`**; this slice adds **`tests/fixtures/circuits/regression_led_out_drives_gate.circ`** which exercises **`led.out → and → output`** so a downstream *gate* (not just **`output_pin`**) consumes **`led.out`** — a stronger fan-out check.
+- Phase 9.4 / Phase 7.5 parser keyword-prefix workaround (`and_pair` → alias `paired_and` / `bit_and`): documented behaviour, not a fix. No regression fixture.
+
+Other STATUS-log mentions of "fix"/"workaround" pertain to test infrastructure (golden helper **`makePath`**, orchestrator stderr-capture writers, harness behaviour) rather than to circuit semantics, so they do not need regression **`.circ`** fixtures.
+
+Wired the new fixture into **`tests/emit/behavior_test.zig`** as a dedicated **`regression_behavior_fixtures`** table run by **`Phase 9 regression: single-file wasm fixtures`** (matches the **`edge_*`** / **`stress_*`** group pattern so future regressions append cleanly).
+
+**What shipped (Part B — smoke perf test).** Added **`perf smoke: 100-component grid compiles under budget`** to **`tests/cli/integration_test.zig`**. Builds **`circ-compile`**, runs it on **`tests/fixtures/circuits/stress_grid_10x10.circ`** with **`-o <tmp>/perf.wasm`**, times the subprocess via **`std.time.nanoTimestamp`** wrapped around **`run(...)`**, asserts **`exit 0`**, asserts the output **`.wasm`** exists, and fails with **`error.PerfBudgetExceeded`** if elapsed time crosses **30 s** (budget per **`PHASE_9_HARDENING.md`** Slice 9.5 / open-question recommendation). Setting **`CIRC_SKIP_PERF=1`** returns **`error.SkipZigTest`** so noisy CI environments can opt out without removing the test.
+
+**Files touched:** `tests/fixtures/circuits/regression_led_out_drives_gate.circ`, `tests/fixtures/expected-wasm/regression_led_out_drives_gate.txt`, `tests/emit/behavior_test.zig`, `tests/cli/integration_test.zig`, `DOCS/STATUS.md`
+
+**Tests:** `Phase 9 regression: single-file wasm fixtures`, `perf smoke: 100-component grid compiles under budget`; full **`zig build test`** — result **pass** (111 tests). Local **`stress_grid_10x10`** compile elapsed well under the 30 s budget on this dev machine.
+
+**Next slice:** Phase **9.6** — top-level **`README.md`** per **`PHASE_9_HARDENING.md`** (project description, install + basic usage, pointers to **`DOCS/getting-started.md`** and **`DOCS/architecture.md`** / **`DOCS/decisions/`**).
+
+**Notes:** Audit was best-effort per the open-question recommendation in **`PHASE_9_HARDENING.md`**; future bug reports should land their reproductions in **`tests/fixtures/circuits/regression_<short>.circ`** and append to **`regression_behavior_fixtures`** (or a sibling diagnostics table when the fix surfaces a new diagnostic). The perf test runs by default; use **`CIRC_SKIP_PERF=1 zig build test`** in CI environments where wall-clock is unreliable rather than gating on **`std.testing.allocator`** slowness.
