@@ -247,3 +247,11 @@
 **Tests:** added scanner tests in `tests/resolver/scan_imports_test.zig` covering two-file discovery, diamond dedupe/load, missing import (`E009`), and alias collision (`E011`); ran `zig build test`, result pass
 **Next slice:** Implement Phase 7 Slice 7.2 import-cycle detection and topological ordering (`lib/resolver/import_cycle.zig`).
 **Notes:** Diagnostic code table was extended to include planned import/sub-circuit codes (`E009`-`E013`, `W003`) so new resolver diagnostics integrate cleanly with existing formatting/tests as Phase 7 continues.
+
+## 2026-05-01 — Phase 7 — Slice 7.2 import-cycle detection and topological sort
+
+**What shipped:** Added `lib/resolver/import_cycle.zig` to analyze the import graph, produce dependency-first topological order (leaves first), and emit `E010` diagnostics for detected cycles. Cycle diagnostics now include a human-readable cycle chain in the main message plus per-file notes naming each member file.
+**Files touched:** `lib/resolver/import_cycle.zig`, `tests/resolver/import_cycle_test.zig`, `build.zig`, `DOCS/STATUS.md`
+**Tests:** added cycle-analysis tests in `tests/resolver/import_cycle_test.zig` covering linear chain topo order, diamond ordering constraints, self-cycle, indirect cycle, three-node cycle, and multiple distinct cycles; ran `zig build test`, result pass
+**Next slice:** Implement Phase 7 Slice 7.3 body resolution and sub-circuit linking (`lib/resolver/resolve_bodies.zig`) to produce project-level IR.
+**Notes:** Cycle detection deduplicates repeated DFS back-edge discoveries per cycle path key so each cycle shape is reported once in diagnostics.

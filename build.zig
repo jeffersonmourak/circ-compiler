@@ -749,6 +749,29 @@ pub fn build(b: *std.Build) void {
     resolver_scan_imports_tests.linkLibrary(parser_lib);
     resolver_scan_imports_tests.linkLibC();
     const run_resolver_scan_imports_tests = b.addRunArtifact(resolver_scan_imports_tests);
+    const resolver_import_cycle_mod = b.createModule(.{
+        .root_source_file = b.path("lib/resolver/import_cycle.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    resolver_import_cycle_mod.addImport("diagnostics", validator_diagnostics_mod);
+    resolver_import_cycle_mod.addImport("scan_imports", resolver_scan_imports_mod);
+    const resolver_import_cycle_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/resolver/import_cycle_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    resolver_import_cycle_tests_mod.addImport("diagnostics", validator_diagnostics_mod);
+    resolver_import_cycle_tests_mod.addImport("scan_imports", resolver_scan_imports_mod);
+    resolver_import_cycle_tests_mod.addImport("import_cycle", resolver_import_cycle_mod);
+    const resolver_import_cycle_tests = b.addTest(.{
+        .root_module = resolver_import_cycle_tests_mod,
+    });
+    resolver_import_cycle_tests.addIncludePath(b.path("."));
+    resolver_import_cycle_tests.addIncludePath(b.path("./lib"));
+    resolver_import_cycle_tests.linkLibrary(parser_lib);
+    resolver_import_cycle_tests.linkLibC();
+    const run_resolver_import_cycle_tests = b.addRunArtifact(resolver_import_cycle_tests);
     const test_step = b.step("test", "Run project test suite");
     test_step.dependOn(&run_unit_tests.step);
     test_step.dependOn(&run_golden_tests.step);
@@ -773,4 +796,5 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&circ_compile_exe.step);
     test_step.dependOn(&run_cli_integration_tests.step);
     test_step.dependOn(&run_resolver_scan_imports_tests.step);
+    test_step.dependOn(&run_resolver_import_cycle_tests.step);
 }
