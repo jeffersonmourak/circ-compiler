@@ -1,0 +1,7 @@
+import leaf "leaf.circ"
+input in
+leaf u0(in=in)
+leaf u1(in=u0.out)
+leaf u2(in=u1.out)
+leaf u3(in=u2.out)
+output out(in=u3.out)

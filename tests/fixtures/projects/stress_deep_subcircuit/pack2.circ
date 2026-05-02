@@ -1,0 +1,7 @@
+import p1 "pack1.circ"
+input in
+p1 v0(in=in)
+p1 v1(in=v0.out)
+p1 v2(in=v1.out)
+p1 v3(in=v2.out)
+output out(in=v3.out)

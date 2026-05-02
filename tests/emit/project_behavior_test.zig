@@ -297,3 +297,12 @@ test "Phase 9 edge: deep sub-circuit import chain" {
     });
 }
 
+test "Phase 9 stress: deep hierarchy 256 leaf NOTs" {
+    try runFixture(.{
+        .name = "stress_deep_subcircuit",
+        .root_path = "tests/fixtures/projects/stress_deep_subcircuit/root.circ",
+        .source_name = "root.circ",
+        .spec_path = "tests/fixtures/expected-wasm/projects/stress_deep_subcircuit.txt",
+    });
+}
+

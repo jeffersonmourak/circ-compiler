@@ -1,0 +1,3 @@
+# bottom-right AND (g_9_9) needs r9 and c9 high for out=1
+r0=1 r1=1 r2=1 r3=1 r4=1 r5=1 r6=1 r7=1 r8=1 r9=1 c0=1 c1=1 c2=1 c3=1 c4=1 c5=1 c6=1 c7=1 c8=1 c9=1 => out=1
+r0=1 r1=1 r2=1 r3=1 r4=1 r5=1 r6=1 r7=1 r8=1 r9=0 c0=1 c1=1 c2=1 c3=1 c4=1 c5=1 c6=1 c7=1 c8=1 c9=1 => out=0

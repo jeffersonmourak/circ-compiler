@@ -371,6 +371,18 @@
 
 **Tests:** new **`translate`** / **`behavior`** / **`project behavior`** cases; **`led: registers out port and drives downstream output_pin`** in **`lib/circuit.zig`**; ran **`zig build test`**, result **pass**
 
-**Next slice:** Phase **9.2** stress fixtures (**`stress_chain_100`**, **`stress_grid_10x10`**, **`stress_deep_subcircuit`**) per **`PHASE_9_HARDENING.md`**.
+**Next slice:** Phase **9.2** — stress fixtures (single-file stress + deep hierarchy project).
 
-**Notes:** Empty **`.circ`** sources fail at parse with **`ParsingFailed`** (not **`InvalidProgram`**). Human **`git add` + commit** for this slice and prior untracked edge files as appropriate.
+**Notes:** Empty **`.circ`** sources fail at parse with **`ParsingFailed`** (not **`InvalidProgram`**).
+
+## 2026-05-02 — Phase 9 — Slice 9.2 stress fixtures (scale + WASM smoke)
+
+**What shipped:** **`tests/fixtures/circuits/stress_chain_100.circ`** (100 **`not`** in series, even-length identity), **`tests/fixtures/circuits/stress_grid_10x10.circ`** (20 inputs **`r0..r9`**, **`c0..c9`** driving 100 **`and`** cells, output **`g_9_9`**), and **`tests/fixtures/projects/stress_deep_subcircuit/`** ( **`pack1`**: four **`not`** in series per file; **`pack2`–`pack4`** chain four sub-packs serially ⇒ **256** leaf **`not`** on the root path, even ⇒ identity). Matching **`tests/fixtures/expected-wasm/*.txt`** and **`tests/fixtures/expected-wasm/projects/stress_deep_subcircuit.txt`**. **`behavior_test`** loop **`Phase 9 stress: large single-file wasm fixtures`**; **`project_behavior_test`** **`Phase 9 stress: deep hierarchy 256 leaf NOTs`**.
+
+**Files touched:** `tests/fixtures/circuits/stress_chain_100.circ`, `tests/fixtures/circuits/stress_grid_10x10.circ`, `tests/fixtures/projects/stress_deep_subcircuit/*.circ`, `tests/fixtures/expected-wasm/stress_chain_100.txt`, `tests/fixtures/expected-wasm/stress_grid_10x10.txt`, `tests/fixtures/expected-wasm/projects/stress_deep_subcircuit.txt`, `tests/emit/behavior_test.zig`, `tests/emit/project_behavior_test.zig`, `DOCS/STATUS.md`
+
+**Tests:** new stress harness rows above; **`zig build test`**, result **pass** (103 tests)
+
+**Next slice:** Phase **9.3** — diagnostic snapshot audit (`E001`–`E013`, `W001`–`W003`).
+
+**Notes:** Stress WASM tests add noticeable time to **`zig build test`**. Grid spec: all row/col pins high ⇒ **`out=1`**; only **`r9`** low ⇒ **`g_9_9`** low. Plan name **`stress_deep_subcircuit.circ`** is satisfied by the **`stress_deep_subcircuit`** project (**serial** sub-packs ⇒ **256** **`not`** on the root path, even ⇒ identity).

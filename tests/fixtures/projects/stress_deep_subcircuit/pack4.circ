@@ -1,0 +1,7 @@
+import p3 "pack3.circ"
+input in
+p3 x0(in=in)
+p3 x1(in=x0.out)
+p3 x2(in=x1.out)
+p3 x3(in=x2.out)
+output out(in=x3.out)

@@ -217,3 +217,22 @@ test "Phase 9 edge: single-file wasm fixtures" {
         try runBehaviorFixture(fx);
     }
 }
+
+const stress_behavior_fixtures = [_]BehaviorFixture{
+    .{
+        .source_path = "tests/fixtures/circuits/stress_chain_100.circ",
+        .source_name = "stress_chain_100.circ",
+        .expected_path = "tests/fixtures/expected-wasm/stress_chain_100.txt",
+    },
+    .{
+        .source_path = "tests/fixtures/circuits/stress_grid_10x10.circ",
+        .source_name = "stress_grid_10x10.circ",
+        .expected_path = "tests/fixtures/expected-wasm/stress_grid_10x10.txt",
+    },
+};
+
+test "Phase 9 stress: large single-file wasm fixtures" {
+    for (stress_behavior_fixtures) |fx| {
+        try runBehaviorFixture(fx);
+    }
+}

@@ -1,0 +1,4 @@
+import tree "pack4.circ"
+input a
+tree top(in=a)
+output out(in=top.out)
