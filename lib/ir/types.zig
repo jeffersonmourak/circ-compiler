@@ -77,6 +77,13 @@ pub const UnresolvedImport = struct {
     span: Span,
 };
 
+pub const ResolvedImport = struct {
+    importing_file: FileId,
+    alias: []const u8,
+    target_file: FileId,
+    span: Span,
+};
+
 pub const Module = struct {
     file_id: FileId,
     inputs: []const InputPin,
@@ -84,6 +91,14 @@ pub const Module = struct {
     components: []const Component,
     connections: []const Connection,
     imports: []const UnresolvedImport,
+};
+
+pub const Project = struct {
+    files: []const Module,
+    root_file_id: FileId,
+    import_table: []const ResolvedImport,
+    file_paths: []const []const u8,
+    source_blobs: []const []const u8,
 };
 
 test "ir types construct and round-trip fields" {

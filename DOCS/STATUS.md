@@ -255,3 +255,11 @@
 **Tests:** added cycle-analysis tests in `tests/resolver/import_cycle_test.zig` covering linear chain topo order, diamond ordering constraints, self-cycle, indirect cycle, three-node cycle, and multiple distinct cycles; ran `zig build test`, result pass
 **Next slice:** Implement Phase 7 Slice 7.3 body resolution and sub-circuit linking (`lib/resolver/resolve_bodies.zig`) to produce project-level IR.
 **Notes:** Cycle detection deduplicates repeated DFS back-edge discoveries per cycle path key so each cycle shape is reported once in diagnostics.
+
+## 2026-05-01 — Phase 7 — Slice 7.3 body resolution and sub-circuit linking
+
+**What shipped:** Added `lib/resolver/resolve_bodies.zig` to build project-level IR from import scan + topological order by resolving each file body with the existing single-file resolver, then linking component kinds so `unresolved_name` entries that match import aliases become `sub_circuit_ref`. Extended IR types with `ir.Project` and `ResolvedImport` so multi-file pipeline stages can consume resolved modules, import edges, paths, and retained per-file source blobs.
+**Files touched:** `lib/resolver/resolve_bodies.zig`, `lib/ir/types.zig`, `tests/resolver/resolve_bodies_test.zig`, `tests/fixtures/projects/unresolved_name/root.circ`, `tests/fixtures/projects/primitive_preserve/root.circ`, `tests/fixtures/projects/primitive_preserve/child.circ`, `build.zig`, `DOCS/STATUS.md`
+**Tests:** added resolver-body tests in `tests/resolver/resolve_bodies_test.zig` covering (1) two-file alias linking to `sub_circuit_ref`, (2) non-imported references remaining `unresolved_name`, and (3) primitive component kinds remaining primitive; ran `zig build test`, result pass
+**Next slice:** Implement Phase 7 Slice 7.4 validator extensions for multi-file IR (`E012`, `E013`, cross-subcircuit loop traversal, `W003` and sub-circuit `W002` activation).
+**Notes:** `resolve_bodies` currently anchors `sub_circuit_ref.name` to the import alias and carries `ir.Project.import_table` target file IDs as the authoritative file-level linkage for later validation/emission phases.

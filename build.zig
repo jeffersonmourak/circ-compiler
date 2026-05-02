@@ -772,6 +772,32 @@ pub fn build(b: *std.Build) void {
     resolver_import_cycle_tests.linkLibrary(parser_lib);
     resolver_import_cycle_tests.linkLibC();
     const run_resolver_import_cycle_tests = b.addRunArtifact(resolver_import_cycle_tests);
+    const resolver_resolve_bodies_mod = b.createModule(.{
+        .root_source_file = b.path("lib/resolver/resolve_bodies.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    resolver_resolve_bodies_mod.addImport("translate", translate_mod);
+    resolver_resolve_bodies_mod.addImport("resolver", resolver_mod);
+    resolver_resolve_bodies_mod.addImport("ir_types", ir_types_mod);
+    resolver_resolve_bodies_mod.addImport("scan_imports", resolver_scan_imports_mod);
+    const resolver_resolve_bodies_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/resolver/resolve_bodies_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    resolver_resolve_bodies_tests_mod.addImport("scan_imports", resolver_scan_imports_mod);
+    resolver_resolve_bodies_tests_mod.addImport("import_cycle", resolver_import_cycle_mod);
+    resolver_resolve_bodies_tests_mod.addImport("resolve_bodies", resolver_resolve_bodies_mod);
+    resolver_resolve_bodies_tests_mod.addImport("ir_types", ir_types_mod);
+    const resolver_resolve_bodies_tests = b.addTest(.{
+        .root_module = resolver_resolve_bodies_tests_mod,
+    });
+    resolver_resolve_bodies_tests.addIncludePath(b.path("."));
+    resolver_resolve_bodies_tests.addIncludePath(b.path("./lib"));
+    resolver_resolve_bodies_tests.linkLibrary(parser_lib);
+    resolver_resolve_bodies_tests.linkLibC();
+    const run_resolver_resolve_bodies_tests = b.addRunArtifact(resolver_resolve_bodies_tests);
     const test_step = b.step("test", "Run project test suite");
     test_step.dependOn(&run_unit_tests.step);
     test_step.dependOn(&run_golden_tests.step);
@@ -797,4 +823,5 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_cli_integration_tests.step);
     test_step.dependOn(&run_resolver_scan_imports_tests.step);
     test_step.dependOn(&run_resolver_import_cycle_tests.step);
+    test_step.dependOn(&run_resolver_resolve_bodies_tests.step);
 }

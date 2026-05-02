@@ -1,0 +1,4 @@
+import child "child.circ"
+input a
+and g(a=a, b=a)
+output out(in=g.out)
