@@ -223,3 +223,11 @@
 **Tests:** added 7 CLI integration tests (default mode matrix) in `tests/cli/integration_test.zig`, wired the test target into `zig build test`, ran `zig build test`, result pass
 **Next slice:** Implement Phase 6 Slice 6.4 integration tests for `--emit-zig` mode.
 **Notes:** The integration tests trigger `zig build circ-compile` before execution so the CLI binary path is deterministic (`zig-out/bin/circ-compile`) regardless of prior manual build state.
+
+## 2026-05-01 — Phase 6 — Slice 6.4 integration tests for --emit-zig mode
+
+**What shipped:** Extended CLI integration coverage with `--emit-zig` mode tests in `tests/cli/integration_test.zig`: successful emit writes Zig output matching the Phase 4 golden fixture, hard semantic errors exit non-zero without creating output, and `--build-dir` usage in emit mode is rejected as a usage error. Also aligned CLI emission metadata to use the input file basename so emitted Zig headers are stable and comparable with existing golden fixtures.
+**Files touched:** `tests/cli/integration_test.zig`, `cmd/circ-compile/main.zig`, `DOCS/STATUS.md`
+**Tests:** added `cli emit-zig mode writes expected zig file`, `cli emit-zig hard error exits 1 and no output`, and `cli emit-zig rejects build-dir with usage error`; ran `zig build test`, result pass
+**Next slice:** Implement Phase 6 Slice 6.5 integration tests for `--inspect` mode (sectioned stdout golden checks and exit semantics).
+**Notes:** The emit-zig golden comparison now checks full-file equality against `tests/fixtures/expected-zig/and_two_inputs.zig`, locking the mode output contract beyond simple existence checks.

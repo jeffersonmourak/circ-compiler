@@ -50,6 +50,10 @@ fn expectFileMissing(path: []const u8) !void {
     try std.testing.expectError(error.FileNotFound, std.fs.cwd().openFile(path, .{}));
 }
 
+fn readFile(path: []const u8) ![]u8 {
+    return std.fs.cwd().readFileAlloc(std.testing.allocator, path, 16 * 1024 * 1024);
+}
+
 test "cli default mode happy path writes wasm" {
     try buildCli();
     var tmp = std.testing.tmpDir(.{});
@@ -155,4 +159,57 @@ test "cli build-dir preserves workspace" {
     const compiled_source = try std.fmt.allocPrint(std.testing.allocator, "{s}/src/compiled.zig", .{build_dir});
     defer std.testing.allocator.free(compiled_source);
     try expectFileExists(compiled_source);
+}
+
+test "cli emit-zig mode writes expected zig file" {
+    try buildCli();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const output_path = try std.fmt.allocPrint(std.testing.allocator, ".zig-cache/tmp/{s}/emit_zig_out.zig", .{tmp.sub_path});
+    defer std.testing.allocator.free(output_path);
+
+    var result = try run(&.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/and_two_inputs.circ", "--emit-zig", "-o", output_path });
+    defer result.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(i32, 0), exitCode(result.term));
+    try expectFileExists(output_path);
+
+    const actual = try readFile(output_path);
+    defer std.testing.allocator.free(actual);
+    const expected = try readFile("tests/fixtures/expected-zig/and_two_inputs.zig");
+    defer std.testing.allocator.free(expected);
+    try std.testing.expectEqualStrings(expected, actual);
+}
+
+test "cli emit-zig hard error exits 1 and no output" {
+    try buildCli();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const output_path = try std.fmt.allocPrint(std.testing.allocator, ".zig-cache/tmp/{s}/emit_hard_error.zig", .{tmp.sub_path});
+    defer std.testing.allocator.free(output_path);
+
+    var result = try run(&.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/E001_undeclared.circ", "--emit-zig", "-o", output_path });
+    defer result.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(@as(i32, 1), exitCode(result.term));
+    try std.testing.expect(std.mem.indexOf(u8, result.stderr, "E001") != null);
+    try expectFileMissing(output_path);
+}
+
+test "cli emit-zig rejects build-dir with usage error" {
+    try buildCli();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const output_path = try std.fmt.allocPrint(std.testing.allocator, ".zig-cache/tmp/{s}/emit_build_dir_reject.zig", .{tmp.sub_path});
+    defer std.testing.allocator.free(output_path);
+    const build_dir = try std.fmt.allocPrint(std.testing.allocator, ".zig-cache/tmp/{s}/emit-build-dir", .{tmp.sub_path});
+    defer std.testing.allocator.free(build_dir);
+
+    var result = try run(&.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/inverter.circ", "--emit-zig", "-o", output_path, "--build-dir", build_dir });
+    defer result.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(@as(i32, 2), exitCode(result.term));
+    try std.testing.expect(std.mem.indexOf(u8, result.stderr, "--build-dir") != null);
 }
