@@ -1000,4 +1000,14 @@ pub fn build(b: *std.Build) void {
     project_behavior_tests.linkLibC();
     const run_project_behavior_tests = b.addRunArtifact(project_behavior_tests);
     test_step.dependOn(&run_project_behavior_tests.step);
+
+    const e2e_linux_docker_step = b.step(
+        "e2e-linux-docker",
+        "Linux Docker E2E: host-built ELF, inspect / emit-zig / wasm / Node (requires Docker)",
+    );
+    const run_e2e_linux_docker = b.addSystemCommand(&.{
+        "bash",
+        "tests/e2e/linux-docker/run.sh",
+    });
+    e2e_linux_docker_step.dependOn(&run_e2e_linux_docker.step);
 }
