@@ -1,0 +1,2 @@
+input in
+output out(in=in)

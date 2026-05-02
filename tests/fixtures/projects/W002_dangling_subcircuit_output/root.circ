@@ -1,0 +1,4 @@
+import child "child.circ"
+input x
+child u1(in=x)
+output z(in=u1.a)

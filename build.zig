@@ -329,6 +329,13 @@ pub fn build(b: *std.Build) void {
     });
     dead_code_mod.addImport("diagnostics", validator_diagnostics_mod);
     dead_code_mod.addImport("ir_types", ir_types_mod);
+    const unused_import_mod = b.createModule(.{
+        .root_source_file = b.path("lib/validator/passes/unused_import.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    unused_import_mod.addImport("diagnostics", validator_diagnostics_mod);
+    unused_import_mod.addImport("ir_types", ir_types_mod);
     const validator_run_mod = b.createModule(.{
         .root_source_file = b.path("lib/validator/run.zig"),
         .target = target,
@@ -344,6 +351,23 @@ pub fn build(b: *std.Build) void {
     validator_run_mod.addImport("output_assignment", output_assignment_mod);
     validator_run_mod.addImport("combinational_loop", combinational_loop_mod);
     validator_run_mod.addImport("dead_code", dead_code_mod);
+    validator_run_mod.addImport("unused_import", unused_import_mod);
+    const sub_circuit_validation_mod = b.createModule(.{
+        .root_source_file = b.path("lib/validator/passes/sub_circuit_validation.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    sub_circuit_validation_mod.addImport("diagnostics", validator_diagnostics_mod);
+    sub_circuit_validation_mod.addImport("ir_types", ir_types_mod);
+    const validator_run_project_mod = b.createModule(.{
+        .root_source_file = b.path("lib/validator/run_project.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    validator_run_project_mod.addImport("diagnostics", validator_diagnostics_mod);
+    validator_run_project_mod.addImport("ir_types", ir_types_mod);
+    validator_run_project_mod.addImport("validator_run", validator_run_mod);
+    validator_run_project_mod.addImport("sub_circuit_validation", sub_circuit_validation_mod);
     const validator_name_passes_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/validator/name_passes_test.zig"),
         .target = target,
@@ -798,6 +822,25 @@ pub fn build(b: *std.Build) void {
     resolver_resolve_bodies_tests.linkLibrary(parser_lib);
     resolver_resolve_bodies_tests.linkLibC();
     const run_resolver_resolve_bodies_tests = b.addRunArtifact(resolver_resolve_bodies_tests);
+    const validator_project_passes_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/validator/project_passes_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    validator_project_passes_tests_mod.addImport("scan_imports", resolver_scan_imports_mod);
+    validator_project_passes_tests_mod.addImport("import_cycle", resolver_import_cycle_mod);
+    validator_project_passes_tests_mod.addImport("resolve_bodies", resolver_resolve_bodies_mod);
+    validator_project_passes_tests_mod.addImport("diagnostics", validator_diagnostics_mod);
+    validator_project_passes_tests_mod.addImport("ir_types", ir_types_mod);
+    validator_project_passes_tests_mod.addImport("validator_run_project", validator_run_project_mod);
+    const validator_project_passes_tests = b.addTest(.{
+        .root_module = validator_project_passes_tests_mod,
+    });
+    validator_project_passes_tests.addIncludePath(b.path("."));
+    validator_project_passes_tests.addIncludePath(b.path("./lib"));
+    validator_project_passes_tests.linkLibrary(parser_lib);
+    validator_project_passes_tests.linkLibC();
+    const run_validator_project_passes_tests = b.addRunArtifact(validator_project_passes_tests);
     const test_step = b.step("test", "Run project test suite");
     test_step.dependOn(&run_unit_tests.step);
     test_step.dependOn(&run_golden_tests.step);
@@ -824,4 +867,5 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_resolver_scan_imports_tests.step);
     test_step.dependOn(&run_resolver_import_cycle_tests.step);
     test_step.dependOn(&run_resolver_resolve_bodies_tests.step);
+    test_step.dependOn(&run_validator_project_passes_tests.step);
 }

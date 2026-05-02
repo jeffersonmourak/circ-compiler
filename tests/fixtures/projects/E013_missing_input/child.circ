@@ -1,0 +1,4 @@
+input a
+input b
+and g(a=a, b=b)
+output out(in=g.out)

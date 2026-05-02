@@ -1,0 +1,1 @@
+tests/fixtures/circuits/W003_unused_import.circ:1:1: warning: W003: import 'dep' is declared but never instantiated

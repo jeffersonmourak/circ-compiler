@@ -32,6 +32,11 @@ const fixtures = [_]Fixture{
         .source_path = "tests/fixtures/circuits/errors_and_warnings.circ",
         .expected_path = "tests/fixtures/expected-diagnostics/errors_and_warnings.txt",
     },
+    .{
+        .name = "W003 unused import",
+        .source_path = "tests/fixtures/circuits/W003_unused_import.circ",
+        .expected_path = "tests/fixtures/expected-diagnostics/W003_unused_import.txt",
+    },
 };
 
 fn lessByLocation(_: void, lhs: diagnostics.Diagnostic, rhs: diagnostics.Diagnostic) bool {

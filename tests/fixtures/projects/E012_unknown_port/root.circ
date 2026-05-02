@@ -1,0 +1,4 @@
+import child "child.circ"
+input a
+child u1(bad_port=a)
+output z(in=u1.nonexistent)

@@ -1,0 +1,4 @@
+import pass_through "pass_through.circ"
+pass_through u1(in=u2.out)
+pass_through u2(in=u1.out)
+output z(in=u1.out)

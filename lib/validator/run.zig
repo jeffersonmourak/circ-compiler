@@ -9,6 +9,7 @@ const required_input = @import("required_input");
 const output_assignment = @import("output_assignment");
 const combinational_loop = @import("combinational_loop");
 const dead_code = @import("dead_code");
+const unused_import = @import("unused_import");
 
 pub fn run(allocator: std.mem.Allocator, module: *const ir.Module) !diagnostics.DiagnosticList {
     var diagnostic_list = diagnostics.initDiagnosticList();
@@ -21,6 +22,7 @@ pub fn run(allocator: std.mem.Allocator, module: *const ir.Module) !diagnostics.
     try output_assignment.run(allocator, module, &diagnostic_list);
     try combinational_loop.run(allocator, module, &diagnostic_list);
     try dead_code.run(allocator, module, &diagnostic_list);
+    try unused_import.run(allocator, module, &diagnostic_list);
 
     return diagnostic_list;
 }

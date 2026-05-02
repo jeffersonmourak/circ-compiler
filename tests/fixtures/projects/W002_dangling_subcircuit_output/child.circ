@@ -1,0 +1,4 @@
+input in
+not n(in=in)
+output a(in=n.out)
+output b(in=in)
