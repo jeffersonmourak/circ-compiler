@@ -48,7 +48,12 @@ fn nextComponentId(ctx: *ResolveContext) ir.ComponentId {
 }
 
 fn ensureNamedReference(ctx: *ResolveContext, named: ast.NamedSignalRef) !ir.SignalEndpoint {
-    const component_id = ctx.name_to_component.get(named.target.text) orelse return error.UnknownSignalReference;
+    const component_id = ctx.name_to_component.get(named.target.text) orelse {
+        return .{
+            .component = ir.InvalidComponentId,
+            .port = named.port.text,
+        };
+    };
     return .{
         .component = component_id,
         .port = named.port.text,
@@ -105,12 +110,17 @@ fn resolveSource(ctx: *ResolveContext, source: ast.SignalSource) anyerror!ir.Sig
     };
 }
 
+fn isValidEndpoint(endpoint: ir.SignalEndpoint) bool {
+    return endpoint.component.value != ir.InvalidComponentId.value;
+}
+
 fn resolvePendingPorts(ctx: *ResolveContext) anyerror!void {
     var index: usize = 0;
     while (index < ctx.pending_ports.items.len) : (index += 1) {
         const pending = ctx.pending_ports.items[index];
         for (pending.ports) |port_connection| {
             const from_endpoint = try resolveSource(ctx, port_connection.value);
+            if (!isValidEndpoint(from_endpoint)) continue;
             try ctx.connections.append(ctx.allocator, .{
                 .from = from_endpoint,
                 .to = .{
@@ -189,6 +199,7 @@ pub fn resolve(allocator: std.mem.Allocator, file: ast.File, file_id: u32) anyer
             .driver = driver,
             .span = toIrSpan(output_decl.span),
         });
+        if (!isValidEndpoint(driver)) continue;
         try ctx.connections.append(allocator, .{
             .from = driver,
             .to = .{

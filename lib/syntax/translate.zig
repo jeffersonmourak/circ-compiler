@@ -357,30 +357,40 @@ fn translateTree(ctx: *TranslationContext) !ast.File {
     if (!C_Parser.ll_tree_root(ctx.tree, &root)) return error.ParsingFailed;
     try expectNamedNode(ctx, root, "Program");
 
-    const sequence = try firstChild(ctx, root);
-    if (nodeType(ctx, sequence) != C_Parser.LL_NODE_SEQUENCE) return error.InvalidProgram;
-
     var imports: std.ArrayList(ast.Import) = .{};
     var inputs: std.ArrayList(ast.InputDecl) = .{};
     var outputs: std.ArrayList(ast.OutputDecl) = .{};
     var components: std.ArrayList(ast.ComponentInstance) = .{};
+    const payload = try firstChild(ctx, root);
+    if (nodeType(ctx, payload) == C_Parser.LL_NODE_SEQUENCE) {
+        const len = childCount(ctx, payload);
+        var i: usize = 0;
+        while (i < len) : (i += 1) {
+            const child = try childAt(ctx, payload, i);
+            if (nodeType(ctx, child) != C_Parser.LL_NODE_NODE) continue;
+            const name = nodeName(ctx, child);
 
-    const len = childCount(ctx, sequence);
-    var i: usize = 0;
-    while (i < len) : (i += 1) {
-        const child = try childAt(ctx, sequence, i);
-        if (nodeType(ctx, child) != C_Parser.LL_NODE_NODE) continue;
-        const name = nodeName(ctx, child);
+            if (std.mem.eql(u8, name, "ImportDecl")) {
+                try imports.append(ctx.allocator, try parseImportDecl(ctx, child));
+                continue;
+            }
 
+            if (std.mem.eql(u8, name, "Declaration")) {
+                try parseDeclaration(ctx, child, &imports, &inputs, &outputs, &components);
+                continue;
+            }
+        }
+    } else if (nodeType(ctx, payload) == C_Parser.LL_NODE_NODE) {
+        const name = nodeName(ctx, payload);
         if (std.mem.eql(u8, name, "ImportDecl")) {
-            try imports.append(ctx.allocator, try parseImportDecl(ctx, child));
-            continue;
+            try imports.append(ctx.allocator, try parseImportDecl(ctx, payload));
+        } else if (std.mem.eql(u8, name, "Declaration")) {
+            try parseDeclaration(ctx, payload, &imports, &inputs, &outputs, &components);
+        } else {
+            return error.InvalidProgram;
         }
-
-        if (std.mem.eql(u8, name, "Declaration")) {
-            try parseDeclaration(ctx, child, &imports, &inputs, &outputs, &components);
-            continue;
-        }
+    } else {
+        return error.InvalidProgram;
     }
 
     return .{

@@ -12,6 +12,7 @@ pub const FileId = struct { value: u32 };
 pub const InputId = struct { value: u32 };
 pub const OutputId = struct { value: u32 };
 pub const ComponentId = struct { value: u32 };
+pub const InvalidComponentId = ComponentId{ .value = std.math.maxInt(u32) };
 
 pub const PrimitiveKind = enum {
     and_gate,

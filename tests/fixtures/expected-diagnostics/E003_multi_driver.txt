@@ -1,0 +1,3 @@
+tests/fixtures/circuits/E003_multi_driver.circ:2:7: error: E003: multiple drivers for input port 'in'
+  note: tests/fixtures/circuits/E003_multi_driver.circ:2:7: driver from component 0.out
+  note: tests/fixtures/circuits/E003_multi_driver.circ:2:13: driver from component 1.out

@@ -1,0 +1,2 @@
+tests/fixtures/circuits/E002_unknown_port.circ:3:1: error: E004: required input 'in' is unconnected
+tests/fixtures/circuits/E002_unknown_port.circ:3:7: error: E002: unknown input port 'x'

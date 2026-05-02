@@ -1,0 +1,1 @@
+tests/fixtures/circuits/E004_unconnected_required_input.circ:2:1: error: E004: required input 'b' is unconnected

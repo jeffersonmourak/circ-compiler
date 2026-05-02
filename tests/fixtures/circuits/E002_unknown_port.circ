@@ -1,0 +1,4 @@
+input a, b
+and gate(a=a, b=b)
+not n(x=gate.out)
+output out(in=n.out)

@@ -1,0 +1,4 @@
+input a
+mystery u1(in=a)
+not n(x=u1.out)
+output out(in=n.out)
