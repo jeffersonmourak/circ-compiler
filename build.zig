@@ -210,8 +210,23 @@ pub fn build(b: *std.Build) void {
     translate_tests.linkLibrary(parser_lib);
     translate_tests.linkLibC();
     const run_translate_tests = b.addRunArtifact(translate_tests);
+    const ir_types_tests_mod = b.createModule(.{
+        .root_source_file = b.path("lib/ir/types.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ir_types_tests_mod.addImport("span", b.createModule(.{
+        .root_source_file = b.path("lib/syntax/span.zig"),
+        .target = target,
+        .optimize = optimize,
+    }));
+    const ir_types_tests = b.addTest(.{
+        .root_module = ir_types_tests_mod,
+    });
+    const run_ir_types_tests = b.addRunArtifact(ir_types_tests);
     const test_step = b.step("test", "Run project test suite");
     test_step.dependOn(&run_unit_tests.step);
     test_step.dependOn(&run_golden_tests.step);
     test_step.dependOn(&run_translate_tests.step);
+    test_step.dependOn(&run_ir_types_tests.step);
 }

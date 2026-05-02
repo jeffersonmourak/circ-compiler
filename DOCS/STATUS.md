@@ -63,3 +63,11 @@
 **Tests:** added fixture-driven translator golden test in `tests/syntax/translate_test.zig`, generated AST goldens with `UPDATE_GOLDENS=1 zig build test`, ran `zig build test`, result pass
 **Next slice:** Implement Phase 2 Slice 2.3 IR type layer under `lib/ir/` with construction/readback tests.
 **Notes:** During slice work, `lib/transport.zig` was adjusted to avoid referencing private `Component.Kind` in non-test builds; this unblocks `zig build compiler:run` while preserving existing kind-byte behavior.
+
+## 2026-05-01 — Phase 2 — Slice 2.3 IR types
+
+**What shipped:** Added the initial IR type layer under `lib/ir/types.zig`, including typed ID wrappers (`FileId`, `InputId`, `OutputId`, `ComponentId`), module-level structures (`Module`, `Component`, `Connection`, `InputPin`, `OutputPin`, `UnresolvedImport`), and component kind modeling (`primitive`, `sub_circuit_ref`, `unresolved_name`). This slice introduces data structures only; no resolver behavior yet.
+**Files touched:** `lib/ir/types.zig`, `build.zig`, `DOCS/STATUS.md`
+**Tests:** added `test "ir types construct and round-trip fields"` in `lib/ir/types.zig`, wired IR tests into `zig build test`, result pass
+**Next slice:** Implement Phase 2 Slice 2.4 AST to IR resolver (single-file) and IR golden dumps.
+**Notes:** IR tests import `Span` via module wiring in `build.zig` (`span` import), keeping IR types decoupled from relative source-path imports.
