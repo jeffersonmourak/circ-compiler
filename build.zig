@@ -894,6 +894,32 @@ pub fn build(b: *std.Build) void {
     validator_project_passes_tests.linkLibrary(parser_lib);
     validator_project_passes_tests.linkLibC();
     const run_validator_project_passes_tests = b.addRunArtifact(validator_project_passes_tests);
+    const validator_codes_snapshot_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/validator/codes_snapshot_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    validator_codes_snapshot_tests_mod.addImport("translate", translate_mod);
+    validator_codes_snapshot_tests_mod.addImport("resolver", resolver_mod);
+    validator_codes_snapshot_tests_mod.addImport("diagnostics", validator_diagnostics_mod);
+    validator_codes_snapshot_tests_mod.addImport("validator_run", validator_run_mod);
+    validator_codes_snapshot_tests_mod.addImport("validator_run_project", validator_run_project_mod);
+    validator_codes_snapshot_tests_mod.addImport("scan_imports", resolver_scan_imports_mod);
+    validator_codes_snapshot_tests_mod.addImport("import_cycle", resolver_import_cycle_mod);
+    validator_codes_snapshot_tests_mod.addImport("resolve_bodies", resolver_resolve_bodies_mod);
+    validator_codes_snapshot_tests_mod.addImport("golden", b.createModule(.{
+        .root_source_file = b.path("tests/helpers/golden.zig"),
+        .target = target,
+        .optimize = optimize,
+    }));
+    const validator_codes_snapshot_tests = b.addTest(.{
+        .root_module = validator_codes_snapshot_tests_mod,
+    });
+    validator_codes_snapshot_tests.addIncludePath(b.path("."));
+    validator_codes_snapshot_tests.addIncludePath(b.path("./lib"));
+    validator_codes_snapshot_tests.linkLibrary(parser_lib);
+    validator_codes_snapshot_tests.linkLibC();
+    const run_validator_codes_snapshot_tests = b.addRunArtifact(validator_codes_snapshot_tests);
     const test_step = b.step("test", "Run project test suite");
     test_step.dependOn(&run_unit_tests.step);
     test_step.dependOn(&run_golden_tests.step);
@@ -905,6 +931,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_validator_structural_tests.step);
     test_step.dependOn(&run_validator_loop_tests.step);
     test_step.dependOn(&run_validator_run_tests.step);
+    test_step.dependOn(&run_validator_codes_snapshot_tests.step);
     test_step.dependOn(&run_emit_build_fn_tests.step);
     test_step.dependOn(&run_emit_metadata_tests.step);
     test_step.dependOn(&run_emit_full_tests.step);

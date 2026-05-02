@@ -1,0 +1,3 @@
+tests/fixtures/projects/E010_import_cycle/b.circ:1:1: error: E010: import cycle detected: tests/fixtures/projects/E010_import_cycle/root.circ -> tests/fixtures/projects/E010_import_cycle/b.circ
+  note: tests/fixtures/projects/E010_import_cycle/b.circ:1:1: cycle member: tests/fixtures/projects/E010_import_cycle/root.circ
+  note: tests/fixtures/projects/E010_import_cycle/b.circ:1:1: cycle member: tests/fixtures/projects/E010_import_cycle/b.circ

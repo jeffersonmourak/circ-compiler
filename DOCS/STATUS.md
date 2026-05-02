@@ -386,3 +386,15 @@
 **Next slice:** Phase **9.3** — diagnostic snapshot audit (`E001`–`E013`, `W001`–`W003`).
 
 **Notes:** Stress WASM tests add noticeable time to **`zig build test`**. Grid spec: all row/col pins high ⇒ **`out=1`**; only **`r9`** low ⇒ **`g_9_9`** low. Plan name **`stress_deep_subcircuit.circ`** is satisfied by the **`stress_deep_subcircuit`** project (**serial** sub-packs ⇒ **256** **`not`** on the root path, even ⇒ identity).
+
+## 2026-05-02 — Phase 9 — Slice 9.3 diagnostic code snapshot audit
+
+**What shipped:** **`tests/validator/codes_snapshot_test.zig`** — full **`validator_run`** goldens for single-file codes and merged **scan → import-cycle → `validator_run_project`** dumps for project codes, with **path normalization** so snapshots use stable **`tests/fixtures/...`** prefixes regardless of absolute **`realpath`**. New/updated **`tests/fixtures/expected-diagnostics/`** goldens: **`E009_missing_import.txt`**, **`E010_import_cycle.txt`**, **`E011_macro_import_collision.txt`**, **`E012_unknown_port.txt`**, **`E013_missing_input.txt`**, **`W002_dangling_subcircuit_output.txt`**. **`E007_unassigned_output.circ`** rewritten (**`output o(in=nope.out)`**) so the assigned driver stays unresolved (**E007**) instead of the old self-loop (**E008**); the full validator also reports **`E004`** on the **`output_pin`** **`in`** port for the same fixture. Added **`tests/fixtures/projects/E010_import_cycle/`** (**`root.circ`** ↔ **`b.circ`**) for **`E010`**. Regenerated **`E007_unassigned_output.txt`** for structural + snapshot parity (**`UPDATE_GOLDENS=1`**). **`build.zig`** wires the new test target.
+
+**Files touched:** `tests/validator/codes_snapshot_test.zig`, `build.zig`, `tests/fixtures/circuits/E007_unassigned_output.circ`, `tests/fixtures/expected-diagnostics/E007_unassigned_output.txt`, new `tests/fixtures/expected-diagnostics/{E009,E010,E011,E012,E013,W002_dangling_subcircuit_output}.txt`, `tests/fixtures/projects/E010_import_cycle/*.circ`, `DOCS/STATUS.md`
+
+**Tests:** **`Phase 9.3 diagnostic code snapshots (single-file full validator)`**, **`Phase 9.3 diagnostic code snapshots (project pipeline)`**; full **`zig build test`**, result **pass**
+
+**Next slice:** Phase **9.4** — canonical **`half_adder`**, **`full_adder`**, **`and_or_network`** projects per **`PHASE_9_HARDENING.md`**.
+
+**Notes — code coverage checklist (v0):** **`E001`–`E013`**, **`W001`–`W003`** each have at least one dedicated snapshot row in **`codes_snapshot_test`** (single-file or project) *or* are covered as below. **`E008`**: canonical snapshot uses **`E008_simple_loop.circ`**; **`E008_wire_loop`** / **`E008_two_cycles`** remain in **`loop_passes_test`**. **`W002`**: project snapshot **`W002_dangling_subcircuit_output`**; single-file **`W002_dangling_output.circ`** snapshot documents reserved single-file behavior. **`E007`**: co-occurs with **`E004`** on the current minimal driverless-output fixture. Resolver **`import_cycle_test`** still has extra **`E010`** graph cases not duplicated as project goldens.

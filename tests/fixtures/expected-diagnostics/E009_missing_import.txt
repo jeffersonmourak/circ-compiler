@@ -1,0 +1,1 @@
+tests/fixtures/projects/missing_import/root.circ:2:1: error: E009: import not found 'missing.circ'

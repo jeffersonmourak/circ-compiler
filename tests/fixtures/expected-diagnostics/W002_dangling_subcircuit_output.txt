@@ -1,0 +1,1 @@
+tests/fixtures/projects/W002_dangling_subcircuit_output/root.circ:3:1: warning: W002: output 'b' of sub-circuit 'child' is never read

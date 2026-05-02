@@ -1,0 +1,1 @@
+tests/fixtures/projects/E013_missing_input/root.circ:3:1: error: E013: sub-circuit 'child' is missing required input 'b'

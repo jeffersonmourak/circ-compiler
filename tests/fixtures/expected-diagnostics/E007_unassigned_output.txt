@@ -1,1 +1,2 @@
-<clean>
+tests/fixtures/circuits/E007_unassigned_output.circ:1:1: error: E004: required input 'in' is unconnected
+tests/fixtures/circuits/E007_unassigned_output.circ:1:1: error: E007: output 'o' has no assigned driver

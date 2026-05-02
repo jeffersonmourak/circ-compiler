@@ -1,0 +1,4 @@
+tests/fixtures/projects/E012_unknown_port/root.circ:3:1: error: E013: sub-circuit 'child' is missing required input 'in'
+tests/fixtures/projects/E012_unknown_port/root.circ:3:1: warning: W002: output 'out' of sub-circuit 'child' is never read
+tests/fixtures/projects/E012_unknown_port/root.circ:3:10: error: E012: sub-circuit 'child' has no input port 'bad_port'
+tests/fixtures/projects/E012_unknown_port/root.circ:4:1: error: E012: sub-circuit 'child' has no output port 'nonexistent'

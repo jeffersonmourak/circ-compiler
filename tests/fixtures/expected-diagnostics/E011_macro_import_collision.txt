@@ -1,0 +1,1 @@
+tests/fixtures/projects/macro_import_collision/root.circ:1:1: error: E011: import alias collision 'or'

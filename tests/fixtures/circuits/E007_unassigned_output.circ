@@ -1,1 +1,1 @@
-output out
+output o(in=nope.out)
