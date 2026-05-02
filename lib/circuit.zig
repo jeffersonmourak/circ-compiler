@@ -34,7 +34,7 @@ fn recalculateAndReschedule(
     switch (component.kind) {
         .not_gate => |gate| {
             if (gate.inputs.get(IN_PORT_NAME)) |input_comp_list| {
-                calculated_state = calculateDominantState(input_comp_list);
+                calculated_state = calculateDominantState(input_comp_list).flip();
             }
         },
         .and_gate => |gate| {

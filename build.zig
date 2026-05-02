@@ -559,6 +559,30 @@ pub fn build(b: *std.Build) void {
     emit_full_tests.linkLibrary(parser_lib);
     emit_full_tests.linkLibC();
     const run_emit_full_tests = b.addRunArtifact(emit_full_tests);
+    const wasm_run_mod = b.createModule(.{
+        .root_source_file = b.path("tests/helpers/wasm_run.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const emit_behavior_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/emit/behavior_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    emit_behavior_tests_mod.addImport("translate", translate_mod);
+    emit_behavior_tests_mod.addImport("resolver", resolver_mod);
+    emit_behavior_tests_mod.addImport("validator_run", validator_run_mod);
+    emit_behavior_tests_mod.addImport("diagnostics", validator_diagnostics_mod);
+    emit_behavior_tests_mod.addImport("emit_main", emit_main_mod);
+    emit_behavior_tests_mod.addImport("wasm_run", wasm_run_mod);
+    const emit_behavior_tests = b.addTest(.{
+        .root_module = emit_behavior_tests_mod,
+    });
+    emit_behavior_tests.addIncludePath(b.path("."));
+    emit_behavior_tests.addIncludePath(b.path("./lib"));
+    emit_behavior_tests.linkLibrary(parser_lib);
+    emit_behavior_tests.linkLibC();
+    const run_emit_behavior_tests = b.addRunArtifact(emit_behavior_tests);
     const test_step = b.step("test", "Run project test suite");
     test_step.dependOn(&run_unit_tests.step);
     test_step.dependOn(&run_golden_tests.step);
@@ -573,4 +597,5 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_emit_build_fn_tests.step);
     test_step.dependOn(&run_emit_metadata_tests.step);
     test_step.dependOn(&run_emit_full_tests.step);
+    test_step.dependOn(&run_emit_behavior_tests.step);
 }

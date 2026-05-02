@@ -143,3 +143,11 @@
 **Tests:** added `test "full emitter fixture files"` in `tests/emit/full_emit_test.zig`, generated full-file emission goldens with `UPDATE_GOLDENS=1 zig build test`, ran `zig build test`, result pass
 **Next slice:** Implement Phase 4 Slice 4.4 behavioral harness (`tests/helpers/wasm_run.zig`, `tests/harness/build.zig`, `tests/harness/loader.js`) and first end-to-end wasm behavior test.
 **Notes:** `getTopology()` currently surfaces a static placeholder payload (`topology_blob`) while keeping the runtime export/wire format stable for the upcoming harness phase.
+
+## 2026-05-01 — Phase 4 — Slice 4.4 behavioral harness and first e2e wasm behavior test
+
+**What shipped:** Added a fixed WASM harness (`tests/harness/build.zig`, `tests/harness/loader.js`) and a reusable Zig helper (`tests/helpers/wasm_run.zig`) that emits source into a temp dir, compiles `compiled.wasm`, executes it under `node`, and captures stdout. Added a first end-to-end behavioral test for an inverter fixture that drives input states via runtime exports and asserts observed output transitions from Node (`0`, then `1`).
+**Files touched:** `tests/helpers/wasm_run.zig`, `tests/harness/build.zig`, `tests/harness/loader.js`, `tests/emit/behavior_test.zig`, `tests/fixtures/circuits/inverter.circ`, `build.zig`, `tests/README.md`, `lib/emit/runtime.zig`, `tests/fixtures/expected-zig/empty_ish.zig`, `tests/fixtures/expected-zig/and_two_inputs.zig`, `tests/fixtures/expected-zig/anonymous_nested.zig`, `lib/circuit.zig`, `DOCS/STATUS.md`
+**Tests:** added `test "behavioral harness: inverter responds to pin toggles"` in `tests/emit/behavior_test.zig`, ran `UPDATE_GOLDENS=1 zig build test` during iteration for emission fixture sync, then ran `zig build test`, result pass
+**Next slice:** Implement Phase 4 Slice 4.5 behavioral fixture table coverage (`inverter`, `and_gate`, `and_of_not`, `chain`, `unused_input`) driven by the harness.
+**Notes:** Harness integration required runtime emitter compatibility fixes for Zig 0.15 (`callconv(.c)`, nullable ptr/len struct) and surfaced a functional NOT-gate issue in engine propagation (`not_gate` now correctly flips input state).

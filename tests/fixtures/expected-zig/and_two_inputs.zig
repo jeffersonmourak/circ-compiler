@@ -49,7 +49,7 @@ const debug_paths: []const DebugPath = &.{
 
 const topology_blob: []const u8 = "debug-paths-v1";
 
-const PtrLen = extern struct { ptr: [*]const u8, len: usize };
+const PtrLen = extern struct { ptr: ?[*]const u8, len: usize };
 const expected_component_count: usize = 4;
 const input_component_ids: []const u32 = &.{
     0,
@@ -60,11 +60,11 @@ const output_component_ids: []const u32 = &.{
 };
 var gpa = std.heap.wasm_allocator;
 var runtime_initialized: bool = false;
-var circuit: engine.Circuit = undefined;
+var runtime_circuit: engine.Circuit = undefined;
 var component_table: []const *engine.Component = &.{};
 
 fn emptyPtrLen() PtrLen {
-    return .{ .ptr = @ptrFromInt(0), .len = 0 };
+    return .{ .ptr = null, .len = 0 };
 }
 
 fn containsId(list: []const u32, id: u32) bool {
@@ -83,14 +83,14 @@ fn bufferFromStaticBytes(bytes: []const u8) PtrLen {
 
 export fn init() void {
     if (runtime_initialized) return;
-    circuit = engine.Circuit.init() catch return;
-    _ = buildCircuit(&circuit) catch {
-        circuit.deinit();
+    runtime_circuit = engine.Circuit.init() catch return;
+    _ = buildCircuit(&runtime_circuit) catch {
+        runtime_circuit.deinit();
         return;
     };
-    component_table = circuit.nodes.items;
+    component_table = runtime_circuit.nodes.items;
     if (component_table.len != expected_component_count) {
-        circuit.deinit();
+        runtime_circuit.deinit();
         component_table = &.{};
         return;
     }
@@ -99,7 +99,7 @@ export fn init() void {
 
 export fn deinit() void {
     if (!runtime_initialized) return;
-    circuit.deinit();
+    runtime_circuit.deinit();
     component_table = &.{};
     runtime_initialized = false;
 }
@@ -111,7 +111,7 @@ export fn reset() void {
 
 export fn run() void {
     if (!runtime_initialized) return;
-    circuit.propagate() catch return;
+    runtime_circuit.propagate() catch return;
 }
 
 export fn stop() void {
@@ -124,7 +124,7 @@ export fn setPin(component_id: i32, state: i32) void {
     const id: u32 = @intCast(component_id);
     if (id >= component_table.len) return;
     if (!containsId(input_component_ids, id)) return;
-    circuit.propagateEvent(component_table[id], engine.State.fromInt(state)) catch return;
+    runtime_circuit.propagateEvent(component_table[id], engine.State.fromInt(state)) catch return;
 }
 
 export fn getOutputState(component_id: i32) i32 {
@@ -136,27 +136,28 @@ export fn getOutputState(component_id: i32) i32 {
     return engine.State.toInt(component_table[id].output_state);
 }
 
-export fn getStateSnapshot() callconv(.C) PtrLen {
+export fn getStateSnapshot() callconv(.c) PtrLen {
     if (!runtime_initialized) return emptyPtrLen();
-    const encoded = circuit.encodeState() catch return emptyPtrLen();
+    const encoded = runtime_circuit.encodeState() catch return emptyPtrLen();
     return .{ .ptr = encoded.ptr, .len = encoded.len };
 }
 
-export fn getTopology() callconv(.C) PtrLen {
+export fn getTopology() callconv(.c) PtrLen {
     return bufferFromStaticBytes(topology_blob);
 }
 
-export fn getPendingEvents() callconv(.C) PtrLen {
+export fn getPendingEvents() callconv(.c) PtrLen {
     const empty_pending: []const u8 = &.{};
     return bufferFromStaticBytes(empty_pending);
 }
 
-export fn getFileInfo() callconv(.C) PtrLen {
+export fn getFileInfo() callconv(.c) PtrLen {
     return .{ .ptr = file_info_blob.ptr, .len = file_info_blob.len };
 }
 
-export fn freeBuffer(ptr: [*]const u8, len: usize) void {
+export fn freeBuffer(ptr: ?[*]const u8, len: usize) void {
     if (len == 0) return;
-    const mutable: [*]u8 = @constCast(ptr);
+    const non_null = ptr orelse return;
+    const mutable: [*]u8 = @constCast(non_null);
     gpa.free(mutable[0..len]);
 }

@@ -1,6 +1,7 @@
 # Tests and Fixtures
 
 This project uses `zig build test` as the canonical local test command.
+Behavioral WASM harness tests also require `node` on your `PATH`.
 
 Fixture directories are organized by artifact kind:
 
