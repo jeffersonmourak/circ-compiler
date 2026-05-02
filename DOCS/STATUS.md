@@ -439,3 +439,15 @@ Wired the new fixture into **`tests/emit/behavior_test.zig`** as a dedicated **`
 **Next slice:** Phase **9.6** — top-level **`README.md`** per **`PHASE_9_HARDENING.md`** (project description, install + basic usage, pointers to **`DOCS/getting-started.md`** and **`DOCS/architecture.md`** / **`DOCS/decisions/`**).
 
 **Notes:** Audit was best-effort per the open-question recommendation in **`PHASE_9_HARDENING.md`**; future bug reports should land their reproductions in **`tests/fixtures/circuits/regression_<short>.circ`** and append to **`regression_behavior_fixtures`** (or a sibling diagnostics table when the fix surfaces a new diagnostic). The perf test runs by default; use **`CIRC_SKIP_PERF=1 zig build test`** in CI environments where wall-clock is unreliable rather than gating on **`std.testing.allocator`** slowness.
+
+## 2026-05-02 — Phase 9 — Slice 9.6 top-level README
+
+**What shipped:** New top-level **`README.md`** (~70 lines) covering: one-paragraph project description, "what it does" with **`inverter.circ`** and **`half_adder/`** worked snippets (verbatim from the shipped fixtures so they keep working as the language evolves), install instructions (**`zig 0.15.x`**, optional **`langlang`** for grammar regeneration, vendored **`lib/parser.c`** so daily contributors do not need it, **`zig build circ-compile`** → **`zig-out/bin/circ-compile`**, **`zig build test`**, **`CIRC_SKIP_PERF=1`** opt-out), a usage table for the three modes (default **`-o <file>`**, **`--emit-zig`**, **`--inspect`**) plus **`--warnings-as-errors`** / **`--build-dir`** flags, the diagnostic-codes guarantee (**`E001`–`E013`**, **`W001`–`W003`**), pointers to **`DOCS/getting-started.md`**, **`DOCS/circuit-format.md`**, **`DOCS/wasm-api.md`**, **`DOCS/simulation-engine.md`**, **`DOCS/architecture.md`**, **`DOCS/decisions/`**, and a **`LICENSE`** pointer (CC-BY-4.0). Verified the inverter snippet by running **`circ-compile tests/fixtures/circuits/inverter.circ -o <tmp>/inverter.wasm`** and confirmed the resulting **`.wasm`** is produced.
+
+**Files touched:** `README.md`, `DOCS/STATUS.md`
+
+**Tests:** none — README is documentation. Spot-checked the inverter and half_adder snippets are byte-identical to **`tests/fixtures/circuits/inverter.circ`** and **`tests/fixtures/projects/half_adder/{half_adder,root}.circ`** so they cannot drift silently from the live fixtures, and ran **`zig build test`** to confirm no incidental changes — result **pass**.
+
+**Next slice:** Phase **9.7** — **`DOCS/getting-started.md`** walkthrough (install verify → first **`.circ`** → compile → load from Node → built-in macro example → sub-circuit example), then v0 sign-off.
+
+**Notes:** README pointer to **`DOCS/getting-started.md`** is forward-referencing — the doc is created in slice 9.7 next. The "Documentation" section also fronts the contributor-oriented docs, so the dead pointer affects only the new-user path until 9.7 is committed. Kept the top-of-README description aligned with **`DOCS/architecture.md`**'s pull-based-runtime framing, and the diagnostic-codes range matches the **`codes_snapshot_test`** audit from slice 9.3.
