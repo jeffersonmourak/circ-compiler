@@ -175,3 +175,11 @@
 **Tests:** added unit tests in `tests/orchestrator/workspace_test.zig` for temp workspace creation, override behavior, runtime file write/byte-match against embed manifest, and emitted-source write path; ran `zig build test`, result pass
 **Next slice:** Implement Phase 5 Slice 5.3 subprocess wrapper in `lib/orchestrator/subprocess.zig` with success/failure capture and failure-header behavior.
 **Notes:** Workspace helpers intentionally handle both absolute and relative paths so test fixtures can use `std.testing.tmpDir()`-relative paths while production defaults remain absolute under `/tmp`.
+
+## 2026-05-01 — Phase 5 — Slice 5.3 subprocess wrapper
+
+**What shipped:** Added `lib/orchestrator/subprocess.zig` with a captured-output subprocess wrapper (`runCommand`) returning term, normalized exit code, stdout, and stderr. On non-zero exit the wrapper writes `zig build failed in <build-dir>:` to the provided stderr writer and streams captured stderr/stdout afterward; it also maps missing `zig` executable to `error.ZigBinaryNotFound` for clearer caller handling.
+**Files touched:** `lib/orchestrator/subprocess.zig`, `tests/orchestrator/subprocess_test.zig`, `build.zig`, `DOCS/STATUS.md`
+**Tests:** added `subprocess wrapper succeeds for zig version` and `subprocess wrapper captures failure and prints header` in `tests/orchestrator/subprocess_test.zig`, ran `zig build test`, result pass
+**Next slice:** Implement Phase 5 Slice 5.4 output copy and cleanup helpers in `lib/orchestrator/finalize.zig`.
+**Notes:** The subprocess wrapper intentionally accepts an arbitrary stderr writer so higher-level orchestration can stream failure headers to real stderr in production and in-memory buffers in tests.
