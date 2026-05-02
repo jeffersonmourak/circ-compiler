@@ -221,3 +221,42 @@ test "project behavior: same_name_half_adder" {
         .spec_path = "tests/fixtures/expected-wasm/projects/same_name_half_adder.txt",
     });
 }
+
+const builtin_truth_fixtures = [_]Fixture{
+    .{
+        .name = "builtin_or",
+        .root_path = "tests/fixtures/circuits/builtin_or.circ",
+        .source_name = "builtin_or.circ",
+        .spec_path = "tests/fixtures/expected-wasm/builtin_or.txt",
+    },
+    .{
+        .name = "builtin_nand",
+        .root_path = "tests/fixtures/circuits/builtin_nand.circ",
+        .source_name = "builtin_nand.circ",
+        .spec_path = "tests/fixtures/expected-wasm/builtin_nand.txt",
+    },
+    .{
+        .name = "builtin_nor",
+        .root_path = "tests/fixtures/circuits/builtin_nor.circ",
+        .source_name = "builtin_nor.circ",
+        .spec_path = "tests/fixtures/expected-wasm/builtin_nor.txt",
+    },
+    .{
+        .name = "builtin_xor",
+        .root_path = "tests/fixtures/circuits/builtin_xor.circ",
+        .source_name = "builtin_xor.circ",
+        .spec_path = "tests/fixtures/expected-wasm/builtin_xor.txt",
+    },
+    .{
+        .name = "builtin_xnor",
+        .root_path = "tests/fixtures/circuits/builtin_xnor.circ",
+        .source_name = "builtin_xnor.circ",
+        .spec_path = "tests/fixtures/expected-wasm/builtin_xnor.txt",
+    },
+};
+
+test "built-in macros: truth tables (or nand nor xor xnor)" {
+    for (builtin_truth_fixtures) |fx| {
+        try runFixture(fx);
+    }
+}

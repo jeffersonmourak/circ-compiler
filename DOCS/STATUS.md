@@ -335,6 +335,18 @@
 
 **Tests:** macro wrong-path (**`E011`**) regression; **`scan_imports`** / **`resolve_bodies`** expectations updated for user + built-in file graph; **`UPDATE_GOLDENS=1 zig build test`** then **`zig build test`** — result **pass**
 
-**Next slice:** Phase 8 Slice 8.4 per **`DOCS/PLANS/PHASE_8_BUILTIN_MACROS.md`** (remaining macro pipeline / **`circ-compile`** UX).
+**Next slice:** Phase 8 Slice 8.5 — composition tests (full adder + user sub-circuit crossover) per **`PHASE_8_BUILTIN_MACROS.md`**.
 
 **Notes:** **`file_loader.builtin_path_prefix`** aliases **`builtins.builtin_vpath_prefix`** so the builtin virtual path stays single-sourced.
+
+## 2026-05-02 — Phase 8 — Slice 8.4 truth-table tests per built-in macro
+
+**What shipped:** Added five single-file **`tests/fixtures/circuits/builtin_{or,nand,nor,xor,xnor}.circ`** fixtures (two inputs, one macro gate, **`output`** driven from the gate) plus matching **`tests/fixtures/expected-wasm/builtin_<name>.txt`** specs (all four input combinations). **`tests/emit/project_behavior_test.zig`** runs them through the same project scan → validate → **`emitProjectSource`** → WASM harness path as other multi-file tests via **`test "built-in macros: truth tables (or nand nor xor xnor)"`**.
+
+**Files touched:** `tests/fixtures/circuits/builtin_*.circ`, `tests/fixtures/expected-wasm/builtin_*.txt`, `tests/emit/project_behavior_test.zig`, `DOCS/STATUS.md`
+
+**Tests:** new looped harness test above; **`zig build test`** — result **pass**
+
+**Next slice:** Phase 8 Slice 8.5 — full-adder + user/built-in composition fixtures and behaviour specs.
+
+**Notes:** No CLI change; single root **`.circ`** still uses the project pipeline (implicit built-ins from slice 8.3).
