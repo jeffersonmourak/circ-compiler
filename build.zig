@@ -630,6 +630,23 @@ pub fn build(b: *std.Build) void {
         .root_module = orchestrator_subprocess_tests_mod,
     });
     const run_orchestrator_subprocess_tests = b.addRunArtifact(orchestrator_subprocess_tests);
+    const orchestrator_finalize_mod = b.createModule(.{
+        .root_source_file = b.path("lib/orchestrator/finalize.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    orchestrator_finalize_mod.addImport("orchestrator_workspace", orchestrator_workspace_mod);
+    const orchestrator_finalize_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/orchestrator/finalize_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    orchestrator_finalize_tests_mod.addImport("orchestrator_workspace", orchestrator_workspace_mod);
+    orchestrator_finalize_tests_mod.addImport("orchestrator_finalize", orchestrator_finalize_mod);
+    const orchestrator_finalize_tests = b.addTest(.{
+        .root_module = orchestrator_finalize_tests_mod,
+    });
+    const run_orchestrator_finalize_tests = b.addRunArtifact(orchestrator_finalize_tests);
     const test_step = b.step("test", "Run project test suite");
     test_step.dependOn(&run_unit_tests.step);
     test_step.dependOn(&run_golden_tests.step);
@@ -648,4 +665,5 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_orchestrator_embed_tests.step);
     test_step.dependOn(&run_orchestrator_workspace_tests.step);
     test_step.dependOn(&run_orchestrator_subprocess_tests.step);
+    test_step.dependOn(&run_orchestrator_finalize_tests.step);
 }

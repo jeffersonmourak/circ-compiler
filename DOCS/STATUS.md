@@ -183,3 +183,11 @@
 **Tests:** added `subprocess wrapper succeeds for zig version` and `subprocess wrapper captures failure and prints header` in `tests/orchestrator/subprocess_test.zig`, ran `zig build test`, result pass
 **Next slice:** Implement Phase 5 Slice 5.4 output copy and cleanup helpers in `lib/orchestrator/finalize.zig`.
 **Notes:** The subprocess wrapper intentionally accepts an arbitrary stderr writer so higher-level orchestration can stream failure headers to real stderr in production and in-memory buffers in tests.
+
+## 2026-05-01 — Phase 5 — Slice 5.4 output copy and cleanup
+
+**What shipped:** Added orchestrator finalize helpers in `lib/orchestrator/finalize.zig`: `copyOutput(workspace, target_path)` copies the deterministic build artifact from `<workspace>/zig-out/bin/compiled.wasm` to the requested output path (creating parent directories as needed), and `cleanup(workspace)` deletes the workspace only when `cleanup_on_success` is true.
+**Files touched:** `lib/orchestrator/finalize.zig`, `tests/orchestrator/finalize_test.zig`, `build.zig`, `DOCS/STATUS.md`
+**Tests:** added finalize unit tests in `tests/orchestrator/finalize_test.zig` for successful copy, missing-artifact error (`error.MissingCompiledWasm`), cleanup delete-on-true, and cleanup no-op-on-false; ran `zig build test`, result pass
+**Next slice:** Implement Phase 5 Slice 5.5 top-level orchestrator `compile(...)` and subprocess-path end-to-end tests.
+**Notes:** `copyOutput` uses explicit file streaming rather than relying on path-specific stdlib copy helpers so relative and absolute workspace/output paths follow the same behavior in production and tests.
