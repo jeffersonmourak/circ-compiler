@@ -119,3 +119,11 @@
 **Tests:** added `test "validator run fixtures"` in `tests/validator/run_test.zig`, generated diagnostics snapshots with `UPDATE_GOLDENS=1 zig build test`, ran `zig build test`, result pass
 **Next slice:** Begin Phase 4 emission work from the active Phase 4 plan.
 **Notes:** In single-file mode `W002` remains intentionally silent (reserved for Phase 7 multi-file context) per the phase plan’s open-question recommendation.
+
+## 2026-05-01 — Phase 4 — Slice 4.1 writer and buildCircuit emission
+
+**What shipped:** Added an emission writer utility for indentation, Zig string literal escaping, and Zig identifier escaping, then implemented `buildCircuit` snippet emission from validated IR. Added fixture-driven golden tests for build-function output covering empty-ish wiring, multi-primitive wiring, anonymous components, and Zig keyword-sensitive instance naming.
+**Files touched:** `lib/emit/writer.zig`, `lib/emit/build_fn.zig`, `tests/emit/build_fn_test.zig`, `tests/fixtures/circuits/keyword_instance_name.circ`, `tests/fixtures/expected-zig/empty_ish_build_fn.zig`, `tests/fixtures/expected-zig/and_two_inputs_build_fn.zig`, `tests/fixtures/expected-zig/anonymous_nested_build_fn.zig`, `tests/fixtures/expected-zig/keyword_instance_name_build_fn.zig`, `build.zig`, `DOCS/STATUS.md`
+**Tests:** added `test "buildCircuit emitter fixtures"` in `tests/emit/build_fn_test.zig`, generated Zig snippet goldens with `UPDATE_GOLDENS=1 zig build test`, ran `zig build test`, result pass
+**Next slice:** Implement Phase 4 Slice 4.2 file-info and debug-paths emission modules with golden coverage.
+**Notes:** Build-function emission currently rejects unresolved/sub-circuit component kinds (`error.UnresolvedComponentName`, `error.UnsupportedSubCircuitInPhase4`) to keep Phase 4 single-file primitive-only constraints explicit.

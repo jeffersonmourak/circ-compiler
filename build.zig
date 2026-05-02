@@ -437,6 +437,35 @@ pub fn build(b: *std.Build) void {
     validator_run_tests.linkLibrary(parser_lib);
     validator_run_tests.linkLibC();
     const run_validator_run_tests = b.addRunArtifact(validator_run_tests);
+    const emit_build_fn_mod = b.createModule(.{
+        .root_source_file = b.path("lib/emit/build_fn.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    emit_build_fn_mod.addImport("ir_types", ir_types_mod);
+    const emit_build_fn_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/emit/build_fn_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    emit_build_fn_tests_mod.addImport("translate", translate_mod);
+    emit_build_fn_tests_mod.addImport("resolver", resolver_mod);
+    emit_build_fn_tests_mod.addImport("validator_run", validator_run_mod);
+    emit_build_fn_tests_mod.addImport("diagnostics", validator_diagnostics_mod);
+    emit_build_fn_tests_mod.addImport("build_fn", emit_build_fn_mod);
+    emit_build_fn_tests_mod.addImport("golden", b.createModule(.{
+        .root_source_file = b.path("tests/helpers/golden.zig"),
+        .target = target,
+        .optimize = optimize,
+    }));
+    const emit_build_fn_tests = b.addTest(.{
+        .root_module = emit_build_fn_tests_mod,
+    });
+    emit_build_fn_tests.addIncludePath(b.path("."));
+    emit_build_fn_tests.addIncludePath(b.path("./lib"));
+    emit_build_fn_tests.linkLibrary(parser_lib);
+    emit_build_fn_tests.linkLibC();
+    const run_emit_build_fn_tests = b.addRunArtifact(emit_build_fn_tests);
     const test_step = b.step("test", "Run project test suite");
     test_step.dependOn(&run_unit_tests.step);
     test_step.dependOn(&run_golden_tests.step);
@@ -448,4 +477,5 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_validator_structural_tests.step);
     test_step.dependOn(&run_validator_loop_tests.step);
     test_step.dependOn(&run_validator_run_tests.step);
+    test_step.dependOn(&run_emit_build_fn_tests.step);
 }
