@@ -1,0 +1,210 @@
+const std = @import("std");
+const ast = @import("translate").Ast;
+const ir = @import("types.zig");
+
+const PendingPorts = struct {
+    component_id: ir.ComponentId,
+    ports: []const ast.PortConnection,
+};
+
+const ResolveContext = struct {
+    allocator: std.mem.Allocator,
+    file: ast.File,
+    imports: std.ArrayList(ir.UnresolvedImport),
+    input_pins: std.ArrayList(ir.InputPin),
+    output_pins: std.ArrayList(ir.OutputPin),
+    components: std.ArrayList(ir.Component),
+    connections: std.ArrayList(ir.Connection),
+    pending_ports: std.ArrayList(PendingPorts),
+    name_to_component: std.StringHashMap(ir.ComponentId),
+    import_aliases: std.StringHashMap(void),
+    next_component_id: u32,
+};
+
+fn toIrSpan(span: anytype) ir.Span {
+    return .{
+        .file_id = span.file_id,
+        .start_line = span.start_line,
+        .start_col = span.start_col,
+        .end_line = span.end_line,
+        .end_col = span.end_col,
+    };
+}
+
+fn isPrimitive(name: []const u8) ?ir.PrimitiveKind {
+    if (std.mem.eql(u8, name, "and")) return .and_gate;
+    if (std.mem.eql(u8, name, "not")) return .not_gate;
+    if (std.mem.eql(u8, name, "wire")) return .wire;
+    if (std.mem.eql(u8, name, "led")) return .led;
+    if (std.mem.eql(u8, name, "input_pin")) return .input_pin;
+    if (std.mem.eql(u8, name, "output_pin")) return .output_pin;
+    return null;
+}
+
+fn nextComponentId(ctx: *ResolveContext) ir.ComponentId {
+    const id = ir.ComponentId{ .value = ctx.next_component_id };
+    ctx.next_component_id += 1;
+    return id;
+}
+
+fn ensureNamedReference(ctx: *ResolveContext, named: ast.NamedSignalRef) !ir.SignalEndpoint {
+    const component_id = ctx.name_to_component.get(named.target.text) orelse return error.UnknownSignalReference;
+    return .{
+        .component = component_id,
+        .port = named.port.text,
+    };
+}
+
+fn addComponent(
+    ctx: *ResolveContext,
+    component_ast: ast.ComponentInstance,
+) !ir.ComponentId {
+    const id = nextComponentId(ctx);
+
+    const kind = if (isPrimitive(component_ast.type_name.text)) |primitive|
+        ir.ComponentKind{ .primitive = primitive }
+    else if (ctx.import_aliases.contains(component_ast.type_name.text))
+        ir.ComponentKind{
+            .sub_circuit_ref = .{
+                .name = component_ast.type_name.text,
+                .span = toIrSpan(component_ast.type_name.span),
+            },
+        }
+    else
+        ir.ComponentKind{ .unresolved_name = component_ast.type_name.text };
+
+    try ctx.components.append(ctx.allocator, .{
+        .id = id,
+        .kind = kind,
+        .instance_name = if (component_ast.instance_name) |name| name.text else null,
+        .span = toIrSpan(component_ast.span),
+    });
+
+    if (component_ast.instance_name) |name| {
+        try ctx.name_to_component.put(name.text, id);
+    }
+
+    try ctx.pending_ports.append(ctx.allocator, .{
+        .component_id = id,
+        .ports = component_ast.ports,
+    });
+
+    return id;
+}
+
+fn resolveSource(ctx: *ResolveContext, source: ast.SignalSource) anyerror!ir.SignalEndpoint {
+    return switch (source) {
+        .named => |named| try ensureNamedReference(ctx, named),
+        .anonymous => |anonymous_component| blk: {
+            const anonymous_id = try addComponent(ctx, anonymous_component.*);
+            break :blk .{
+                .component = anonymous_id,
+                .port = "out",
+            };
+        },
+    };
+}
+
+fn resolvePendingPorts(ctx: *ResolveContext) anyerror!void {
+    var index: usize = 0;
+    while (index < ctx.pending_ports.items.len) : (index += 1) {
+        const pending = ctx.pending_ports.items[index];
+        for (pending.ports) |port_connection| {
+            const from_endpoint = try resolveSource(ctx, port_connection.value);
+            try ctx.connections.append(ctx.allocator, .{
+                .from = from_endpoint,
+                .to = .{
+                    .component = pending.component_id,
+                    .port = port_connection.port.text,
+                },
+                .span = toIrSpan(port_connection.span),
+            });
+        }
+    }
+}
+
+pub fn resolve(allocator: std.mem.Allocator, file: ast.File, file_id: u32) anyerror!ir.Module {
+    var ctx = ResolveContext{
+        .allocator = allocator,
+        .file = file,
+        .imports = .{},
+        .input_pins = .{},
+        .output_pins = .{},
+        .components = .{},
+        .connections = .{},
+        .pending_ports = .{},
+        .name_to_component = std.StringHashMap(ir.ComponentId).init(allocator),
+        .import_aliases = std.StringHashMap(void).init(allocator),
+        .next_component_id = 0,
+    };
+
+    for (file.imports) |import_decl| {
+        try ctx.import_aliases.put(import_decl.alias.text, {});
+        try ctx.imports.append(allocator, .{
+            .alias = import_decl.alias.text,
+            .path = import_decl.path.text,
+            .span = toIrSpan(import_decl.span),
+        });
+    }
+
+    for (file.inputs) |input_decl| {
+        for (input_decl.names) |name| {
+            const component_id = nextComponentId(&ctx);
+            try ctx.components.append(allocator, .{
+                .id = component_id,
+                .kind = .{ .primitive = .input_pin },
+                .instance_name = name.text,
+                .span = toIrSpan(input_decl.span),
+            });
+            try ctx.name_to_component.put(name.text, component_id);
+            try ctx.input_pins.append(allocator, .{
+                .id = .{ .value = @intCast(ctx.input_pins.items.len) },
+                .name = name.text,
+                .component = component_id,
+                .span = toIrSpan(name.span),
+            });
+        }
+    }
+
+    for (file.components) |component_decl| {
+        _ = try addComponent(&ctx, component_decl);
+    }
+
+    try resolvePendingPorts(&ctx);
+
+    for (file.outputs) |output_decl| {
+        const output_component_id = nextComponentId(&ctx);
+        try ctx.components.append(allocator, .{
+            .id = output_component_id,
+            .kind = .{ .primitive = .output_pin },
+            .instance_name = output_decl.name.text,
+            .span = toIrSpan(output_decl.span),
+        });
+        try ctx.name_to_component.put(output_decl.name.text, output_component_id);
+
+        const driver = try resolveSource(&ctx, output_decl.value);
+        try ctx.output_pins.append(allocator, .{
+            .id = .{ .value = @intCast(ctx.output_pins.items.len) },
+            .name = output_decl.name.text,
+            .driver = driver,
+            .span = toIrSpan(output_decl.span),
+        });
+        try ctx.connections.append(allocator, .{
+            .from = driver,
+            .to = .{
+                .component = output_component_id,
+                .port = "in",
+            },
+            .span = toIrSpan(output_decl.span),
+        });
+    }
+
+    return .{
+        .file_id = .{ .value = file_id },
+        .inputs = try ctx.input_pins.toOwnedSlice(allocator),
+        .outputs = try ctx.output_pins.toOwnedSlice(allocator),
+        .components = try ctx.components.toOwnedSlice(allocator),
+        .connections = try ctx.connections.toOwnedSlice(allocator),
+        .imports = try ctx.imports.toOwnedSlice(allocator),
+    };
+}

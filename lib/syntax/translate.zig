@@ -3,6 +3,8 @@ const ast = @import("ast.zig");
 const Span = @import("span.zig").Span;
 const C_Parser = @import("CParser.zig").C_Parser;
 
+pub const Ast = ast;
+
 const TranslationContext = struct {
     allocator: std.mem.Allocator,
     tree: [*c]C_Parser.ll_tree,

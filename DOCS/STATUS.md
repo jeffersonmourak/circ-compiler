@@ -71,3 +71,11 @@
 **Tests:** added `test "ir types construct and round-trip fields"` in `lib/ir/types.zig`, wired IR tests into `zig build test`, result pass
 **Next slice:** Implement Phase 2 Slice 2.4 AST to IR resolver (single-file) and IR golden dumps.
 **Notes:** IR tests import `Span` via module wiring in `build.zig` (`span` import), keeping IR types decoupled from relative source-path imports.
+
+## 2026-05-01 — Phase 2 — Slice 2.4 AST to IR resolver
+
+**What shipped:** Implemented a single-file AST→IR resolver in `lib/ir/resolver.zig` that synthesizes input/output components, resolves primitive vs import-alias vs unresolved component kinds, flattens anonymous inline components into concrete IR components, materializes connections, and carries unresolved imports forward for later phases. Added deterministic IR dump tooling plus fixture-driven golden tests covering primitive resolution, anonymous flattening, unresolved-name markers, import-alias markers, and output-driver synthesis.
+**Files touched:** `lib/ir/resolver.zig`, `lib/ir/types.zig`, `lib/syntax/translate.zig`, `build.zig`, `tests/helpers/ir_dump.zig`, `tests/ir/resolver_test.zig`, `tests/fixtures/circuits/unknown_component.circ`, `tests/fixtures/expected-ir/and_two_inputs.txt`, `tests/fixtures/expected-ir/anonymous_nested.txt`, `tests/fixtures/expected-ir/unknown_component.txt`, `tests/fixtures/expected-ir/with_import.txt`, `tests/fixtures/expected-ir/multi_output.txt`, `tests/README.md`, `DOCS/STATUS.md`
+**Tests:** added resolver fixture test `test "resolve ast to ir fixtures"` in `tests/ir/resolver_test.zig`, generated IR goldens with `UPDATE_GOLDENS=1 zig build test`, ran `zig build test`, result pass
+**Next slice:** Begin Phase 3 semantic validation from the active Phase 3 plan.
+**Notes:** `tests/helpers/golden.zig` now keeps expected-failure test paths silent, so the resolver/translator golden suites run without intentional stderr noise.

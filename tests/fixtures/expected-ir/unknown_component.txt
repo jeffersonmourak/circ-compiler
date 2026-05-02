@@ -1,0 +1,13 @@
+Module file_id=0
+Imports (0)
+Inputs (1)
+  id=0 name=a component=0
+Outputs (1)
+  id=0 name=out driver=1.out
+Components (3)
+  id=0 name=a kind=primitive:input_pin
+  id=1 name=u1 kind=unresolved_name:mystery
+  id=2 name=out kind=primitive:output_pin
+Connections (2)
+  0.out -> 1.in
+  1.out -> 2.in

@@ -215,18 +215,45 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    ir_types_tests_mod.addImport("span", b.createModule(.{
-        .root_source_file = b.path("lib/syntax/span.zig"),
-        .target = target,
-        .optimize = optimize,
-    }));
     const ir_types_tests = b.addTest(.{
         .root_module = ir_types_tests_mod,
     });
     const run_ir_types_tests = b.addRunArtifact(ir_types_tests);
+    const resolver_mod = b.createModule(.{
+        .root_source_file = b.path("lib/ir/resolver.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    resolver_mod.addImport("translate", translate_mod);
+    const resolver_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/ir/resolver_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    resolver_tests_mod.addImport("translate", translate_mod);
+    resolver_tests_mod.addImport("resolver", resolver_mod);
+    resolver_tests_mod.addImport("ir_dump", b.createModule(.{
+        .root_source_file = b.path("tests/helpers/ir_dump.zig"),
+        .target = target,
+        .optimize = optimize,
+    }));
+    resolver_tests_mod.addImport("golden", b.createModule(.{
+        .root_source_file = b.path("tests/helpers/golden.zig"),
+        .target = target,
+        .optimize = optimize,
+    }));
+    const resolver_tests = b.addTest(.{
+        .root_module = resolver_tests_mod,
+    });
+    resolver_tests.addIncludePath(b.path("."));
+    resolver_tests.addIncludePath(b.path("./lib"));
+    resolver_tests.linkLibrary(parser_lib);
+    resolver_tests.linkLibC();
+    const run_resolver_tests = b.addRunArtifact(resolver_tests);
     const test_step = b.step("test", "Run project test suite");
     test_step.dependOn(&run_unit_tests.step);
     test_step.dependOn(&run_golden_tests.step);
     test_step.dependOn(&run_translate_tests.step);
     test_step.dependOn(&run_ir_types_tests.step);
+    test_step.dependOn(&run_resolver_tests.step);
 }

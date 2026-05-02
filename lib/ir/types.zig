@@ -1,5 +1,12 @@
 const std = @import("std");
-const Span = @import("span").Span;
+
+pub const Span = struct {
+    file_id: u32,
+    start_line: u32,
+    start_col: u32,
+    end_line: u32,
+    end_col: u32,
+};
 
 pub const FileId = struct { value: u32 };
 pub const InputId = struct { value: u32 };

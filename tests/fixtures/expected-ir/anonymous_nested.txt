@@ -1,0 +1,16 @@
+Module file_id=0
+Imports (0)
+Inputs (1)
+  id=0 name=a component=0
+Outputs (1)
+  id=0 name=result driver=1.out
+Components (4)
+  id=0 name=a kind=primitive:input_pin
+  id=1 name=gate kind=primitive:and_gate
+  id=2 name=__anon_0 kind=primitive:not_gate
+  id=3 name=result kind=primitive:output_pin
+Connections (4)
+  2.out -> 1.a
+  0.out -> 1.b
+  0.out -> 2.in
+  1.out -> 3.in
