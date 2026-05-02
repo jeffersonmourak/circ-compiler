@@ -74,6 +74,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    # gh looks up the repo via git remote; this job never checks out source.
+    env:
+      GH_REPO: ${{ github.repository }}
     steps:
       - name: Download build artifacts
         uses: actions/download-artifact@v8
