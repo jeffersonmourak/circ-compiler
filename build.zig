@@ -674,6 +674,15 @@ pub fn build(b: *std.Build) void {
     orchestrator_main_tests.linkLibrary(parser_lib);
     orchestrator_main_tests.linkLibC();
     const run_orchestrator_main_tests = b.addRunArtifact(orchestrator_main_tests);
+    const cli_args_mod = b.createModule(.{
+        .root_source_file = b.path("lib/cli/args.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const cli_args_tests = b.addTest(.{
+        .root_module = cli_args_mod,
+    });
+    const run_cli_args_tests = b.addRunArtifact(cli_args_tests);
     const test_step = b.step("test", "Run project test suite");
     test_step.dependOn(&run_unit_tests.step);
     test_step.dependOn(&run_golden_tests.step);
@@ -694,4 +703,5 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_orchestrator_subprocess_tests.step);
     test_step.dependOn(&run_orchestrator_finalize_tests.step);
     test_step.dependOn(&run_orchestrator_main_tests.step);
+    test_step.dependOn(&run_cli_args_tests.step);
 }

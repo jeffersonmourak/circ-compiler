@@ -199,3 +199,11 @@
 **Tests:** added orchestrator end-to-end tests in `tests/orchestrator/main_test.zig` for (1) successful compile producing wasm magic bytes with temp-dir cleanup, (2) override `build_dir` preservation with generated workspace contents, and (3) invalid Zig source failure preserving build dir; ran `zig build test`, result pass
 **Next slice:** Begin Phase 6 CLI surface work from the active Phase 6 plan.
 **Notes:** Failure-path tests use the writer-injected entrypoint to keep expected failing `zig build` stderr output captured/silent in test logs while still verifying preserve-on-failure behavior.
+
+## 2026-05-01 — Phase 6 — Slice 6.1 argument parser
+
+**What shipped:** Added a hand-rolled single-pass CLI argument parser in `lib/cli/args.zig` with `Mode`, `Args`, `ParseError`, and `parse(argv)` covering compile, `--emit-zig`, and `--inspect` modes plus `--warnings-as-errors`/`-Werror`, `-o`, and `--build-dir`. The parser enforces mutually exclusive mode flags, required `-o` for compile/emit-zig, rejects unknown flags, and rejects `--build-dir` outside compile mode.
+**Files touched:** `lib/cli/args.zig`, `build.zig`, `DOCS/STATUS.md`
+**Tests:** added parser unit tests in `lib/cli/args.zig` covering all planned happy-path and error-path argv shapes for Slice 6.1, wired parser tests into `zig build test`, ran `zig build test`, result pass
+**Next slice:** Implement Phase 6 Slice 6.2 CLI entry point and pipeline driver (`cmd/circ-compile/main.zig`) and wire the `circ-compile` executable target in root `build.zig`.
+**Notes:** Current parser behavior keeps `--inspect` without `-o` valid and does not yet enforce `-o` rejection in inspect mode; that mode-specific policy is deferred to later integration slices per the phase open question.
