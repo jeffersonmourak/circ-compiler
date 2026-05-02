@@ -47,3 +47,11 @@
 **Tests:** added `test "transport: encodes output_pin state"` in `lib/transport.zig`, ran `zig build test`, result pass
 **Next slice:** Begin Phase 2 parser and AST/IR work from the active Phase 2 plan.
 **Notes:** Phase 1 baseline slices (1.1 to 1.3) are now implemented and passing as a set.
+
+## 2026-05-01 — Phase 2 — Slice 2.1 AST types and span module
+
+**What shipped:** Added a dedicated `Span` type and a new typed AST module covering the Phase 2 syntax constructs (`File`, `Import`, `InputDecl`, `OutputDecl`, `ComponentInstance`, `PortConnection`, `SignalSource`, `NamedSignalRef`, `Identifier`, `StringLiteral`). The AST includes spans on every node and uses a tagged union for signal sources.
+**Files touched:** `lib/syntax/span.zig`, `lib/syntax/ast.zig`, `DOCS/STATUS.md`
+**Tests:** added `test "ast nodes carry span data"` in `lib/syntax/ast.zig`, ran `zig test lib/syntax/ast.zig` and `zig build test`, result pass
+**Next slice:** Implement Phase 2 Slice 2.2 parse-tree to AST translation using the new typed AST.
+**Notes:** `SignalSource.anonymous` is represented as `*const ComponentInstance` to avoid recursive-by-value type cycles while preserving inline-component structure.
