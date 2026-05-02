@@ -36,7 +36,7 @@ pub fn initDiagnosticList() DiagnosticList {
 
 pub fn levelForCode(code: DiagnosticCode) DiagnosticLevel {
     return switch (code) {
-        .W001, .W002 => .warning,
+        .W001, .W002, .W003 => .warning,
         else => .err,
     };
 }

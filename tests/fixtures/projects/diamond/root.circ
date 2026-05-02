@@ -1,0 +1,6 @@
+import left "left.circ"
+import right "right.circ"
+input a
+left l(in=a)
+right r(in=a)
+output out(in=l.out)

@@ -1,0 +1,6 @@
+import dup "a.circ"
+import dup "b.circ"
+import and "a.circ"
+input x
+dup u1(in=x)
+output out(in=u1.out)

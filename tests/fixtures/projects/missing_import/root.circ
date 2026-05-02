@@ -1,0 +1,5 @@
+import ok "ok.circ"
+import missing "missing.circ"
+input a
+ok u1(in=a)
+output out(in=u1.out)

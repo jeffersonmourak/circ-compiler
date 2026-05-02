@@ -721,6 +721,34 @@ pub fn build(b: *std.Build) void {
         .root_module = cli_integration_tests_mod,
     });
     const run_cli_integration_tests = b.addRunArtifact(cli_integration_tests);
+    const resolver_file_loader_mod = b.createModule(.{
+        .root_source_file = b.path("lib/resolver/file_loader.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const resolver_scan_imports_mod = b.createModule(.{
+        .root_source_file = b.path("lib/resolver/scan_imports.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    resolver_scan_imports_mod.addImport("translate", translate_mod);
+    resolver_scan_imports_mod.addImport("diagnostics", validator_diagnostics_mod);
+    resolver_scan_imports_mod.addImport("file_loader", resolver_file_loader_mod);
+    const resolver_scan_imports_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/resolver/scan_imports_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    resolver_scan_imports_tests_mod.addImport("scan_imports", resolver_scan_imports_mod);
+    resolver_scan_imports_tests_mod.addImport("diagnostics", validator_diagnostics_mod);
+    const resolver_scan_imports_tests = b.addTest(.{
+        .root_module = resolver_scan_imports_tests_mod,
+    });
+    resolver_scan_imports_tests.addIncludePath(b.path("."));
+    resolver_scan_imports_tests.addIncludePath(b.path("./lib"));
+    resolver_scan_imports_tests.linkLibrary(parser_lib);
+    resolver_scan_imports_tests.linkLibC();
+    const run_resolver_scan_imports_tests = b.addRunArtifact(resolver_scan_imports_tests);
     const test_step = b.step("test", "Run project test suite");
     test_step.dependOn(&run_unit_tests.step);
     test_step.dependOn(&run_golden_tests.step);
@@ -744,4 +772,5 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_cli_args_tests.step);
     test_step.dependOn(&circ_compile_exe.step);
     test_step.dependOn(&run_cli_integration_tests.step);
+    test_step.dependOn(&run_resolver_scan_imports_tests.step);
 }
