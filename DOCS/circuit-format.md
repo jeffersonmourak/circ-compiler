@@ -17,6 +17,10 @@ input <name> [, <name> ...]
 )
 ```
 
+## Comments
+
+Line comments start with `//` and run to end of line (see `Annotation` in `lib/grammar/proto-circ.peg`). Hash (`#`) is not a comment starter in `.circ`.
+
 ## Declarations
 
 ### Input Pins

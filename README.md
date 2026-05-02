@@ -15,14 +15,14 @@ output out(in=inv.out)
 `circ-compile inverter.circ -o inverter.wasm` produces a `.wasm` whose exported `setPin` / `run` / `getOutputState` functions simulate that exact circuit. Multi-file projects work the same way — the root file imports siblings and the compiler emits one `buildXxx` function per source file:
 
 ```text
-# half_adder.circ
+// half_adder.circ
 input a, b
 xor s(a=a, b=b)
 and c(a=a, b=b)
 output sum(in=s.out)
 output carry(in=c.out)
 
-# root.circ
+// root.circ
 import half_adder "half_adder.circ"
 input a, b
 half_adder ha(a=a, b=b)

@@ -108,7 +108,7 @@ a=1 -> NOT a = 0
 Built-in gates `or`, `nand`, `nor`, `xor`, and `xnor` are auto-imported when a file is part of a project — i.e. when the parser sees at least one `import` declaration. To use a built-in in an otherwise standalone file, add an explicit import to the virtual `<builtin>/` filesystem:
 
 ```text
-# examples/xor_demo.circ
+// examples/xor_demo.circ
 import xor "<builtin>/xor.circ"
 input a, b
 xor x(a=a, b=b)
@@ -140,7 +140,7 @@ For a structured map use `getFileInfo()` (returns a binary blob in linear memory
 Sub-circuits live in their own `.circ` files and are imported by alias. The half-adder is a canonical two-file project:
 
 ```text
-# examples/half_adder/half_adder.circ
+// examples/half_adder/half_adder.circ
 input a, b
 xor s(a=a, b=b)
 and c(a=a, b=b)
@@ -149,7 +149,7 @@ output carry(in=c.out)
 ```
 
 ```text
-# examples/half_adder/root.circ
+// examples/half_adder/root.circ
 import half_adder "half_adder.circ"
 input a, b
 half_adder ha(a=a, b=b)
