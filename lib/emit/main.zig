@@ -5,6 +5,10 @@ const file_info = @import("emit_file_info");
 const debug_paths = @import("emit_debug_paths");
 const runtime = @import("emit_runtime");
 const Writer = @import("emit_writer").Writer;
+const project = @import("emit_project");
+
+pub const ProjectEmitOptions = project.EmitOptions;
+pub const emitProjectSource = project.emitProjectSource;
 
 pub const EmitOptions = struct {
     source_name: []const u8,

@@ -1,0 +1,4 @@
+import buf "buf.circ"
+input a
+buf b1(a=a)
+output out(in=b1.out)

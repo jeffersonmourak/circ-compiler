@@ -1,0 +1,5 @@
+import inverter "inverter.circ"
+input a
+inverter inv1(a=a)
+inverter inv2(a=inv1.out)
+output out(in=inv2.out)

@@ -4,9 +4,13 @@ const translate = @import("translate");
 const resolver = @import("resolver");
 const diagnostics = @import("diagnostics");
 const validator_run = @import("validator_run");
+const validator_run_project = @import("validator_run_project");
 const emit_main = @import("emit_main");
 const orchestrator = @import("orchestrator_main");
 const inspect_dump = @import("inspect_dump");
+const scan_imports = @import("scan_imports");
+const import_cycle = @import("import_cycle");
+const resolve_bodies = @import("resolve_bodies");
 
 fn makePathAny(path: []const u8) !void {
     if (!std.fs.path.isAbsolute(path)) {
@@ -121,10 +125,50 @@ fn run() !u8 {
         return 1;
     };
 
-    var diagnostic_list = validator_run.run(allocator, &ir_module) catch |err| {
-        try stderr_writer.print("validation failed: {s}\n", .{@errorName(err)});
-        return 1;
-    };
+    const has_imports = ast_file.imports.len > 0;
+
+    var diagnostic_list: diagnostics.DiagnosticList = undefined;
+    var maybe_project: ?@import("ir_types").Project = null;
+
+    if (has_imports and args.mode != .inspect) {
+        const scan_result = scan_imports.scanProjectImports(allocator, args.input_path) catch |err| {
+            try stderr_writer.print("import scan failed: {s}\n", .{@errorName(err)});
+            return 1;
+        };
+        if (scan_result.diagnostics.items.len > 0) {
+            const counts_scan = try printDiagnosticSet(allocator, stderr_writer, args.input_path, scan_result.diagnostics.items);
+            if (counts_scan.errors > 0) return 1;
+        }
+
+        const cycle_result = import_cycle.analyzeImports(allocator, scan_result.file_paths, scan_result.import_table) catch |err| {
+            try stderr_writer.print("import cycle analysis failed: {s}\n", .{@errorName(err)});
+            return 1;
+        };
+        if (cycle_result.diagnostics.items.len > 0) {
+            const counts_cycle = try printDiagnosticSet(allocator, stderr_writer, args.input_path, cycle_result.diagnostics.items);
+            if (counts_cycle.errors > 0) return 1;
+        }
+
+        const project = resolve_bodies.resolveBodies(
+            allocator,
+            scan_result.file_paths,
+            scan_result.import_table,
+            cycle_result.topo_order,
+        ) catch |err| {
+            try stderr_writer.print("body resolution failed: {s}\n", .{@errorName(err)});
+            return 1;
+        };
+        maybe_project = project;
+        diagnostic_list = validator_run_project.run(allocator, &project) catch |err| {
+            try stderr_writer.print("project validation failed: {s}\n", .{@errorName(err)});
+            return 1;
+        };
+    } else {
+        diagnostic_list = validator_run.run(allocator, &ir_module) catch |err| {
+            try stderr_writer.print("validation failed: {s}\n", .{@errorName(err)});
+            return 1;
+        };
+    }
     defer diagnostic_list.deinit(allocator);
 
     const counts = countDiagnostics(diagnostic_list.items);
@@ -151,13 +195,25 @@ fn run() !u8 {
         return 1;
     }
 
-    const emitted = emit_main.emitModuleSource(allocator, &ir_module, .{
-        .source_name = std.fs.path.basename(args.input_path),
-        .compile_timestamp = "2026-05-01T22:00:00Z",
-        .compiler_version = "circ-renderer-z/dev",
-    }) catch |err| {
-        try stderr_writer.print("emission failed: {s}\n", .{@errorName(err)});
-        return 1;
+    const emitted = blk: {
+        if (maybe_project) |*project| {
+            break :blk emit_main.emitProjectSource(allocator, project, .{
+                .source_name = std.fs.path.basename(args.input_path),
+                .compile_timestamp = "2026-05-01T22:00:00Z",
+                .compiler_version = "circ-renderer-z/dev",
+            }) catch |err| {
+                try stderr_writer.print("emission failed: {s}\n", .{@errorName(err)});
+                return 1;
+            };
+        }
+        break :blk emit_main.emitModuleSource(allocator, &ir_module, .{
+            .source_name = std.fs.path.basename(args.input_path),
+            .compile_timestamp = "2026-05-01T22:00:00Z",
+            .compiler_version = "circ-renderer-z/dev",
+        }) catch |err| {
+            try stderr_writer.print("emission failed: {s}\n", .{@errorName(err)});
+            return 1;
+        };
     };
 
     switch (args.mode) {

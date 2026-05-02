@@ -1,0 +1,4 @@
+# root pass-through via buf sub-circuit
+a=0 => out=0
+a=1 => out=1
+a=0 => out=0

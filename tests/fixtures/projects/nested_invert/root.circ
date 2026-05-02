@@ -1,0 +1,4 @@
+import double_invert "double_invert.circ"
+input a
+double_invert d(a=a)
+output out(in=d.out)

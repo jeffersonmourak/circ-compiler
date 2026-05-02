@@ -80,7 +80,11 @@ fn recalculateAndReschedule(
             const inputs = output_pin.inputs.get(OUTPUT_PIN_IN_PORT_NAME) orelse return;
             calculated_state = calculateDominantState(inputs);
         },
-        .input_pin_gate => return,
+        .input_pin_gate => |gate| {
+            const wired = gate.inputs.get(IN_PORT_NAME) orelse return;
+            if (wired.items.len == 0) return;
+            calculated_state = calculateDominantState(wired);
+        },
     }
 
     if (component.output_state != calculated_state) {
@@ -164,7 +168,9 @@ pub const Component = struct {
     outputs: PortMap,
 
     const Kind = union(ComponentType) {
-        input_pin_gate: struct { state: State = .undefined },
+        /// Host-driven root inputs typically have no wired "in"; sub-circuit input pins may
+        /// receive one upstream driver from the parent hierarchy via port "in" (dominant semantics).
+        input_pin_gate: struct { inputs: PortMap = PortMap.init(memory.allocator) },
         not_gate: struct { inputs: PortMap = PortMap.init(memory.allocator) },
         led: struct { inputs: PortMap = PortMap.init(memory.allocator), state: State = .undefined },
         and_gate: struct { inputs: PortMap = PortMap.init(memory.allocator) },
@@ -195,6 +201,7 @@ pub const Component = struct {
         self.* = .{ .id = id, .output_state = .undefined, .kind = kind, .outputs = outputsMap };
 
         switch (self.kind) {
+            .input_pin_gate => {},
             .and_gate => |*gate| {
                 gate.inputs = std.StringHashMap(std.ArrayList(*Component)).init(memory.allocator);
             },
@@ -210,7 +217,6 @@ pub const Component = struct {
             .output_pin => |*output_pin| {
                 output_pin.inputs = PortMap.init(memory.allocator);
             },
-            else => {},
         }
 
         return self;
@@ -259,7 +265,13 @@ pub const Component = struct {
                 }
                 output_pin.inputs.deinit();
             },
-            .input_pin_gate => {},
+            .input_pin_gate => |*gate| {
+                var gateInputsIterator = gate.inputs.valueIterator();
+                while (gateInputsIterator.next()) |list| {
+                    list.deinit(memory.allocator);
+                }
+                gate.inputs.deinit();
+            },
         }
 
         memory.allocator.destroy(self);
@@ -393,7 +405,13 @@ pub const Circuit = struct {
                 }
                 try toPortResult.value_ptr.*.append(memory.allocator, fromComponent);
             },
-            .input_pin_gate => return error.InvalidConnection,
+            .input_pin_gate => |*gate| {
+                const toPortResult = try gate.inputs.getOrPut(toPort);
+                if (!toPortResult.found_existing) {
+                    toPortResult.value_ptr.* = try std.ArrayList(*Component).initCapacity(memory.allocator, 0);
+                }
+                try toPortResult.value_ptr.*.append(memory.allocator, fromComponent);
+            },
         }
     }
 
@@ -535,5 +553,20 @@ test "output_pin: passes input through" {
         try std.testing.expectEqual(State.high, output_pin_1.output_state);
         try std.testing.expectEqual(State.high, output_pin_2.output_state);
         try std.testing.expectEqual(@as(Timestamp, PROPAGATION_DELAY + (WIRE_PROPAGATION_DELAY * 2)), circuit.current_time);
+    }
+
+    {
+        var circuit = try Circuit.init();
+        defer circuit.deinit();
+
+        const upstream = try circuit.createComponent(.{ .input_pin_gate = .{} });
+        const downstream = try circuit.createComponent(.{ .input_pin_gate = .{} });
+        try circuit.connect(upstream.port(OUT_PORT_NAME), downstream.port(IN_PORT_NAME));
+
+        try circuit.propagateEvent(upstream, .low);
+        try std.testing.expectEqual(State.low, downstream.output_state);
+
+        try circuit.propagateEvent(upstream, .high);
+        try std.testing.expectEqual(State.high, downstream.output_state);
     }
 }

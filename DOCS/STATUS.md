@@ -278,3 +278,15 @@
 **Tests:** added `W003 unused import` row in `run_test.zig` (golden); added `project validator: clean_two_file`, `E012 unknown sub-circuit port`, `E013 sub-circuit arity mismatch`, `E008 combinational loop through sub-circuit`, `W003 unused import in project`, `W002 dangling sub-circuit output` in `project_passes_test.zig`; ran `zig build test`, result pass
 **Next slice:** Implement Phase 7 Slice 7.5 multi-file emission — one `buildXxx` function per source file, sub-circuit call sites, updated runtime/file-info/debug-paths emitters.
 **Notes:** `sub_circuit_ref` remains non-cycle-breaking in the single-file combinational-loop pass (correct for transparent sub-circuits). The project-level `run_project.zig` is additive on top of the per-module runner; no existing pass signatures changed.
+
+## 2026-05-01 — Phase 7 — Slice 7.5 multi-file emission
+
+**What shipped:** Wired project emission via `lib/emit/project.zig` (`emitProjectSource`): one `buildFile_<FileId>` per module, hierarchical `computeLayout` (`debug_paths`, `sub_circuits`, stable global IDs), runtime wiring with root `expected_component_count` checks, CLI compile/emit path using project IR when imports exist. **`input_pin_gate`** gained optional wired **`in`** fan-in (`circuit.connect` target) plus dominant-state recalculation so parent→subcircuit signal paths match Phase 7 call-site wiring (`inst.input_x.port("in")`). **`and_pair`** root fixture avoids the `and` keyword split by aliasing **`paired_and`**. Generated missing **`tests/fixtures/expected-zig/projects/{and_pair,nested_invert}/main.zig`** goldens.
+
+**Files touched:** `lib/circuit.zig`, `lib/emit/project.zig`, `lib/emit/main.zig`, `cmd/circ-compile/main.zig`, `build.zig`, `tests/fixtures/projects/and_pair/root.circ`, `tests/emit/project_emit_test.zig`, `tests/emit/project_behavior_test.zig`, `tests/fixtures/expected-zig/projects/and_pair/main.zig`, `tests/fixtures/expected-zig/projects/nested_invert/main.zig`, `tests/fixtures/expected-wasm/projects/*.txt`, `DOCS/STATUS.md`
+
+**Tests:** added `tests/emit/project_emit_test.zig` (golden), `tests/emit/project_behavior_test.zig` (wasm harness specs), `zig build test`; result **pass**. Added **`input_pin_gate` wired-in propagation** regression in `lib/circuit.zig`.
+
+**Next slice:** Phase 7 Slice 7.6 hardening fixtures (diamond / deep-chain / same-name aliases) plus harness coverage per Phase 7 plan.
+
+**Notes:** `emit_project` still uses **`threadlocal current_project`** for import-table lookups during Zig emission generation; callers are single-threaded today. Wired **`input_pin_gate`** ignores host **`setPin`** when **`in`** is connected (combinational dominance over wire); WASM only exposes **`setPin`** for root-listed inputs anyway.

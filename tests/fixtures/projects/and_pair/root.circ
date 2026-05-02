@@ -1,0 +1,9 @@
+import paired_and "and_pair.circ"
+input a
+input b
+input c
+input d
+paired_and p1(a=a, b=b)
+paired_and p2(a=c, b=d)
+and combine(a=p1.out, b=p2.out)
+output out(in=combine.out)

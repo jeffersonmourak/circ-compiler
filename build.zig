@@ -500,6 +500,14 @@ pub fn build(b: *std.Build) void {
     });
     emit_runtime_mod.addImport("ir_types", ir_types_mod);
     emit_runtime_mod.addImport("emit_writer", emit_writer_mod);
+    const emit_project_mod = b.createModule(.{
+        .root_source_file = b.path("lib/emit/project.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    emit_project_mod.addImport("ir_types", ir_types_mod);
+    emit_project_mod.addImport("emit_writer", emit_writer_mod);
+    emit_project_mod.addImport("file_info_format", emit_file_info_format_mod);
     const emit_main_mod = b.createModule(.{
         .root_source_file = b.path("lib/emit/main.zig"),
         .target = target,
@@ -511,6 +519,7 @@ pub fn build(b: *std.Build) void {
     emit_main_mod.addImport("emit_file_info", emit_file_info_mod);
     emit_main_mod.addImport("emit_debug_paths", emit_debug_paths_mod);
     emit_main_mod.addImport("emit_runtime", emit_runtime_mod);
+    emit_main_mod.addImport("emit_project", emit_project_mod);
     const emit_build_fn_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/emit/build_fn_test.zig"),
         .target = target,
@@ -708,30 +717,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    const circ_compile_mod = b.createModule(.{
-        .root_source_file = b.path("cmd/circ-compile/main.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    circ_compile_mod.addImport("cli_args", cli_args_mod);
-    circ_compile_mod.addImport("translate", translate_mod);
-    circ_compile_mod.addImport("resolver", resolver_mod);
-    circ_compile_mod.addImport("diagnostics", validator_diagnostics_mod);
-    circ_compile_mod.addImport("validator_run", validator_run_mod);
-    circ_compile_mod.addImport("emit_main", emit_main_mod);
-    circ_compile_mod.addImport("orchestrator_main", orchestrator_main_mod);
-    circ_compile_mod.addImport("inspect_dump", cli_inspect_dump_mod);
-    const circ_compile_exe = b.addExecutable(.{
-        .name = "circ-compile",
-        .root_module = circ_compile_mod,
-    });
-    circ_compile_exe.addIncludePath(b.path("."));
-    circ_compile_exe.addIncludePath(b.path("./lib"));
-    circ_compile_exe.linkLibrary(parser_lib);
-    circ_compile_exe.linkLibC();
-    b.installArtifact(circ_compile_exe);
-    const circ_compile_step = b.step("circ-compile", "Build circ-compile CLI");
-    circ_compile_step.dependOn(b.getInstallStep());
     const cli_args_tests = b.addTest(.{
         .root_module = cli_args_mod,
     });
@@ -822,6 +807,35 @@ pub fn build(b: *std.Build) void {
     resolver_resolve_bodies_tests.linkLibrary(parser_lib);
     resolver_resolve_bodies_tests.linkLibC();
     const run_resolver_resolve_bodies_tests = b.addRunArtifact(resolver_resolve_bodies_tests);
+    const circ_compile_mod = b.createModule(.{
+        .root_source_file = b.path("cmd/circ-compile/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    circ_compile_mod.addImport("cli_args", cli_args_mod);
+    circ_compile_mod.addImport("translate", translate_mod);
+    circ_compile_mod.addImport("resolver", resolver_mod);
+    circ_compile_mod.addImport("diagnostics", validator_diagnostics_mod);
+    circ_compile_mod.addImport("validator_run", validator_run_mod);
+    circ_compile_mod.addImport("validator_run_project", validator_run_project_mod);
+    circ_compile_mod.addImport("emit_main", emit_main_mod);
+    circ_compile_mod.addImport("orchestrator_main", orchestrator_main_mod);
+    circ_compile_mod.addImport("inspect_dump", cli_inspect_dump_mod);
+    circ_compile_mod.addImport("scan_imports", resolver_scan_imports_mod);
+    circ_compile_mod.addImport("import_cycle", resolver_import_cycle_mod);
+    circ_compile_mod.addImport("resolve_bodies", resolver_resolve_bodies_mod);
+    circ_compile_mod.addImport("ir_types", ir_types_mod);
+    const circ_compile_exe = b.addExecutable(.{
+        .name = "circ-compile",
+        .root_module = circ_compile_mod,
+    });
+    circ_compile_exe.addIncludePath(b.path("."));
+    circ_compile_exe.addIncludePath(b.path("./lib"));
+    circ_compile_exe.linkLibrary(parser_lib);
+    circ_compile_exe.linkLibC();
+    b.installArtifact(circ_compile_exe);
+    const circ_compile_step = b.step("circ-compile", "Build circ-compile CLI");
+    circ_compile_step.dependOn(b.getInstallStep());
     const validator_project_passes_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/validator/project_passes_test.zig"),
         .target = target,
@@ -868,4 +882,54 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_resolver_import_cycle_tests.step);
     test_step.dependOn(&run_resolver_resolve_bodies_tests.step);
     test_step.dependOn(&run_validator_project_passes_tests.step);
+
+    const emit_project_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/emit/project_emit_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    emit_project_tests_mod.addImport("scan_imports", resolver_scan_imports_mod);
+    emit_project_tests_mod.addImport("import_cycle", resolver_import_cycle_mod);
+    emit_project_tests_mod.addImport("resolve_bodies", resolver_resolve_bodies_mod);
+    emit_project_tests_mod.addImport("validator_run_project", validator_run_project_mod);
+    emit_project_tests_mod.addImport("diagnostics", validator_diagnostics_mod);
+    emit_project_tests_mod.addImport("emit_main", emit_main_mod);
+    emit_project_tests_mod.addImport("golden", b.createModule(.{
+        .root_source_file = b.path("tests/helpers/golden.zig"),
+        .target = target,
+        .optimize = optimize,
+    }));
+    const emit_project_tests = b.addTest(.{
+        .root_module = emit_project_tests_mod,
+    });
+    emit_project_tests.addIncludePath(b.path("."));
+    emit_project_tests.addIncludePath(b.path("./lib"));
+    emit_project_tests.linkLibrary(parser_lib);
+    emit_project_tests.linkLibC();
+    const run_emit_project_tests = b.addRunArtifact(emit_project_tests);
+    test_step.dependOn(&run_emit_project_tests.step);
+
+    const project_behavior_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/emit/project_behavior_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    project_behavior_tests_mod.addImport("scan_imports", resolver_scan_imports_mod);
+    project_behavior_tests_mod.addImport("import_cycle", resolver_import_cycle_mod);
+    project_behavior_tests_mod.addImport("resolve_bodies", resolver_resolve_bodies_mod);
+    project_behavior_tests_mod.addImport("validator_run_project", validator_run_project_mod);
+    project_behavior_tests_mod.addImport("diagnostics", validator_diagnostics_mod);
+    project_behavior_tests_mod.addImport("emit_main", emit_main_mod);
+    project_behavior_tests_mod.addImport("emit_project", emit_project_mod);
+    project_behavior_tests_mod.addImport("ir_types", ir_types_mod);
+    project_behavior_tests_mod.addImport("wasm_run", wasm_run_mod);
+    const project_behavior_tests = b.addTest(.{
+        .root_module = project_behavior_tests_mod,
+    });
+    project_behavior_tests.addIncludePath(b.path("."));
+    project_behavior_tests.addIncludePath(b.path("./lib"));
+    project_behavior_tests.linkLibrary(parser_lib);
+    project_behavior_tests.linkLibC();
+    const run_project_behavior_tests = b.addRunArtifact(project_behavior_tests);
+    test_step.dependOn(&run_project_behavior_tests.step);
 }

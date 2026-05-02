@@ -1,0 +1,4 @@
+# two nested inverters compose to identity
+a=0 => out=0
+a=1 => out=1
+a=0 => out=0
