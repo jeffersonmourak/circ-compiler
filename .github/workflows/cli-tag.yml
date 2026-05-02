@@ -14,53 +14,34 @@ permissions:
 
 jobs:
   build:
-    runs-on: ${{ matrix.runner }}
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-          - runner: ubuntu-latest
+          - zig_target: x86_64-linux-gnu
             artifact_suffix: linux-x86_64
             binary: zig-out/bin/circ-compile
-          # GitHub-hosted macOS is aarch64 (Apple Silicon).
-          - runner: macos-latest
+          - zig_target: aarch64-macos
             artifact_suffix: macos-aarch64
             binary: zig-out/bin/circ-compile
-          - runner: windows-latest
+          - zig_target: x86_64-windows-gnu
             artifact_suffix: windows-x86_64
             binary: zig-out/bin/circ-compile.exe
     steps:
       - uses: actions/checkout@v5
 
-      # Official tarball/zip (avoids third-party actions still on Node 20).
-      - name: Install Zig (Unix)
-        if: runner.os != 'Windows'
+      - name: Install Zig
         shell: bash
         run: |
           set -euo pipefail
-          case "$(uname -s)/$(uname -m)" in
-            Linux/x86_64) zig_suffix=x86_64-linux ;;
-            Darwin/arm64) zig_suffix=aarch64-macos ;;
-            Darwin/x86_64) zig_suffix=x86_64-macos ;;
-            *) echo "::error::unsupported OS/arch $(uname -s)/$(uname -m)"; exit 1 ;;
-          esac
-          pkg="zig-${zig_suffix}-${ZIG_VERSION}"
+          pkg="zig-x86_64-linux-${ZIG_VERSION}"
           curl -fsSL -o zig.tar.xz "https://ziglang.org/download/${ZIG_VERSION}/${pkg}.tar.xz"
           tar -xf zig.tar.xz
           echo "${PWD}/${pkg}" >> "${GITHUB_PATH}"
 
-      - name: Install Zig (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $pkg = "zig-x86_64-windows-${env:ZIG_VERSION}"
-          Invoke-WebRequest -Uri "https://ziglang.org/download/${env:ZIG_VERSION}/${pkg}.zip" -OutFile zig.zip
-          Expand-Archive -Path zig.zip -DestinationPath .
-          Add-Content -Path $env:GITHUB_PATH -Value (Join-Path (Get-Location) $pkg)
-
-      - name: Build circ-compile
-        run: zig build -Doptimize=ReleaseFast circ-compile
+      - name: Build circ-compile (${{ matrix.artifact_suffix }})
+        run: zig build -Doptimize=ReleaseFast "-Dtarget=${{ matrix.zig_target }}" circ-compile
 
       - name: Upload binary
         uses: actions/upload-artifact@v6
@@ -105,7 +86,7 @@ jobs:
             gh release create "$TAG" \
               --draft \
               --title "Release ${TAG}" \
-              --notes "Draft release for **${TAG}**. Attached: Linux (x86_64), macOS (aarch64), Windows (x86_64) CLI builds."
+              --notes "Draft release for **${TAG}**. Attached: Linux (x86_64), macOS (aarch64), Windows (x86_64) CLI builds (cross-compiled from Linux)."
           fi
 
           for dir in "${dirs[@]}"; do
