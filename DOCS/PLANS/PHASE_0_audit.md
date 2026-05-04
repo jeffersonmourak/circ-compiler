@@ -103,9 +103,9 @@ Runner: Zig 0.15.x via `zig build test` (full suite registered in build.zig)
 | Item | Type | Status | Reachable From | Phase That Deletes It |
 |------|------|--------|----------------|-----------------------|
 | `lib/wasm.zig` | file | dead | none (was `build.zig` wasm executable only; also `lib/wasm.zig` internal imports) | Phase 1 (shipped) |
-| `lib/transport.zig` | file | live | `lib/circuit.zig` (`encodeState`), `main.zig`, `lib/orchestrator/embed.zig` (@embedFile), `tests/helpers/wasm_run.zig` (fixture path string) | kept (live) — **Phase 2 spec incorrectly assumes deletion; revise before Phase 2 slice 2** |
-| `main.zig` (repo root) | file | live | `build.zig` (`exe_debug_mod` for `logic-sim`, root `unit_tests` via `exe_debug_mod`) | Phase 2 (pending) |
-| `lib/compiler.zig` | file | live | `build.zig` (`compiler` executable / `compiler_mod`) | Phase 2 (pending) |
+| `lib/transport.zig` | file | live | `lib/circuit.zig` (`encodeState`), `lib/orchestrator/embed.zig` (@embedFile), `tests/helpers/wasm_run.zig` (fixture path string) | kept (live) — optional future removal after moving encoding off `transport` |
+| `main.zig` (repo root) | file | dead | none | Phase 2 (shipped) |
+| `lib/compiler.zig` | file | dead | none | Phase 2 (shipped) |
 | `src/` | directory | dead | none (TypeScript/browser tree; not on compiler path) | Phase 1 (shipped) |
 | `example/` | directory | dead | none (browser demo; often gitignored; wasm install step used it pre–Phase 1) | Phase 1 (shipped) |
 | `package.json` | file | dead | none | Phase 1 (shipped) |
@@ -136,8 +136,8 @@ Runner: Zig 0.15.x via `zig build test` (full suite registered in build.zig)
 
 **Execution agent:** tables above are complete (no empty cells); `zig build test` passed on 2026-05-04 after documentation update.
 
-**Human reviewer:** please explicitly approve this inventory (reply or commit note) before treating Phase 0 as formally closed. Resolve the **`lib/transport.zig` vs Phase 2 deletion** inconsistency in planning so Phase 2 does not regress `lib/circuit.zig`.
+**Human reviewer:** please explicitly approve this inventory (reply or commit note) before treating Phase 0 as formally closed. **Phase 2 (2026-05-04):** retained `lib/transport.zig` per live `circuit` dependency; legacy `main.zig` / `lib/compiler.zig` removed.
 
 ## Open Questions / Spikes
 
-- **Phase 2 vs `lib/transport.zig`:** `DOCS/PLANS/PHASE_2_legacy_zig_binaries.md` calls for deleting `lib/transport.zig`, but `lib/circuit.zig` invokes `transport.encodeState` on the simulation path—this file is **live**. Spike: update Phase 2 scope to retain `transport.zig`, or move encoding helpers into `circuit.zig` (or a new module) and then delete `transport.zig`.
+- **Optional:** Relocate `transport.encodeState` if the project later wants a single file to own all simulation encoding; not required for Phases 1–3 of the dead-code initiative.

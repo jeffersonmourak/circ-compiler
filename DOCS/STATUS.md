@@ -1,5 +1,29 @@
 # Initiative status — Dead code removal
 
+## 2026-05-04 — Phase 2 — Strip dead build targets
+
+**What shipped:** Removed `logic-sim` executable, `compiler` executable, and the `compiler`, `compiler:run`, and `run` steps plus their `installArtifact` / run wiring from `build.zig`. Kept the temporary `main.zig` test root (`exe_debug_mod` + `unit_tests`) until Slice 2.
+
+**Files touched:** `build.zig`
+
+**Tests:** ran `zig build test`, result pass; `zig build logic-sim` → no step named `logic-sim`.
+
+**Next slice:** Phase 2 — Delete `main.zig`, `lib/compiler.zig`, remove root `unit_tests` from `test` step.
+
+**Notes:** None.
+
+## 2026-05-04 — Phase 2 — Delete legacy source files
+
+**What shipped:** Deleted `main.zig` (repo root) and `lib/compiler.zig`. Removed `unit_tests` / `run_unit_tests` and their `test` step dependency (the old root had no `test` declarations). **`lib/transport.zig` kept** — `lib/circuit.zig` depends on `transport.encodeState`. Updated `DOCS/PLANS/PHASE_2_legacy_zig_binaries.md` and audit rows in `DOCS/PLANS/PHASE_0_audit.md` to match.
+
+**Files touched:** `build.zig`, `main.zig` (deleted), `lib/compiler.zig` (deleted), `DOCS/PLANS/PHASE_2_legacy_zig_binaries.md`, `DOCS/PLANS/PHASE_0_audit.md`
+
+**Tests:** ran `zig build test`, result pass.
+
+**Next slice:** Phase 3 — remove commented-out dead wiring in `build.zig` per `DOCS/PLANS/PHASE_3_stubs_and_placeholders.md`.
+
+**Notes:** `zig build compiler`, `zig build run`, `zig build compiler:run` all report missing steps as expected.
+
 ## 2026-05-04 — Phase 0 — Audit inventory (retroactive)
 
 **What shipped:** Completed `DOCS/PLANS/PHASE_0_audit.md`: baseline note, **Known Suspects** and **Newly Discovered Items** tables with full schema, audit sign-off block (human approval still pending), and Open Questions spike for **Phase 2 vs `lib/transport.zig`**. No code or `build.zig` edits.
@@ -8,9 +32,9 @@
 
 **Tests:** ran `zig build test`, result pass.
 
-**Next slice:** Human sign-off on Phase 0 inventory; then continue **Phase 2 slice 1** per plan (after Phase 1 commit), after revising Phase 2 if `transport.zig` must stay.
+**Next slice:** Phase 3 — `build.zig` comment cleanup; or formal human sign-off on Phase 0 when convenient.
 
-**Notes:** Phase 0 was supposed to precede Phase 1 per dependency order; inventory documents **Phase 1 (shipped)** rows for browser/wasm removals already merged in the tree.
+**Notes:** Phase 2 landed 2026-05-04 after this entry was written; `transport.zig` retained per `circuit` dependency.
 
 ## 2026-05-04 — Phase 1 — Frontend tree removal
 
