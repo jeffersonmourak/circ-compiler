@@ -102,4 +102,32 @@ pub fn build(b: *std.Build) void {
 
     const run_step = b.step("run", "Run the spike binary");
     run_step.dependOn(&run_cmd.step);
+
+    // ---- Phase 0 Slice 3: LLVM-free symbol inspection. ----
+    //
+    // The literal test in PHASE_0_spike.md (`nm spike/zig-out/bin/spike | grep -i llvm`)
+    // returns non-empty even on an LLVM-free build because Zig's stdlib has a pure-Zig
+    // LLVM IR builder type at `std.zig.llvm.Builder`. The spike's hard-stop concern was
+    // *real* LLVM C/C++ library linkage, so this step greps for the C symbols that
+    // would appear if LLVM were actually linked: `_LLVMInitialize*`, `_LLVMCreate*`,
+    // `_LLVMContext*`, `_LLVMTarget*`, and Itanium-mangled `llvm::` namespace symbols.
+    const verify_cmd = b.addSystemCommand(&.{
+        "sh", "-c",
+        \\set -e
+        \\bin="$1"
+        \\count=$(nm "$bin" 2>/dev/null | grep -cE '_LLVMInitialize|_LLVMCreate|_LLVMContext|_LLVMTarget|__ZN4llvm' || true)
+        \\if [ "$count" -ne 0 ]; then
+        \\  echo "FAIL: $count LLVM C/C++ library symbols found in $bin" >&2
+        \\  nm "$bin" | grep -E '_LLVMInitialize|_LLVMCreate|_LLVMContext|_LLVMTarget|__ZN4llvm' >&2
+        \\  exit 1
+        \\fi
+        \\echo "OK: 0 LLVM C/C++ library symbols in $bin"
+        ,
+        "verify-no-llvm",
+    });
+    verify_cmd.addArtifactArg(exe);
+    verify_cmd.step.dependOn(b.getInstallStep());
+
+    const verify_step = b.step("verify", "Confirm the spike binary contains no LLVM library symbols");
+    verify_step.dependOn(&verify_cmd.step);
 }

@@ -64,3 +64,32 @@ The embedded compiler's `build_options` were also tightened: `dev = .full` (the 
 - The hardcoded source compiles through Zig's standard pipeline (AstGen → Sema → AIR → wasm CodeGen → Wasm linker) and the resulting `add.wasm` exports the `add` function (visible as the literal string `add` at offset 0x29 in `xxd` output).
 
 **Next slice:** Phase 0 Slice 3 — symbol inspection (`nm` check is already passing, just needs to be wired into a build step), then update `DOCS/STATUS.md` with a dedicated Phase 0 conclusion entry summarising whether to proceed to Phase 1 vendoring. The recommended slice-2 split in the partial entry above is **withdrawn** — slice 2 as originally written is shippable in one slice.
+
+## 2026-05-04 — Phase 0 — Slice 3: Validate, document, and conclude Phase 0
+
+**Status:** **COMPLETE**. Phase 0 ends here. The recommendation to the human is **proceed to Phase 1 (vendoring)** — embedding Zig's self-hosted compiler into a third-party `.wasm`-emitting binary is empirically viable on Zig 0.15.1, with no LLVM dependency.
+
+**What shipped:** Wired the slice's symbol-inspection check into the spike's build system as a reproducible `zig build verify` step. The step shells out to `nm` + `grep -cE` against the installed binary and fails the build if any of `_LLVMInitialize*`, `_LLVMCreate*`, `_LLVMContext*`, `_LLVMTarget*`, or Itanium-mangled `llvm::` namespace symbols (`__ZN4llvm`) are present. PHASE_0_spike.md's literal test (`grep -i llvm`) was deliberately not used because Zig stdlib has a pure-Zig LLVM IR builder type at `std.zig.llvm.Builder` whose name unavoidably matches a case-insensitive `llvm` substring even though no LLVM C/C++ library is linked. The verify step targets the spike's actual hard-stop concern (LLVM library linkage) rather than the literal-but-misleading text.
+
+**Files touched:** `spike/build.zig` (added `verify` step + a comment explaining the `grep -i llvm` discrepancy).
+
+**Tests:**
+- `cd spike && ZIG_SRC_DIR=/tmp/zig-spike-src/zig-0.15.1 zig build verify` → exit 0, prints `OK: 0 LLVM C/C++ library symbols in …/spike/zig-out/bin/spike`.
+- `cd spike && ZIG_SRC_DIR=/tmp/zig-spike-src/zig-0.15.1 zig build run` (regression check) → still exit 0, still emits `spike/out/add.wasm` with valid WASM magic.
+
+### Phase 0 conclusion
+
+The single empirical question Phase 0 was designed to answer was: *can the Zig 0.15.1 self-hosted compiler be called in-process to emit a `wasm32-freestanding` `.wasm` artifact, with zero runtime LLVM dependency?* The answer is **yes**, with these caveats for Phase 1:
+
+1. The spike must be configured with `have_llvm = false` in the embedded compiler's `build_options`, runtime `Compilation.Config` must set `use_llvm = false`, `use_lib_llvm = false`, and `use_lld = false`, and the WASM target plus `entry = .disabled` for library-style exports. With this configuration Zig's lazy comptime evaluation and the `if (build_options.have_llvm) … else @compileError` gate in `src/codegen/llvm.zig` keep all LLVM-bindings code paths unreachable.
+2. `dev = .full` is required (not `.wasm`) because Zig 0.15.1's `Env.wasm` does not list `legalize` as supported even though `arch/wasm/CodeGen.zig:legalizeFeatures()` returns non-null. `.full` pulls in unrelated backend modules at comptime; that's tolerable at this stage but Phase 1 should consider patching `dev.zig` to add `.legalize` to `Env.wasm`'s feature set so a tighter compile-time surface is possible.
+3. `enable_debug_extensions = true` is required when `dev = .full` because some non-wasm backend modules (`Air/print.zig`) `comptime assert(build_options.enable_debug_extensions)` — turning this off causes a comptime failure even when the runtime config never reaches those backends.
+4. `output_mode = .Obj` for `wasm32-freestanding` with a Zig source ZCU is **not viable in 0.15.1** (`src/link/Wasm.zig:3462` panics `TODO`). Phase 1 must use `.Exe` with `entry = .disabled` for library-style outputs.
+5. `std.Thread.Pool` must be initialized with `.track_ids = true`; Zig's compiler workers unwrap `id.?` unconditionally.
+6. The 18 MB → 57 MB binary growth between "compiler embedded but not driven" and "compiler driven end-to-end" is from `dev = .full` Debug-mode codegen surface. Phase 1 should re-measure with ReleaseFast/ReleaseSmall and a tightened dev env. The current ~57 MB Debug binary is **larger than the entire current `circ-compile` shipping bundle**, so Phase 1's success criterion should include a release-mode size budget.
+7. Phase 1's vendoring scope must include, at minimum: all of `src/` (8000+ lines in `Compilation.zig` alone, plus `Package.zig`, `Zcu.zig`, `Sema.zig`, `link.zig`, `link/Wasm.zig`, `arch/wasm/CodeGen.zig`, `target.zig`, `dev.zig`, `introspect.zig`, the `libs/` subtree, the `Compilation/` and `Package/` subtrees), `lib/compiler/aro/` and `lib/compiler/aro_translate_c.zig` (referenced inside function bodies even when not used at runtime), and the host Zig lib dir (`std/`, `compiler_rt/`, builtin headers — needed by `Compilation.Directories` for std module resolution at compile time of the user's source).
+8. The vendored Zig source must be pinned to **0.15.1 exactly**; per `PLANS_PROMPT.md` recurring traps, internal compiler APIs change between patch releases. Any future host-toolchain bump in this repo must re-vendor the matching Zig source.
+
+**Recommendation:** Begin Phase 1 (vendor a curated subset of Zig 0.15.1 source under `vendor/zig-compiler/`). Use the spike's `build.zig` as a starting point for the vendored module's build wiring; the `spike_exports.zig` shim can become a permanent `vendor/zig-compiler/exports.zig`. The entire `circ-compile` codebase will then drop the `zig build` subprocess shellout in Phase 2.
+
+**Next slice:** Phase 1 Slice 1, per `DOCS/PLANS/PHASE_1_vendor.md` (initial vendor drop + project `build.zig` wiring; existing tests must continue to pass).
