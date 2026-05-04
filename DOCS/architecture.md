@@ -115,21 +115,22 @@ The SDK wraps the raw WASM exports in an idiomatic TypeScript class. It:
 
 The rendering layer (`example/`) is a separate demo application. It uses a **theme** system where each component kind has a *skin* — a function that receives a canvas 2D context, component dimensions, and port signal values, and draws the component.
 
-## Compiler / Parser (WIP)
+## Compiler pipeline (`lib/syntax/` and downstream)
 
-A separate compilation path exists for parsing `.circ` text files:
+The `.circ` compilation path is **live** and covered by `zig build test`. Parsed sources feed the IR and validator, not a direct bridge into `lib/circuit.zig` construction from the syntax layer:
 
 ```
 .circ source
-    → langlang PEG grammar (lib/grammar/proto-circ.peg)
-    → generated C parser (lib/parser.c / parser.h)
-    → lib/syntax/CParser.zig  (Zig FFI import)
-    → lib/syntax/translate.zig  (parse tree walker)
-    → lib/syntax/nodes/declaration.zig  (declaration handler)
-    → lib/circuit.zig  (circuit construction) [not yet connected]
+    → vendored C parser (lib/parser.c / lib/parser.h; grammar lib/grammar/proto-circ.peg)
+    → lib/syntax/CParser.zig  (FFI)
+    → lib/syntax/translate.zig  (AST / parse tree handling)
+    → lib/ir/  (types, resolver)
+    → lib/validator/  (diagnostics, passes)
+    → lib/emit/  (Zig / WASM artifact shape)
+    → cmd/circ-compile  (CLI) and orchestrated builds for self-contained artifacts
 ```
 
-The parser recognises `input`, `output`, and `component` declarations but does not yet emit circuit construction calls. See [circuit-format.md](circuit-format.md) for the target DSL.
+`lib/syntax/` is fully connected through this pipeline.
 
 ## Memory Management
 

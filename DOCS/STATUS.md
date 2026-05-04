@@ -1,5 +1,39 @@
 # Initiative status — Dead code removal
 
+## 2026-05-04 — Phase 3 — `build.zig` comment cleanup
+
+**What shipped:** Removed all full-line `//` comments from `build.zig` (file banner, section dividers, commented `parser_lib.step.dependOn`). Left `parser:gen` step and vendored `lib/parser.c` / `lib/parser.h` untouched.
+
+**Files touched:** `build.zig`
+
+**Tests:** ran `zig build test`, result pass; `grep -n '^\s*//' build.zig` → no matches.
+
+**Next slice:** Phase 3 — WIP scan, `DOCS/architecture.md` syntax correction, STATUS inventory.
+
+**Notes:** None.
+
+## 2026-05-04 — Phase 3 — WIP scan and docs correction
+
+**What shipped:** Corrected **Compiler pipeline** section in `DOCS/architecture.md` (stale “WIP / not yet connected” / `lib/circuit.zig` syntax bridge). Scanned active `.zig` under `lib/` and `tests/` for `TODO` / `FIXME` / `WIP` / `@panic("TODO")` style markers — **no matches.** Appended **WIP inventory** below for intentional emit scaffolding (not marker-driven).
+
+**Files touched:** `DOCS/architecture.md`, `DOCS/STATUS.md`
+
+**Tests:** ran `zig build test`, result pass.
+
+**Next slice:** Phase 4 — surgical dead symbols per `DOCS/PLANS/PHASE_4_surgical_dead_symbols.md`.
+
+**Notes:** Do not remove `getTopology()` static payload or change export names — frozen v0 surface per `DOCS/PLANS_PROMPT.md`.
+
+### WIP inventory (Phase 3)
+
+*Placeholders worth tracking; triage in a future initiative. Not an exhaustive dead-code pass (Phase 4).*
+
+| File | Symbol / location | Marker | Notes |
+|------|-------------------|--------|-------|
+| `lib/emit/main.zig` | `topology_blob` emission | static literal `"debug-paths-v1"` | Emitted WASM/Zig uses static blob for `getTopology()` — intentional scaffolding per plan prompt |
+| `lib/emit/project.zig` | `topology_blob` / `getTopology` / `getPendingEvents` emitted body | static / empty slice | Same; `getPendingEvents` currently emits empty pending buffer |
+| `lib/emit/runtime.zig` | `getTopology` / `getPendingEvents` emitted lines | static `topology_blob` / `empty_pending` | Generator output for single-file emit path |
+
 ## 2026-05-04 — Phase 2 — Strip dead build targets
 
 **What shipped:** Removed `logic-sim` executable, `compiler` executable, and the `compiler`, `compiler:run`, and `run` steps plus their `installArtifact` / run wiring from `build.zig`. Kept the temporary `main.zig` test root (`exe_debug_mod` + `unit_tests`) until Slice 2.

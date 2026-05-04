@@ -1,12 +1,8 @@
-// build.zig
 const std = @import("std");
 
 const GRAMMAR_FILE = "lib/grammar/proto-circ.peg";
 
 pub fn build(b: *std.Build) void {
-    //
-    // Build the application
-    //
     const target = b.standardTargetOptions(.{});
 
     const optimize = b.standardOptimizeOption(.{});
@@ -45,11 +41,6 @@ pub fn build(b: *std.Build) void {
 
     parser_lib.addIncludePath(b.path("."));
     parser_lib.linkLibC();
-    // parser_lib.step.dependOn(&generate_parser_cmd.step);
-
-    //
-    // Build the application
-    //
 
     const golden_tests = b.addTest(.{
         .root_module = b.createModule(.{
