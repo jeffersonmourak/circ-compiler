@@ -16,10 +16,8 @@ A digital logic circuit simulator written in Zig, compiled to WebAssembly for us
 | [wasm-api.md](wasm-api.md)                   | WASM exports/imports, TypeScript SDK, integration example               |
 | [circuit-format.md](circuit-format.md)       | `.circ` DSL syntax, grammar, file examples                              |
 | [decisions/](decisions/index.md)             | WIP architectural decisions for the `.circ` compiler                    |
-| [archive/plan-v0.md](archive/plan-v0.md)     | Archived v0 implementation plan (highlights; full bundle in git history) |
-| [archive/plan-dead-code-removal.md](archive/plan-dead-code-removal.md) | Archived dead-code removal plan (highlights; full bundle in git history) |
-| [archive/plan-test-speed.md](archive/plan-test-speed.md) | Archived test-suite speed-up plan (highlights; full bundle in git history) |
-| [prompts/ARCHIVE.md](prompts/ARCHIVE.md)       | How to archive a finished plan into `DOCS/archive/`                     |
+| [archive/](archive/index.md)                 | Archived implementation plans                                           |
+| [prompts/ARCHIVE.md](prompts/ARCHIVE.md)     | How to archive a finished plan into `DOCS/archive/`                     |
 
 ## Quick start
 
