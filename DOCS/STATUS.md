@@ -1,5 +1,29 @@
 # Initiative status — Dead code removal
 
+## 2026-05-04 — Phase 4 — Audit checklist (Phase 0 “Newly Discovered”)
+
+**What shipped:** Reviewed `DOCS/PLANS/PHASE_0_audit.md` **Newly Discovered Items** table: every row is **live** (`cmd/circ-compile`, orchestrator embed shim, `embed.zig`, `templates/*`). **No symbol or file removals** in this slice.
+
+**Files touched:** none (documentation-only confirmation).
+
+**Tests:** ran `zig build test`, result pass.
+
+**Next slice:** Phase 4 — grep discovery pass for unreferenced code.
+
+**Notes:** Slice exists to satisfy phased plan dependency; checklist did not contain dead entries.
+
+## 2026-05-04 — Phase 4 — Grep discovery pass
+
+**What shipped:** Deleted **`lib/syntax/helpers.zig`** (never `@import`’d anywhere in the tree). Trimmed **`lib/log.zig`**: removed unused `bufPrint` binding, removed never-called **`clearLogArena` / `deinitLogArena` / `clearLogPointer`** (legacy WASM host hooks; no remaining callers after browser wasm removal), and dropped stale commented-out blocks.
+
+**Files touched:** `lib/syntax/helpers.zig` (deleted), `lib/log.zig`
+
+**Tests:** ran `zig build test` after removals, result pass.
+
+**Next slice:** Initiative closure — optional future passes if new dead code appears; Phase 3 **WIP inventory** entries (`getTopology` / pending-event scaffolding) remain **intentionally untouched**.
+
+**Notes:** Further “no unreferenced `pub fn`” guarantees would need a dedicated static pass or manual audit; this pass targeted **confirmed** orphans only.
+
 ## 2026-05-04 — Phase 3 — `build.zig` comment cleanup
 
 **What shipped:** Removed all full-line `//` comments from `build.zig` (file banner, section dividers, commented `parser_lib.step.dependOn`). Left `parser:gen` step and vendored `lib/parser.c` / `lib/parser.h` untouched.
