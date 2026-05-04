@@ -2,3 +2,6 @@
 zig-out/
 example/
 node_modules/
+spike/out/
+
+.claude/*.local.*
