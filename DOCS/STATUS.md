@@ -20,3 +20,16 @@
 **Notes:**
 - Warm full-suite wall time after the change: **real 26.36s** (`/usr/bin/time -p zig build test`).
 - Recurring trap from `DOCS/PLANS_PROMPT.md`: verified `test_step` can overlap slow test binaries; PID suffix is the mitigation without touching `build.zig`.
+
+## 2026-05-04 — Phase 2 — Close-out
+
+**What shipped:** Initiative complete. `zig build test` confirmed green with warm wall time well under 60 s.
+**Files touched:** `DOCS/STATUS.md`
+**Tests:** no new tests; ran `zig build test`, result pass
+**Next slice:** None — initiative is complete.
+**Notes:**
+- Baseline warm run (Phase 0): **95.93s** (`/usr/bin/time -p zig build test`).
+- Post-fix warm run (Phase 1): **26.36s** (same command).
+- Final confirmation run: **25.33s** (`/usr/bin/time -p zig build test`).
+- Speedup factor (baseline ÷ final): **~3.8×**.
+- Residual caveat: workspace path is `.zig-cache/test-wasm-workspace-<pid>` so parallel test binaries stay isolated; two cold WASM caches exist after both have run (acceptable trade-off).
