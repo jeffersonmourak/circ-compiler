@@ -36,3 +36,31 @@ Append-only log of phase slices shipped. Newest entries at the bottom.
 - Phase 1 should plan for a roughly 18 MB embedded compiler at link time (release mode may shrink this; this measurement is ReleaseSafe-by-default).
 
 **Next slice:** Slice 2b (per recommended split) — minimum-viable `Compilation.create()` instance with no emit, to flush out the runtime-config wiring before attempting WASM emission in Slice 2c.
+
+## 2026-05-04 — Phase 0 — Slice 2 (FULL): `Compilation.create()` emits `add.wasm`
+
+**Status:** **COMPLETE** — supersedes the partial slice 2 entry above. Slice 2 is fully shipped per the original `DOCS/PLANS/PHASE_0_spike.md` deliverable; no plan revision needed. The spike binary now drives `Compilation.create()` end-to-end and emits a real WASM artifact.
+
+**What shipped:** `spike/src/main.zig` now performs the full in-process compilation: stages a hardcoded `pub export fn add(a: i32, b: i32) i32 { return a + b; }` source under `spike/out/work/add.zig`, initializes a `std.Thread.Pool` (with `track_ids = true`, required by Zig's compiler workers), constructs `Compilation.Directories` against the host Zig lib dir, resolves `wasm32-freestanding` via `std.zig.parseTargetQueryOrReportFatalError`, builds a `Compilation.Config` with `output_mode = .Exe`, `use_llvm = false`, `use_lib_llvm = false`, `use_lld = false`, creates a root `Package.Module` rooted at the staged source dir, and calls `Compilation.create()` with `cache_mode = .none`, `emit_bin = .{ .yes_path = ... }`, and `entry = .disabled` (since the export is a library function, not a `_start` program). Then drives `comp.update(progress)`, surfaces any `getAllErrorsAlloc()` errors via `renderToStdErr`, and verifies the output's WASM magic bytes (`\x00asm`).
+
+The embedded compiler's `build_options` were also tightened: `dev = .full` (the spike's input compiles through `Air.legalize`, which `Env.wasm` does not gate as supported in Zig 0.15.1 even though the wasm backend's `legalizeFeatures()` returns non-null — see Findings) and `enable_debug_extensions = true` (required because non-wasm backend code paths in `dev = .full` reference `build_options.enable_debug_extensions` at comptime via `Air/print.zig`).
+
+**Files touched:** `spike/build.zig`, `spike/src/main.zig`. (No new files in the repo; `/tmp/zig-spike-src/zig-0.15.1/` and its `src/spike_exports.zig` shim remain the same.)
+
+**Tests:**
+- `ZIG_SRC_DIR=/tmp/zig-spike-src/zig-0.15.1 zig build run` (in `spike/`): exit 0, prints `emit ok=true, size=901 bytes, path=…/spike/out/add.wasm`.
+- `xxd spike/out/add.wasm | head -1` → `00000000: 0061 736d 0100 0000 …` — WASM magic `\0asm` confirmed.
+- `nm spike/zig-out/bin/spike | grep -cE '_LLVMInitialize|_LLVMCreate|_LLVMContext|_LLVMTarget|__ZN4llvm'` → **0** (no LLVM C/C++ library symbols; the slice-3 hard-stop check passes ahead of slice 3).
+- `ls -lh spike/out/add.wasm` → 901 bytes; `ls -lh spike/zig-out/bin/spike` → 57 MB Debug build (the embedded compiler is heavy in Debug; ReleaseFast/Small expected to shrink substantially).
+
+**Findings to carry forward (additions / updates beyond the partial entry above):**
+- `Compilation.CreateOptions.entry` defaults to `.default`, which requires a `_start` symbol on freestanding WASM `Exe` output. Use `.disabled` for library-style `pub export fn` outputs (matches `-fno-entry`).
+- `output_mode = .Obj` for `wasm32-freestanding` is **not viable in Zig 0.15.1**: `src/link/Wasm.zig:3462` panics `TODO` when `comp.zcu != null and is_obj`. Use `.Exe` with `entry = .disabled` instead.
+- `std.Thread.Pool` must be initialized with `.track_ids = true` for the Zig compiler — workers unwrap `id.?` unconditionally in their runFn, so `track_ids = false` panics on first task dispatch.
+- `dev.Env.wasm` is missing the `legalize` feature in Zig 0.15.1 even though `arch/wasm/CodeGen.zig:legalizeFeatures()` returns non-null (so `runCodegenInner` always calls `air.legalize`). For now, set `dev = .full` for the spike. For Phase 1 vendoring, either patch `dev.zig` to add `.legalize` to `Env.wasm`'s feature set, or vendor against `.full` and rely on the runtime `use_llvm = false` / `use_lld = false` config to keep LLVM/LLD code paths unreached. The empirical `nm` check shows zero LLVM C/C++ symbols in the linked binary regardless.
+- `dev = .full` pulls AArch64/x86_64/etc. backend modules into comptime analysis. Several of those backends gate code on `build_options.enable_debug_extensions` (e.g. `Air/print.zig:63 comptime assert(build_options.enable_debug_extensions)`). Set `enable_debug_extensions = true` in the embedded compiler's `build_options`.
+- `Compilation.update(progress)` requires a `std.Progress.Node`. `std.Progress.start(.{ .disable_printing = true })` returns one suitable for the embedded use case; no terminal output is produced.
+- The spike's binary grew from 18 MB (when only addresses of `Compilation.create`/`update`/`Module.create` were forced into reachability) to 57 MB once the full `dev = .full` codegen surface is reachable. ReleaseSafe/ReleaseFast builds will likely halve or quarter this; Phase 1 should re-measure.
+- The hardcoded source compiles through Zig's standard pipeline (AstGen → Sema → AIR → wasm CodeGen → Wasm linker) and the resulting `add.wasm` exports the `add` function (visible as the literal string `add` at offset 0x29 in `xxd` output).
+
+**Next slice:** Phase 0 Slice 3 — symbol inspection (`nm` check is already passing, just needs to be wired into a build step), then update `DOCS/STATUS.md` with a dedicated Phase 0 conclusion entry summarising whether to proceed to Phase 1 vendoring. The recommended slice-2 split in the partial entry above is **withdrawn** — slice 2 as originally written is shippable in one slice.

@@ -77,11 +77,11 @@ pub fn build(b: *std.Build) void {
     zig_options.addOption(bool, "llvm_has_arc", false);
     zig_options.addOption(bool, "llvm_has_xtensa", false);
     zig_options.addOption(bool, "debug_gpa", false);
-    zig_options.addOption(DevEnv, "dev", .wasm);
+    zig_options.addOption(DevEnv, "dev", .full);
     zig_options.addOption(ValueInterpretMode, "value_interpret_mode", .direct);
     zig_options.addOption([:0]const u8, "version", "0.15.1");
     zig_options.addOption(std.SemanticVersion, "semver", .{ .major = 0, .minor = 15, .patch = 1 });
-    zig_options.addOption(bool, "enable_debug_extensions", false);
+    zig_options.addOption(bool, "enable_debug_extensions", true);
     zig_options.addOption(bool, "enable_logging", false);
     zig_options.addOption(bool, "enable_link_snapshots", false);
     zig_options.addOption(bool, "enable_tracy", false);
