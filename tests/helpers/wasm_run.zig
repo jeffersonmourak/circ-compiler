@@ -1,4 +1,18 @@
 const std = @import("std");
+const builtin = @import("builtin");
+
+/// Base directory under `.zig-cache/`. Each OS process gets its own subdirectory
+/// (`test-wasm-workspace-<pid>`) so parallel `zig build test` runners (e.g. behavior vs
+/// project_behavior test binaries) never clobber the same `compiled.zig` / WASM output.
+const workspace_dir_prefix = ".zig-cache/test-wasm-workspace";
+
+fn processWorkspacePath(buffer: []u8) []const u8 {
+    const pid: u32 = switch (builtin.os.tag) {
+        .windows => @truncate(std.os.windows.kernel32.GetCurrentProcessId()),
+        else => @bitCast(std.c.getpid()),
+    };
+    return std.fmt.bufPrint(buffer, "{s}-{d}", .{ workspace_dir_prefix, pid }) catch unreachable;
+}
 
 const engine_files = [_][]const u8{
     "circuit.zig",
@@ -7,19 +21,15 @@ const engine_files = [_][]const u8{
     "log.zig",
 };
 
-fn tmpDirPath(allocator: std.mem.Allocator, tmp: *std.testing.TmpDir) ![]u8 {
-    return std.fmt.allocPrint(allocator, ".zig-cache/tmp/{s}", .{tmp.sub_path});
-}
-
 fn copyTextFile(
     allocator: std.mem.Allocator,
     source_path: []const u8,
-    tmp: *std.testing.TmpDir,
+    dest_dir: std.fs.Dir,
     destination_name: []const u8,
 ) !void {
     const data = try std.fs.cwd().readFileAlloc(allocator, source_path, 1024 * 1024);
     defer allocator.free(data);
-    try tmp.dir.writeFile(.{
+    try dest_dir.writeFile(.{
         .sub_path = destination_name,
         .data = data,
     });
@@ -46,28 +56,29 @@ pub fn compileAndRun(
     emitted_source: []const u8,
     script: []const u8,
 ) ![]u8 {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
+    var workspace_path_buf: [128]u8 = undefined;
+    const workspace_path = processWorkspacePath(workspace_path_buf[0..]);
 
-    try tmp.dir.writeFile(.{
+    try std.fs.cwd().makePath(workspace_path);
+    var workspace = try std.fs.cwd().openDir(workspace_path, .{});
+    defer workspace.close();
+
+    try workspace.writeFile(.{
         .sub_path = "compiled.zig",
         .data = emitted_source,
     });
-    try copyTextFile(allocator, "tests/harness/build.zig", &tmp, "build.zig");
+    try copyTextFile(allocator, "tests/harness/build.zig", workspace, "build.zig");
 
     for (engine_files) |engine_file| {
         const source_path = try std.fmt.allocPrint(allocator, "lib/{s}", .{engine_file});
         defer allocator.free(source_path);
-        try copyTextFile(allocator, source_path, &tmp, engine_file);
+        try copyTextFile(allocator, source_path, workspace, engine_file);
     }
-
-    const tmp_path = try tmpDirPath(allocator, &tmp);
-    defer allocator.free(tmp_path);
 
     const build_result = try std.process.Child.run(.{
         .allocator = allocator,
         .argv = &.{ "zig", "build", "wasm", "-Doptimize=Debug" },
-        .cwd = tmp_path,
+        .cwd = workspace_path,
         .max_output_bytes = 1024 * 1024,
     });
     defer allocator.free(build_result.stdout);
@@ -78,7 +89,7 @@ pub fn compileAndRun(
     }
     try ensureSuccess(build_result.term);
 
-    const wasm_path = try std.fmt.allocPrint(allocator, "{s}/zig-out/bin/compiled.wasm", .{tmp_path});
+    const wasm_path = try std.fmt.allocPrint(allocator, "{s}/zig-out/bin/compiled.wasm", .{workspace_path});
     defer allocator.free(wasm_path);
     const encoded_len = std.base64.standard.Encoder.calcSize(script.len);
     const encoded_script = try allocator.alloc(u8, encoded_len);

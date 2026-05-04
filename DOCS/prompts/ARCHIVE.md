@@ -87,7 +87,7 @@ After the archive file is written and the user has reviewed it (you stop for rev
 - Every file under `DOCS/PLANS/`
 - `DOCS/STATUS.md`
 
-`DOCS/index.md` and any other doc that points at these files gets its pointer removed (or repointed at `DOCS/archive/plan-<name>.md`). Do **not** delete `DOCS/decisions/`, `DOCS/architecture.md`, `DOCS/circuit-format.md`, `DOCS/wasm-api.md`, `DOCS/simulation-engine.md`, or anything under `DOCS/getting-started.md` — those are living specs, not plan artefacts.
+`DOCS/index.md` and any other doc that points at these files gets its pointer removed (or repointed at `DOCS/archive/index.md`). Add a row for the new archive file to `DOCS/archive/index.md`. Do **not** delete `DOCS/decisions/`, `DOCS/architecture.md`, `DOCS/circuit-format.md`, `DOCS/wasm-api.md`, `DOCS/simulation-engine.md`, or anything under `DOCS/getting-started.md` — those are living specs, not plan artefacts.
 
 If the repository contains a `DOCS/prompts/ARCHIVE.md` (this file), keep it. The archive prompt is a process artefact for *future* plans and survives across plan cycles.
 
