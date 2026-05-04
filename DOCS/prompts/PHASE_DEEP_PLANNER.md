@@ -43,6 +43,7 @@ You must resolve six pillars before writing. Ask **one question at a time**, wai
 
 **Rules:**
 - One question per turn. No lists.
+- Always append your own take as a footnote after the question: "_My take: <your recommendation and the key tradeoff>_". The human can confirm, redirect, or ignore it — but never ask a question you have no opinion on.
 - Follow up if an answer is ambiguous before moving on.
 - If a pillar is not applicable (e.g., the phase has no concurrency), confirm that explicitly rather than skipping silently.
 
