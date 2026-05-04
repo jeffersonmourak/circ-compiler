@@ -8,10 +8,6 @@ pub fn build(b: *std.Build) void {
     // Build the application
     //
     const target = b.standardTargetOptions(.{});
-    const wasm_target = b.resolveTargetQuery(.{
-        .cpu_arch = .wasm32,
-        .os_tag = .freestanding,
-    });
 
     const optimize = b.standardOptimizeOption(.{});
 
@@ -65,31 +61,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-
-    const wasm_mod = b.createModule(.{
-        .root_source_file = b.path("lib/wasm.zig"),
-        .target = wasm_target,
-        .optimize = .ReleaseSmall,
-    });
-
-    // Set export symbols for WASM
-    wasm_mod.export_symbol_names = &.{ "init", "deinit", "createComponent", "connect", "propagateEvent", "propagate", "getComponentState", "freeLogMessage" };
-
-    const wasm_lib = b.addExecutable(.{
-        .name = "circ-renderer-lib-wasm",
-        .root_module = wasm_mod,
-    });
-
-    wasm_lib.addIncludePath(b.path("./lib"));
-    wasm_lib.addLibraryPath(b.path("./lib"));
-
-    // wasm_lib.linkSystemLibrary("parser");
-    // wasm_lib.linkLibC();
-
-    wasm_lib.entry = .disabled;
-    wasm_lib.rdynamic = false;
-
-    b.installArtifact(wasm_lib);
 
     const exe = b.addExecutable(.{
         .name = "logic-sim",
@@ -146,24 +117,6 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run the application");
     // run_step.dependOn(&generate_parser_cmd.step);
     run_step.dependOn(&run_cmd.step);
-
-    const wasm_step = b.step("wasm", "Build the application for WebAssembly");
-
-    const install_wasm_step = b.addInstallFile(
-        wasm_lib.getEmittedBin(),
-        "wasm/circ-renderer-lib.wasm",
-    );
-
-    // wasm_step.dependOn(&generate_parser_cmd.step);
-    wasm_step.dependOn(&wasm_lib.step);
-    wasm_step.dependOn(&install_wasm_step.step);
-
-    const wasm_src_step = b.addInstallFile(
-        wasm_lib.getEmittedBin(),
-        "../example/circ-renderer-lib.wasm",
-    );
-
-    wasm_step.dependOn(&wasm_src_step.step);
 
     const unit_tests = b.addTest(.{
         .root_module = exe_debug_mod,

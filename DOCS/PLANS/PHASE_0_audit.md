@@ -88,45 +88,56 @@ Run command: `zig build test`
 
 ## Inventory Tables
 
-*The execution agent appends these tables during Slices 1–3. They are empty until the phase is executed.*
+*Tables below were completed 2026-05-04. Phase 1 deletions had already landed in the repo before this audit file was filled; rows still record the correct classification and the phase that owns removal (or **Phase 1 (shipped)** where applicable).*
 
 ### Baseline
 
 ```
-zig build test result: TODO(phase0)
-Date: TODO(phase0)
+zig build test result: PASS (exit 0)
+Date: 2026-05-04
+Runner: Zig 0.15.x via `zig build test` (full suite registered in build.zig)
 ```
 
 ### Known Suspects
 
 | Item | Type | Status | Reachable From | Phase That Deletes It |
 |------|------|--------|----------------|-----------------------|
-| `lib/wasm.zig` | file | TODO(phase0) | TODO(phase0) | TODO(phase0) |
-| `lib/transport.zig` | file | TODO(phase0) | TODO(phase0) | TODO(phase0) |
-| `main.zig` (repo root) | file | TODO(phase0) | TODO(phase0) | TODO(phase0) |
-| `lib/compiler.zig` | file | TODO(phase0) | TODO(phase0) | TODO(phase0) |
-| `src/` | directory | TODO(phase0) | TODO(phase0) | TODO(phase0) |
-| `example/` | directory | TODO(phase0) | TODO(phase0) | TODO(phase0) |
-| `package.json` | file | TODO(phase0) | TODO(phase0) | TODO(phase0) |
-| `tsconfig.json` | file | TODO(phase0) | TODO(phase0) | TODO(phase0) |
-| `bun.lock` | file | TODO(phase0) | TODO(phase0) | TODO(phase0) |
-| `node_modules/` | directory | TODO(phase0) | TODO(phase0) | TODO(phase0) |
-| `wasm` build target | build-target | TODO(phase0) | TODO(phase0) | TODO(phase0) |
-| `wasm_step` build target | build-target | TODO(phase0) | TODO(phase0) | TODO(phase0) |
-| `logic-sim` build target | build-target | TODO(phase0) | TODO(phase0) | TODO(phase0) |
-| `compiler` build target | build-target | TODO(phase0) | TODO(phase0) | TODO(phase0) |
-| `compiler:run` build target | build-target | TODO(phase0) | TODO(phase0) | TODO(phase0) |
-| `run` build target | build-target | TODO(phase0) | TODO(phase0) | TODO(phase0) |
-| Commented-out lines in `build.zig` (parser-gen step, `wasm_lib.linkSystemLibrary`, etc.) | symbol | TODO(phase0) | TODO(phase0) | TODO(phase0) |
+| `lib/wasm.zig` | file | dead | none (was `build.zig` wasm executable only; also `lib/wasm.zig` internal imports) | Phase 1 (shipped) |
+| `lib/transport.zig` | file | live | `lib/circuit.zig` (`encodeState`), `main.zig`, `lib/orchestrator/embed.zig` (@embedFile), `tests/helpers/wasm_run.zig` (fixture path string) | kept (live) — **Phase 2 spec incorrectly assumes deletion; revise before Phase 2 slice 2** |
+| `main.zig` (repo root) | file | live | `build.zig` (`exe_debug_mod` for `logic-sim`, root `unit_tests` via `exe_debug_mod`) | Phase 2 (pending) |
+| `lib/compiler.zig` | file | live | `build.zig` (`compiler` executable / `compiler_mod`) | Phase 2 (pending) |
+| `src/` | directory | dead | none (TypeScript/browser tree; not on compiler path) | Phase 1 (shipped) |
+| `example/` | directory | dead | none (browser demo; often gitignored; wasm install step used it pre–Phase 1) | Phase 1 (shipped) |
+| `package.json` | file | dead | none | Phase 1 (shipped) |
+| `tsconfig.json` | file | dead | none | Phase 1 (shipped) |
+| `bun.lock` | file | dead | none | Phase 1 (shipped) |
+| `node_modules/` | directory | dead | none | Phase 1 (shipped) |
+| `wasm` user step (`zig build wasm`) | build-target | dead | none (step removed with wasm artifact) | Phase 1 (shipped) |
+| `wasm_step` (PLAN name for same step; Zig identifier `wasm_step` in pre-removal `build.zig`) | build-target | dead | none | Phase 1 (shipped) |
+| `logic-sim` executable / step | build-target | live | `build.zig` | Phase 2 (pending) |
+| `compiler` step | build-target | live | `build.zig` | Phase 2 (pending) |
+| `compiler:run` step | build-target | live | `build.zig` | Phase 2 (pending) |
+| `run` step | build-target | live | `build.zig` | Phase 2 (pending) |
+| Commented-out lines in `build.zig` (e.g. `parser_lib.step.dependOn`, `compiler_step.dependOn` / `run_step` / old wasm deps, `wasm_lib.linkSystemLibrary`) | symbol | live | `build.zig` (inactive build wiring, still present as comments) | Phase 3 |
 
 ### Newly Discovered Items
 
-*To be populated by the discovery pass (Slice 3). Any item found here that was not in the Known Suspects table above must be listed with full schema fields.*
+*Independent discovery: high-value paths not named in `PLANS_PROMPT.md` suspect list but relevant to reachability and later phases.*
 
 | Item | Type | Status | Reachable From | Phase That Deletes It |
 |------|------|--------|----------------|-----------------------|
-| | | | | |
+| `cmd/circ-compile/main.zig` | file | live | Production CLI entry (and `build.zig` `circ-compile` target) | kept (live) |
+| `orchestrator_embed_module.zig` | file | live | `build.zig` (orchestrator / embed test module graph) | kept (live) — see PLAN recurring traps |
+| `lib/orchestrator/embed.zig` | file | live | `orchestrator_embed_module.zig`, tests | kept (live) |
+| `templates/build.zig` | file | live | `lib/orchestrator/embed.zig` (@embedFile) | kept (live) |
+| `templates/main.zig` | file | live | `lib/orchestrator/embed.zig` (@embedFile) | kept (live) |
+
+## Audit sign-off (Slice 4)
+
+**Execution agent:** tables above are complete (no empty cells); `zig build test` passed on 2026-05-04 after documentation update.
+
+**Human reviewer:** please explicitly approve this inventory (reply or commit note) before treating Phase 0 as formally closed. Resolve the **`lib/transport.zig` vs Phase 2 deletion** inconsistency in planning so Phase 2 does not regress `lib/circuit.zig`.
 
 ## Open Questions / Spikes
 
-None — phase is fully specified.
+- **Phase 2 vs `lib/transport.zig`:** `DOCS/PLANS/PHASE_2_legacy_zig_binaries.md` calls for deleting `lib/transport.zig`, but `lib/circuit.zig` invokes `transport.encodeState` on the simulation path—this file is **live**. Spike: update Phase 2 scope to retain `transport.zig`, or move encoding helpers into `circuit.zig` (or a new module) and then delete `transport.zig`.
