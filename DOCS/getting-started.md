@@ -4,7 +4,9 @@ This walkthrough takes you from a fresh checkout to a working compiled circuit y
 
 ## 1. Install and verify the CLI
 
-You need [Zig](https://ziglang.org/) 0.15.x. Build the compiler:
+**Download a pre-built binary** from the [releases page](https://github.com/jeffersonmourak/circ-renderer-z/releases) (macOS arm64, Linux x86_64) and place it on your PATH. No Zig installation is required to use `circ-compile`.
+
+**Or build from source** (requires [Zig](https://ziglang.org/) 0.15.x — only for building the CLI itself, not for compiling circuits):
 
 ```sh
 zig build circ-compile
@@ -50,7 +52,7 @@ This declares one input pin `a`, drives it through a `not` gate, mirrors the res
 zig-out/bin/circ-compile examples/inverter.circ -o examples/inverter.wasm
 ```
 
-The CLI runs the parser, validator, Zig source emitter, and `zig build` orchestrator end-to-end. On success it copies the resulting `.wasm` to the path given to `-o`. On failure it streams the underlying `zig build` stderr verbatim and preserves the build directory for inspection.
+The CLI runs the parser, validator, Zig source emitter, and in-process compiler end-to-end — no `zig` binary is required at circuit-compile time. On success it copies the resulting `.wasm` to the path given to `-o`. On failure it surfaces compiler errors and preserves the build directory for inspection.
 
 Inspect the compiled circuit's interface:
 

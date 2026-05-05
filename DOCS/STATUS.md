@@ -164,3 +164,12 @@ Byte-for-byte equality between subprocess and in-process WASM output is **not ac
 **Files touched:** `DOCS/decisions/compiler-pipeline.md`
 **Tests:** No runtime code changed; doc review is the validation.
 **Next slice:** Phase 3 Slice 3 — update `DOCS/getting-started.md` to remove the Zig installation prerequisite and any runtime `zig` references.
+
+## 2026-05-04 — Phase 3 — Slice 3: Update getting-started
+
+**Status:** **COMPLETE**. Phase 3 ends here.
+
+**What shipped:** `DOCS/getting-started.md` updated in two places. Section 1 restructured: lead path is "download a pre-built binary — no Zig required"; build-from-source path retained but clearly scoped to CLI development only, with an explicit parenthetical "(only for building the CLI itself, not for compiling circuits)". Section 3 description updated: "Zig source emitter, and `zig build` orchestrator end-to-end" → "Zig source emitter, and in-process compiler end-to-end — no `zig` binary is required at circuit-compile time"; failure-mode text updated from "streams the underlying `zig build` stderr" to "surfaces compiler errors". No other stale runtime Zig references remain in the doc (`grep` clean).
+**Files touched:** `DOCS/getting-started.md`
+**Tests:** No runtime code changed; `grep -i "zig build\|install zig\|need.*zig\|require.*zig"` on the doc returns only the intentional build-from-source line.
+**Next slice:** None. Phase 3 is complete. The initiative (Phases 0–3) is fully shipped: `circ-compile` embeds the Zig 0.15.1 self-hosted WASM backend in-process, the e2e CI workflow validates no-Zig-in-PATH on macOS arm64 and Linux x86_64, and the docs reflect the revised architecture.
