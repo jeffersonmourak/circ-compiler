@@ -1,0 +1,84 @@
+name: E2E — no Zig in PATH
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+env:
+  ZIG_VERSION: "0.15.1"
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: e2e (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macos-latest resolves to an M1 (arm64) runner on GitHub-hosted
+          # infrastructure as of 2026. If the label changes, update zig_pkg to
+          # match the runner's native architecture.
+          - runner: macos-latest
+            zig_pkg: zig-aarch64-macos-0.15.1
+            platform: macos-arm64
+          - runner: ubuntu-latest
+            zig_pkg: zig-x86_64-linux-0.15.1
+            platform: linux-x86_64
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Zig ${{ env.ZIG_VERSION }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pkg="${{ matrix.zig_pkg }}"
+          curl -fsSL -o zig.tar.xz "https://ziglang.org/download/${ZIG_VERSION}/${pkg}.tar.xz"
+          tar -xf zig.tar.xz
+          echo "${PWD}/${pkg}" >> "${GITHUB_PATH}"
+
+      - name: Build circ-compile
+        run: zig build -Doptimize=ReleaseFast circ-compile
+
+      - name: Clear Zig cache
+        shell: bash
+        # cache_mode = .none in inprocess.zig means the in-process compiler
+        # should not consult the Zig cache at all, but clear it explicitly to
+        # make that claim verifiable rather than implicit.
+        run: rm -rf ~/.cache/zig
+
+      - name: Strip Zig from PATH
+        shell: bash
+        run: |
+          set -euo pipefail
+          stripped=$(echo "$PATH" | tr ':' '\n' | grep -v zig | tr '\n' ':')
+          echo "PATH=${stripped}" >> "${GITHUB_ENV}"
+
+      - name: Confirm Zig is absent
+        shell: bash
+        run: |
+          if command -v zig &>/dev/null; then
+            echo "::error::zig is still reachable in PATH after strip"
+            exit 1
+          fi
+          echo "OK: zig not found in PATH"
+
+      - name: Run end-to-end compilation
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./zig-out/bin/circ-compile tests/fixtures/circuits/inverter.circ -o out.wasm
+          python3 - <<'EOF'
+          import sys, os
+          with open('out.wasm', 'rb') as f:
+              magic = f.read(4)
+          if magic != b'\x00asm':
+              print(f'::error::out.wasm has unexpected leading bytes: {magic.hex()}')
+              sys.exit(1)
+          size = os.path.getsize('out.wasm')
+          print(f'OK: out.wasm is valid WASM ({size} bytes)')
+          EOF
