@@ -54,6 +54,7 @@ be96913adb4ec6f8ec86e258d226b015d7bfe0fc42439d26822b78cf3fcac83e  vendor/zig-com
 b227b392a0d3a606a29ecf5bb9b53a67e58c1f89cf5facee7fc8c31680d5e7fa  vendor/zig-compiler/lib/compiler/aro/backend/Object.zig
 c3c99f6dbec920fc47f60620d55cbfd09e45a7dc6e652bed1ff084d6661d8985  vendor/zig-compiler/lib/compiler/aro/backend/Object/Elf.zig
 4f0d937ce0413e3f95433184fe01d7222da7fc2f5cc5d5aa91608af9f908aa10  vendor/zig-compiler/lib/compiler/aro_translate_c.zig
+28cb7e38d5a34b673c6e8e8697cc9944761911a1665f955ca2d53f66dc7e093a  vendor/zig-compiler/lib/compiler/aro_translate_c/ast.zig
 3196c5d73e9ad030bee0ef60ffddbb0e732170a6a242329fd93c4afc3c2d1612  vendor/zig-compiler/src/Air.zig
 5987743c6d3c986a5a935f3338537eae54f4405c41f53065176e611cc2555ef4  vendor/zig-compiler/src/Air/Legalize.zig
 06a4fd9896f904304742cc9fed1b841d6a34d7d5b365e95a4261e79f389a8c73  vendor/zig-compiler/src/Air/Liveness.zig

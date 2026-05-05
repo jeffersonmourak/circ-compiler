@@ -1,4 +1,9 @@
 const std = @import("std");
+
+// Suppress the embedded Zig compiler's debug/info logging; it is voluminous
+// and would flood stderr in Debug builds.
+pub const std_options: std.Options = .{ .log_level = .warn };
+
 const cli_args = @import("cli_args");
 const translate = @import("translate");
 const resolver = @import("resolver");

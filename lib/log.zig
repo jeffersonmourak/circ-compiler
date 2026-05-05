@@ -4,8 +4,10 @@ const std = @import("std");
 const builtin = @import("builtin");
 const memory = @import("memory.zig");
 
-extern fn onDebugLog(msg: *const u8, msgLen: usize, logType: u8) void;
-extern fn debugEnabled() bool;
+// "env" module matches what LLD/wasm-ld emits by default for anonymous externs
+// and what the JS host provides as `{ env: { onDebugLog, debugEnabled } }`.
+extern "env" fn onDebugLog(msg: *const u8, msgLen: usize, logType: u8) void;
+extern "env" fn debugEnabled() bool;
 
 const is_wasm = builtin.target.cpu.arch == .wasm32 or builtin.target.cpu.arch == .wasm64;
 

@@ -561,6 +561,37 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     inprocess_mod.addImport("zig_compiler", zig_compiler_mod);
+    // Pre-build wasm32 compiler_rt using the system Zig (which has LLVM).
+    // The Zig WASM backend cannot build compiler_rt in-process due to circular
+    // intrinsic dependencies (__multi3 needs __lshrti3 etc.); LLVM resolves them.
+    const build_wasm_compiler_rt = b.addSystemCommand(&.{
+        b.graph.zig_exe,
+        "build-lib",
+        "-target", "wasm32-freestanding",
+        "-O", "Debug",
+        "-fno-compiler-rt",
+        b.fmt("{s}/compiler_rt.zig", .{b.graph.zig_lib_directory.path orelse @panic("zig_lib_directory.path is null")}),
+    });
+    const wasm_compiler_rt_lazy = build_wasm_compiler_rt.addPrefixedOutputFileArg("-femit-bin=", "libcompiler_rt.a");
+    const inprocess_build_options = b.addOptions();
+    inprocess_build_options.addOption(
+        []const u8,
+        "zig_lib_dir",
+        b.graph.zig_lib_directory.path orelse @panic("zig_lib_directory.path is null"),
+    );
+    inprocess_build_options.addOptionPath("wasm_compiler_rt", wasm_compiler_rt_lazy);
+    inprocess_mod.addOptions("build_options", inprocess_build_options);
+    const inprocess_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/orchestrator/inprocess_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    inprocess_tests_mod.addImport("orchestrator_inprocess", inprocess_mod);
+    inprocess_tests_mod.addImport("orchestrator_workspace", orchestrator_workspace_mod);
+    const inprocess_tests = b.addTest(.{
+        .root_module = inprocess_tests_mod,
+    });
+    const run_inprocess_tests = b.addRunArtifact(inprocess_tests);
     const orchestrator_main_mod = b.createModule(.{
         .root_source_file = b.path("lib/orchestrator/main.zig"),
         .target = target,
@@ -822,6 +853,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_orchestrator_workspace_tests.step);
     test_step.dependOn(&run_orchestrator_subprocess_tests.step);
     test_step.dependOn(&run_orchestrator_finalize_tests.step);
+    test_step.dependOn(&run_inprocess_tests.step);
     test_step.dependOn(&run_orchestrator_main_tests.step);
     test_step.dependOn(&run_cli_args_tests.step);
     test_step.dependOn(&circ_compile_exe.step);

@@ -1,6 +1,6 @@
 const std = @import("std");
 const workspace_mod = @import("orchestrator_workspace");
-const subprocess_mod = @import("orchestrator_subprocess");
+const inprocess_mod = @import("orchestrator_inprocess");
 const finalize_mod = @import("orchestrator_finalize");
 
 pub const OrchestratorOptions = struct {
@@ -39,16 +39,7 @@ pub fn compileWithStderrWriter(
     try workspace_mod.writeRuntime(&workspace);
     try workspace_mod.writeEmittedSource(&workspace, emitted_zig_source);
 
-    var run_result = try subprocess_mod.runCommand(
-        allocator,
-        &.{ "zig", "build", "wasm", "-Doptimize=Debug" },
-        workspace.path,
-        workspace.path,
-        stderr_writer,
-    );
-    defer run_result.deinit(allocator);
-
-    if (run_result.exit_code != 0) return error.ZigBuildFailed;
+    try inprocess_mod.compile(allocator, workspace.path, stderr_writer);
 
     try finalize_mod.copyOutput(&workspace, options.output_wasm_path);
 
