@@ -13,8 +13,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const zig_compiler_dep = b.dependency("zig_compiler", .{ .target = target, .optimize = optimize });
-    const zig_compiler_mod = zig_compiler_dep.module("zig_compiler");
+    const maybe_zig_compiler_dep = b.lazyDependency("zig_compiler", .{ .target = target, .optimize = optimize });
 
     const parser_gen = b.step("parser:gen", "Generate C Parser");
 
@@ -530,27 +529,29 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    inprocess_mod.addImport("zig_compiler", zig_compiler_mod);
-    // Pre-build wasm32 compiler_rt using the system Zig (which has LLVM).
-    // The Zig WASM backend cannot build compiler_rt in-process due to circular
-    // intrinsic dependencies (__multi3 needs __lshrti3 etc.); LLVM resolves them.
-    const build_wasm_compiler_rt = b.addSystemCommand(&.{
-        b.graph.zig_exe,
-        "build-lib",
-        "-target", "wasm32-freestanding",
-        "-O", "Debug",
-        "-fno-compiler-rt",
-        b.fmt("{s}/compiler_rt.zig", .{b.graph.zig_lib_directory.path orelse @panic("zig_lib_directory.path is null")}),
-    });
-    const wasm_compiler_rt_lazy = build_wasm_compiler_rt.addPrefixedOutputFileArg("-femit-bin=", "libcompiler_rt.a");
-    const inprocess_build_options = b.addOptions();
-    inprocess_build_options.addOption(
-        []const u8,
-        "zig_lib_dir",
-        b.graph.zig_lib_directory.path orelse @panic("zig_lib_directory.path is null"),
-    );
-    inprocess_build_options.addOptionPath("wasm_compiler_rt", wasm_compiler_rt_lazy);
-    inprocess_mod.addOptions("build_options", inprocess_build_options);
+    if (maybe_zig_compiler_dep) |zig_compiler_dep| {
+        inprocess_mod.addImport("zig_compiler", zig_compiler_dep.module("zig_compiler"));
+        // Pre-build wasm32 compiler_rt using the system Zig (which has LLVM).
+        // The Zig WASM backend cannot build compiler_rt in-process due to circular
+        // intrinsic dependencies (__multi3 needs __lshrti3 etc.); LLVM resolves them.
+        const build_wasm_compiler_rt = b.addSystemCommand(&.{
+            b.graph.zig_exe,
+            "build-lib",
+            "-target", "wasm32-freestanding",
+            "-O", "Debug",
+            "-fno-compiler-rt",
+            b.fmt("{s}/compiler_rt.zig", .{b.graph.zig_lib_directory.path orelse @panic("zig_lib_directory.path is null")}),
+        });
+        const wasm_compiler_rt_lazy = build_wasm_compiler_rt.addPrefixedOutputFileArg("-femit-bin=", "libcompiler_rt.a");
+        const inprocess_build_options = b.addOptions();
+        inprocess_build_options.addOption(
+            []const u8,
+            "zig_lib_dir",
+            b.graph.zig_lib_directory.path orelse @panic("zig_lib_directory.path is null"),
+        );
+        inprocess_build_options.addOptionPath("wasm_compiler_rt", wasm_compiler_rt_lazy);
+        inprocess_mod.addOptions("build_options", inprocess_build_options);
+    }
     const inprocess_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/orchestrator/inprocess_test.zig"),
         .target = target,
@@ -747,7 +748,9 @@ pub fn build(b: *std.Build) void {
     circ_compile_mod.addImport("import_cycle", resolver_import_cycle_mod);
     circ_compile_mod.addImport("resolve_bodies", resolver_resolve_bodies_mod);
     circ_compile_mod.addImport("ir_types", ir_types_mod);
-    circ_compile_mod.addImport("zig_compiler", zig_compiler_mod);
+    if (maybe_zig_compiler_dep) |zig_compiler_dep| {
+        circ_compile_mod.addImport("zig_compiler", zig_compiler_dep.module("zig_compiler"));
+    }
     const circ_compile_exe = b.addExecutable(.{
         .name = "circ-compile",
         .root_module = circ_compile_mod,
@@ -756,7 +759,7 @@ pub fn build(b: *std.Build) void {
     circ_compile_exe.addIncludePath(b.path("./lib"));
     circ_compile_exe.linkLibrary(parser_lib);
     circ_compile_exe.linkLibC();
-    b.installArtifact(circ_compile_exe);
+    if (maybe_zig_compiler_dep != null) b.installArtifact(circ_compile_exe);
     const circ_compile_step = b.step("circ-compile", "Build circ-compile CLI");
     circ_compile_step.dependOn(b.getInstallStep());
     const validator_project_passes_tests_mod = b.createModule(.{
@@ -819,10 +822,12 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_orchestrator_workspace_tests.step);
     test_step.dependOn(&run_orchestrator_subprocess_tests.step);
     test_step.dependOn(&run_orchestrator_finalize_tests.step);
-    test_step.dependOn(&run_inprocess_tests.step);
-    test_step.dependOn(&run_orchestrator_main_tests.step);
+    if (maybe_zig_compiler_dep != null) {
+        test_step.dependOn(&run_inprocess_tests.step);
+        test_step.dependOn(&run_orchestrator_main_tests.step);
+    }
     test_step.dependOn(&run_cli_args_tests.step);
-    test_step.dependOn(&circ_compile_exe.step);
+    if (maybe_zig_compiler_dep != null) test_step.dependOn(&circ_compile_exe.step);
     test_step.dependOn(&run_cli_integration_tests.step);
     test_step.dependOn(&run_resolver_scan_imports_tests.step);
     test_step.dependOn(&run_resolver_import_cycle_tests.step);
