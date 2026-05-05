@@ -1,0 +1,3 @@
+# Prebuilt archives are local/CI-only (see DOCS/PLANS_PROMPT.md).
+*.a
+*.lib

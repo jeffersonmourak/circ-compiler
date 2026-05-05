@@ -33,3 +33,11 @@ Append-only entries for plan-driven work (`DOCS/PLANS_PROMPT.md`). Newest at the
 **Tests:** ran `zig build test` (default), pass; `zig build stub-link-smoke`, pass; `zig build test -Dorchestrator-inprocess-stub=true`, pass
 **Next slice:** Phase 2 — fast path / `prebuilt/` detection (`DOCS/PLANS/PHASE_2_fast_path.md`).
 **Notes:** Stub mode still compiles `libinprocess` via the existing `inprocess_static_lib` step in the graph (same artifact as `zig build inprocess-lib`); Phase 2 can prefer a path-only prebuilt when present.
+
+## 2026-05-04 — Phase 2 — Prebuilt fast path (`circ-prebuilt-inprocess`)
+
+**What shipped:** `-Dcirc-prebuilt-inprocess=true` when `prebuilt/libinprocess.a` exists enables stub graph **without** compiling the fat `inprocess_static_lib` into `circ-compile` / orchestrator tests (link via `root_module.addObjectFile`). Unified flag `use_stub_inprocess_graph` = `-Dorchestrator-inprocess-stub` OR prebuilt fast path. Configure-time `@panic` if flag set but archive missing. Added `linkInprocessForStub` helper and `prebuilt/.gitignore` for `*.a` / `*.lib`.
+**Files touched:** `build.zig`, `prebuilt/.gitignore`
+**Tests:** `zig build test` (default), pass; `zig build circ-compile -Dcirc-prebuilt-inprocess=true --summary all` with prebuilt present, pass (link line includes `prebuilt/libinprocess.a`, no vendored `zig_compiler` module); `zig build test -Dcirc-prebuilt-inprocess=true`, pass
+**Next slice:** Phase 3 — `tools/build-inprocess-lib.sh`, CI cache, contributor docs (`DOCS/PLANS/PHASE_3_tooling_ci.md`).
+**Notes:** Fast path requires copying `zig-out/lib/libinprocess.a` (or other `-p`) to `prebuilt/libinprocess.a` after `zig build inprocess-lib`. Sandbox builds can hit `PermissionDenied` on Zig global cache when linking the exe; run the same command with full permissions if needed.
