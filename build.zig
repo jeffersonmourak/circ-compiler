@@ -15,6 +15,33 @@ pub fn build(b: *std.Build) void {
 
     const maybe_zig_compiler_dep = b.lazyDependency("zig_compiler", .{ .target = target, .optimize = optimize });
 
+    // Prebuilt-FFI Phase 0 (`DOCS/PLANS_PROMPT.md`): static archive exporting `circ_inprocess_compile` plus the
+    // vendored compiler. Uses a non-lazy `zig_compiler` dep so `zig build inprocess-lib` always builds this
+    // graph when that step runs (default `zig build` / `zig build test` do not).
+    //
+    // Artifact layout: `zig build inprocess-lib -p <PREFIX>` installs `<PREFIX>/lib/libinprocess.a` (macOS/Linux;
+    // Windows may use `.lib`). Default PREFIX when `-p` is omitted is `zig-out` in the project directory, so the
+    // usual path is `zig-out/lib/libinprocess.a`.
+    const zig_compiler_for_inprocess_lib = b.dependency("zig_compiler", .{ .target = target, .optimize = optimize });
+    const inprocess_ffi_lib_mod = b.createModule(.{
+        .root_source_file = b.path("lib/orchestrator/inprocess_ffi.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    inprocess_ffi_lib_mod.addImport("zig_compiler", zig_compiler_for_inprocess_lib.module("zig_compiler"));
+    const inprocess_static_lib = b.addLibrary(.{
+        .name = "inprocess",
+        .linkage = .static,
+        .root_module = inprocess_ffi_lib_mod,
+    });
+    inprocess_static_lib.linkLibC();
+    const install_inprocess_lib = b.addInstallArtifact(inprocess_static_lib, .{});
+    const inprocess_lib_build_step = b.step(
+        "inprocess-lib",
+        "Build libinprocess.a (FFI + vendored compiler); install to <prefix>/lib/ (default prefix zig-out/)",
+    );
+    inprocess_lib_build_step.dependOn(&install_inprocess_lib.step);
+
     const parser_gen = b.step("parser:gen", "Generate C Parser");
 
     const generate_parser_cmd = b.addSystemCommand(&.{
