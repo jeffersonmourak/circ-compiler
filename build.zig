@@ -872,6 +872,17 @@ pub fn build(b: *std.Build) void {
     const run_project_behavior_tests = b.addRunArtifact(project_behavior_tests);
     test_step.dependOn(&run_project_behavior_tests.step);
 
+    const topology_format_tests_mod = b.createModule(.{
+        .root_source_file = b.path("lib/topology/format.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const topology_format_tests = b.addTest(.{
+        .root_module = topology_format_tests_mod,
+    });
+    const run_topology_format_tests = b.addRunArtifact(topology_format_tests);
+    test_step.dependOn(&run_topology_format_tests.step);
+
     const e2e_linux_docker_step = b.step(
         "e2e-linux-docker",
         "Linux Docker E2E: host-built ELF, inspect / emit-zig / wasm / Node (requires Docker)",
