@@ -7,6 +7,9 @@ pub fn build(b: *std.Build) void {
 
     const optimize = b.standardOptimizeOption(.{});
 
+    const zig_compiler_dep = b.dependency("zig_compiler", .{ .target = target, .optimize = optimize });
+    const zig_compiler_mod = zig_compiler_dep.module("zig_compiler");
+
     const parser_gen = b.step("parser:gen", "Generate C Parser");
 
     const generate_parser_cmd = b.addSystemCommand(&.{
@@ -736,6 +739,7 @@ pub fn build(b: *std.Build) void {
     circ_compile_mod.addImport("import_cycle", resolver_import_cycle_mod);
     circ_compile_mod.addImport("resolve_bodies", resolver_resolve_bodies_mod);
     circ_compile_mod.addImport("ir_types", ir_types_mod);
+    circ_compile_mod.addImport("zig_compiler", zig_compiler_mod);
     const circ_compile_exe = b.addExecutable(.{
         .name = "circ-compile",
         .root_module = circ_compile_mod,

@@ -71,7 +71,7 @@ pub fn build(b: *std.Build) void {
     zig_options.addOption(bool, "value_tracing", false);
 
     // Public named module — accessible to parent builds via dep.module("zig-compiler").
-    const mod = b.addModule("zig-compiler", .{
+    const mod = b.addModule("zig_compiler", .{
         .root_source_file = b.path("src/exports.zig"),
         .target = target,
         .optimize = optimize,

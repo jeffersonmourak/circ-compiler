@@ -1,0 +1,5 @@
+.{
+    .name = .zig_compiler,
+    .version = "0.15.1",
+    .paths = .{""},
+}
