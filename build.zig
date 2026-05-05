@@ -7,6 +7,12 @@ pub fn build(b: *std.Build) void {
 
     const optimize = b.standardOptimizeOption(.{});
 
+    const golden_mod = b.createModule(.{
+        .root_source_file = b.path("tests/helpers/golden.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     const zig_compiler_dep = b.dependency("zig_compiler", .{ .target = target, .optimize = optimize });
     const zig_compiler_mod = zig_compiler_dep.module("zig_compiler");
 
@@ -66,11 +72,7 @@ pub fn build(b: *std.Build) void {
     translate_mod.addIncludePath(b.path("."));
     translate_mod.addIncludePath(b.path("./lib"));
     translate_tests_mod.addImport("translate", translate_mod);
-    translate_tests_mod.addImport("golden", b.createModule(.{
-        .root_source_file = b.path("tests/helpers/golden.zig"),
-        .target = target,
-        .optimize = optimize,
-    }));
+    translate_tests_mod.addImport("golden", golden_mod);
     const ast_dump_mod = b.createModule(.{
         .root_source_file = b.path("tests/helpers/ast_dump.zig"),
         .target = target,
@@ -113,11 +115,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     }));
-    resolver_tests_mod.addImport("golden", b.createModule(.{
-        .root_source_file = b.path("tests/helpers/golden.zig"),
-        .target = target,
-        .optimize = optimize,
-    }));
+    resolver_tests_mod.addImport("golden", golden_mod);
     const resolver_tests = b.addTest(.{
         .root_module = resolver_tests_mod,
     });
@@ -253,11 +251,7 @@ pub fn build(b: *std.Build) void {
     validator_name_passes_tests_mod.addImport("diagnostics", validator_diagnostics_mod);
     validator_name_passes_tests_mod.addImport("name_resolution", name_resolution_mod);
     validator_name_passes_tests_mod.addImport("name_collision", name_collision_mod);
-    validator_name_passes_tests_mod.addImport("golden", b.createModule(.{
-        .root_source_file = b.path("tests/helpers/golden.zig"),
-        .target = target,
-        .optimize = optimize,
-    }));
+    validator_name_passes_tests_mod.addImport("golden", golden_mod);
     const validator_name_passes_tests = b.addTest(.{
         .root_module = validator_name_passes_tests_mod,
     });
@@ -279,11 +273,7 @@ pub fn build(b: *std.Build) void {
     validator_structural_tests_mod.addImport("multi_driver", multi_driver_mod);
     validator_structural_tests_mod.addImport("required_input", required_input_mod);
     validator_structural_tests_mod.addImport("output_assignment", output_assignment_mod);
-    validator_structural_tests_mod.addImport("golden", b.createModule(.{
-        .root_source_file = b.path("tests/helpers/golden.zig"),
-        .target = target,
-        .optimize = optimize,
-    }));
+    validator_structural_tests_mod.addImport("golden", golden_mod);
     const validator_structural_tests = b.addTest(.{
         .root_module = validator_structural_tests_mod,
     });
@@ -301,11 +291,7 @@ pub fn build(b: *std.Build) void {
     validator_loop_tests_mod.addImport("resolver", resolver_mod);
     validator_loop_tests_mod.addImport("diagnostics", validator_diagnostics_mod);
     validator_loop_tests_mod.addImport("combinational_loop", combinational_loop_mod);
-    validator_loop_tests_mod.addImport("golden", b.createModule(.{
-        .root_source_file = b.path("tests/helpers/golden.zig"),
-        .target = target,
-        .optimize = optimize,
-    }));
+    validator_loop_tests_mod.addImport("golden", golden_mod);
     const validator_loop_tests = b.addTest(.{
         .root_module = validator_loop_tests_mod,
     });
@@ -323,11 +309,7 @@ pub fn build(b: *std.Build) void {
     validator_run_tests_mod.addImport("resolver", resolver_mod);
     validator_run_tests_mod.addImport("diagnostics", validator_diagnostics_mod);
     validator_run_tests_mod.addImport("validator_run", validator_run_mod);
-    validator_run_tests_mod.addImport("golden", b.createModule(.{
-        .root_source_file = b.path("tests/helpers/golden.zig"),
-        .target = target,
-        .optimize = optimize,
-    }));
+    validator_run_tests_mod.addImport("golden", golden_mod);
     const validator_run_tests = b.addTest(.{
         .root_module = validator_run_tests_mod,
     });
@@ -405,11 +387,7 @@ pub fn build(b: *std.Build) void {
     emit_build_fn_tests_mod.addImport("validator_run", validator_run_mod);
     emit_build_fn_tests_mod.addImport("diagnostics", validator_diagnostics_mod);
     emit_build_fn_tests_mod.addImport("build_fn", emit_build_fn_mod);
-    emit_build_fn_tests_mod.addImport("golden", b.createModule(.{
-        .root_source_file = b.path("tests/helpers/golden.zig"),
-        .target = target,
-        .optimize = optimize,
-    }));
+    emit_build_fn_tests_mod.addImport("golden", golden_mod);
     const emit_build_fn_tests = b.addTest(.{
         .root_module = emit_build_fn_tests_mod,
     });
@@ -431,11 +409,7 @@ pub fn build(b: *std.Build) void {
     emit_metadata_tests_mod.addImport("emit_file_info", emit_file_info_mod);
     emit_metadata_tests_mod.addImport("emit_file_info_format", emit_file_info_format_mod);
     emit_metadata_tests_mod.addImport("emit_debug_paths", emit_debug_paths_mod);
-    emit_metadata_tests_mod.addImport("golden", b.createModule(.{
-        .root_source_file = b.path("tests/helpers/golden.zig"),
-        .target = target,
-        .optimize = optimize,
-    }));
+    emit_metadata_tests_mod.addImport("golden", golden_mod);
     const emit_metadata_tests = b.addTest(.{
         .root_module = emit_metadata_tests_mod,
     });
@@ -454,11 +428,7 @@ pub fn build(b: *std.Build) void {
     emit_full_tests_mod.addImport("validator_run", validator_run_mod);
     emit_full_tests_mod.addImport("diagnostics", validator_diagnostics_mod);
     emit_full_tests_mod.addImport("emit_main", emit_main_mod);
-    emit_full_tests_mod.addImport("golden", b.createModule(.{
-        .root_source_file = b.path("tests/helpers/golden.zig"),
-        .target = target,
-        .optimize = optimize,
-    }));
+    emit_full_tests_mod.addImport("golden", golden_mod);
     const emit_full_tests = b.addTest(.{
         .root_module = emit_full_tests_mod,
     });
@@ -821,11 +791,7 @@ pub fn build(b: *std.Build) void {
     validator_codes_snapshot_tests_mod.addImport("scan_imports", resolver_scan_imports_mod);
     validator_codes_snapshot_tests_mod.addImport("import_cycle", resolver_import_cycle_mod);
     validator_codes_snapshot_tests_mod.addImport("resolve_bodies", resolver_resolve_bodies_mod);
-    validator_codes_snapshot_tests_mod.addImport("golden", b.createModule(.{
-        .root_source_file = b.path("tests/helpers/golden.zig"),
-        .target = target,
-        .optimize = optimize,
-    }));
+    validator_codes_snapshot_tests_mod.addImport("golden", golden_mod);
     const validator_codes_snapshot_tests = b.addTest(.{
         .root_module = validator_codes_snapshot_tests_mod,
     });
@@ -876,11 +842,7 @@ pub fn build(b: *std.Build) void {
     emit_project_tests_mod.addImport("validator_run_project", validator_run_project_mod);
     emit_project_tests_mod.addImport("diagnostics", validator_diagnostics_mod);
     emit_project_tests_mod.addImport("emit_main", emit_main_mod);
-    emit_project_tests_mod.addImport("golden", b.createModule(.{
-        .root_source_file = b.path("tests/helpers/golden.zig"),
-        .target = target,
-        .optimize = optimize,
-    }));
+    emit_project_tests_mod.addImport("golden", golden_mod);
     const emit_project_tests = b.addTest(.{
         .root_module = emit_project_tests_mod,
     });
