@@ -12,7 +12,27 @@ This walkthrough takes you from a fresh checkout to a working compiled circuit y
 zig build circ-compile
 ```
 
-The binary lands at `zig-out/bin/circ-compile`. Verify it works by compiling a fixture from the test suite:
+The binary lands at `zig-out/bin/circ-compile`.
+
+### Faster rebuilds (prebuilt `libinprocess`)
+
+The first `zig build circ-compile` compiles a large vendored Zig compiler slice. To **skip recompiling** that slice on later builds, build the static archive once and enable the prebuilt link path:
+
+```sh
+bash tools/build-inprocess-lib.sh
+zig build circ-compile -Dcirc-prebuilt-inprocess=true
+```
+
+`tools/build-inprocess-lib.sh` runs `zig build inprocess-lib` and copies `libinprocess.a` to `prebuilt/` (ignored by git). Pass the same optimize mode to both steps, for example:
+
+```sh
+bash tools/build-inprocess-lib.sh -Doptimize=ReleaseFast
+zig build circ-compile -Doptimize=ReleaseFast -Dcirc-prebuilt-inprocess=true
+```
+
+If `-Dcirc-prebuilt-inprocess=true` is set but `prebuilt/libinprocess.a` is missing, the build fails at configure time with a short hint. See `DOCS/PLANS_PROMPT.md` for the initiative context.
+
+Verify it works by compiling a fixture from the test suite:
 
 ```sh
 zig-out/bin/circ-compile tests/fixtures/circuits/inverter.circ --inspect | head -8

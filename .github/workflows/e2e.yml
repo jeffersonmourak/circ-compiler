@@ -32,6 +32,14 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # Cache prebuilt/libinprocess.a so PR CI skips recompiling the vendored compiler on hits.
+      # Key inputs: Zig version, FFI root, vendor MANIFEST, build files (see DOCS/PLANS/PHASE_3_tooling_ci.md).
+      - uses: actions/cache@v4
+        id: inprocess-prebuilt
+        with:
+          path: prebuilt/libinprocess.a
+          key: inprocess-lib-${{ matrix.platform }}-${{ env.ZIG_VERSION }}-${{ hashFiles('lib/orchestrator/inprocess_ffi.zig', 'vendor/zig-compiler/MANIFEST', 'build.zig', 'build.zig.zon') }}
+
       - name: Install Zig ${{ env.ZIG_VERSION }}
         shell: bash
         run: |
@@ -41,8 +49,13 @@ jobs:
           tar -xf zig.tar.xz
           echo "${PWD}/${pkg}" >> "${GITHUB_PATH}"
 
+      - name: Build libinprocess (cache miss)
+        if: steps.inprocess-prebuilt.outputs.cache-hit != 'true'
+        shell: bash
+        run: bash tools/build-inprocess-lib.sh -Doptimize=ReleaseFast
+
       - name: Build circ-compile
-        run: zig build -Doptimize=ReleaseFast circ-compile -j$(nproc 2>/dev/null || sysctl -n hw.ncpu) --verbose --summary all
+        run: zig build -Doptimize=ReleaseFast -Dcirc-prebuilt-inprocess=true circ-compile -j$(nproc 2>/dev/null || sysctl -n hw.ncpu) --verbose --summary all
 
       - name: Clear Zig cache
         shell: bash

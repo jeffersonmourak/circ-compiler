@@ -12,6 +12,7 @@ This initiative introduces a **split compile**: a **static library** (`libinproc
 
 ## Tech Stack
 
+- **Contributor quick path (fast `circ-compile` rebuilds):** `bash tools/build-inprocess-lib.sh` then `zig build circ-compile -Dcirc-prebuilt-inprocess=true` — details in `DOCS/getting-started.md` (“Faster rebuilds”).
 - **Language:** Zig 0.15.1 (pinned; must match vendored compiler slice and the toolchain used to build `libinprocess`).
 - **Build:** Root `build.zig` / `build.zig.zon`; nested or sibling `zig build inprocess-lib` (exact step name as implemented in Phase 0).
 - **Vendored compiler:** `vendor/zig-compiler` (unchanged semantics; only **where** it is compiled moves for the fast path).

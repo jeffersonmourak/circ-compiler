@@ -41,3 +41,11 @@ Append-only entries for plan-driven work (`DOCS/PLANS_PROMPT.md`). Newest at the
 **Tests:** `zig build test` (default), pass; `zig build circ-compile -Dcirc-prebuilt-inprocess=true --summary all` with prebuilt present, pass (link line includes `prebuilt/libinprocess.a`, no vendored `zig_compiler` module); `zig build test -Dcirc-prebuilt-inprocess=true`, pass
 **Next slice:** Phase 3 — `tools/build-inprocess-lib.sh`, CI cache, contributor docs (`DOCS/PLANS/PHASE_3_tooling_ci.md`).
 **Notes:** Fast path requires copying `zig-out/lib/libinprocess.a` (or other `-p`) to `prebuilt/libinprocess.a` after `zig build inprocess-lib`. Sandbox builds can hit `PermissionDenied` on Zig global cache when linking the exe; run the same command with full permissions if needed.
+
+## 2026-05-04 — Phase 3 — Tooling + CI + docs
+
+**What shipped:** Added executable `tools/build-inprocess-lib.sh` (tmp prefix + `zig build inprocess-lib` + copy to `prebuilt/libinprocess.a`, forwards extra args). Documented fast path in `DOCS/getting-started.md` and one-line pointer in `DOCS/PLANS_PROMPT.md`. `.github/workflows/e2e.yml`: `actions/cache` on `prebuilt/libinprocess.a` with key including platform, Zig version, `inprocess_ffi.zig`, `MANIFEST`, `build.zig`/`build.zig.zon`; cache-miss step runs the script; `circ-compile` uses `-Dcirc-prebuilt-inprocess=true`. `tests/e2e/linux-docker/run.sh` uses the script + fast path for the host-built Linux ELF.
+**Files touched:** `tools/build-inprocess-lib.sh`, `DOCS/getting-started.md`, `DOCS/PLANS_PROMPT.md`, `DOCS/STATUS.md`, `.github/workflows/e2e.yml`, `tests/e2e/linux-docker/run.sh`
+**Tests:** `bash tools/build-inprocess-lib.sh`, pass; `zig build test` (default), pass
+**Next slice:** Planned phases 0–3 complete; optional: `cli-tag.yml` prebuilt matrix or Windows.
+**Notes:** `cli-tag.yml` unchanged (cross-target release builds still full compile). Cold E2E cache miss pays one `inprocess-lib` build before fast `circ-compile`.

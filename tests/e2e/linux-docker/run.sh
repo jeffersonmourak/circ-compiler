@@ -17,8 +17,9 @@ if ! command -v zig >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "==> Host: zig build Linux circ-compile release"
-zig build -Doptimize=ReleaseFast "-Dtarget=x86_64-linux-gnu" circ-compile -j$(sysctl -n hw.ncpu)
+echo "==> Host: prebuilt libinprocess + Linux circ-compile release (fast path)"
+bash tools/build-inprocess-lib.sh -Doptimize=ReleaseFast "-Dtarget=x86_64-linux-gnu"
+zig build -Doptimize=ReleaseFast "-Dtarget=x86_64-linux-gnu" -Dcirc-prebuilt-inprocess=true circ-compile -j"$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
 
 if [[ ! -x zig-out/bin/circ-compile ]]; then
   echo "e2e: expected executable zig-out/bin/circ-compile" >&2
