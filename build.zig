@@ -883,6 +883,26 @@ pub fn build(b: *std.Build) void {
     const run_topology_format_tests = b.addRunArtifact(topology_format_tests);
     test_step.dependOn(&run_topology_format_tests.step);
 
+    const topology_interpreter_tests_mod = b.createModule(.{
+        .root_source_file = b.path("templates/interpreter.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    topology_interpreter_tests_mod.addImport("format", topology_format_tests_mod);
+    
+    const circuit_mod = b.createModule(.{
+        .root_source_file = b.path("lib/circuit.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    
+    topology_interpreter_tests_mod.addImport("circuit.zig", circuit_mod);
+    const topology_interpreter_tests = b.addTest(.{
+        .root_module = topology_interpreter_tests_mod,
+    });
+    const run_topology_interpreter_tests = b.addRunArtifact(topology_interpreter_tests);
+    test_step.dependOn(&run_topology_interpreter_tests.step);
+
     const e2e_linux_docker_step = b.step(
         "e2e-linux-docker",
         "Linux Docker E2E: host-built ELF, inspect / emit-zig / wasm / Node (requires Docker)",
