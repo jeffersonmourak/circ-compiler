@@ -2,10 +2,39 @@ const std = @import("std");
 
 const GRAMMAR_FILE = "lib/grammar/proto-circ.peg";
 
+/// `zig_lib_dir` + wasm32 `compiler_rt` options for `inprocess.zig` / `inprocess_stub.zig`.
+fn addInprocessWasmBuildOptions(b: *std.Build, mod: *std.Build.Module) void {
+    const build_wasm_compiler_rt = b.addSystemCommand(&.{
+        b.graph.zig_exe,
+        "build-lib",
+        "-target",
+        "wasm32-freestanding",
+        "-O",
+        "Debug",
+        "-fno-compiler-rt",
+        b.fmt("{s}/compiler_rt.zig", .{b.graph.zig_lib_directory.path orelse @panic("zig_lib_directory.path is null")}),
+    });
+    const wasm_compiler_rt_lazy = build_wasm_compiler_rt.addPrefixedOutputFileArg("-femit-bin=", "libcompiler_rt.a");
+    const inprocess_build_options = b.addOptions();
+    inprocess_build_options.addOption(
+        []const u8,
+        "zig_lib_dir",
+        b.graph.zig_lib_directory.path orelse @panic("zig_lib_directory.path is null"),
+    );
+    inprocess_build_options.addOptionPath("wasm_compiler_rt", wasm_compiler_rt_lazy);
+    mod.addOptions("build_options", inprocess_build_options);
+}
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
 
     const optimize = b.standardOptimizeOption(.{});
+
+    const use_inprocess_stub = b.option(
+        bool,
+        "orchestrator-inprocess-stub",
+        "Use FFI stub + libinprocess.a (no zig_compiler in circ-compile / orchestrator graph)",
+    ) orelse false;
 
     const golden_mod = b.createModule(.{
         .root_source_file = b.path("tests/helpers/golden.zig"),
@@ -552,32 +581,18 @@ pub fn build(b: *std.Build) void {
     });
     const run_orchestrator_finalize_tests = b.addRunArtifact(orchestrator_finalize_tests);
     const inprocess_mod = b.createModule(.{
-        .root_source_file = b.path("lib/orchestrator/inprocess.zig"),
+        .root_source_file = if (use_inprocess_stub)
+            b.path("lib/orchestrator/inprocess_stub.zig")
+        else
+            b.path("lib/orchestrator/inprocess.zig"),
         .target = target,
         .optimize = optimize,
     });
-    if (maybe_zig_compiler_dep) |zig_compiler_dep| {
+    if (use_inprocess_stub) {
+        addInprocessWasmBuildOptions(b, inprocess_mod);
+    } else if (maybe_zig_compiler_dep) |zig_compiler_dep| {
         inprocess_mod.addImport("zig_compiler", zig_compiler_dep.module("zig_compiler"));
-        // Pre-build wasm32 compiler_rt using the system Zig (which has LLVM).
-        // The Zig WASM backend cannot build compiler_rt in-process due to circular
-        // intrinsic dependencies (__multi3 needs __lshrti3 etc.); LLVM resolves them.
-        const build_wasm_compiler_rt = b.addSystemCommand(&.{
-            b.graph.zig_exe,
-            "build-lib",
-            "-target", "wasm32-freestanding",
-            "-O", "Debug",
-            "-fno-compiler-rt",
-            b.fmt("{s}/compiler_rt.zig", .{b.graph.zig_lib_directory.path orelse @panic("zig_lib_directory.path is null")}),
-        });
-        const wasm_compiler_rt_lazy = build_wasm_compiler_rt.addPrefixedOutputFileArg("-femit-bin=", "libcompiler_rt.a");
-        const inprocess_build_options = b.addOptions();
-        inprocess_build_options.addOption(
-            []const u8,
-            "zig_lib_dir",
-            b.graph.zig_lib_directory.path orelse @panic("zig_lib_directory.path is null"),
-        );
-        inprocess_build_options.addOptionPath("wasm_compiler_rt", wasm_compiler_rt_lazy);
-        inprocess_mod.addOptions("build_options", inprocess_build_options);
+        addInprocessWasmBuildOptions(b, inprocess_mod);
     }
     const inprocess_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/orchestrator/inprocess_test.zig"),
@@ -589,6 +604,7 @@ pub fn build(b: *std.Build) void {
     const inprocess_tests = b.addTest(.{
         .root_module = inprocess_tests_mod,
     });
+    if (use_inprocess_stub) inprocess_tests.linkLibrary(inprocess_static_lib);
     const run_inprocess_tests = b.addRunArtifact(inprocess_tests);
     const orchestrator_main_mod = b.createModule(.{
         .root_source_file = b.path("lib/orchestrator/main.zig"),
@@ -617,7 +633,36 @@ pub fn build(b: *std.Build) void {
     orchestrator_main_tests.addIncludePath(b.path("./lib"));
     orchestrator_main_tests.linkLibrary(parser_lib);
     orchestrator_main_tests.linkLibC();
+    if (use_inprocess_stub) orchestrator_main_tests.linkLibrary(inprocess_static_lib);
     const run_orchestrator_main_tests = b.addRunArtifact(orchestrator_main_tests);
+
+    // Phase 1: always-runnable link smoke (separate module graph so default builds stay on slow path).
+    const stub_smoke_inprocess_mod = b.createModule(.{
+        .root_source_file = b.path("lib/orchestrator/inprocess_stub.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    addInprocessWasmBuildOptions(b, stub_smoke_inprocess_mod);
+    const stub_link_smoke_root = b.createModule(.{
+        .root_source_file = b.path("tests/orchestrator/stub_link_smoke_main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    stub_link_smoke_root.addImport("orchestrator_workspace", orchestrator_workspace_mod);
+    stub_link_smoke_root.addImport("orchestrator_inprocess", stub_smoke_inprocess_mod);
+    const stub_link_smoke_exe = b.addExecutable(.{
+        .name = "stub-link-smoke",
+        .root_module = stub_link_smoke_root,
+    });
+    stub_link_smoke_exe.linkLibrary(inprocess_static_lib);
+    stub_link_smoke_exe.linkLibC();
+    const run_stub_link_smoke = b.addRunArtifact(stub_link_smoke_exe);
+    const stub_link_smoke_step = b.step(
+        "stub-link-smoke",
+        "FFI stub + libinprocess: compile minimal workspace to wasm (link proof)",
+    );
+    stub_link_smoke_step.dependOn(&run_stub_link_smoke.step);
+
     const cli_args_mod = b.createModule(.{
         .root_source_file = b.path("lib/cli/args.zig"),
         .target = target,
@@ -775,8 +820,10 @@ pub fn build(b: *std.Build) void {
     circ_compile_mod.addImport("import_cycle", resolver_import_cycle_mod);
     circ_compile_mod.addImport("resolve_bodies", resolver_resolve_bodies_mod);
     circ_compile_mod.addImport("ir_types", ir_types_mod);
-    if (maybe_zig_compiler_dep) |zig_compiler_dep| {
-        circ_compile_mod.addImport("zig_compiler", zig_compiler_dep.module("zig_compiler"));
+    if (!use_inprocess_stub) {
+        if (maybe_zig_compiler_dep) |zig_compiler_dep| {
+            circ_compile_mod.addImport("zig_compiler", zig_compiler_dep.module("zig_compiler"));
+        }
     }
     const circ_compile_exe = b.addExecutable(.{
         .name = "circ-compile",
@@ -786,7 +833,8 @@ pub fn build(b: *std.Build) void {
     circ_compile_exe.addIncludePath(b.path("./lib"));
     circ_compile_exe.linkLibrary(parser_lib);
     circ_compile_exe.linkLibC();
-    if (maybe_zig_compiler_dep != null) b.installArtifact(circ_compile_exe);
+    if (use_inprocess_stub) circ_compile_exe.linkLibrary(inprocess_static_lib);
+    if (maybe_zig_compiler_dep != null or use_inprocess_stub) b.installArtifact(circ_compile_exe);
     const circ_compile_step = b.step("circ-compile", "Build circ-compile CLI");
     circ_compile_step.dependOn(b.getInstallStep());
     const validator_project_passes_tests_mod = b.createModule(.{
@@ -849,12 +897,12 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_orchestrator_workspace_tests.step);
     test_step.dependOn(&run_orchestrator_subprocess_tests.step);
     test_step.dependOn(&run_orchestrator_finalize_tests.step);
-    if (maybe_zig_compiler_dep != null) {
+    if (maybe_zig_compiler_dep != null or use_inprocess_stub) {
         test_step.dependOn(&run_inprocess_tests.step);
         test_step.dependOn(&run_orchestrator_main_tests.step);
     }
     test_step.dependOn(&run_cli_args_tests.step);
-    if (maybe_zig_compiler_dep != null) test_step.dependOn(&circ_compile_exe.step);
+    if (maybe_zig_compiler_dep != null or use_inprocess_stub) test_step.dependOn(&circ_compile_exe.step);
     test_step.dependOn(&run_cli_integration_tests.step);
     test_step.dependOn(&run_resolver_scan_imports_tests.step);
     test_step.dependOn(&run_resolver_import_cycle_tests.step);

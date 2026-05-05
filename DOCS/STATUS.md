@@ -25,3 +25,11 @@ Append-only entries for plan-driven work (`DOCS/PLANS_PROMPT.md`). Newest at the
 **Tests:** `nm …/lib/libinprocess.a | grep circ_inprocess` after install, saw `T _circ_inprocess_compile`; ran `zig build test`, result pass
 **Next slice:** Phase 1 slice 1 — `inprocess_stub.zig` + link proof (`DOCS/PLANS/PHASE_1_stub_link.md`).
 **Notes:** Phase 0 plan slices 1–3 complete from a spec perspective; optional `getting-started.md` pointer deferred to Phase 3 tooling.
+
+## 2026-05-04 — Phase 1 — Stub + link + orchestrator wiring
+
+**What shipped:** Added `lib/orchestrator/inprocess_stub.zig` (`compile` → `circ_inprocess_compile`), refactored wasm `compiler_rt` + `build_options` into `addInprocessWasmBuildOptions`, `-Dorchestrator-inprocess-stub` switches `inprocess_mod` root to the stub and links `inprocess_static_lib` into `circ-compile` / orchestrator tests; `circ_compile` skips `zig_compiler` import in stub mode. Added `tests/orchestrator/stub_link_smoke_main.zig` and `zig build stub-link-smoke` (always uses stub + fat lib, independent of `-D`). `lib/orchestrator/main.zig` unchanged — indirection is **module root swap** in `build.zig` only.
+**Files touched:** `build.zig`, `lib/orchestrator/inprocess_stub.zig`, `tests/orchestrator/stub_link_smoke_main.zig`
+**Tests:** ran `zig build test` (default), pass; `zig build stub-link-smoke`, pass; `zig build test -Dorchestrator-inprocess-stub=true`, pass
+**Next slice:** Phase 2 — fast path / `prebuilt/` detection (`DOCS/PLANS/PHASE_2_fast_path.md`).
+**Notes:** Stub mode still compiles `libinprocess` via the existing `inprocess_static_lib` step in the graph (same artifact as `zig build inprocess-lib`); Phase 2 can prefer a path-only prebuilt when present.
