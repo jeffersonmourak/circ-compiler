@@ -43,7 +43,7 @@ pub fn build(b: *std.Build) void {
     aro_translate_c_mod.addImport("aro", aro_mod);
 
     // Build options expected by the embedded Zig 0.15.1 compiler source.
-    // Mirrors spike/build.zig exactly; see DOCS/STATUS.md Phase 0 findings for rationale.
+    // Mirrors spike/build.zig exactly; see DOCS/archive/plan-zig-embed.md (Phase 0) for rationale.
     const zig_options = b.addOptions();
     zig_options.addOption(u32, "mem_leak_frames", 0);
     zig_options.addOption(bool, "skip_non_native", false);
