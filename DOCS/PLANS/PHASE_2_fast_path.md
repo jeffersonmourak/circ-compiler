@@ -1,5 +1,7 @@
 # Phase 2 — Fast path in root build
 
+> **Superseded (2026-05):** Prebuilt `libinprocess` / lazy `zig_compiler` graph is gone. **Archival** spec only; see `DOCS/decisions/compiler-pipeline.md`.
+
 > **Dependencies:** Phase 0 (`inprocess-lib`), Phase 1 (stub + link proof). `build.zig` already uses `b.lazyDependency("zig_compiler", …)` in the current tree — this phase **refines** when that lazy dep activates vs when the stub + prebuilt archive path is used.
 > **Warnings:** Changing lazy dependency behavior affects **install**, `circ-compile` step, and `test` step dependencies (`grep maybe_zig_compiler_dep build.zig`). Review all conditional blocks.
 

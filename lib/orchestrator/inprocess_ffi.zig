@@ -4,11 +4,11 @@ const zc = @import("zig_compiler");
 /// C-ABI entry point compiled into `libinprocess.a`.
 ///
 /// `workspace_path`: prepared compilation workspace (relative paths resolved against CWD).
-/// `zig_lib_dir`: Zig standard library directory (same string as `build_options.zig_lib_dir` on the Zig path).
+/// `zig_lib_dir`: Zig standard library directory (same string as `zig env`'s `lib_dir`).
 /// `compiler_rt`: path to the wasm32 `compiler_rt` static archive from the host `zig build-lib` step.
 ///
 /// Returns 0 on success, -1 on failure (diagnostics rendered to stderr). Uses `c_allocator` internally because
-/// the export has no Zig `Allocator` parameter; keep in sync with `inprocess.zig` compilation logic otherwise.
+/// the export has no Zig `Allocator` parameter; keep in sync with in-process compilation logic otherwise.
 export fn circ_inprocess_compile(
     workspace_path_z: [*:0]const u8,
     zig_lib_dir_z: [*:0]const u8,
@@ -61,9 +61,9 @@ fn compileImpl(workspace_path: []const u8, zig_lib_dir: []const u8, compiler_rt:
     const target_query = std.zig.parseTargetQueryOrReportFatalError(arena, .{
         .arch_os_abi = "wasm32-freestanding",
     });
-    const target = std.zig.resolveTargetQueryOrFatal(target_query);
+    const comp_target = std.zig.resolveTargetQueryOrFatal(target_query);
     const resolved_target: zc.Package.Module.ResolvedTarget = .{
-        .result = target,
+        .result = comp_target,
         .is_native_os = target_query.isNativeOs(),
         .is_native_abi = target_query.isNativeAbi(),
         .is_explicit_dynamic_linker = false,
@@ -126,7 +126,6 @@ fn compileImpl(workspace_path: []const u8, zig_lib_dir: []const u8, compiler_rt:
         .entry = .disabled,
         .link_inputs = link_inputs,
         .want_compiler_rt = false,
-        // Match `inprocess.zig`: WASM imports for host/debug hooks stay unresolved at link time.
         .linker_import_symbols = true,
     }) catch |err| {
         std.debug.print("Compilation.create failed ({s}): see above for details\n", .{@errorName(err)});

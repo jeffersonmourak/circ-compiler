@@ -1,4 +1,8 @@
-name: E2E — no Zig in PATH
+# Default circuit compile path: orchestrator runs `zig build wasm` as a subprocess,
+# so `zig` must stay on PATH for the "Run end-to-end compilation" step.
+# (Older CI built prebuilt libinprocess + stripped PATH; that only applied to the
+# embedded/stub graph — see DOCS/decisions/compiler-pipeline.md.)
+name: E2E — circ-compile + wasm
 
 on:
   push:
@@ -32,14 +36,6 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # Cache prebuilt/libinprocess.a so PR CI skips recompiling the vendored compiler on hits.
-      # Key inputs: Zig version, FFI root, vendor MANIFEST, build files (see DOCS/PLANS/PHASE_3_tooling_ci.md).
-      - uses: actions/cache@v4
-        id: inprocess-prebuilt
-        with:
-          path: prebuilt/libinprocess.a
-          key: inprocess-lib-${{ matrix.platform }}-${{ env.ZIG_VERSION }}-${{ hashFiles('lib/orchestrator/inprocess_ffi.zig', 'vendor/zig-compiler/MANIFEST', 'build.zig', 'build.zig.zon') }}
-
       - name: Install Zig ${{ env.ZIG_VERSION }}
         shell: bash
         run: |
@@ -49,43 +45,8 @@ jobs:
           tar -xf zig.tar.xz
           echo "${PWD}/${pkg}" >> "${GITHUB_PATH}"
 
-      - name: Build libinprocess (cache miss)
-        if: steps.inprocess-prebuilt.outputs.cache-hit != 'true'
-        shell: bash
-        run: bash tools/build-inprocess-lib.sh -Doptimize=ReleaseFast
-
       - name: Build circ-compile
-        run: zig build -Doptimize=ReleaseFast -Dcirc-prebuilt-inprocess=true circ-compile -j$(nproc 2>/dev/null || sysctl -n hw.ncpu) --verbose --summary all
-
-      - name: Clear Zig cache
-        shell: bash
-        # cache_mode = .none in inprocess.zig means the in-process compiler
-        # should not consult the Zig cache at all, but clear it explicitly to
-        # make that claim verifiable rather than implicit.
-        run: rm -rf ~/.cache/zig
-
-      - name: Strip Zig from PATH
-        shell: bash
-        run: |
-          set -euo pipefail
-          new_path=""
-          IFS=':' read -ra path_dirs <<< "$PATH"
-          for dir in "${path_dirs[@]}"; do
-            [ -n "$dir" ] && [ -x "${dir}/zig" ] && continue
-            new_path="${new_path:+${new_path}:}${dir}"
-          done
-          hash -r 2>/dev/null || true
-          export PATH="$new_path"
-          echo "PATH=$new_path" >> "${GITHUB_ENV}"
-
-      - name: Confirm Zig is absent
-        shell: bash
-        run: |
-          if command -v zig &>/dev/null; then
-            echo "::error::zig is still reachable in PATH after strip"
-            exit 1
-          fi
-          echo "OK: zig not found in PATH"
+        run: zig build -Doptimize=ReleaseFast circ-compile -j$(nproc 2>/dev/null || sysctl -n hw.ncpu) --verbose --summary all
 
       - name: Run end-to-end compilation
         shell: bash

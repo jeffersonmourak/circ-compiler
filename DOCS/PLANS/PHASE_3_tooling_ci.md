@@ -1,5 +1,7 @@
 # Phase 3 — Tooling, gitignore, CI
 
+> **Superseded (2026-05):** CI and contributors use the installed **`zig`** on PATH, not `build-inprocess-lib` or prebuilt archives. **Archival** spec only; see `DOCS/decisions/compiler-pipeline.md` and `.github/workflows/e2e.yml`.
+
 > **Dependencies:** Phase 2 — fast path in root build (`DOCS/PLANS/PHASE_2_fast_path.md`) complete and verified locally.
 > **Warnings:** Do **not** commit `*.a` binaries. `.gitignore` + PR review discipline. Cache keys must include Zig version + relevant source hashes (`DOCS/PLANS_PROMPT.md` recurring traps).
 

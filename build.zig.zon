@@ -2,10 +2,6 @@
     .name = .circ_renderer_z,
     .version = "0.0.0",
     .fingerprint = 0x9bbc06004e9bd75a,
-    .dependencies = .{
-        .zig_compiler = .{
-            .path = "vendor/zig-compiler",
-        },
-    },
+    .dependencies = .{},
     .paths = .{""},
 }

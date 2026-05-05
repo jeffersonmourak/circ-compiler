@@ -1,5 +1,7 @@
 # Phase 1 — Stub + link
 
+> **Superseded (2026-05):** Stub / FFI link path was removed with the subprocess migration. See `DOCS/decisions/compiler-pipeline.md`. **Archival** spec only.
+
 > **Dependencies:** Phase 0 — `inprocess-lib` build (`DOCS/PLANS/PHASE_0_inprocess_lib.md`) complete: `zig build inprocess-lib` produces `libinprocess.a` (or documented equivalent).
 > **Warnings:** `std.fs.selfExePath` and allocator behavior must match production expectations when the stub is linked into the real `circ-compile` binary (see `DOCS/PLANS_PROMPT.md` recurring traps).
 

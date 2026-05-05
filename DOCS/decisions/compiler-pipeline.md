@@ -8,15 +8,15 @@
 
 **Alternatives.** A circuit-as-data-blob loaded by the existing `circ-renderer-lib.wasm`. Smaller per-circuit footprint and lets the engine evolve independently, but creates a coupling that v0 doesn't need. Revisit if many-circuit pages become a real workload.
 
-### Pipeline shape: parse → IR Zig file → in-process Compilation.create() → wasm
+### Pipeline shape: parse → IR Zig file → `zig build wasm` (subprocess) → wasm
 
-**Decision.** Compilation runs as `.circ source → langlang parse tree → emitted Zig IR file → in-process `Compilation.create()` / `comp.update()` → .wasm`. The Zig 0.15.x self-hosted compiler is vendored into `vendor/zig-compiler/` and linked directly into the `circ-compile` binary. No `zig` binary is required at circuit-compile time.
+**Decision.** Compilation runs as `.circ` source → langlang parse tree → emitted Zig IR file → **`zig build wasm`** run as a **subprocess** inside the workspace directory that `circ-compile` materializes on disk (template `build.zig` + `src/main.zig` + runtime sources). The **`zig` executable must be on `PATH`** whenever the CLI compiles to `.wasm` (default compile mode). The `circ-compile` binary does **not** embed or vendor the Zig compiler source tree.
 
-**Rationale.** Emitting Zig source as the IR reuses everything the Zig compiler already does — type checking, optimisation, WASM lowering, debug info. Calling the compiler in-process (rather than via a subprocess) eliminates `zig` as a runtime dependency: the resulting binary is self-contained and ships without a Zig installation requirement. Phase 0 confirmed that the self-hosted WASM backend calls `Compilation.create()` with zero LLVM C/C++ library symbols in the final binary (`nm` check, `have_llvm = false`, `use_llvm = false`), making in-process embedding tractable.
+**Rationale.** Emitting Zig source as the IR reuses the installed Zig toolchain for type checking, optimisation, and WASM lowering. Subprocess integration is simple, stable across Zig minor releases for the user-facing `zig build` contract, and keeps the application repository free of a full compiler checkout. Release binaries stay small.
 
-**Accepted tradeoff.** The vendored compiler source is pinned to Zig 0.15.1 exactly. Upgrading the host toolchain requires re-vendoring the matching Zig source and re-auditing the `Compilation` API call sites — the internal compiler API is not stable across versions. This coupling is the price of zero-runtime-dependency distribution.
+**Accepted tradeoff.** End users who compile `.circ` to `.wasm` need a **compatible Zig** (same major.minor as the project targets, currently **0.15.x**) discoverable as `zig` on `PATH`. CI and Docker flows install Zig before invoking `circ-compile`.
 
-**Alternatives.** Direct WASM emission from the IR (skip Zig): faster, but requires hand-written WASM lowering for every primitive and a custom optimiser — rejected. Subprocess `zig build` (the previous decision): requires `zig` in PATH at circuit-compile time — replaced by this decision in Phase 2. Embedding rejected in an earlier revision of this document due to API instability; the self-hosted WASM backend (no LLVM required) and the explicit version-lock tradeoff make embedding acceptable now.
+**Alternatives.** In-process `Compilation.create()` with a vendored compiler slice: no `zig` on `PATH` at circuit-compile time, but required vendoring a large pinned source tree in-repo — **replaced by this decision (2026-05)** in favour of subprocess + no vendor. Direct WASM emission from the IR: rejected (too much custom lowering).
 
 ### IR shape: code-emitting Zig file
 
@@ -26,17 +26,25 @@
 
 **Alternatives.** A data-only IR (a const describing the graph, consumed by a generic builder at module init). Smaller emitted files but loses Zig's type checking on connections, and inlining is harder. Hybrid (data + builder) was considered but adds two layers without clear benefit over the function-per-file approach.
 
-### Zig compiler called in-process via vendored source
+### Orchestration: workspace + subprocess (default)
 
-**Decision.** The CLI calls `Compilation.create()` and `comp.update()` from the Zig 0.15.1 self-hosted compiler, vendored under `vendor/zig-compiler/` and linked into the `circ-compile` binary. The `lib/orchestrator/inprocess.zig` module owns this call. `zig build` is no longer invoked as a subprocess at circuit-compile time.
+**Decision.** `lib/orchestrator/main.zig` writes the embedded runtime template into a workspace directory, writes `src/compiled.zig`, then — **by default** — invokes `lib/orchestrator/subprocess.zig` to run `zig`, `build`, `wasm` with `cwd` set to that workspace. On non-zero exit, the CLI returns failure after subprocess stderr is printed. `lib/orchestrator/finalize.zig` copies `zig-out/bin/compiled.wasm` to the user’s `-o` path.
 
-**Rationale.** In-process compilation eliminates `zig` as a runtime PATH dependency. Error output is surfaced via `error_bundle.renderToStdErr()`, matching what users would see from `zig build`. The `--emit-zig` and `--inspect` CLI modes are unaffected — they bypass the compilation step entirely. The `--build-dir` flag behaviour (preserve on failure, clean on success unless specified) is preserved; the in-process path still writes intermediates to a workspace directory.
+**Optional in-process path.** With **`-Dorchestrator-use-inprocess=true`** and a wired **`zig_compiler`** graph (**`ZIG_COMPILER_SRC`** / stub + **`libinprocess`**, see build options), the orchestrator calls **`lib/orchestrator/inprocess.zig`** (or the FFI stub module) instead of the subprocess. Default remains subprocess so release **`circ-compile`** stays small and only requires **`zig`** on PATH.
 
-**Configuration.** The embedded compiler is configured with `have_llvm = false`, `use_llvm = false`, `use_lib_llvm = false`, `use_lld = false`, target `wasm32-freestanding`, `output_mode = .Exe`, `entry = .disabled`, `cache_mode = .none`, `dev = .full`, `enable_debug_extensions = true`. `std.Thread.Pool` must be initialized with `track_ids = true` (Zig compiler workers unwrap `id.?` unconditionally). `output_mode = .Obj` is not viable for `wasm32-freestanding` with a ZCU in Zig 0.15.1 — `.Exe` with `entry = .disabled` is the correct substitute for library-style `pub export fn` outputs.
+**Rationale.** Centralises PATH/`zig` discovery and error surfacing; matches what a developer would run manually inside the temp dir.
 
-**Alternatives.** Subprocess `zig build` (the previous decision): simpler integration but requires `zig` in PATH at circuit-compile time — replaced by this decision. Two-phase emit-only CLI requiring users to run `zig build` themselves: rejected — doesn't match the `circ-compile in.circ -o out.wasm` contract.
+**Prior decision note.** An earlier revision used in-process compilation with a vendored compiler under `vendor/zig-compiler/`. That approach is **superseded** by subprocess-by-default plus **external** ziglang checkout for optional embedding (`libinprocess`).
 
-**Prior decision note.** An earlier revision of this document listed "embedding Zig as a library" as rejected due to API instability. That rejection is superseded: the version-lock tradeoff is now explicitly accepted, and LLVM-free linkage was confirmed in Phase 0.
+### Optional FFI archive `libinprocess.a`
+
+**Decision.** The repository may still produce a **static library** exporting **`circ_inprocess_compile`** (`zig build inprocess-lib`) for experiments or downstream FFI callers. Building it requires:
+
+1. A **ziglang/zig source checkout** at the matching release (same minor as the toolchain, currently **0.15.x**), via **`ZIG_COMPILER_SRC`** or **`-Dzig-compiler-src=`**. The Zig **install** tarball includes **`lib/std`**, **`lib/compiler_rt`**, and **`lib/compiler/*` tooling**, but **does not** ship the self-hosted compiler’s **`src/`** tree (`Compilation.zig`, `Sema.zig`, …), so **`~/.asdf/.../lib/` alone cannot satisfy this link.**
+
+2. On first successful configure, **`build.zig`** copies **`lib/zig_compiler_exports/zig_compiler_exports.zig`** into **`$ZIG_COMPILER_SRC/src/circ_zig_compiler_exports.zig`** if that file is absent (small shim; safe to commit inside a fork or delete after builds).
+
+**Rationale.** Keeps the application repo free of a full compiler tree while still allowing a deliberate, reproducible path to the prior FFI artifact for advanced users.
 
 ### Vendored runtime template
 

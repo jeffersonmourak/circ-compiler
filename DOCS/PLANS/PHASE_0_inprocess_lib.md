@@ -1,5 +1,7 @@
 # Phase 0 — `inprocess-lib` build
 
+> **Superseded (2026-05):** This initiative is no longer implemented. The orchestrator runs **`zig build wasm` via subprocess**; see `DOCS/decisions/compiler-pipeline.md` and `DOCS/PLANS_PROMPT.md`. Treat the rest of this file as **archival** spec only.
+
 > **Dependencies:** None (first phase in the initiative).
 > **Warnings:** Read `DOCS/PLANS_PROMPT.md` and `DOCS/decisions/compiler-pipeline.md`. `lib/orchestrator/inprocess_ffi.zig` must compile cleanly as a **library** root (export + internal helpers). Same `zig_compiler` build options as the root build’s vendor path.
 

@@ -235,6 +235,13 @@ fn run() !u8 {
                 .build_dir = args.build_dir,
             }) catch |err| {
                 if (err == error.ZigBuildFailed) return 1;
+                if (err == error.ZigBinaryNotFound) {
+                    try stderr_writer.print(
+                        "compile failed: `zig` was not found on PATH (install Zig 0.15.x; required to run `zig build wasm` in the temp workspace)\n",
+                        .{},
+                    );
+                    return 1;
+                }
                 try stderr_writer.print("compile orchestration failed: {s}\n", .{@errorName(err)});
                 return 1;
             };

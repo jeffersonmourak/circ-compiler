@@ -2,6 +2,8 @@
 
 Append-only entries for plan-driven work (`DOCS/PLANS_PROMPT.md`). Newest at the bottom.
 
+**Current pipeline:** WASM is built with **`zig build wasm` in a subprocess** (no compiler sources in this repo). Optional **`zig build inprocess-lib`** produces **`libinprocess.a`** using a **separate ziglang/zig source checkout** plus the **installed Zig `lib/`** (see `zig env`). Entries from **Phase 0 through Phase 3** below are **historical** (superseded vendor/prebuilt initiative); the **Subprocess Zig** entry describes the default orchestrator path today.
+
 ## 2026-05-04 — Phase 0 — Static lib target (`inprocess-lib`)
 
 **What shipped:** Root `build.zig` defines a static `inprocess` library from `lib/orchestrator/inprocess_ffi.zig` with a non-lazy `zig_compiler` dependency; `zig build inprocess-lib` installs `libinprocess.a` under the build prefix (`zig-out/lib/` with default `-p`). Fixed `callconv(.C)` → `callconv(.c)` for Zig 0.15.1.
@@ -49,3 +51,27 @@ Append-only entries for plan-driven work (`DOCS/PLANS_PROMPT.md`). Newest at the
 **Tests:** `bash tools/build-inprocess-lib.sh`, pass; `zig build test` (default), pass
 **Next slice:** Planned phases 0–3 complete; optional: `cli-tag.yml` prebuilt matrix or Windows.
 **Notes:** `cli-tag.yml` unchanged (cross-target release builds still full compile). Cold E2E cache miss pays one `inprocess-lib` build before fast `circ-compile`.
+
+## 2026-05-04 — Subprocess Zig (remove vendor / in-process compiler)
+
+**What shipped:** Orchestrator runs `zig build wasm` in the workspace via `subprocess.zig` instead of in-process `Compilation`. Removed `vendor/zig-compiler`, `build.zig.zon` dependency, `inprocess*.zig`, FFI/stub/prebuilt build options, `tools/build-inprocess-lib.sh`, and related tests. `circ-compile` handles `error.ZigBinaryNotFound`. E2E workflow no longer strips `zig` from PATH (compile requires `zig`). Updated `DOCS/decisions/compiler-pipeline.md`, `DOCS/getting-started.md`, `DOCS/PLANS_PROMPT.md` (archived prior plan).
+**Files touched:** `lib/orchestrator/main.zig`, `build.zig`, `build.zig.zon`, `cmd/circ-compile/main.zig`, `.github/workflows/e2e.yml`, `tests/e2e/linux-docker/run.sh`, docs; deleted `vendor/zig-compiler/`, `lib/orchestrator/inprocess*.zig`, `tests/orchestrator/inprocess_test.zig`, `tests/orchestrator/stub_link_smoke_main.zig`, `tools/build-inprocess-lib.sh`
+**Tests:** ran `zig build test`, pass
+**Next slice:** None for this migration; re-pin `build.zig.zon` fingerprint if Zig prompts after dependency removal.
+**Notes:** Prebuilt `DOCS/PLANS/PHASE_*.md` describe obsolete workstreams. Release download text now assumes users have Zig 0.15.x on PATH for wasm compilation.
+
+## 2026-05-05 — libinprocess via ziglang checkout + installed lib dir
+
+**What shipped:** Restored **`zig build inprocess-lib`** with **`lib/orchestrator/inprocess_ffi.zig`** and **`lib/zig_compiler_exports/zig_compiler_exports.zig`**. Compiler modules resolve against **`ZIG_COMPILER_SRC`** / **`-Dzig-compiler-src`** (ziglang/zig tree matching 0.15.x); **`circ_zig_compiler_exports.zig`** is auto-copied into that checkout’s **`src/`** when missing. No **`vendor/zig-compiler`** or **`build.zig.zon`** dependency. Default **`circ-compile`** path unchanged (subprocess).
+**Files touched:** `build.zig`, `lib/orchestrator/inprocess_ffi.zig`, `lib/zig_compiler_exports/zig_compiler_exports.zig`, `DOCS/decisions/compiler-pipeline.md`, `DOCS/getting-started.md`, `DOCS/STATUS.md`
+**Tests:** ran `zig build test`, pass; `zig build inprocess-lib -Dzig-compiler-src=…` against ziglang/zig 0.15.1 checkout, pass; `nm` shows **`circ_inprocess_compile`**
+**Next slice:** None required for this slice.
+**Notes:** Zig’s install **`lib/`** (e.g. asdf `…/lib`) has **std / compiler_rt / tools** but **not** **`src/Compilation.zig`**; embedding still needs a source checkout.
+
+## 2026-05-05 — Restore pre-subprocess orchestrator wiring (external zig_compiler only)
+
+**What shipped:** Reapplied **`inprocess.zig`**, **`inprocess_stub.zig`**, **`inprocess_test`**, **`stub-link-smoke`**, **`linkInprocessForStub`**, **`addInprocessWasmBuildOptions`**, stub/prebuilt **`build.zig`** flags, and conditional **`zig_compiler`** **`circ-compile`** import — all using **`zig_compiler_embed_mod`** from **`ZIG_COMPILER_SRC`** (no **`lazyDependency`**). **`lib/orchestrator/main.zig`** reads **`orchestrator_build_options.use_subprocess_for_wasm`** (default subprocess; **`-Dorchestrator-use-inprocess`** opts into embedded path). Restored **`tools/build-inprocess-lib.sh`** as a thin **`zig build inprocess-lib`** wrapper.
+**Files touched:** `build.zig`, `lib/orchestrator/main.zig`, `lib/orchestrator/inprocess.zig`, `lib/orchestrator/inprocess_stub.zig`, `tests/orchestrator/inprocess_test.zig`, `tests/orchestrator/stub_link_smoke_main.zig`, `tools/build-inprocess-lib.sh`, `DOCS/decisions/compiler-pipeline.md`, `DOCS/STATUS.md`
+**Tests:** ran `zig build test`, pass (without **`ZIG_COMPILER_SRC`**; **`inprocess_test`** skipped unless stub/compiler graph enabled)
+**Next slice:** None.
+**Notes:** **`stub-link-smoke`** / **`inprocess-lib`** still require **`ZIG_COMPILER_SRC`** (or prebuilt archive for stub-only links).

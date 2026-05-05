@@ -4,9 +4,9 @@ This walkthrough takes you from a fresh checkout to a working compiled circuit y
 
 ## 1. Install and verify the CLI
 
-**Download a pre-built binary** from the [releases page](https://github.com/jeffersonmourak/circ-renderer-z/releases) (macOS arm64, Linux x86_64) and place it on your PATH. No Zig installation is required to use `circ-compile`.
+**Download a pre-built binary** from the [releases page](https://github.com/jeffersonmourak/circ-renderer-z/releases) (macOS arm64, Linux x86_64) and place it on your PATH. To **compile `.circ` files to `.wasm`**, that binary still needs the **`zig` command on `PATH`** (Zig **0.15.x**), because the CLI runs `zig build wasm` in a temporary workspace.
 
-**Or build from source** (requires [Zig](https://ziglang.org/) 0.15.x — only for building the CLI itself, not for compiling circuits):
+**Or build `circ-compile` from source** (requires [Zig](https://ziglang.org/) 0.15.x for both building the CLI and compiling circuits):
 
 ```sh
 zig build circ-compile
@@ -14,25 +14,28 @@ zig build circ-compile
 
 The binary lands at `zig-out/bin/circ-compile`.
 
-### Faster rebuilds (prebuilt `libinprocess`)
+### Optional: `libinprocess.a` (embedded Zig compiler, FFI)
 
-The first `zig build circ-compile` compiles a large vendored Zig compiler slice. To **skip recompiling** that slice on later builds, build the static archive once and enable the prebuilt link path:
+This is **not** required for **`circ-compile`** (which uses **`zig build wasm` in a subprocess**). To build the static archive that exports **`circ_inprocess_compile`**:
 
-```sh
-bash tools/build-inprocess-lib.sh
-zig build circ-compile -Dcirc-prebuilt-inprocess=true
-```
+1. Clone the Zig language repository at the **same minor version** as your toolchain (see **`zig version`**), for example:
 
-`tools/build-inprocess-lib.sh` runs `zig build inprocess-lib` and copies `libinprocess.a` to `prebuilt/` (ignored by git). Pass the same optimize mode to both steps, for example:
+   ```sh
+   git clone https://github.com/ziglang/zig --branch 0.15.1 --depth 1 ~/zig-src
+   ```
 
-```sh
-bash tools/build-inprocess-lib.sh -Doptimize=ReleaseFast
-zig build circ-compile -Doptimize=ReleaseFast -Dcirc-prebuilt-inprocess=true
-```
+2. Point the build at that checkout (either form works):
 
-If `-Dcirc-prebuilt-inprocess=true` is set but `prebuilt/libinprocess.a` is missing, the build fails at configure time with a short hint. See `DOCS/PLANS_PROMPT.md` for the initiative context.
+   ```sh
+   export ZIG_COMPILER_SRC=$HOME/zig-src
+   zig build inprocess-lib -p zig-out
+   ```
 
-Verify it works by compiling a fixture from the test suite:
+   or **`zig build inprocess-lib -Dzig-compiler-src=$HOME/zig-src -p zig-out`**.
+
+The artifact is **`zig-out/lib/libinprocess.a`** (platform naming may differ on Windows). The **installed Zig `lib/` directory** (`zig env` → **`lib_dir`**, e.g. `~/.asdf/installs/zig/0.15.1/lib`) supplies **std / compiler_rt** for wasm assists when **calling** the FFI from a linked binary; it does **not** replace the need for **`src/`** when **compiling** `libinprocess` itself.
+
+Verify it works by compiling a fixture from the test suite (with `zig` on `PATH`):
 
 ```sh
 zig-out/bin/circ-compile tests/fixtures/circuits/inverter.circ --inspect | head -8
@@ -72,7 +75,7 @@ This declares one input pin `a`, drives it through a `not` gate, mirrors the res
 zig-out/bin/circ-compile examples/inverter.circ -o examples/inverter.wasm
 ```
 
-The CLI runs the parser, validator, Zig source emitter, and in-process compiler end-to-end — no `zig` binary is required at circuit-compile time. On success it copies the resulting `.wasm` to the path given to `-o`. On failure it surfaces compiler errors and preserves the build directory for inspection.
+The CLI runs the parser, validator, Zig source emitter, then **`zig build wasm`** in the workspace end-to-end. On success it copies the resulting `.wasm` to the path given to `-o`. On failure it surfaces compiler errors and preserves the build directory for inspection.
 
 Inspect the compiled circuit's interface:
 
