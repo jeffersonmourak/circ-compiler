@@ -1,3 +1,4 @@
+e8cbde5be5e1ca91d6191b9e0450b4a07e6dba972000f8a6fc722a3b9dcbcc7c  vendor/zig-compiler/build.zig
 c42d36d5b8e36550ef724c4b12397a712edf529ed1b83f332de64c45d014f136  vendor/zig-compiler/lib/compiler/aro/README.md
 9bd55b69d8dbd99b12b2db54afd672a5e01a8988dac2a6aaeed400400c9adb0a  vendor/zig-compiler/lib/compiler/aro/aro.zig
 720aad80bad7f0f90d61583565818478ced3c89ac54f1da306bc7af774e7f53e  vendor/zig-compiler/lib/compiler/aro/aro/Attribute.zig
@@ -233,3 +234,4 @@ fa27f61079243cef431ff04ce300ce655aed21acfd960a181591643e523c24a3  vendor/zig-com
 49f294ca5e4c9cced134d0652c16d304baa494b0d566c85fc97a46523f9dba06  vendor/zig-compiler/src/target.zig
 d7370437d95f0e5cde5ac48860b86206847ff707247ac52cc26d20d498cc997a  vendor/zig-compiler/src/tracy.zig
 86d38ec4d2505fc28006e78f58864a2f6528fd12e8b916390f8c6c2925a0955e  vendor/zig-compiler/src/translate_c.zig
+6d9fd970ae5d24208bb9a73144aedb76fd1e5f1057d27be7a418f05b0c921b10  vendor/zig-compiler/version.zig
