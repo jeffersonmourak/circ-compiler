@@ -42,7 +42,7 @@ jobs:
           echo "${PWD}/${pkg}" >> "${GITHUB_PATH}"
 
       - name: Build circ-compile
-        run: zig build -Doptimize=ReleaseFast circ-compile
+        run: zig build -Doptimize=ReleaseFast circ-compile -j$(sysctl -n hw.ncpu)
 
       - name: Clear Zig cache
         shell: bash
@@ -56,6 +56,14 @@ jobs:
         run: |
           set -euo pipefail
           stripped=$(echo "$PATH" | tr ':' '\n' | grep -v zig | tr '\n' ':')
+          # Also evict any directory that contains a zig binary but has no
+          # 'zig' in its name (e.g. /opt/homebrew/bin on macOS runners).
+          export PATH="$stripped"
+          while zig_bin=$(command -v zig 2>/dev/null); do
+            zig_dir=$(dirname "$zig_bin")
+            stripped=$(printf '%s' "$stripped" | tr ':' '\n' | grep -v "^${zig_dir}$" | tr '\n' ':')
+            export PATH="$stripped"
+          done
           echo "PATH=${stripped}" >> "${GITHUB_ENV}"
 
       - name: Confirm Zig is absent

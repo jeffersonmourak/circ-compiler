@@ -18,7 +18,7 @@ if ! command -v zig >/dev/null 2>&1; then
 fi
 
 echo "==> Host: zig build Linux circ-compile release"
-zig build -Doptimize=ReleaseFast "-Dtarget=x86_64-linux-gnu" circ-compile
+zig build -Doptimize=ReleaseFast "-Dtarget=x86_64-linux-gnu" circ-compile -j$(sysctl -n hw.ncpu)
 
 if [[ ! -x zig-out/bin/circ-compile ]]; then
   echo "e2e: expected executable zig-out/bin/circ-compile" >&2
