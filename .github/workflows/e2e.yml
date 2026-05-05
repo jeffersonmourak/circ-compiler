@@ -42,7 +42,7 @@ jobs:
           echo "${PWD}/${pkg}" >> "${GITHUB_PATH}"
 
       - name: Build circ-compile
-        run: zig build -Doptimize=ReleaseFast circ-compile -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
+        run: zig build -Doptimize=ReleaseFast circ-compile -j$(nproc 2>/dev/null || sysctl -n hw.ncpu) --verbose --summary all
 
       - name: Clear Zig cache
         shell: bash
