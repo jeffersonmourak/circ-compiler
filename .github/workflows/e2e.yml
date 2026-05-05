@@ -2,7 +2,7 @@ name: E2E — no Zig in PATH
 
 on:
   push:
-    branches: ["**"]
+    branches: ["main"]
   pull_request:
 
 env:
@@ -42,7 +42,7 @@ jobs:
           echo "${PWD}/${pkg}" >> "${GITHUB_PATH}"
 
       - name: Build circ-compile
-        run: zig build -Doptimize=ReleaseFast circ-compile -j$(sysctl -n hw.ncpu)
+        run: zig build -Doptimize=ReleaseFast circ-compile -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
 
       - name: Clear Zig cache
         shell: bash
