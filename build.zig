@@ -555,6 +555,12 @@ pub fn build(b: *std.Build) void {
         .root_module = orchestrator_finalize_tests_mod,
     });
     const run_orchestrator_finalize_tests = b.addRunArtifact(orchestrator_finalize_tests);
+    const inprocess_mod = b.createModule(.{
+        .root_source_file = b.path("lib/orchestrator/inprocess.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    inprocess_mod.addImport("zig_compiler", zig_compiler_mod);
     const orchestrator_main_mod = b.createModule(.{
         .root_source_file = b.path("lib/orchestrator/main.zig"),
         .target = target,
@@ -563,6 +569,7 @@ pub fn build(b: *std.Build) void {
     orchestrator_main_mod.addImport("orchestrator_workspace", orchestrator_workspace_mod);
     orchestrator_main_mod.addImport("orchestrator_subprocess", orchestrator_subprocess_mod);
     orchestrator_main_mod.addImport("orchestrator_finalize", orchestrator_finalize_mod);
+    orchestrator_main_mod.addImport("orchestrator_inprocess", inprocess_mod);
     const orchestrator_main_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/orchestrator/main_test.zig"),
         .target = target,
