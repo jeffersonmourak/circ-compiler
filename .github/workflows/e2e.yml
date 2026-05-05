@@ -55,16 +55,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          stripped=$(echo "$PATH" | tr ':' '\n' | grep -v zig | tr '\n' ':')
-          # Also evict any directory that contains a zig binary but has no
-          # 'zig' in its name (e.g. /opt/homebrew/bin on macOS runners).
-          export PATH="$stripped"
-          while zig_bin=$(command -v zig 2>/dev/null); do
-            zig_dir=$(dirname "$zig_bin")
-            stripped=$(printf '%s' "$stripped" | tr ':' '\n' | grep -v "^${zig_dir}$" | tr '\n' ':')
-            export PATH="$stripped"
+          new_path=""
+          IFS=':' read -ra path_dirs <<< "$PATH"
+          for dir in "${path_dirs[@]}"; do
+            [ -n "$dir" ] && [ -x "${dir}/zig" ] && continue
+            new_path="${new_path:+${new_path}:}${dir}"
           done
-          echo "PATH=${stripped}" >> "${GITHUB_ENV}"
+          hash -r 2>/dev/null || true
+          export PATH="$new_path"
+          echo "PATH=$new_path" >> "${GITHUB_ENV}"
 
       - name: Confirm Zig is absent
         shell: bash
