@@ -948,6 +948,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     topology_full_serializer_mod.addImport("full_format", topology_full_format_mod);
+    topology_full_serializer_mod.addImport("ir_types", ir_types_mod);
     const topology_full_serializer_tests = b.addTest(.{
         .root_module = topology_full_serializer_mod,
     });
