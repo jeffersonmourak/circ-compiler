@@ -51,7 +51,7 @@ test "cli: circ-compile inverter end-to-end" {
         \\        _log: () => {}, _log_flush: () => {}, _log_set_name: () => {},
         \\        debugEnabled: () => 0, onDebugLog: () => {}
         \\    }});
-        \\    const topo = new Uint8Array(WebAssembly.Module.customSections(mod, 'circ.topology')[0]);
+        \\    const topo = new Uint8Array(WebAssembly.Module.customSections(mod, 'circ.topology.v0.min')[0]);
         \\    const ptr = inst.exports.topology_alloc(topo.length);
         \\    new Uint8Array(inst.exports.memory.buffer).set(topo, ptr);
         \\    inst.exports.init();
@@ -102,7 +102,7 @@ test "cli: circ-compile project end-to-end" {
         return error.CompileFailed;
     }
 
-    // Verify: structurally valid WASM with circ.topology section, init() runs without crashing
+    // Verify: structurally valid WASM with circ.topology.v0.min section, init() runs without crashing
     const script =
         \\const fs = require('fs');
         \\const wasmBytes = fs.readFileSync(process.argv[2]);
@@ -114,8 +114,8 @@ test "cli: circ-compile project end-to-end" {
         \\        _log: () => {}, _log_flush: () => {}, _log_set_name: () => {},
         \\        debugEnabled: () => 0, onDebugLog: () => {}
         \\    }});
-        \\    const sections = WebAssembly.Module.customSections(mod, 'circ.topology');
-        \\    if (sections.length === 0) throw new Error('No circ.topology section');
+        \\    const sections = WebAssembly.Module.customSections(mod, 'circ.topology.v0.min');
+        \\    if (sections.length === 0) throw new Error('No circ.topology.v0.min section');
         \\    const topo = new Uint8Array(sections[0]);
         \\    const ptr = inst.exports.topology_alloc(topo.length);
         \\    new Uint8Array(inst.exports.memory.buffer).set(topo, ptr);

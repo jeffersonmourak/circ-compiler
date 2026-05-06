@@ -66,3 +66,25 @@ test "full emitter fixture files" {
         };
     }
 }
+
+test "emit topology_blob marker is circ.topology.v0.min" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const source = try std.fs.cwd().readFileAlloc(allocator, "tests/fixtures/circuits/empty_ish.circ", 1024 * 1024);
+    const ast_file = try translate.parseSource(allocator, 0, source);
+    const ir_module = try resolver.resolve(allocator, ast_file, 0);
+    var diagnostic_list = try validator_run.run(allocator, &ir_module);
+    defer diagnostic_list.deinit(allocator);
+    if (hasHardErrors(diagnostic_list.items)) return error.InvalidFixtureForEmission;
+
+    const emitted = try emit_main.emitModuleSource(allocator, &ir_module, .{
+        .source_name = "empty_ish.circ",
+        .compile_timestamp = "2026-05-01T22:00:00Z",
+        .compiler_version = "circ-compiler/dev",
+    });
+
+    try std.testing.expect(std.mem.indexOf(u8, emitted, "\"circ.topology.v0.min\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, emitted, "\"debug-paths-v1\"") == null);
+}

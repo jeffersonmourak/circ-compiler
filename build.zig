@@ -488,11 +488,38 @@ pub fn build(b: *std.Build) void {
     emit_behavior_tests.linkLibrary(parser_lib);
     emit_behavior_tests.linkLibC();
     const run_emit_behavior_tests = b.addRunArtifact(emit_behavior_tests);
+    // Phase 3 slice 1: color resolution module (depends only on std, used by cli_args).
+    const preview_render_color_mod = b.createModule(.{
+        .root_source_file = b.path("lib/preview/render/color.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const preview_render_color_tests = b.addTest(.{
+        .root_module = preview_render_color_mod,
+    });
+    const run_preview_render_color_tests = b.addRunArtifact(preview_render_color_tests);
+
+    // Phase 3 slice 2: Canvas — in-memory cell grid with per-cell color tags.
+    const preview_render_canvas_mod = b.createModule(.{
+        .root_source_file = b.path("lib/preview/render/canvas.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    preview_render_canvas_mod.addImport("color", preview_render_color_mod);
+    const preview_render_canvas_tests = b.addTest(.{
+        .root_module = preview_render_canvas_mod,
+    });
+    const run_preview_render_canvas_tests = b.addRunArtifact(preview_render_canvas_tests);
+
+    // Phase 3 slice 3: glyphs — per-kind drawing functions that fill a Canvas.
+    // (preview_layout_mod is already declared earlier in the build script.)
+
     const cli_args_mod = b.createModule(.{
         .root_source_file = b.path("lib/cli/args.zig"),
         .target = target,
         .optimize = optimize,
     });
+    cli_args_mod.addImport("render_color", preview_render_color_mod);
     const cli_inspect_dump_mod = b.createModule(.{
         .root_source_file = b.path("lib/cli/inspect_dump.zig"),
         .target = target,
@@ -768,6 +795,16 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(circ_compile_exe);
     const circ_compile_step = b.step("circ-compile", "Build circ-compile CLI");
     circ_compile_step.dependOn(b.getInstallStep());
+
+    const circ_compile_tests = b.addTest(.{
+        .root_module = circ_compile_mod,
+    });
+    circ_compile_tests.addIncludePath(b.path("."));
+    circ_compile_tests.addIncludePath(b.path("./lib"));
+    circ_compile_tests.linkLibrary(parser_lib);
+    circ_compile_tests.linkLibC();
+    const run_circ_compile_tests = b.addRunArtifact(circ_compile_tests);
+    run_circ_compile_tests.step.dependOn(&install_runtime.step);
     const validator_project_passes_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/validator/project_passes_test.zig"),
         .target = target,
@@ -829,6 +866,9 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_emit_full_tests.step);
     test_step.dependOn(&run_emit_behavior_tests.step);
     test_step.dependOn(&run_cli_args_tests.step);
+    test_step.dependOn(&run_preview_render_color_tests.step);
+    test_step.dependOn(&run_preview_render_canvas_tests.step);
+    test_step.dependOn(&run_circ_compile_tests.step);
     test_step.dependOn(&circ_compile_exe.step);
     test_step.dependOn(&run_cli_integration_tests.step);
     test_step.dependOn(&run_resolver_scan_imports_tests.step);
@@ -922,12 +962,302 @@ pub fn build(b: *std.Build) void {
     // Wire serializer and section_writer into the circ-compile binary
     circ_compile_mod.addImport("serializer", topology_serializer_tests_mod);
     circ_compile_mod.addImport("section_writer", section_writer_mod);
+    circ_compile_mod.addImport("golden", b.createModule(.{
+        .root_source_file = b.path("tests/helpers/golden.zig"),
+        .target = target,
+        .optimize = optimize,
+    }));
+    // full_serializer and preview_dump added below; the import wiring happens after the modules are created.
 
     const section_writer_tests = b.addTest(.{
         .root_module = section_writer_mod,
     });
     const run_section_writer_tests = b.addRunArtifact(section_writer_tests);
     test_step.dependOn(&run_section_writer_tests.step);
+
+    // Phase 0 slice 3: circ.topology.v0.full schema + encoder + decoder
+    const topology_full_format_mod = b.createModule(.{
+        .root_source_file = b.path("lib/topology/full_format.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    topology_full_format_mod.addImport("format", topology_format_tests_mod);
+    const topology_full_format_tests = b.addTest(.{
+        .root_module = topology_full_format_mod,
+    });
+    const run_topology_full_format_tests = b.addRunArtifact(topology_full_format_tests);
+    test_step.dependOn(&run_topology_full_format_tests.step);
+
+    const topology_full_serializer_mod = b.createModule(.{
+        .root_source_file = b.path("lib/topology/full_serializer.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    topology_full_serializer_mod.addImport("full_format", topology_full_format_mod);
+    topology_full_serializer_mod.addImport("ir_types", ir_types_mod);
+    circ_compile_mod.addImport("full_serializer", topology_full_serializer_mod);
+    const topology_full_serializer_tests = b.addTest(.{
+        .root_module = topology_full_serializer_mod,
+    });
+    const run_topology_full_serializer_tests = b.addRunArtifact(topology_full_serializer_tests);
+    test_step.dependOn(&run_topology_full_serializer_tests.step);
+
+    const topology_full_decoder_mod = b.createModule(.{
+        .root_source_file = b.path("lib/topology/full_decoder.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    topology_full_decoder_mod.addImport("full_format", topology_full_format_mod);
+    const topology_full_decoder_tests = b.addTest(.{
+        .root_module = topology_full_decoder_mod,
+    });
+    const run_topology_full_decoder_tests = b.addRunArtifact(topology_full_decoder_tests);
+    test_step.dependOn(&run_topology_full_decoder_tests.step);
+
+    const topology_full_roundtrip_mod = b.createModule(.{
+        .root_source_file = b.path("tests/topology/full_roundtrip_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    topology_full_roundtrip_mod.addImport("full_format", topology_full_format_mod);
+    topology_full_roundtrip_mod.addImport("full_serializer", topology_full_serializer_mod);
+    topology_full_roundtrip_mod.addImport("full_decoder", topology_full_decoder_mod);
+    const topology_full_roundtrip_tests = b.addTest(.{
+        .root_module = topology_full_roundtrip_mod,
+    });
+    const run_topology_full_roundtrip_tests = b.addRunArtifact(topology_full_roundtrip_tests);
+    test_step.dependOn(&run_topology_full_roundtrip_tests.step);
+
+    // Phase 2 slice 1: layout public types + sizing constants
+    const preview_layout_mod = b.createModule(.{
+        .root_source_file = b.path("lib/preview/layout.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    preview_layout_mod.addImport("full_format", topology_full_format_mod);
+    const preview_layout_tests = b.addTest(.{
+        .root_module = preview_layout_mod,
+    });
+    const run_preview_layout_tests = b.addRunArtifact(preview_layout_tests);
+    test_step.dependOn(&run_preview_layout_tests.step);
+
+    // Phase 1 slice 3: preview.dump.dump implementation (depends on layout types)
+    const preview_dump_mod = b.createModule(.{
+        .root_source_file = b.path("lib/preview/dump.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    preview_dump_mod.addImport("full_format", topology_full_format_mod);
+    preview_dump_mod.addImport("layout", preview_layout_mod);
+    circ_compile_mod.addImport("preview_dump", preview_dump_mod);
+    const preview_dump_tests = b.addTest(.{
+        .root_module = preview_dump_mod,
+    });
+    const run_preview_dump_tests = b.addRunArtifact(preview_dump_tests);
+    test_step.dependOn(&run_preview_dump_tests.step);
+
+    const preview_layout_types_mod = b.createModule(.{
+        .root_source_file = b.path("lib/preview/layout/types.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    preview_layout_types_mod.addImport("full_format", topology_full_format_mod);
+    preview_layout_types_mod.addImport("layout", preview_layout_mod);
+    const preview_layout_types_tests = b.addTest(.{
+        .root_module = preview_layout_types_mod,
+    });
+    const run_preview_layout_types_tests = b.addRunArtifact(preview_layout_types_tests);
+    test_step.dependOn(&run_preview_layout_types_tests.step);
+
+    const preview_layout_sizing_mod = b.createModule(.{
+        .root_source_file = b.path("lib/preview/layout/sizing.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    preview_layout_sizing_mod.addImport("full_format", topology_full_format_mod);
+    const preview_layout_sizing_tests = b.addTest(.{
+        .root_module = preview_layout_sizing_mod,
+    });
+    const run_preview_layout_sizing_tests = b.addRunArtifact(preview_layout_sizing_tests);
+    test_step.dependOn(&run_preview_layout_sizing_tests.step);
+
+    // Phase 2 slice 2: Stage 1 — collapse
+    const preview_layout_collapse_mod = b.createModule(.{
+        .root_source_file = b.path("lib/preview/layout/collapse.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    preview_layout_collapse_mod.addImport("full_format", topology_full_format_mod);
+    preview_layout_collapse_mod.addImport("layout", preview_layout_mod);
+    preview_layout_collapse_mod.addImport("layout_types", preview_layout_types_mod);
+    const preview_layout_collapse_tests = b.addTest(.{
+        .root_module = preview_layout_collapse_mod,
+    });
+    const run_preview_layout_collapse_tests = b.addRunArtifact(preview_layout_collapse_tests);
+    test_step.dependOn(&run_preview_layout_collapse_tests.step);
+
+    // Phase 2 slice 3: Stage 2 — columns
+    const preview_layout_columns_mod = b.createModule(.{
+        .root_source_file = b.path("lib/preview/layout/columns.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    preview_layout_columns_mod.addImport("full_format", topology_full_format_mod);
+    preview_layout_columns_mod.addImport("layout_types", preview_layout_types_mod);
+    const preview_layout_columns_tests = b.addTest(.{
+        .root_module = preview_layout_columns_mod,
+    });
+    const run_preview_layout_columns_tests = b.addRunArtifact(preview_layout_columns_tests);
+    test_step.dependOn(&run_preview_layout_columns_tests.step);
+
+    // Phase 2 slice 4: Stage 3 — rows
+    const preview_layout_rows_mod = b.createModule(.{
+        .root_source_file = b.path("lib/preview/layout/rows.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    preview_layout_rows_mod.addImport("full_format", topology_full_format_mod);
+    preview_layout_rows_mod.addImport("layout_types", preview_layout_types_mod);
+    const preview_layout_rows_tests = b.addTest(.{
+        .root_module = preview_layout_rows_mod,
+    });
+    const run_preview_layout_rows_tests = b.addRunArtifact(preview_layout_rows_tests);
+    test_step.dependOn(&run_preview_layout_rows_tests.step);
+
+    // Phase 2 slice 5: Stage 4 — place
+    const preview_layout_place_mod = b.createModule(.{
+        .root_source_file = b.path("lib/preview/layout/place.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    preview_layout_place_mod.addImport("full_format", topology_full_format_mod);
+    preview_layout_place_mod.addImport("layout", preview_layout_mod);
+    preview_layout_place_mod.addImport("layout_types", preview_layout_types_mod);
+    preview_layout_place_mod.addImport("sizing", preview_layout_sizing_mod);
+    const preview_layout_place_tests = b.addTest(.{
+        .root_module = preview_layout_place_mod,
+    });
+    const run_preview_layout_place_tests = b.addRunArtifact(preview_layout_place_tests);
+    test_step.dependOn(&run_preview_layout_place_tests.step);
+
+    // Phase 2 slice 6a: Stage 5 — route
+    const preview_layout_route_mod = b.createModule(.{
+        .root_source_file = b.path("lib/preview/layout/route.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    preview_layout_route_mod.addImport("full_format", topology_full_format_mod);
+    preview_layout_route_mod.addImport("layout", preview_layout_mod);
+    preview_layout_route_mod.addImport("layout_types", preview_layout_types_mod);
+    const preview_layout_route_tests = b.addTest(.{
+        .root_module = preview_layout_route_mod,
+    });
+    const run_preview_layout_route_tests = b.addRunArtifact(preview_layout_route_tests);
+    test_step.dependOn(&run_preview_layout_route_tests.step);
+
+    // Phase 3 slice 3: glyphs — depends on layout types.
+    const preview_render_glyphs_mod = b.createModule(.{
+        .root_source_file = b.path("lib/preview/render/glyphs.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    preview_render_glyphs_mod.addImport("layout", preview_layout_mod);
+    preview_render_glyphs_mod.addImport("canvas", preview_render_canvas_mod);
+    preview_render_glyphs_mod.addImport("color", preview_render_color_mod);
+    const preview_render_glyphs_tests = b.addTest(.{
+        .root_module = preview_render_glyphs_mod,
+    });
+    const run_preview_render_glyphs_tests = b.addRunArtifact(preview_render_glyphs_tests);
+    test_step.dependOn(&run_preview_render_glyphs_tests.step);
+
+    // Phase 3 slice 4: render orchestrator — composes Canvas + glyphs + wire rendering.
+    const preview_render_mod = b.createModule(.{
+        .root_source_file = b.path("lib/preview/render.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    preview_render_mod.addImport("layout", preview_layout_mod);
+    preview_render_mod.addImport("layout_types", preview_layout_types_mod);
+    preview_render_mod.addImport("canvas", preview_render_canvas_mod);
+    preview_render_mod.addImport("color", preview_render_color_mod);
+    preview_render_mod.addImport("glyphs", preview_render_glyphs_mod);
+    const preview_render_tests = b.addTest(.{
+        .root_module = preview_render_mod,
+    });
+    const run_preview_render_tests = b.addRunArtifact(preview_render_tests);
+    test_step.dependOn(&run_preview_render_tests.step);
+
+    // Phase 2 slice 6b: orchestrator composing all five stages
+    const preview_layout_orchestrator_mod = b.createModule(.{
+        .root_source_file = b.path("lib/preview/layout/orchestrator.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    preview_layout_orchestrator_mod.addImport("full_format", topology_full_format_mod);
+    preview_layout_orchestrator_mod.addImport("layout", preview_layout_mod);
+    preview_layout_orchestrator_mod.addImport("collapse", preview_layout_collapse_mod);
+    preview_layout_orchestrator_mod.addImport("columns", preview_layout_columns_mod);
+    preview_layout_orchestrator_mod.addImport("rows", preview_layout_rows_mod);
+    preview_layout_orchestrator_mod.addImport("place", preview_layout_place_mod);
+    preview_layout_orchestrator_mod.addImport("route", preview_layout_route_mod);
+    circ_compile_mod.addImport("layout_orchestrator", preview_layout_orchestrator_mod);
+    circ_compile_mod.addImport("preview_render", preview_render_mod);
+
+    // Phase 2 slice 6b: golden integration tests via the orchestrator + dumpLayout
+    const preview_layout_integration_mod = b.createModule(.{
+        .root_source_file = b.path("tests/preview/layout_integration_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    preview_layout_integration_mod.addImport("scan_imports", resolver_scan_imports_mod);
+    preview_layout_integration_mod.addImport("import_cycle", resolver_import_cycle_mod);
+    preview_layout_integration_mod.addImport("resolve_bodies", resolver_resolve_bodies_mod);
+    preview_layout_integration_mod.addImport("validator_run_project", validator_run_project_mod);
+    preview_layout_integration_mod.addImport("diagnostics", validator_diagnostics_mod);
+    preview_layout_integration_mod.addImport("full_serializer", topology_full_serializer_mod);
+    preview_layout_integration_mod.addImport("layout", preview_layout_mod);
+    preview_layout_integration_mod.addImport("orchestrator", preview_layout_orchestrator_mod);
+    preview_layout_integration_mod.addImport("preview_dump", preview_dump_mod);
+    preview_layout_integration_mod.addImport("golden", b.createModule(.{
+        .root_source_file = b.path("tests/helpers/golden.zig"),
+        .target = target,
+        .optimize = optimize,
+    }));
+    const preview_layout_integration_tests = b.addTest(.{
+        .root_module = preview_layout_integration_mod,
+    });
+    preview_layout_integration_tests.addIncludePath(b.path("."));
+    preview_layout_integration_tests.addIncludePath(b.path("./lib"));
+    preview_layout_integration_tests.linkLibrary(parser_lib);
+    preview_layout_integration_tests.linkLibC();
+    const run_preview_layout_integration_tests = b.addRunArtifact(preview_layout_integration_tests);
+    test_step.dependOn(&run_preview_layout_integration_tests.step);
+
+    const topology_full_emit_integration_mod = b.createModule(.{
+        .root_source_file = b.path("tests/topology/full_emit_integration_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    topology_full_emit_integration_mod.addImport("scan_imports", resolver_scan_imports_mod);
+    topology_full_emit_integration_mod.addImport("import_cycle", resolver_import_cycle_mod);
+    topology_full_emit_integration_mod.addImport("resolve_bodies", resolver_resolve_bodies_mod);
+    topology_full_emit_integration_mod.addImport("validator_run_project", validator_run_project_mod);
+    topology_full_emit_integration_mod.addImport("diagnostics", validator_diagnostics_mod);
+    topology_full_emit_integration_mod.addImport("serializer", topology_serializer_tests_mod);
+    topology_full_emit_integration_mod.addImport("full_serializer", topology_full_serializer_mod);
+    topology_full_emit_integration_mod.addImport("full_decoder", topology_full_decoder_mod);
+    topology_full_emit_integration_mod.addImport("section_writer", section_writer_mod);
+    topology_full_emit_integration_mod.addImport("runtime_embed", runtime_embed_mod);
+    const topology_full_emit_integration_tests = b.addTest(.{
+        .root_module = topology_full_emit_integration_mod,
+    });
+    topology_full_emit_integration_tests.addIncludePath(b.path("."));
+    topology_full_emit_integration_tests.addIncludePath(b.path("./lib"));
+    topology_full_emit_integration_tests.linkLibrary(parser_lib);
+    topology_full_emit_integration_tests.linkLibC();
+    const run_topology_full_emit_integration_tests = b.addRunArtifact(topology_full_emit_integration_tests);
+    run_topology_full_emit_integration_tests.step.dependOn(&install_runtime.step);
+    test_step.dependOn(&run_topology_full_emit_integration_tests.step);
 
     const section_writer_fixtures_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/e2e/section_writer_fixtures_test.zig"),

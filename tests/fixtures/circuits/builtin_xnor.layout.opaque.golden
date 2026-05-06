@@ -1,0 +1,16 @@
+LayoutGrid 30x5
+
+Components:
+  [0] input_pin "a" @(0,0) 6x1
+  [1] input_pin "b" @(0,4) 6x1
+  [22] output_pin "out" @(24,0) 6x1
+  [23] subcircuit:xnor "g" @(10,0) 10x3
+
+Wires:
+  0.out -> 23.in: (5,0) -> (6,0) -> (6,1) -> (10,1)
+  1.out -> 23.in: (5,4) -> (7,4) -> (7,1) -> (10,1)
+  23.out -> 22.in: (19,1) -> (20,1) -> (20,0) -> (24,0)
+
+Crossings:
+  wire 0.out->23.in @(7,1)
+  wire 1.out->23.in @(7,1)

@@ -49,7 +49,7 @@ test "topology host protocol: inverter round-trip via Node" {
     try topo.appendSlice(allocator, &[_]u8{1, 0, 0, 0});
     try topo.append(allocator, @intFromEnum(format.PortName.in));
 
-    const name = "circ.topology";
+    const name = "circ.topology.v0.min";
 
     // 2. Construct the WASM custom section
     try payload.append(allocator, 0x00); // section id
@@ -91,8 +91,8 @@ test "topology host protocol: inverter round-trip via Node" {
         \\        onDebugLog: () => {}
         \\    } });
         \\    
-        \\    const topoSections = WebAssembly.Module.customSections(mod, 'circ.topology');
-        \\    if (topoSections.length === 0) throw new Error("No circ.topology section found");
+        \\    const topoSections = WebAssembly.Module.customSections(mod, 'circ.topology.v0.min');
+        \\    if (topoSections.length === 0) throw new Error("No circ.topology.v0.min section found");
         \\    
         \\    const topoBytes = new Uint8Array(topoSections[0]);
         \\    const ptr = instance.exports.topology_alloc(topoBytes.length);

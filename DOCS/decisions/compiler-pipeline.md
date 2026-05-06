@@ -10,17 +10,17 @@
 
 ### Pipeline shape: parse → topology bytes → custom section append → wasm
 
-**Decision.** Compilation runs as `.circ source → langlang parse tree → resolved IR → `circ.topology` binary payload → custom section appended to pre-built runtime blob → `.wasm``. No `zig` subprocess is spawned at circuit-compile time.
+**Decision.** Compilation runs as `.circ source → langlang parse tree → resolved IR → `circ.topology.v0.{min,full}` binary payloads → custom sections appended to pre-built runtime blob → `.wasm``. No `zig` subprocess is spawned at circuit-compile time.
 
 **Rationale.** The previous pipeline required Zig installed on every user machine at circuit-compile time. Serializing the resolved IR into a compact binary format and appending it as a WASM custom section to a pre-built runtime blob removes that dependency entirely. The runtime is compiled exactly once at CLI build time and embedded via `@embedFile`. The host protocol (`topology_alloc` + `init()`) is simple enough to implement in any JS environment without SDK support.
 
 **Alternatives.** The previous `zig build` subprocess approach (rejected: requires Zig at user runtime). Direct WASM emission (rejected: requires hand-written WASM lowering). Embedding the Zig compiler as a library (rejected: API instability — see `DOCS/decisions/compiler-pipeline.md`).
 
-### IR shape: flat topology binary (`circ.topology` format)
+### IR shape: flat topology binary (`circ.topology.v0.min` + `circ.topology.v0.full`)
 
-**Decision.** The resolved project IR is serialized into a compact binary format (`circ.topology`) describing an ordered sequence of `createComponent` records followed by `connect` records. The full sub-circuit hierarchy is flattened by the serializer into primitive operations with globally-unique IDs.
+**Decision.** The resolved project IR is serialized into two coexisting binary payloads embedded as WASM custom sections. `circ.topology.v0.min` (magic `CIRC`, version `0x01`) describes an ordered sequence of `createComponent` records followed by `connect` records — what the runtime interpreter consumes. `circ.topology.v0.full` (magic `CIRF`, version `0x01`) carries the same structural data plus per-component instance names and subcircuit-origin chains — what offline tools (the `--preview` renderer; future inspection tooling) consume. The full sub-circuit hierarchy is flattened by the serializer into primitive operations with globally-unique IDs in both payloads, and the two serializers produce identical id sequences so a reader can correlate records by index.
 
-**Rationale.** The runtime interpreter has no concept of sub-circuit boundaries — it only ever calls `createComponent` and `connect`. Flattening at serialize time keeps the interpreter minimal and makes the custom section self-contained. The format is locked after Phase 0 so that changes require updating both the serializer and the interpreter in lockstep (treated as a wire protocol).
+**Rationale.** The runtime interpreter has no concept of sub-circuit boundaries — it only ever calls `createComponent` and `connect`. Flattening at serialize time keeps the interpreter minimal and makes the custom section self-contained. Splitting "what the runtime needs" (`min`) from "what tooling needs" (`full`) means the runtime path stays a fixed-size byte parser while the tooling path can carry arbitrary metadata without bloating the runtime hot path. Pre-1.0 the version axis is freely revvable: bump `vN.{min,full}` rather than carrying compatibility shims.
 
 **Alternatives.** A hierarchical format requiring the runtime to handle sub-circuit scoping. More flexible but much harder to implement correctly in a WASM-hosted interpreter with no dynamic dispatch.
 
@@ -34,7 +34,7 @@
 
 ### Host protocol: `topology_alloc` + `init()`
 
-**Decision.** WASM custom sections are opaque to the module itself. The host reads the `circ.topology` section via `WebAssembly.Module.customSections()`, calls `topology_alloc(len)` to get a writable pointer, copies the bytes into WASM linear memory, then calls `init()`.
+**Decision.** WASM custom sections are opaque to the module itself. The host reads the `circ.topology.v0.min` section via `WebAssembly.Module.customSections()`, calls `topology_alloc(len)` to get a writable pointer, copies the bytes into WASM linear memory, then calls `init()`. Hosts that don't need rendering metadata can ignore the parallel `circ.topology.v0.full` section.
 
 **Rationale.** The protocol is three calls and a `memcpy`. Any JS environment (browser, Node, Deno) can implement it without SDK support. The TypeScript SDK wraps this transparently; raw users follow the documented protocol.
 

@@ -1,0 +1,6 @@
+input a
+input b
+input c
+output o1(in=a)
+output o2(in=b)
+output o3(in=c)
