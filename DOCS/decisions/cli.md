@@ -1,18 +1,30 @@
 # CLI Design
 
-### Three invocation modes
+### Four invocation modes
 
-**Decision.** The CLI supports three modes, all using `-o <path>` for the output destination:
+**Decision.** The CLI supports four modes, selected by mutually-exclusive flags:
 
 ```
 circ-compile <input.circ> -o <output.wasm>           # produce WASM (default)
 circ-compile <input.circ> --emit-zig -o <output.zig> # emit IR Zig source only
 circ-compile <input.circ> --inspect                  # dump parse tree / IR to stdout
+circ-compile <input.circ> --preview                  # render ASCII schematic to stdout
 ```
 
-**Rationale.** The default produces the only artifact most users care about. `--emit-zig` exposes the IR step for users who want to inspect, hand-edit, or integrate the emitted source into a larger Zig project — and it falls out of the pipeline for free. `--inspect` is the debugging mode for the compiler itself: it prints the parse tree and resolved IR without invoking the build, useful when a `.circ` file produces unexpected emission.
+**Rationale.** The default produces the only artifact most users care about. `--emit-zig` exposes the IR step for users who want to inspect, hand-edit, or integrate the emitted source into a larger Zig project — and it falls out of the pipeline for free. `--inspect` is the debugging mode for the compiler itself: it prints the parse tree and resolved IR without invoking the build, useful when a `.circ` file produces unexpected emission. `--preview` is the visualisation mode: it lays out the resolved circuit on a character grid and emits a styled ASCII schematic with line-art glyphs, useful for code review, documentation, and teaching. See [`preview.md`](../preview.md) for the rendering reference.
 
 **Alternatives.** A single mode with everything controlled by output extension. Concise but magical; users have to know that `.zig` extensions trigger different behaviour. Explicit flags are clearer.
+
+### Preview mode flags
+
+**Decision.** `--preview` accepts two extra flags that are meaningless in other modes:
+
+- `--expand-macros` — expand subcircuits into their constituent primitives instead of rendering them as labeled opaque boxes. Rejected at parse time outside `--preview`.
+- `--color=auto|always|never` — control ANSI color output. Defaults to `auto` (color when stdout is a TTY *and* `NO_COLOR` is unset). `always` overrides `NO_COLOR` per the convention used by `git`/`ls`/`grep`. Stored but harmlessly ignored in non-preview modes — those don't render anything.
+
+**Rationale.** Macro expansion is a *display* choice, not a compilation one — the same artifact can be rendered both ways. Surfacing it as a flag avoids forking the topology format. `--color` follows the standard tri-state convention so users don't need to learn a project-specific colour discipline.
+
+**Alternatives.** Always render macros expanded (loses the schematic-style abstraction by default) or always render them opaque (hides what the macro actually does). The flag-controlled split serves both audiences without picking one as canonical.
 
 ### TypeScript declaration emission deferred
 

@@ -50,13 +50,29 @@ This declares one input pin `a`, drives it through a `not` gate, mirrors the res
 zig-out/bin/circ-compile examples/inverter.circ -o examples/inverter.wasm
 ```
 
-The CLI runs the parser, validator, and topology serializer end-to-end, then appends the serialized circuit as a `circ.topology` custom WASM section to the pre-built runtime blob. No `zig` subprocess is spawned. On success it writes the combined `.wasm` to the path given to `-o`.
+The CLI runs the parser, validator, and topology serializer end-to-end, then appends the serialized circuit as `circ.topology.v0.min` and `circ.topology.v0.full` custom WASM sections to the pre-built runtime blob. No `zig` subprocess is spawned. On success it writes the combined `.wasm` to the path given to `-o`.
 
 Inspect the compiled circuit's interface:
 
 ```sh
 zig-out/bin/circ-compile examples/inverter.circ --inspect
 ```
+
+Or visualise the circuit as an ASCII schematic without producing any artifact:
+
+```sh
+zig-out/bin/circ-compile examples/inverter.circ --preview
+```
+
+Expected:
+
+```
+a─────╮        ╭──────out
+      ╰────▷○──╯         
+
+```
+
+See [`preview.md`](preview.md) for `--expand-macros`, `--color`, and the rendering conventions.
 
 The relevant block tells you which component IDs to drive from JavaScript:
 
@@ -71,7 +87,7 @@ Outputs (1)
 
 ## 4. Drive the compiled `.wasm` from Node
 
-The compiled `.wasm` contains the runtime and a `circ.topology` custom section. The host must load that section into WASM linear memory before calling `init()`. Create `examples/run.mjs`:
+The compiled `.wasm` contains the runtime and a `circ.topology.v0.min` custom section. The host must load that section into WASM linear memory before calling `init()`. Create `examples/run.mjs`:
 
 ```js
 import fs from "node:fs";
@@ -86,8 +102,8 @@ const { exports: w } = await WebAssembly.instantiate(mod, {
   },
 });
 
-// Load the circ.topology custom section into WASM linear memory
-const [topoSection] = WebAssembly.Module.customSections(mod, "circ.topology");
+// Load the circ.topology.v0.min custom section into WASM linear memory
+const [topoSection] = WebAssembly.Module.customSections(mod, "circ.topology.v0.min");
 const topoBytes = new Uint8Array(topoSection);
 const ptr = w.topology_alloc(topoBytes.length);
 new Uint8Array(w.memory.buffer).set(topoBytes, ptr);

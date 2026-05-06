@@ -15,6 +15,7 @@ A digital logic circuit simulator written in Zig, compiled to WebAssembly for us
 | [simulation-engine.md](simulation-engine.md) | Zig API reference: types, functions, propagation algorithm, gate logic  |
 | [wasm-api.md](wasm-api.md)                   | WASM exports/imports, TypeScript SDK, integration example               |
 | [circuit-format.md](circuit-format.md)       | `.circ` DSL syntax, grammar, file examples                              |
+| [preview.md](preview.md)                     | `circ-compile --preview`: ASCII circuit schematic rendering             |
 | [decisions/](decisions/index.md)             | WIP architectural decisions for the `.circ` compiler                    |
 | [archive/](archive/index.md)                 | Archived implementation plans                                           |
 | [prompts/ARCHIVE.md](prompts/ARCHIVE.md)     | How to archive a finished plan into `DOCS/archive/`                     |
