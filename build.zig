@@ -995,6 +995,19 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_topology_full_roundtrip_tests.step);
 
     // Phase 0 slice 5: end-to-end integration test for two-section emit.
+    // Phase 1 slice 3: preview.dump.dump implementation
+    const preview_dump_mod = b.createModule(.{
+        .root_source_file = b.path("lib/preview/dump.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    preview_dump_mod.addImport("full_format", topology_full_format_mod);
+    const preview_dump_tests = b.addTest(.{
+        .root_module = preview_dump_mod,
+    });
+    const run_preview_dump_tests = b.addRunArtifact(preview_dump_tests);
+    test_step.dependOn(&run_preview_dump_tests.step);
+
     const topology_full_emit_integration_mod = b.createModule(.{
         .root_source_file = b.path("tests/topology/full_emit_integration_test.zig"),
         .target = target,
