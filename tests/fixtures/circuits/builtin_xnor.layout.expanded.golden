@@ -1,0 +1,136 @@
+LayoutGrid 61x25
+
+Components:
+  [0] input_pin "a" @(0,8) 6x1
+  [1] input_pin "b" @(0,16) 6x1
+  [2] input_pin "a" @(0,18) 6x1
+  [3] input_pin "b" @(0,20) 6x1
+  [4] input_pin "a" @(0,22) 6x1
+  [5] input_pin "b" @(0,24) 6x1
+  [6] input_pin "a" @(0,0) 6x1
+  [7] input_pin "b" @(0,4) 6x1
+  [8] not_gate "na" @(10,0) 5x3
+  [9] not_gate "nb" @(10,4) 5x3
+  [10] and_gate "inner" @(19,0) 5x3
+  [11] not_gate "n" @(28,0) 5x3
+  [12] output_pin "out" @(55,0) 6x1
+  [13] input_pin "a" @(0,12) 6x1
+  [14] input_pin "b" @(0,14) 6x1
+  [15] and_gate "inner" @(10,8) 5x3
+  [16] not_gate "n" @(19,4) 5x3
+  [17] output_pin "out" @(55,14) 6x1
+  [18] and_gate "gate" @(37,0) 5x3
+  [19] output_pin "out" @(55,4) 6x1
+  [20] not_gate "n" @(46,0) 5x3
+  [21] output_pin "out" @(55,8) 6x1
+  [22] output_pin "out" @(55,12) 6x1
+
+Wires:
+  0.out -> 2.in: (5,8) -> (6,8) -> (6,18) -> (0,18)
+  1.out -> 3.in: (5,16) -> (7,16) -> (7,20) -> (0,20)
+  2.out -> 4.in: (5,18) -> (8,18) -> (8,22) -> (0,22)
+  3.out -> 5.in: (5,20) -> (6,20) -> (6,24) -> (0,24)
+  4.out -> 6.in: (5,22) -> (9,22) -> (9,0) -> (0,0)
+  4.out -> 13.in: (5,22) -> (10,22) -> (10,12) -> (0,12)
+  5.out -> 7.in: (5,24) -> (11,24) -> (11,4) -> (0,4)
+  5.out -> 14.in: (5,24) -> (12,24) -> (12,14) -> (0,14)
+  6.out -> 8.in: (5,0) -> (6,0) -> (6,1) -> (10,1)
+  7.out -> 9.in: (5,4) -> (7,4) -> (7,5) -> (10,5)
+  8.out -> 10.a: (14,1) -> (15,1) -> (15,0) -> (19,0)
+  9.out -> 10.b: (14,5) -> (15,5) -> (15,2) -> (19,2)
+  10.out -> 11.in: (23,1) -> (24,1) -> (28,1)
+  11.out -> 12.in: (32,1) -> (33,1) -> (33,0) -> (55,0)
+  11.out -> 18.a: (32,1) -> (34,1) -> (34,0) -> (37,0)
+  13.out -> 15.a: (5,12) -> (8,12) -> (8,8) -> (10,8)
+  14.out -> 15.b: (5,14) -> (13,14) -> (13,10) -> (10,10)
+  15.out -> 16.in: (14,9) -> (16,9) -> (16,5) -> (19,5)
+  16.out -> 17.in: (23,5) -> (24,5) -> (24,14) -> (55,14)
+  16.out -> 18.b: (23,5) -> (25,5) -> (25,2) -> (37,2)
+  18.out -> 19.in: (41,1) -> (42,1) -> (42,4) -> (55,4)
+  18.out -> 20.in: (41,1) -> (43,1) -> (46,1)
+  20.out -> 21.in: (50,1) -> (51,1) -> (51,8) -> (55,8)
+  20.out -> 22.in: (50,1) -> (52,1) -> (52,12) -> (55,12)
+
+Crossings:
+  wire 0.out->2.in @(6,16)
+  wire 0.out->2.in @(6,18)
+  wire 0.out->2.in @(6,12)
+  wire 0.out->2.in @(6,14)
+  wire 0.out->2.in @(6,12)
+  wire 0.out->2.in @(6,14)
+  wire 1.out->3.in @(6,16)
+  wire 1.out->3.in @(7,18)
+  wire 1.out->3.in @(6,20)
+  wire 2.out->4.in @(6,18)
+  wire 2.out->4.in @(7,18)
+  wire 2.out->4.in @(6,22)
+  wire 2.out->4.in @(8,22)
+  wire 2.out->4.in @(8,22)
+  wire 3.out->5.in @(6,20)
+  wire 3.out->5.in @(6,22)
+  wire 3.out->5.in @(6,22)
+  wire 3.out->5.in @(6,22)
+  wire 3.out->5.in @(6,24)
+  wire 3.out->5.in @(6,24)
+  wire 4.out->6.in @(8,22)
+  wire 4.out->6.in @(6,22)
+  wire 4.out->6.in @(9,22)
+  wire 4.out->6.in @(9,12)
+  wire 4.out->6.in @(9,4)
+  wire 4.out->6.in @(9,14)
+  wire 4.out->6.in @(9,1)
+  wire 4.out->6.in @(6,0)
+  wire 4.out->6.in @(9,5)
+  wire 4.out->6.in @(9,8)
+  wire 4.out->6.in @(9,14)
+  wire 4.out->13.in @(6,12)
+  wire 4.out->13.in @(8,22)
+  wire 4.out->13.in @(6,22)
+  wire 4.out->13.in @(9,22)
+  wire 4.out->13.in @(9,12)
+  wire 4.out->13.in @(10,14)
+  wire 4.out->13.in @(8,12)
+  wire 4.out->13.in @(10,14)
+  wire 5.out->7.in @(6,24)
+  wire 5.out->7.in @(9,4)
+  wire 5.out->7.in @(11,24)
+  wire 5.out->7.in @(11,14)
+  wire 5.out->7.in @(7,4)
+  wire 5.out->7.in @(11,14)
+  wire 5.out->7.in @(11,10)
+  wire 5.out->14.in @(6,14)
+  wire 5.out->14.in @(6,24)
+  wire 5.out->14.in @(9,14)
+  wire 5.out->14.in @(10,14)
+  wire 5.out->14.in @(11,24)
+  wire 5.out->14.in @(11,14)
+  wire 5.out->14.in @(12,14)
+  wire 6.out->8.in @(9,1)
+  wire 6.out->8.in @(6,0)
+  wire 7.out->9.in @(9,5)
+  wire 7.out->9.in @(7,4)
+  wire 11.out->12.in @(33,1)
+  wire 11.out->12.in @(34,0)
+  wire 11.out->18.a @(33,1)
+  wire 11.out->18.a @(34,0)
+  wire 13.out->15.a @(6,12)
+  wire 13.out->15.a @(9,8)
+  wire 13.out->15.a @(8,12)
+  wire 14.out->15.b @(6,14)
+  wire 14.out->15.b @(9,14)
+  wire 14.out->15.b @(10,14)
+  wire 14.out->15.b @(11,14)
+  wire 14.out->15.b @(11,10)
+  wire 14.out->15.b @(12,14)
+  wire 16.out->17.in @(24,5)
+  wire 16.out->18.b @(24,5)
+  wire 18.out->19.in @(42,1)
+  wire 18.out->19.in @(51,4)
+  wire 18.out->19.in @(52,4)
+  wire 18.out->20.in @(42,1)
+  wire 20.out->21.in @(51,4)
+  wire 20.out->21.in @(51,1)
+  wire 20.out->21.in @(52,8)
+  wire 20.out->22.in @(52,4)
+  wire 20.out->22.in @(51,1)
+  wire 20.out->22.in @(52,8)

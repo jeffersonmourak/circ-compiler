@@ -1,7 +1,11 @@
 const std = @import("std");
 const full_format = @import("full_format");
+const layout_mod = @import("layout");
 
 const FullTopology = full_format.FullTopology;
+const LayoutGrid = layout_mod.LayoutGrid;
+const PlacedComponent = layout_mod.PlacedComponent;
+const RoutedWire = layout_mod.RoutedWire;
 
 fn portName(port: u8) []const u8 {
     return switch (port) {
@@ -42,6 +46,57 @@ pub fn dump(writer: anytype, topology: FullTopology) !void {
             conn.to_id,
             portName(conn.port),
         });
+    }
+}
+
+/// Phase 2 slice 6b helper: textual debug dump of a `LayoutGrid` for golden tests
+/// and ad-hoc inspection. Three sections: header (grid dimensions), components
+/// list with placement, wires list with segment paths, optional crossings list.
+pub fn dumpLayout(writer: anytype, grid: LayoutGrid) !void {
+    try writer.print("LayoutGrid {d}x{d}\n\n", .{ grid.width, grid.height });
+
+    try writer.writeAll("Components:\n");
+    for (grid.components) |comp| {
+        try writer.print("  [{d}] ", .{comp.id});
+        switch (comp.kind) {
+            .primitive => |p| try writer.print("{s}", .{@tagName(p)}),
+            .subcircuit => |sub| try writer.print("subcircuit:{s}", .{sub}),
+        }
+        try writer.print(" \"{s}\" @({d},{d}) {d}x{d}\n", .{ comp.name, comp.x, comp.y, comp.width, comp.height });
+    }
+
+    try writer.writeAll("\nWires:\n");
+    for (grid.wires) |w| {
+        try writer.print("  {d}.{s} -> {d}.{s}:", .{ w.src_id, portName(w.src_port), w.dst_id, portName(w.dst_port) });
+        if (w.segments.len == 0) {
+            try writer.writeAll(" (empty)\n");
+            continue;
+        }
+        try writer.print(" ({d},{d})", .{ w.segments[0].from.x, w.segments[0].from.y });
+        for (w.segments) |seg| {
+            try writer.print(" -> ({d},{d})", .{ seg.to.x, seg.to.y });
+        }
+        try writer.writeByte('\n');
+    }
+
+    // Crossings: deduplicated by (wire-pair, point), but for simplicity dump all
+    // raw entries grouped by wire.
+    var any_crossings = false;
+    for (grid.wires) |w| {
+        if (w.crossings.len > 0) {
+            any_crossings = true;
+            break;
+        }
+    }
+    if (any_crossings) {
+        try writer.writeAll("\nCrossings:\n");
+        for (grid.wires) |w| {
+            for (w.crossings) |pt| {
+                try writer.print("  wire {d}.{s}->{d}.{s} @({d},{d})\n", .{
+                    w.src_id, portName(w.src_port), w.dst_id, portName(w.dst_port), pt.x, pt.y,
+                });
+            }
+        }
     }
 }
 
