@@ -804,15 +804,30 @@ pub fn build(b: *std.Build) void {
         .dest_dir = .{ .override = .{ .custom = "lib" } },
     });
     
+    const embed_write_files = b.addWriteFiles();
+    _ = embed_write_files.addCopyFile(runtime_artifact.getEmittedBin(), "circ-runtime.wasm");
+    const embed_zig_file = embed_write_files.add("runtime_embed.zig", 
+        \\pub const runtime_wasm = @embedFile("circ-runtime.wasm");
+    );
+    
     const runtime_embed_mod = b.createModule(.{
-        .root_source_file = b.path("lib/topology/runtime_embed.zig"),
+        .root_source_file = embed_zig_file,
         .target = target,
         .optimize = optimize,
     });
-    // Add the installed wasm as an anonymous import that runtime_embed.zig can @embedFile
-    runtime_embed_mod.addAnonymousImport("circ-runtime.wasm", .{
-        .root_source_file = runtime_artifact.getEmittedBin(),
+
+    const phase0_node_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/e2e/phase0_node_test.zig"),
+        .target = target,
+        .optimize = optimize,
     });
+    phase0_node_tests_mod.addImport("format", format_mod_for_wasm);
+    phase0_node_tests_mod.addImport("runtime_embed", runtime_embed_mod);
+    const phase0_node_tests = b.addTest(.{
+        .root_module = phase0_node_tests_mod,
+    });
+    const run_phase0_node_tests = b.addRunArtifact(phase0_node_tests);
+    run_phase0_node_tests.step.dependOn(&install_runtime.step);
 
     const circ_compile_mod = b.createModule(.{
         .root_source_file = b.path("cmd/circ-compile/main.zig"),
@@ -919,6 +934,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_resolver_builtins_tests.step);
     test_step.dependOn(&run_resolver_file_loader_tests.step);
     test_step.dependOn(&run_validator_project_passes_tests.step);
+    test_step.dependOn(&run_phase0_node_tests.step);
 
     const emit_project_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/emit/project_emit_test.zig"),

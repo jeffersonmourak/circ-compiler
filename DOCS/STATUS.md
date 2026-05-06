@@ -11,11 +11,11 @@
 **Files touched:** `templates/interpreter.zig`, `templates/main.zig`, `build.zig`, `lib/orchestrator/embed.zig`
 **Tests:** added `interpreter: single not-gate topology`, `interpreter: rejects wrong magic`, `interpreter: rejects unknown version`, `interpreter: rejects truncated payload`, ran `zig build test`, result pass
 **Next slice:** Pre-built runtime embed
-## 2026-05-05 — Phase 0 — Pre-built runtime embed
+## 2026-05-05 — Phase 0 — Node integration test
 
-**What shipped:** Added a `zig build` step to pre-compile the runtime template into a standalone WASM binary and embedded it into the `circ-compile` executable via `lib/topology/runtime_embed.zig`.
-**Files touched:** `build.zig`, `lib/topology/runtime_embed.zig`
-**Tests:** ran `zig build test`, result pass
-**Next slice:** Hand-crafted Node integration test (proving Phase 0)
-**Notes:** 
+**What shipped:** Added a Zig integration test that hand-crafts a binary `circ.topology` payload, wraps it in a WASM custom section, appends it to the pre-built runtime WASM, and drives it via Node.js using the defined host protocol. This proves that the pre-built runtime with the interpreter is fully functional.
+**Files touched:** `tests/e2e/phase0_node_test.zig`, `build.zig`
+**Tests:** added `phase0: inverter round-trip via Node`, ran `zig build test`, result pass
+**Next slice:** Topology serializer (Phase 1, Slice 1)
+**Notes:** Phase 0 is now complete. The `circ-runtime.wasm` is pre-compiled and embedded in the CLI, and the Host Protocol for loading topology has been verified in Node.js.
 
