@@ -28,3 +28,12 @@
 **Next slice:** Recursive expander + project serializer
 **Notes:** 
 
+
+## 2026-05-05 — Phase 1 — Recursive expander + project serializer
+
+**What shipped:** Implemented `serializeProject` and the recursive expander in `lib/topology/serializer.zig`. The expander flattens sub-circuit hierarchies into primitive records with globally-unique IDs and rewires input/output boundaries.
+**Files touched:** `lib/topology/serializer.zig`
+**Tests:** added `serialize: half-adder project flat`, ran `zig build test`, result pass
+**Next slice:** Integration tests against all fixtures
+**Notes:** 
+
