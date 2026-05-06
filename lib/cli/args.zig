@@ -1,4 +1,5 @@
 const std = @import("std");
+const render_color = @import("render_color");
 
 pub const Mode = enum {
     compile,
@@ -7,12 +8,15 @@ pub const Mode = enum {
     preview,
 };
 
+pub const ColorMode = render_color.ColorMode;
+
 pub const Args = struct {
     input_path: []const u8,
     mode: Mode,
     output_path: ?[]const u8 = null,
     warnings_as_errors: bool = false,
     expand_macros: bool = false,
+    color: ColorMode = .auto,
 };
 
 pub const ParseError = error{
@@ -64,6 +68,19 @@ pub fn parse(argv: []const []const u8) ParseError!Args {
         }
         if (std.mem.eql(u8, token, "--expand-macros")) {
             args.expand_macros = true;
+            continue;
+        }
+        if (std.mem.startsWith(u8, token, "--color=")) {
+            const value = token["--color=".len..];
+            if (std.mem.eql(u8, value, "auto")) {
+                args.color = .auto;
+            } else if (std.mem.eql(u8, value, "always")) {
+                args.color = .always;
+            } else if (std.mem.eql(u8, value, "never")) {
+                args.color = .never;
+            } else {
+                return error.InvalidFlagValue;
+            }
             continue;
         }
         if (std.mem.eql(u8, token, "-o")) {
@@ -171,4 +188,28 @@ test "cli_args_parse_expand_macros_flag" {
 test "cli_args_expand_macros_rejects_outside_preview" {
     try std.testing.expectError(error.InvalidFlagValue, parse(&.{ "circ-compile", "in.circ", "--inspect", "--expand-macros" }));
     try std.testing.expectError(error.InvalidFlagValue, parse(&.{ "circ-compile", "in.circ", "-o", "out.wasm", "--expand-macros" }));
+}
+
+test "cli_args_parse_color_auto" {
+    const parsed = try parse(&.{ "circ-compile", "in.circ", "--preview", "--color=auto" });
+    try std.testing.expectEqual(ColorMode.auto, parsed.color);
+}
+
+test "cli_args_parse_color_always" {
+    const parsed = try parse(&.{ "circ-compile", "in.circ", "--preview", "--color=always" });
+    try std.testing.expectEqual(ColorMode.always, parsed.color);
+}
+
+test "cli_args_parse_color_never" {
+    const parsed = try parse(&.{ "circ-compile", "in.circ", "--preview", "--color=never" });
+    try std.testing.expectEqual(ColorMode.never, parsed.color);
+}
+
+test "cli_args_color_default_is_auto" {
+    const parsed = try parse(&.{ "circ-compile", "in.circ", "--preview" });
+    try std.testing.expectEqual(ColorMode.auto, parsed.color);
+}
+
+test "cli_args_color_rejects_invalid_value" {
+    try std.testing.expectError(error.InvalidFlagValue, parse(&.{ "circ-compile", "in.circ", "--preview", "--color=rainbow" }));
 }

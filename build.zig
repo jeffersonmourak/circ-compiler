@@ -488,11 +488,23 @@ pub fn build(b: *std.Build) void {
     emit_behavior_tests.linkLibrary(parser_lib);
     emit_behavior_tests.linkLibC();
     const run_emit_behavior_tests = b.addRunArtifact(emit_behavior_tests);
+    // Phase 3 slice 1: color resolution module (depends only on std, used by cli_args).
+    const preview_render_color_mod = b.createModule(.{
+        .root_source_file = b.path("lib/preview/render/color.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const preview_render_color_tests = b.addTest(.{
+        .root_module = preview_render_color_mod,
+    });
+    const run_preview_render_color_tests = b.addRunArtifact(preview_render_color_tests);
+
     const cli_args_mod = b.createModule(.{
         .root_source_file = b.path("lib/cli/args.zig"),
         .target = target,
         .optimize = optimize,
     });
+    cli_args_mod.addImport("render_color", preview_render_color_mod);
     const cli_inspect_dump_mod = b.createModule(.{
         .root_source_file = b.path("lib/cli/inspect_dump.zig"),
         .target = target,
@@ -839,6 +851,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_emit_full_tests.step);
     test_step.dependOn(&run_emit_behavior_tests.step);
     test_step.dependOn(&run_cli_args_tests.step);
+    test_step.dependOn(&run_preview_render_color_tests.step);
     test_step.dependOn(&run_circ_compile_tests.step);
     test_step.dependOn(&circ_compile_exe.step);
     test_step.dependOn(&run_cli_integration_tests.step);
