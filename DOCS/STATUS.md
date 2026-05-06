@@ -64,3 +64,12 @@
 **Next slice:** Phase 3 Slice 1 — CLI wiring (`cmd/circ-compile/main.zig` calls `section_writer.combine` instead of `orchestrator.compile`)
 **Notes:** Phase 2 is complete. `section_writer.combine` is the stable surface Phase 3 will call.
 
+
+## 2026-05-06 — Phase 3 — CLI wiring + integration tests
+
+**What shipped:** Wired `serializer`, `section_writer`, and `runtime_embed` as imports into the `circ-compile` module in `build.zig`. Replaced the `.compile` branch in `cmd/circ-compile/main.zig` to use `serializer.serializeProject`/`serializeModule` + `section_writer.combine` instead of `orchestrator.compile`. Added `--build-dir` deprecation warning. Added `tests/e2e/phase3_cli_test.zig` with 5 CLI integration tests. Updated the pre-existing `cli build-dir preserves workspace` test to reflect the new behavior (workspace no longer created; warning emitted instead).
+**Files touched:** `build.zig`, `cmd/circ-compile/main.zig`, `tests/e2e/phase3_cli_test.zig`, `tests/cli/integration_test.zig`, `DOCS/STATUS.md`
+**Tests:** added `phase3: circ-compile inverter end-to-end`, `phase3: circ-compile project end-to-end`, `phase3: --emit-zig output unchanged`, `phase3: --inspect output unchanged`, `phase3: --build-dir emits warning not error`; updated `cli build-dir is accepted with warning`; ran `zig build test`, result 137/137 pass
+**Next slice:** Phase 4 — Cleanup (remove orchestrator, old embed.zig, templates/; update TypeScript SDK host protocol)
+**Notes:** Phase 3 is complete. `zig` subprocess is no longer spawned in compile mode. The `emitted` variable and orchestrator import are intentionally left as dead code for Phase 4 to remove.
+

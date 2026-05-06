@@ -1015,6 +1015,11 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+
+    // Wire serializer and section_writer into the circ-compile binary
+    circ_compile_mod.addImport("serializer", topology_serializer_tests_mod);
+    circ_compile_mod.addImport("section_writer", section_writer_mod);
+
     const section_writer_tests = b.addTest(.{
         .root_module = section_writer_mod,
     });
@@ -1067,6 +1072,21 @@ pub fn build(b: *std.Build) void {
     const run_phase1_node_tests = b.addRunArtifact(phase1_node_tests);
     run_phase1_node_tests.step.dependOn(&install_runtime.step);
     test_step.dependOn(&run_phase1_node_tests.step);
+
+    const phase3_cli_options = b.addOptions();
+    phase3_cli_options.addOption([]const u8, "circ_compile_path", b.getInstallPath(.bin, "circ-compile"));
+    const phase3_cli_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/e2e/phase3_cli_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    phase3_cli_tests_mod.addOptions("build_options", phase3_cli_options);
+    const phase3_cli_tests = b.addTest(.{
+        .root_module = phase3_cli_tests_mod,
+    });
+    const run_phase3_cli_tests = b.addRunArtifact(phase3_cli_tests);
+    run_phase3_cli_tests.step.dependOn(&circ_compile_exe.step);
+    test_step.dependOn(&run_phase3_cli_tests.step);
 
     const topology_interpreter_tests_mod = b.createModule(.{
         .root_source_file = b.path("templates/interpreter.zig"),

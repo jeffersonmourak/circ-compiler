@@ -11,6 +11,9 @@ const inspect_dump = @import("inspect_dump");
 const scan_imports = @import("scan_imports");
 const import_cycle = @import("import_cycle");
 const resolve_bodies = @import("resolve_bodies");
+const serializer = @import("serializer");
+const section_writer = @import("section_writer");
+const runtime_embed = @import("runtime_embed");
 
 fn makePathAny(path: []const u8) !void {
     if (!std.fs.path.isAbsolute(path)) {
@@ -225,15 +228,40 @@ fn run() !u8 {
             return 0;
         },
         .compile => {
-            var orchestrator_result = orchestrator.compile(allocator, emitted, .{
-                .output_wasm_path = args.output_path.?,
-                .build_dir = args.build_dir,
-            }) catch |err| {
-                if (err == error.ZigBuildFailed) return 1;
-                try stderr_writer.print("compile orchestration failed: {s}\n", .{@errorName(err)});
+            if (args.build_dir != null) {
+                try stderr_writer.writeAll(
+                    "warning: --build-dir is unused in the new compile path and will be removed in a future release\n",
+                );
+            }
+
+            const topology_bytes = blk: {
+                if (maybe_project) |*project| {
+                    break :blk serializer.serializeProject(allocator, project) catch |err| {
+                        try stderr_writer.print("topology serialization failed: {s}\n", .{@errorName(err)});
+                        return 1;
+                    };
+                }
+                break :blk serializer.serializeModule(allocator, &ir_module) catch |err| {
+                    try stderr_writer.print("topology serialization failed: {s}\n", .{@errorName(err)});
+                    return 1;
+                };
+            };
+            defer allocator.free(topology_bytes);
+
+            const wasm_bytes = section_writer.combine(
+                allocator,
+                runtime_embed.runtime_wasm,
+                topology_bytes,
+            ) catch |err| {
+                try stderr_writer.print("wasm assembly failed: {s}\n", .{@errorName(err)});
                 return 1;
             };
-            defer orchestrator_result.deinit(allocator);
+            defer allocator.free(wasm_bytes);
+
+            writeFileAny(args.output_path.?, wasm_bytes) catch |err| {
+                try stderr_writer.print("failed writing wasm output: {s}\n", .{@errorName(err)});
+                return 1;
+            };
             return 0;
         },
         .inspect => unreachable,

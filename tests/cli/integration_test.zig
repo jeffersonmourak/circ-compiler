@@ -147,7 +147,7 @@ test "cli unknown flag exits 2" {
     try std.testing.expect(std.mem.indexOf(u8, result.stderr, "usage error") != null);
 }
 
-test "cli build-dir preserves workspace" {
+test "cli build-dir is accepted with warning" {
     try buildCli();
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
@@ -160,11 +160,10 @@ test "cli build-dir preserves workspace" {
     var result = try run(&.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/inverter.circ", "-o", output_path, "--build-dir", build_dir });
     defer result.deinit(std.testing.allocator);
 
+    // --build-dir is ignored in the new compile path; exits 0 with a deprecation warning
     try std.testing.expectEqual(@as(i32, 0), exitCode(result.term));
     try expectFileExists(output_path);
-    const compiled_source = try std.fmt.allocPrint(std.testing.allocator, "{s}/src/compiled.zig", .{build_dir});
-    defer std.testing.allocator.free(compiled_source);
-    try expectFileExists(compiled_source);
+    try std.testing.expect(std.mem.indexOf(u8, result.stderr, "warning:") != null);
 }
 
 test "cli emit-zig mode writes expected zig file" {
