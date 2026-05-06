@@ -929,6 +929,57 @@ pub fn build(b: *std.Build) void {
     const run_section_writer_tests = b.addRunArtifact(section_writer_tests);
     test_step.dependOn(&run_section_writer_tests.step);
 
+    // Phase 0 slice 3: circ.topology.v0.full schema + encoder + decoder
+    const topology_full_format_mod = b.createModule(.{
+        .root_source_file = b.path("lib/topology/full_format.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    topology_full_format_mod.addImport("format", topology_format_tests_mod);
+    const topology_full_format_tests = b.addTest(.{
+        .root_module = topology_full_format_mod,
+    });
+    const run_topology_full_format_tests = b.addRunArtifact(topology_full_format_tests);
+    test_step.dependOn(&run_topology_full_format_tests.step);
+
+    const topology_full_serializer_mod = b.createModule(.{
+        .root_source_file = b.path("lib/topology/full_serializer.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    topology_full_serializer_mod.addImport("full_format", topology_full_format_mod);
+    const topology_full_serializer_tests = b.addTest(.{
+        .root_module = topology_full_serializer_mod,
+    });
+    const run_topology_full_serializer_tests = b.addRunArtifact(topology_full_serializer_tests);
+    test_step.dependOn(&run_topology_full_serializer_tests.step);
+
+    const topology_full_decoder_mod = b.createModule(.{
+        .root_source_file = b.path("lib/topology/full_decoder.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    topology_full_decoder_mod.addImport("full_format", topology_full_format_mod);
+    const topology_full_decoder_tests = b.addTest(.{
+        .root_module = topology_full_decoder_mod,
+    });
+    const run_topology_full_decoder_tests = b.addRunArtifact(topology_full_decoder_tests);
+    test_step.dependOn(&run_topology_full_decoder_tests.step);
+
+    const topology_full_roundtrip_mod = b.createModule(.{
+        .root_source_file = b.path("tests/topology/full_roundtrip_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    topology_full_roundtrip_mod.addImport("full_format", topology_full_format_mod);
+    topology_full_roundtrip_mod.addImport("full_serializer", topology_full_serializer_mod);
+    topology_full_roundtrip_mod.addImport("full_decoder", topology_full_decoder_mod);
+    const topology_full_roundtrip_tests = b.addTest(.{
+        .root_module = topology_full_roundtrip_mod,
+    });
+    const run_topology_full_roundtrip_tests = b.addRunArtifact(topology_full_roundtrip_tests);
+    test_step.dependOn(&run_topology_full_roundtrip_tests.step);
+
     const section_writer_fixtures_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/e2e/section_writer_fixtures_test.zig"),
         .target = target,
