@@ -488,97 +488,6 @@ pub fn build(b: *std.Build) void {
     emit_behavior_tests.linkLibrary(parser_lib);
     emit_behavior_tests.linkLibC();
     const run_emit_behavior_tests = b.addRunArtifact(emit_behavior_tests);
-    const orchestrator_embed_mod = b.createModule(.{
-        .root_source_file = b.path("orchestrator_embed_module.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    const orchestrator_embed_tests_mod = b.createModule(.{
-        .root_source_file = b.path("tests/orchestrator/embed_test.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    orchestrator_embed_tests_mod.addImport("orchestrator_embed", orchestrator_embed_mod);
-    const orchestrator_embed_tests = b.addTest(.{
-        .root_module = orchestrator_embed_tests_mod,
-    });
-    const run_orchestrator_embed_tests = b.addRunArtifact(orchestrator_embed_tests);
-    const orchestrator_workspace_mod = b.createModule(.{
-        .root_source_file = b.path("lib/orchestrator/workspace.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    orchestrator_workspace_mod.addImport("orchestrator_embed", orchestrator_embed_mod);
-    const orchestrator_workspace_tests_mod = b.createModule(.{
-        .root_source_file = b.path("tests/orchestrator/workspace_test.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    orchestrator_workspace_tests_mod.addImport("orchestrator_workspace", orchestrator_workspace_mod);
-    orchestrator_workspace_tests_mod.addImport("orchestrator_embed", orchestrator_embed_mod);
-    const orchestrator_workspace_tests = b.addTest(.{
-        .root_module = orchestrator_workspace_tests_mod,
-    });
-    const run_orchestrator_workspace_tests = b.addRunArtifact(orchestrator_workspace_tests);
-    const orchestrator_subprocess_mod = b.createModule(.{
-        .root_source_file = b.path("lib/orchestrator/subprocess.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    const orchestrator_subprocess_tests_mod = b.createModule(.{
-        .root_source_file = b.path("tests/orchestrator/subprocess_test.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    orchestrator_subprocess_tests_mod.addImport("orchestrator_subprocess", orchestrator_subprocess_mod);
-    const orchestrator_subprocess_tests = b.addTest(.{
-        .root_module = orchestrator_subprocess_tests_mod,
-    });
-    const run_orchestrator_subprocess_tests = b.addRunArtifact(orchestrator_subprocess_tests);
-    const orchestrator_finalize_mod = b.createModule(.{
-        .root_source_file = b.path("lib/orchestrator/finalize.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    orchestrator_finalize_mod.addImport("orchestrator_workspace", orchestrator_workspace_mod);
-    const orchestrator_finalize_tests_mod = b.createModule(.{
-        .root_source_file = b.path("tests/orchestrator/finalize_test.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    orchestrator_finalize_tests_mod.addImport("orchestrator_workspace", orchestrator_workspace_mod);
-    orchestrator_finalize_tests_mod.addImport("orchestrator_finalize", orchestrator_finalize_mod);
-    const orchestrator_finalize_tests = b.addTest(.{
-        .root_module = orchestrator_finalize_tests_mod,
-    });
-    const run_orchestrator_finalize_tests = b.addRunArtifact(orchestrator_finalize_tests);
-    const orchestrator_main_mod = b.createModule(.{
-        .root_source_file = b.path("lib/orchestrator/main.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    orchestrator_main_mod.addImport("orchestrator_workspace", orchestrator_workspace_mod);
-    orchestrator_main_mod.addImport("orchestrator_subprocess", orchestrator_subprocess_mod);
-    orchestrator_main_mod.addImport("orchestrator_finalize", orchestrator_finalize_mod);
-    const orchestrator_main_tests_mod = b.createModule(.{
-        .root_source_file = b.path("tests/orchestrator/main_test.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    orchestrator_main_tests_mod.addImport("translate", translate_mod);
-    orchestrator_main_tests_mod.addImport("resolver", resolver_mod);
-    orchestrator_main_tests_mod.addImport("validator_run", validator_run_mod);
-    orchestrator_main_tests_mod.addImport("diagnostics", validator_diagnostics_mod);
-    orchestrator_main_tests_mod.addImport("emit_main", emit_main_mod);
-    orchestrator_main_tests_mod.addImport("orchestrator_main", orchestrator_main_mod);
-    const orchestrator_main_tests = b.addTest(.{
-        .root_module = orchestrator_main_tests_mod,
-    });
-    orchestrator_main_tests.addIncludePath(b.path("."));
-    orchestrator_main_tests.addIncludePath(b.path("./lib"));
-    orchestrator_main_tests.linkLibrary(parser_lib);
-    orchestrator_main_tests.linkLibC();
-    const run_orchestrator_main_tests = b.addRunArtifact(orchestrator_main_tests);
     const cli_args_mod = b.createModule(.{
         .root_source_file = b.path("lib/cli/args.zig"),
         .target = target,
@@ -718,6 +627,117 @@ pub fn build(b: *std.Build) void {
     resolver_file_loader_tests.linkLibrary(parser_lib);
     resolver_file_loader_tests.linkLibC();
     const run_resolver_file_loader_tests = b.addRunArtifact(resolver_file_loader_tests);
+
+    // --- Pre-built Runtime WASM ---
+    const wasm_target = b.resolveTargetQuery(.{
+        .cpu_arch = .wasm32,
+        .os_tag = .freestanding,
+    });
+    
+    // We create a dummy compiled.zig file for the runtime embed
+    const write_dummy_compiled = b.addWriteFiles();
+    const dummy_compiled_file = write_dummy_compiled.add("compiled.zig", "pub const is_prebuilt_runtime = true;\n");
+
+    const runtime_module = b.createModule(.{
+        .root_source_file = b.path("templates/main.zig"),
+        .target = wasm_target,
+        .optimize = optimize, // Usually ReleaseSmall or ReleaseFast for WASM, but follow global optimize option
+    });
+    
+    runtime_module.addImport("compiled.zig", b.createModule(.{
+        .root_source_file = dummy_compiled_file,
+        .target = wasm_target,
+        .optimize = optimize,
+    }));
+    
+    const circuit_mod_for_wasm = b.createModule(.{
+        .root_source_file = b.path("lib/circuit.zig"),
+        .target = wasm_target,
+        .optimize = optimize,
+    });
+    
+    const memory_mod_for_wasm = b.createModule(.{
+        .root_source_file = b.path("lib/memory.zig"),
+        .target = wasm_target,
+        .optimize = optimize,
+    });
+    
+    const transport_mod_for_wasm = b.createModule(.{
+        .root_source_file = b.path("lib/transport.zig"),
+        .target = wasm_target,
+        .optimize = optimize,
+    });
+    
+    const log_mod_for_wasm = b.createModule(.{
+        .root_source_file = b.path("lib/log.zig"),
+        .target = wasm_target,
+        .optimize = optimize,
+    });
+    
+    log_mod_for_wasm.addImport("memory.zig", memory_mod_for_wasm);
+    
+    circuit_mod_for_wasm.addImport("memory.zig", memory_mod_for_wasm);
+    circuit_mod_for_wasm.addImport("log.zig", log_mod_for_wasm);
+    circuit_mod_for_wasm.addImport("transport.zig", transport_mod_for_wasm);
+    
+    transport_mod_for_wasm.addImport("circuit.zig", circuit_mod_for_wasm);
+    
+    const interpreter_mod_for_wasm = b.createModule(.{
+        .root_source_file = b.path("templates/interpreter.zig"),
+        .target = wasm_target,
+        .optimize = optimize,
+    });
+    
+    const format_mod_for_wasm = b.createModule(.{
+        .root_source_file = b.path("lib/topology/format.zig"),
+        .target = wasm_target,
+        .optimize = optimize,
+    });
+    
+    interpreter_mod_for_wasm.addImport("format", format_mod_for_wasm);
+    interpreter_mod_for_wasm.addImport("circuit.zig", circuit_mod_for_wasm);
+    
+    runtime_module.addImport("circuit.zig", circuit_mod_for_wasm);
+    runtime_module.addImport("memory.zig", memory_mod_for_wasm);
+    runtime_module.addImport("interpreter.zig", interpreter_mod_for_wasm);
+    
+    const runtime_artifact = b.addExecutable(.{
+        .name = "circ-runtime",
+        .root_module = runtime_module,
+    });
+    runtime_artifact.entry = .disabled;
+    runtime_artifact.rdynamic = true;
+    
+    // We install the WASM so we can use it as a dependency for the CLI embed
+    const install_runtime = b.addInstallArtifact(runtime_artifact, .{
+        .dest_dir = .{ .override = .{ .custom = "lib" } },
+    });
+    
+    const embed_write_files = b.addWriteFiles();
+    _ = embed_write_files.addCopyFile(runtime_artifact.getEmittedBin(), "circ-runtime.wasm");
+    const embed_zig_file = embed_write_files.add("runtime_embed.zig", 
+        \\pub const runtime_wasm = @embedFile("circ-runtime.wasm");
+    );
+    
+    const runtime_embed_mod = b.createModule(.{
+        .root_source_file = embed_zig_file,
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const topology_protocol_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/e2e/topology_protocol_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    topology_protocol_tests_mod.addImport("format", format_mod_for_wasm);
+    topology_protocol_tests_mod.addImport("runtime_embed", runtime_embed_mod);
+    const topology_protocol_tests = b.addTest(.{
+        .root_module = topology_protocol_tests_mod,
+    });
+    const run_topology_protocol_tests = b.addRunArtifact(topology_protocol_tests);
+    run_topology_protocol_tests.step.dependOn(&install_runtime.step);
+
     const circ_compile_mod = b.createModule(.{
         .root_source_file = b.path("cmd/circ-compile/main.zig"),
         .target = target,
@@ -730,16 +750,17 @@ pub fn build(b: *std.Build) void {
     circ_compile_mod.addImport("validator_run", validator_run_mod);
     circ_compile_mod.addImport("validator_run_project", validator_run_project_mod);
     circ_compile_mod.addImport("emit_main", emit_main_mod);
-    circ_compile_mod.addImport("orchestrator_main", orchestrator_main_mod);
     circ_compile_mod.addImport("inspect_dump", cli_inspect_dump_mod);
     circ_compile_mod.addImport("scan_imports", resolver_scan_imports_mod);
     circ_compile_mod.addImport("import_cycle", resolver_import_cycle_mod);
     circ_compile_mod.addImport("resolve_bodies", resolver_resolve_bodies_mod);
     circ_compile_mod.addImport("ir_types", ir_types_mod);
+    circ_compile_mod.addImport("runtime_embed", runtime_embed_mod);
     const circ_compile_exe = b.addExecutable(.{
         .name = "circ-compile",
         .root_module = circ_compile_mod,
     });
+    circ_compile_exe.step.dependOn(&install_runtime.step);
     circ_compile_exe.addIncludePath(b.path("."));
     circ_compile_exe.addIncludePath(b.path("./lib"));
     circ_compile_exe.linkLibrary(parser_lib);
@@ -807,11 +828,6 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_emit_metadata_tests.step);
     test_step.dependOn(&run_emit_full_tests.step);
     test_step.dependOn(&run_emit_behavior_tests.step);
-    test_step.dependOn(&run_orchestrator_embed_tests.step);
-    test_step.dependOn(&run_orchestrator_workspace_tests.step);
-    test_step.dependOn(&run_orchestrator_subprocess_tests.step);
-    test_step.dependOn(&run_orchestrator_finalize_tests.step);
-    test_step.dependOn(&run_orchestrator_main_tests.step);
     test_step.dependOn(&run_cli_args_tests.step);
     test_step.dependOn(&circ_compile_exe.step);
     test_step.dependOn(&run_cli_integration_tests.step);
@@ -821,6 +837,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_resolver_builtins_tests.step);
     test_step.dependOn(&run_resolver_file_loader_tests.step);
     test_step.dependOn(&run_validator_project_passes_tests.step);
+    test_step.dependOn(&run_topology_protocol_tests.step);
 
     const emit_project_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/emit/project_emit_test.zig"),
@@ -871,6 +888,128 @@ pub fn build(b: *std.Build) void {
     project_behavior_tests.linkLibC();
     const run_project_behavior_tests = b.addRunArtifact(project_behavior_tests);
     test_step.dependOn(&run_project_behavior_tests.step);
+
+    const topology_format_tests_mod = b.createModule(.{
+        .root_source_file = b.path("lib/topology/format.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const topology_format_tests = b.addTest(.{
+        .root_module = topology_format_tests_mod,
+    });
+    const run_topology_format_tests = b.addRunArtifact(topology_format_tests);
+    test_step.dependOn(&run_topology_format_tests.step);
+
+    const topology_serializer_tests_mod = b.createModule(.{
+        .root_source_file = b.path("lib/topology/serializer.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    topology_serializer_tests_mod.addImport("format", topology_format_tests_mod);
+    topology_serializer_tests_mod.addImport("ir_types", ir_types_mod);
+    const topology_serializer_tests = b.addTest(.{
+        .root_module = topology_serializer_tests_mod,
+    });
+    const run_topology_serializer_tests = b.addRunArtifact(topology_serializer_tests);
+    test_step.dependOn(&run_topology_serializer_tests.step);
+
+    const section_writer_mod = b.createModule(.{
+        .root_source_file = b.path("lib/topology/section_writer.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // Wire serializer and section_writer into the circ-compile binary
+    circ_compile_mod.addImport("serializer", topology_serializer_tests_mod);
+    circ_compile_mod.addImport("section_writer", section_writer_mod);
+
+    const section_writer_tests = b.addTest(.{
+        .root_module = section_writer_mod,
+    });
+    const run_section_writer_tests = b.addRunArtifact(section_writer_tests);
+    test_step.dependOn(&run_section_writer_tests.step);
+
+    const section_writer_fixtures_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/e2e/section_writer_fixtures_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    section_writer_fixtures_tests_mod.addImport("scan_imports", resolver_scan_imports_mod);
+    section_writer_fixtures_tests_mod.addImport("import_cycle", resolver_import_cycle_mod);
+    section_writer_fixtures_tests_mod.addImport("resolve_bodies", resolver_resolve_bodies_mod);
+    section_writer_fixtures_tests_mod.addImport("validator_run_project", validator_run_project_mod);
+    section_writer_fixtures_tests_mod.addImport("diagnostics", validator_diagnostics_mod);
+    section_writer_fixtures_tests_mod.addImport("serializer", topology_serializer_tests_mod);
+    section_writer_fixtures_tests_mod.addImport("section_writer", section_writer_mod);
+    section_writer_fixtures_tests_mod.addImport("runtime_embed", runtime_embed_mod);
+    const section_writer_fixtures_tests = b.addTest(.{
+        .root_module = section_writer_fixtures_tests_mod,
+    });
+    section_writer_fixtures_tests.addIncludePath(b.path("."));
+    section_writer_fixtures_tests.addIncludePath(b.path("./lib"));
+    section_writer_fixtures_tests.linkLibrary(parser_lib);
+    section_writer_fixtures_tests.linkLibC();
+    const run_section_writer_fixtures_tests = b.addRunArtifact(section_writer_fixtures_tests);
+    run_section_writer_fixtures_tests.step.dependOn(&install_runtime.step);
+    test_step.dependOn(&run_section_writer_fixtures_tests.step);
+
+    const serializer_fixtures_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/e2e/serializer_fixtures_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    serializer_fixtures_tests_mod.addImport("scan_imports", resolver_scan_imports_mod);
+    serializer_fixtures_tests_mod.addImport("import_cycle", resolver_import_cycle_mod);
+    serializer_fixtures_tests_mod.addImport("resolve_bodies", resolver_resolve_bodies_mod);
+    serializer_fixtures_tests_mod.addImport("validator_run_project", validator_run_project_mod);
+    serializer_fixtures_tests_mod.addImport("diagnostics", validator_diagnostics_mod);
+    serializer_fixtures_tests_mod.addImport("serializer", topology_serializer_tests_mod);
+    serializer_fixtures_tests_mod.addImport("runtime_embed", runtime_embed_mod);
+    const serializer_fixtures_tests = b.addTest(.{
+        .root_module = serializer_fixtures_tests_mod,
+    });
+    serializer_fixtures_tests.addIncludePath(b.path("."));
+    serializer_fixtures_tests.addIncludePath(b.path("./lib"));
+    serializer_fixtures_tests.linkLibrary(parser_lib);
+    serializer_fixtures_tests.linkLibC();
+    const run_serializer_fixtures_tests = b.addRunArtifact(serializer_fixtures_tests);
+    run_serializer_fixtures_tests.step.dependOn(&install_runtime.step);
+    test_step.dependOn(&run_serializer_fixtures_tests.step);
+
+    const cli_e2e_options = b.addOptions();
+    cli_e2e_options.addOption([]const u8, "circ_compile_path", b.getInstallPath(.bin, "circ-compile"));
+    const cli_e2e_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/e2e/cli_e2e_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    cli_e2e_tests_mod.addOptions("build_options", cli_e2e_options);
+    const cli_e2e_tests = b.addTest(.{
+        .root_module = cli_e2e_tests_mod,
+    });
+    const run_cli_e2e_tests = b.addRunArtifact(cli_e2e_tests);
+    run_cli_e2e_tests.step.dependOn(&circ_compile_exe.step);
+    test_step.dependOn(&run_cli_e2e_tests.step);
+
+    const topology_interpreter_tests_mod = b.createModule(.{
+        .root_source_file = b.path("templates/interpreter.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    topology_interpreter_tests_mod.addImport("format", topology_format_tests_mod);
+    
+    const circuit_mod = b.createModule(.{
+        .root_source_file = b.path("lib/circuit.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    
+    topology_interpreter_tests_mod.addImport("circuit.zig", circuit_mod);
+    const topology_interpreter_tests = b.addTest(.{
+        .root_module = topology_interpreter_tests_mod,
+    });
+    const run_topology_interpreter_tests = b.addRunArtifact(topology_interpreter_tests);
+    test_step.dependOn(&run_topology_interpreter_tests.step);
 
     const e2e_linux_docker_step = b.step(
         "e2e-linux-docker",

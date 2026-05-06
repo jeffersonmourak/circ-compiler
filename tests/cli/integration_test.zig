@@ -147,7 +147,7 @@ test "cli unknown flag exits 2" {
     try std.testing.expect(std.mem.indexOf(u8, result.stderr, "usage error") != null);
 }
 
-test "cli build-dir preserves workspace" {
+test "cli build-dir is rejected as unknown flag" {
     try buildCli();
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
@@ -160,11 +160,9 @@ test "cli build-dir preserves workspace" {
     var result = try run(&.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/inverter.circ", "-o", output_path, "--build-dir", build_dir });
     defer result.deinit(std.testing.allocator);
 
-    try std.testing.expectEqual(@as(i32, 0), exitCode(result.term));
-    try expectFileExists(output_path);
-    const compiled_source = try std.fmt.allocPrint(std.testing.allocator, "{s}/src/compiled.zig", .{build_dir});
-    defer std.testing.allocator.free(compiled_source);
-    try expectFileExists(compiled_source);
+    // --build-dir is now an unknown flag — exits 2 with a usage error
+    try std.testing.expectEqual(@as(i32, 2), exitCode(result.term));
+    try std.testing.expect(std.mem.indexOf(u8, result.stderr, "usage error") != null);
 }
 
 test "cli emit-zig mode writes expected zig file" {
@@ -203,7 +201,7 @@ test "cli emit-zig hard error exits 1 and no output" {
     try expectFileMissing(output_path);
 }
 
-test "cli emit-zig rejects build-dir with usage error" {
+test "cli build-dir is unknown flag in all modes" {
     try buildCli();
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
@@ -217,7 +215,7 @@ test "cli emit-zig rejects build-dir with usage error" {
     defer result.deinit(std.testing.allocator);
 
     try std.testing.expectEqual(@as(i32, 2), exitCode(result.term));
-    try std.testing.expect(std.mem.indexOf(u8, result.stderr, "--build-dir") != null);
+    try std.testing.expect(std.mem.indexOf(u8, result.stderr, "usage error") != null);
 }
 
 test "cli inspect clean fixture exits 0 and matches golden stdout" {

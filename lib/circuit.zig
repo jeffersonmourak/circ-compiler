@@ -47,6 +47,8 @@ fn recalculateAndReschedule(
 
             if (aValue == .low or bValue == .low) {
                 calculated_state = .low;
+            } else if (aValue == .undefined or bValue == .undefined) {
+                calculated_state = .undefined;
             } else {
                 calculated_state = .high;
             }
@@ -112,7 +114,7 @@ pub const State = enum {
         return switch (self) {
             .low => .high,
             .high => .low,
-            else => undefined,
+            .undefined => .undefined,
         };
     }
 
