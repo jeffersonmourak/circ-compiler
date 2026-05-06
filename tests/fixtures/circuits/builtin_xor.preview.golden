@@ -1,0 +1,46 @@
+Topology (v0.full)
+  components: 19
+  connections: 20
+
+Components:
+  [0] input_pin "a"
+  [1] input_pin "b"
+  [2] input_pin "a" origin: g:xor
+  [3] input_pin "b" origin: g:xor
+  [4] input_pin "a" origin: g:xor > o:or
+  [5] input_pin "b" origin: g:xor > o:or
+  [6] not_gate "na" origin: g:xor > o:or
+  [7] not_gate "nb" origin: g:xor > o:or
+  [8] and_gate "inner" origin: g:xor > o:or
+  [9] not_gate "n" origin: g:xor > o:or
+  [10] output_pin "out" origin: g:xor > o:or
+  [11] input_pin "a" origin: g:xor > n:nand
+  [12] input_pin "b" origin: g:xor > n:nand
+  [13] and_gate "inner" origin: g:xor > n:nand
+  [14] not_gate "n" origin: g:xor > n:nand
+  [15] output_pin "out" origin: g:xor > n:nand
+  [16] and_gate "gate" origin: g:xor
+  [17] output_pin "out" origin: g:xor
+  [18] output_pin "out"
+
+Connections:
+  4.out -> 6.in
+  5.out -> 7.in
+  6.out -> 8.a
+  7.out -> 8.b
+  8.out -> 9.in
+  9.out -> 10.in
+  2.out -> 4.in
+  3.out -> 5.in
+  11.out -> 13.a
+  12.out -> 13.b
+  13.out -> 14.in
+  14.out -> 15.in
+  2.out -> 11.in
+  3.out -> 12.in
+  9.out -> 16.a
+  14.out -> 16.b
+  16.out -> 17.in
+  0.out -> 2.in
+  1.out -> 3.in
+  16.out -> 18.in

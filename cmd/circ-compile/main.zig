@@ -14,6 +14,7 @@ const serializer = @import("serializer");
 const full_serializer = @import("full_serializer");
 const section_writer = @import("section_writer");
 const runtime_embed = @import("runtime_embed");
+const preview_dump = @import("preview_dump");
 
 fn makePathAny(path: []const u8) !void {
     if (!std.fs.path.isAbsolute(path)) {
@@ -129,7 +130,13 @@ pub fn run(
     var diagnostic_list: diagnostics.DiagnosticList = undefined;
     var maybe_project: ?@import("ir_types").Project = null;
 
-    if (has_imports and args.mode != .inspect) {
+    // Preview always goes through the project pipeline so implicit builtin-macro
+    // usages (e.g. `xor` without an explicit import) get resolved via scan_imports'
+    // implicit_builtin path. Compile/emit_zig keep the cheaper has_imports gate to
+    // avoid the extra disk I/O on macro-free fixtures (locked by perf-budget tests).
+    const needs_project_resolution = args.mode != .inspect and (has_imports or args.mode == .preview);
+
+    if (needs_project_resolution) {
         const scan_result = scan_imports.scanProjectImports(allocator, args.input_path) catch |err| {
             try stderr_writer.print("import scan failed: {s}\n", .{@errorName(err)});
             return 1;
@@ -270,9 +277,23 @@ pub fn run(
         },
         .inspect => unreachable,
         .preview => {
-            // Slice 1 placeholder. Real preview behaviour lands in slices 2–4.
-            try stderr_writer.writeAll("preview mode not yet implemented\n");
-            return 1;
+            var topology = if (maybe_project) |*project|
+                full_serializer.buildFromProject(allocator, project) catch |err| {
+                    try stderr_writer.print("topology build failed: {s}\n", .{@errorName(err)});
+                    return 1;
+                }
+            else
+                full_serializer.buildFromModule(allocator, &ir_module) catch |err| {
+                    try stderr_writer.print("topology build failed: {s}\n", .{@errorName(err)});
+                    return 1;
+                };
+            defer topology.deinit(allocator);
+
+            preview_dump.dump(stdout_writer, topology) catch |err| {
+                try stderr_writer.print("dump failed: {s}\n", .{@errorName(err)});
+                return 1;
+            };
+            return 0;
         },
     }
 }
@@ -309,4 +330,78 @@ test "run with --inspect on existing fixture" {
     try std.testing.expectEqual(@as(u8, 0), exit_code);
     try std.testing.expect(stdout_buf.items.len > 0);
     try std.testing.expectEqual(@as(usize, 0), stderr_buf.items.len);
+}
+
+const golden = @import("golden");
+
+fn runPreview(allocator: std.mem.Allocator, fixture_path: []const u8, stdout_buf: *std.ArrayList(u8), stderr_buf: *std.ArrayList(u8)) !u8 {
+    const argv = [_][]const u8{ "circ-compile", fixture_path, "--preview" };
+    return run(allocator, &argv, stdout_buf.writer(allocator), stderr_buf.writer(allocator));
+}
+
+test "phase1_preview_primitives_fixture" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const exit_code = try runPreview(allocator, "tests/fixtures/circuits/chain.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try std.testing.expectEqual(@as(usize, 0), stderr_buf.items.len);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/circuits/chain.preview.golden");
+}
+
+test "phase1_preview_xor_fixture" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const exit_code = try runPreview(allocator, "tests/fixtures/circuits/builtin_xor.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try std.testing.expectEqual(@as(usize, 0), stderr_buf.items.len);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/circuits/builtin_xor.preview.golden");
+}
+
+test "phase1_preview_xnor_fixture" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const exit_code = try runPreview(allocator, "tests/fixtures/circuits/builtin_xnor.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try std.testing.expectEqual(@as(usize, 0), stderr_buf.items.len);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/circuits/builtin_xnor.preview.golden");
+}
+
+test "phase1_preview_parse_error_to_stderr" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    // E001 is a validation error (unknown component type). Preview emits the
+    // diagnostic to stderr and returns non-zero before reaching the dispatch
+    // arm — locks the stream-split contract.
+    const exit_code = try runPreview(allocator, "tests/fixtures/circuits/E001_undeclared.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expect(exit_code != 0);
+    try std.testing.expectEqual(@as(usize, 0), stdout_buf.items.len);
+    try std.testing.expect(stderr_buf.items.len > 0);
 }

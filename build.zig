@@ -933,7 +933,12 @@ pub fn build(b: *std.Build) void {
     // Wire serializer and section_writer into the circ-compile binary
     circ_compile_mod.addImport("serializer", topology_serializer_tests_mod);
     circ_compile_mod.addImport("section_writer", section_writer_mod);
-    // full_serializer added below; the import wiring happens after the module is created.
+    circ_compile_mod.addImport("golden", b.createModule(.{
+        .root_source_file = b.path("tests/helpers/golden.zig"),
+        .target = target,
+        .optimize = optimize,
+    }));
+    // full_serializer and preview_dump added below; the import wiring happens after the modules are created.
 
     const section_writer_tests = b.addTest(.{
         .root_module = section_writer_mod,
@@ -1002,6 +1007,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     preview_dump_mod.addImport("full_format", topology_full_format_mod);
+    circ_compile_mod.addImport("preview_dump", preview_dump_mod);
     const preview_dump_tests = b.addTest(.{
         .root_module = preview_dump_mod,
     });
