@@ -55,14 +55,29 @@ const ExpanderState = struct {
 
 const BoundInput = struct {
     global_from_id: u32,
-    // from_port: format.PortName, // Not needed as from is always "out" for primitives? 
-    // Actually from can be anything, but for topology we assume from is "out" of component.
 };
 
-pub fn serializeProject(
+pub const PinMapping = struct {
+    name: []const u8,
+    global_id: u32,
+};
+
+pub const ProjectTopology = struct {
+    payload: []u8,
+    input_ids: []PinMapping,
+    output_ids: []PinMapping,
+
+    pub fn deinit(self: *ProjectTopology, allocator: std.mem.Allocator) void {
+        allocator.free(self.payload);
+        allocator.free(self.input_ids);
+        allocator.free(self.output_ids);
+    }
+};
+
+pub fn serializeProjectFull(
     allocator: std.mem.Allocator,
     project: *const ir.Project,
-) ![]u8 {
+) !ProjectTopology {
     var state = ExpanderState{
         .allocator = allocator,
         .project = project,
@@ -73,29 +88,63 @@ pub fn serializeProject(
     defer state.deinit();
 
     const root_module = &project.files[project.root_file_id.value];
-    _ = try expandModule(&state, root_module, null);
 
-    return try encodePayload(allocator, state.components.items, state.connections.items);
+    var root_local_to_global = std.AutoHashMap(u32, u32).init(allocator);
+    defer root_local_to_global.deinit();
+
+    var output_map = try expandModule(&state, root_module, null, &root_local_to_global);
+    defer output_map.deinit();
+
+    var input_ids_list: std.ArrayList(PinMapping) = .{};
+    errdefer input_ids_list.deinit(allocator);
+    for (root_module.inputs) |input| {
+        const global_id = root_local_to_global.get(input.component.value) orelse continue;
+        try input_ids_list.append(allocator, .{ .name = input.name, .global_id = global_id });
+    }
+
+    var output_ids_list: std.ArrayList(PinMapping) = .{};
+    errdefer output_ids_list.deinit(allocator);
+    for (root_module.outputs) |output| {
+        const global_id = output_map.get(output.name) orelse continue;
+        try output_ids_list.append(allocator, .{ .name = output.name, .global_id = global_id });
+    }
+
+    const payload = try encodePayload(allocator, state.components.items, state.connections.items);
+    errdefer allocator.free(payload);
+
+    return ProjectTopology{
+        .payload = payload,
+        .input_ids = try input_ids_list.toOwnedSlice(allocator),
+        .output_ids = try output_ids_list.toOwnedSlice(allocator),
+    };
+}
+
+pub fn serializeProject(
+    allocator: std.mem.Allocator,
+    project: *const ir.Project,
+) ![]u8 {
+    const topo = try serializeProjectFull(allocator, project);
+    allocator.free(topo.input_ids);
+    allocator.free(topo.output_ids);
+    return topo.payload;
 }
 
 /// Expands a module and returns a map of its output pin names to their global driver component IDs.
+/// When `local_to_global_out` is non-null (root call only), the caller's local→global map is
+/// populated before `local_to_global` is freed, so the caller can look up root input pin IDs.
 fn expandModule(
     state: *ExpanderState,
     module: *const ir.Module,
-    /// Maps child input pin names to parent global driver IDs.
     parent_input_bindings: ?std.StringHashMap(BoundInput),
+    local_to_global_out: ?*std.AutoHashMap(u32, u32),
 ) !std.StringHashMap(u32) {
-    // Maps module-local ComponentId.value -> globally-unique u32
     var local_to_global = std.AutoHashMap(u32, u32).init(state.allocator);
-    defer local_to_global.deinit();
+    errdefer local_to_global.deinit();
 
-    // Maps sub-circuit-instance ComponentId.value -> { output_name -> global_driver_id }
     var sub_output_map = std.AutoHashMap(u32, std.StringHashMap(u32)).init(state.allocator);
-    defer {
+    errdefer {
         var it = sub_output_map.valueIterator();
-        while (it.next()) |map| {
-            map.deinit();
-        }
+        while (it.next()) |map| map.deinit();
         sub_output_map.deinit();
     }
 
@@ -121,7 +170,6 @@ fn expandModule(
                 });
             },
             .sub_circuit_ref => |ref| {
-                // Find the child module
                 var child_module: ?*const ir.Module = null;
                 for (state.project.import_table) |imp| {
                     if (imp.importing_file.value == module.file_id.value and std.mem.eql(u8, imp.alias, ref.name)) {
@@ -129,15 +177,8 @@ fn expandModule(
                         break;
                     }
                 }
-                
-                if (child_module == null) {
-                    // Fallback for implicit builtins or just error
-                    // Actually resolveBodies should have handled this, but let's check files directly if not in import table?
-                    // Project.files is indexed by FileId.
-                    return error.ModuleNotFound;
-                }
+                if (child_module == null) return error.ModuleNotFound;
 
-                // Collect parent connections feeding this sub-circuit
                 var input_bindings = std.StringHashMap(BoundInput).init(state.allocator);
                 errdefer input_bindings.deinit();
                 for (module.connections) |conn| {
@@ -147,7 +188,7 @@ fn expandModule(
                     }
                 }
 
-                const child_outputs = try expandModule(state, child_module.?, input_bindings);
+                const child_outputs = try expandModule(state, child_module.?, input_bindings, null);
                 try sub_output_map.put(comp.id.value, child_outputs);
                 input_bindings.deinit();
             },
@@ -157,8 +198,6 @@ fn expandModule(
 
     // 2. Second pass: Handle module-level connections (rewiring primitives)
     for (module.connections) |conn| {
-        // We only care about connections between primitives or feeding into primitives.
-        // Connections *to* sub-circuits were already consumed in the recursive call above.
         const to_comp = findComponent(module, conn.to.component) orelse return error.ComponentNotFound;
         if (to_comp.kind != .primitive) continue;
 
@@ -192,6 +231,22 @@ fn expandModule(
     for (module.outputs) |output| {
         const driver_global_id = try resolveSignalGlobalId(module, output.driver, local_to_global, sub_output_map);
         try module_outputs.put(output.name, driver_global_id);
+    }
+
+    // Optionally export local_to_global before freeing (used by serializeProjectFull for root call)
+    if (local_to_global_out) |out| {
+        var it = local_to_global.iterator();
+        while (it.next()) |entry| {
+            try out.put(entry.key_ptr.*, entry.value_ptr.*);
+        }
+    }
+
+    // Explicit cleanup (errdefers above handle error paths)
+    local_to_global.deinit();
+    {
+        var it = sub_output_map.valueIterator();
+        while (it.next()) |map| map.deinit();
+        sub_output_map.deinit();
     }
 
     return module_outputs;

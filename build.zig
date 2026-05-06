@@ -1010,6 +1010,29 @@ pub fn build(b: *std.Build) void {
     const run_topology_serializer_tests = b.addRunArtifact(topology_serializer_tests);
     test_step.dependOn(&run_topology_serializer_tests.step);
 
+    const phase1_node_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/e2e/phase1_node_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    phase1_node_tests_mod.addImport("scan_imports", resolver_scan_imports_mod);
+    phase1_node_tests_mod.addImport("import_cycle", resolver_import_cycle_mod);
+    phase1_node_tests_mod.addImport("resolve_bodies", resolver_resolve_bodies_mod);
+    phase1_node_tests_mod.addImport("validator_run_project", validator_run_project_mod);
+    phase1_node_tests_mod.addImport("diagnostics", validator_diagnostics_mod);
+    phase1_node_tests_mod.addImport("serializer", topology_serializer_tests_mod);
+    phase1_node_tests_mod.addImport("runtime_embed", runtime_embed_mod);
+    const phase1_node_tests = b.addTest(.{
+        .root_module = phase1_node_tests_mod,
+    });
+    phase1_node_tests.addIncludePath(b.path("."));
+    phase1_node_tests.addIncludePath(b.path("./lib"));
+    phase1_node_tests.linkLibrary(parser_lib);
+    phase1_node_tests.linkLibC();
+    const run_phase1_node_tests = b.addRunArtifact(phase1_node_tests);
+    run_phase1_node_tests.step.dependOn(&install_runtime.step);
+    test_step.dependOn(&run_phase1_node_tests.step);
+
     const topology_interpreter_tests_mod = b.createModule(.{
         .root_source_file = b.path("templates/interpreter.zig"),
         .target = target,
