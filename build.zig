@@ -768,6 +768,16 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(circ_compile_exe);
     const circ_compile_step = b.step("circ-compile", "Build circ-compile CLI");
     circ_compile_step.dependOn(b.getInstallStep());
+
+    const circ_compile_tests = b.addTest(.{
+        .root_module = circ_compile_mod,
+    });
+    circ_compile_tests.addIncludePath(b.path("."));
+    circ_compile_tests.addIncludePath(b.path("./lib"));
+    circ_compile_tests.linkLibrary(parser_lib);
+    circ_compile_tests.linkLibC();
+    const run_circ_compile_tests = b.addRunArtifact(circ_compile_tests);
+    run_circ_compile_tests.step.dependOn(&install_runtime.step);
     const validator_project_passes_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/validator/project_passes_test.zig"),
         .target = target,
@@ -829,6 +839,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_emit_full_tests.step);
     test_step.dependOn(&run_emit_behavior_tests.step);
     test_step.dependOn(&run_cli_args_tests.step);
+    test_step.dependOn(&run_circ_compile_tests.step);
     test_step.dependOn(&circ_compile_exe.step);
     test_step.dependOn(&run_cli_integration_tests.step);
     test_step.dependOn(&run_resolver_scan_imports_tests.step);

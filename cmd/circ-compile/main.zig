@@ -90,15 +90,12 @@ fn printDiagnosticSet(
     return .{ .errors = errors, .warnings = warnings };
 }
 
-fn run() !u8 {
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
-
-    const argv = try std.process.argsAlloc(allocator);
-    const stderr_writer = std.fs.File.stderr().deprecatedWriter();
-    const stdout_writer = std.fs.File.stdout().deprecatedWriter();
-
+pub fn run(
+    allocator: std.mem.Allocator,
+    argv: []const []const u8,
+    stdout_writer: anytype,
+    stderr_writer: anytype,
+) !u8 {
     const args = cli_args.parse(argv) catch |err| {
         try stderr_writer.print("usage error: {s}\n", .{parseErrorMessage(err)});
         return 2;
@@ -281,6 +278,35 @@ fn run() !u8 {
 }
 
 pub fn main() !void {
-    const exit_code = try run();
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const argv = try std.process.argsAlloc(allocator);
+    const stderr_writer = std.fs.File.stderr().deprecatedWriter();
+    const stdout_writer = std.fs.File.stdout().deprecatedWriter();
+
+    const exit_code = try run(allocator, argv, stdout_writer, stderr_writer);
     if (exit_code != 0) std.process.exit(exit_code);
+}
+
+test "run with --inspect on existing fixture" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const argv = [_][]const u8{
+        "circ-compile",
+        "tests/fixtures/circuits/and_two_inputs.circ",
+        "--inspect",
+    };
+    const exit_code = try run(allocator, &argv, stdout_buf.writer(allocator), stderr_buf.writer(allocator));
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try std.testing.expect(stdout_buf.items.len > 0);
+    try std.testing.expectEqual(@as(usize, 0), stderr_buf.items.len);
 }
