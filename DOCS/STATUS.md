@@ -37,3 +37,21 @@
 **Next slice:** Integration tests against all fixtures
 **Notes:** 
 
+
+## 2026-05-06 — Phase 1 — Integration tests against all fixtures
+
+**What shipped:** Added `tests/e2e/phase1_node_test.zig` with 20 circuit and 12 project fixture tests. Each test runs the full pipeline (scan → cycle → resolve → validate → serialize → combine WASM → Node.js) and compares simulation output against expected values. Also added `serializeProjectFull` to `lib/topology/serializer.zig` to expose root pin ID mappings, and fixed two bugs in `lib/circuit.zig`: `State.flip(.undefined)` was returning Zig's `undefined` keyword (uninitialized memory) instead of the `.undefined` enum variant, and the AND gate was treating both-undefined inputs as HIGH instead of `.undefined`.
+**Files touched:** `tests/e2e/phase1_node_test.zig`, `lib/topology/serializer.zig`, `lib/circuit.zig`, `build.zig`
+**Tests:** added `phase1: circuits fixtures via Node` (20 fixtures), `phase1: project fixtures via Node` (12 fixtures), ran `zig build test`, result 123/123 pass
+**Next slice:** Phase 2 Slice 1 — Section writer + unit tests
+**Notes:** Phase 1 is complete. The `circuit.zig` undefined-state fixes are load-bearing for circuits with nested builtins (XOR, OR, NAND etc.) — without them, sequential `setPin` calls during multi-step tests produce wrong intermediate states that persist.
+
+
+## 2026-05-06 — Phase 2 — Section writer + unit tests
+
+**What shipped:** Implemented `lib/topology/section_writer.zig` with a public `combine(allocator, runtime_wasm, topology_payload) ![]u8` function and an internal LEB128 encoder. Validates WASM magic and minimum topology length. Six unit tests verify byte-exact encoding, LEB128 single/multi-byte cases, and error paths.
+**Files touched:** `lib/topology/section_writer.zig`, `build.zig`
+**Tests:** added `section_writer: custom section bytes are correct`, `section_writer: runtime bytes are preserved verbatim`, `section_writer: leb128 single byte`, `section_writer: leb128 multi byte`, `section_writer: rejects invalid runtime magic`, `section_writer: rejects short topology`, ran `zig build test`, result 129/129 pass
+**Next slice:** Phase 2 Slice 2 — Integration tests (`WebAssembly.validate()` + full behavioral fixture tests via Node using `section_writer.combine`)
+**Notes:** 
+

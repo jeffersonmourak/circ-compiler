@@ -1010,6 +1010,17 @@ pub fn build(b: *std.Build) void {
     const run_topology_serializer_tests = b.addRunArtifact(topology_serializer_tests);
     test_step.dependOn(&run_topology_serializer_tests.step);
 
+    const section_writer_mod = b.createModule(.{
+        .root_source_file = b.path("lib/topology/section_writer.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const section_writer_tests = b.addTest(.{
+        .root_module = section_writer_mod,
+    });
+    const run_section_writer_tests = b.addRunArtifact(section_writer_tests);
+    test_step.dependOn(&run_section_writer_tests.step);
+
     const phase1_node_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/e2e/phase1_node_test.zig"),
         .target = target,
