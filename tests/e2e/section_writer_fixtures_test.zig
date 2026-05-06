@@ -190,8 +190,8 @@ fn runFixture(fixture: Fixture, allocator: std.mem.Allocator) !void {
         \\        _log: () => {}, _log_flush: () => {}, _log_set_name: () => {},
         \\        debugEnabled: () => 0, onDebugLog: () => {}
         \\    } });
-        \\    const topoSections = WebAssembly.Module.customSections(mod, 'circ.topology');
-        \\    if (topoSections.length === 0) throw new Error('No circ.topology section');
+        \\    const topoSections = WebAssembly.Module.customSections(mod, 'circ.topology.v0.min');
+        \\    if (topoSections.length === 0) throw new Error('No circ.topology.v0.min section');
         \\    const topoBytes = new Uint8Array(topoSections[0]);
         \\    const ptr = instance.exports.topology_alloc(topoBytes.length);
         \\    new Uint8Array(instance.exports.memory.buffer).set(topoBytes, ptr);

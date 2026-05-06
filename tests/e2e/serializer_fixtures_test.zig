@@ -77,7 +77,7 @@ fn appendLEB128(buf: *std.ArrayList(u8), allocator: std.mem.Allocator, value: u3
 }
 
 fn buildCombinedWasm(allocator: std.mem.Allocator, topology_payload: []const u8) ![]u8 {
-    const section_name = "circ.topology";
+    const section_name = "circ.topology.v0.min";
     // Section body = LEB128(name_len) + name + payload
     const name_len: u32 = @intCast(section_name.len);
     // name_len < 128, so LEB128 is 1 byte
@@ -174,8 +174,8 @@ fn runFixture(fixture: Fixture) !void {
         \\        _log: () => {}, _log_flush: () => {}, _log_set_name: () => {},
         \\        debugEnabled: () => 0, onDebugLog: () => {}
         \\    } });
-        \\    const topoSections = WebAssembly.Module.customSections(mod, 'circ.topology');
-        \\    if (topoSections.length === 0) throw new Error('No circ.topology section');
+        \\    const topoSections = WebAssembly.Module.customSections(mod, 'circ.topology.v0.min');
+        \\    if (topoSections.length === 0) throw new Error('No circ.topology.v0.min section');
         \\    const topoBytes = new Uint8Array(topoSections[0]);
         \\    const ptr = instance.exports.topology_alloc(topoBytes.length);
         \\    new Uint8Array(instance.exports.memory.buffer).set(topoBytes, ptr);

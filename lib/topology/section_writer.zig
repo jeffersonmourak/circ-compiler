@@ -3,8 +3,8 @@ const std = @import("std");
 const WASM_MAGIC = "\x00asm";
 const WASM_VERSION = "\x01\x00\x00\x00";
 const SECTION_ID_CUSTOM: u8 = 0x00;
-const SECTION_NAME = "circ.topology";
-const SECTION_NAME_LEN: u8 = SECTION_NAME.len; // 13, fits in 1 LEB128 byte
+const SECTION_NAME = "circ.topology.v0.min";
+const SECTION_NAME_LEN: u8 = SECTION_NAME.len; // 20, fits in 1 LEB128 byte
 const TOPOLOGY_MIN_LEN: usize = 9; // magic(4) + version(1) + comp_count(4)
 
 /// Encodes `value` as an unsigned LEB128 integer into `buf`.
@@ -25,7 +25,7 @@ fn writeLeb128(buf: *[5]u8, value: u32) u3 {
     }
 }
 
-/// Appends a `circ.topology` custom section to `runtime_wasm` and returns
+/// Appends a `circ.topology.v0.min` custom section to `runtime_wasm` and returns
 /// the combined bytes as a newly allocated slice owned by the caller.
 ///
 /// Errors:
@@ -44,7 +44,7 @@ pub fn combine(
     }
     if (topology_payload.len < TOPOLOGY_MIN_LEN) return error.TopologyTooShort;
 
-    // section_body = name_len_byte(1) + name(13) + payload
+    // section_body = name_len_byte(1) + name(20) + payload
     const section_body_len: u32 = 1 + SECTION_NAME_LEN + @as(u32, @intCast(topology_payload.len));
     var leb_buf: [5]u8 = undefined;
     const leb_len = writeLeb128(&leb_buf, section_body_len);
@@ -135,12 +135,12 @@ test "section_writer: custom section bytes are correct" {
     const section_start = fake_runtime.len;
     // section id
     try testing.expectEqual(@as(u8, 0x00), result[section_start]);
-    // section_body_len = 1 + 13 + 9 = 23, fits in single LEB128 byte
-    try testing.expectEqual(@as(u8, 23), result[section_start + 1]);
+    // section_body_len = 1 + 20 + 9 = 30, fits in single LEB128 byte
+    try testing.expectEqual(@as(u8, 30), result[section_start + 1]);
     // name length byte
-    try testing.expectEqual(@as(u8, 13), result[section_start + 2]);
+    try testing.expectEqual(@as(u8, 20), result[section_start + 2]);
     // name
-    try testing.expectEqualSlices(u8, SECTION_NAME, result[section_start + 3 ..][0..13]);
+    try testing.expectEqualSlices(u8, SECTION_NAME, result[section_start + 3 ..][0..20]);
     // payload
-    try testing.expectEqualSlices(u8, payload, result[section_start + 16 ..]);
+    try testing.expectEqualSlices(u8, payload, result[section_start + 23 ..]);
 }
