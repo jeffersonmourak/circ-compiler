@@ -296,6 +296,57 @@ pub fn serializeProjectFull(allocator: std.mem.Allocator, project: *const ir.Pro
     return encode(allocator, topo);
 }
 
+/// Single-file (no project) full-payload walk. Mirrors lib/topology/serializer.zig's
+/// serializeModule: errors on sub_circuit_ref since there is no import_table to
+/// resolve against. Used when the CLI compiles a `.circ` that has no imports.
+pub fn buildFromModule(allocator: std.mem.Allocator, module: *const ir.Module) !FullTopology {
+    var components: std.ArrayList(FullComponentRecord) = .{};
+    errdefer {
+        freePartialComponents(allocator, components.items);
+        components.deinit(allocator);
+    }
+    var connections: std.ArrayList(FullConnectionRecord) = .{};
+    errdefer connections.deinit(allocator);
+
+    for (module.components) |comp| {
+        switch (comp.kind) {
+            .primitive => |p| {
+                const name_src = comp.instance_name orelse "";
+                const name_copy = try allocator.dupe(u8, name_src);
+                errdefer allocator.free(name_copy);
+                const empty_origin = try allocator.alloc(OriginFrame, 0);
+                try components.append(allocator, .{
+                    .id = comp.id.value,
+                    .kind = primitiveToKind(p),
+                    .name = name_copy,
+                    .origin = empty_origin,
+                });
+            },
+            .sub_circuit_ref => return error.SubCircuitInFlatModule,
+            .unresolved_name => return error.UnresolvedComponent,
+        }
+    }
+
+    for (module.connections) |conn| {
+        try connections.append(allocator, .{
+            .from_id = conn.from.component.value,
+            .to_id = conn.to.component.value,
+            .port = try parsePortByte(conn.to.port),
+        });
+    }
+
+    return FullTopology{
+        .components = try components.toOwnedSlice(allocator),
+        .connections = try connections.toOwnedSlice(allocator),
+    };
+}
+
+pub fn serializeModuleFull(allocator: std.mem.Allocator, module: *const ir.Module) ![]u8 {
+    var topo = try buildFromModule(allocator, module);
+    defer topo.deinit(allocator);
+    return encode(allocator, topo);
+}
+
 // ---------- Tests ----------
 
 test "full_encode_empty: locks the wire format" {

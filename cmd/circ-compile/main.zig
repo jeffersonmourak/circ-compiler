@@ -11,6 +11,7 @@ const scan_imports = @import("scan_imports");
 const import_cycle = @import("import_cycle");
 const resolve_bodies = @import("resolve_bodies");
 const serializer = @import("serializer");
+const full_serializer = @import("full_serializer");
 const section_writer = @import("section_writer");
 const runtime_embed = @import("runtime_embed");
 
@@ -239,10 +240,25 @@ fn run() !u8 {
             };
             defer allocator.free(topology_bytes);
 
-            const wasm_bytes = section_writer.combine(
+            const full_topology_bytes = blk: {
+                if (maybe_project) |*project| {
+                    break :blk full_serializer.serializeProjectFull(allocator, project) catch |err| {
+                        try stderr_writer.print("full topology serialization failed: {s}\n", .{@errorName(err)});
+                        return 1;
+                    };
+                }
+                break :blk full_serializer.serializeModuleFull(allocator, &ir_module) catch |err| {
+                    try stderr_writer.print("full topology serialization failed: {s}\n", .{@errorName(err)});
+                    return 1;
+                };
+            };
+            defer allocator.free(full_topology_bytes);
+
+            const wasm_bytes = section_writer.combineTwo(
                 allocator,
                 runtime_embed.runtime_wasm,
                 topology_bytes,
+                full_topology_bytes,
             ) catch |err| {
                 try stderr_writer.print("wasm assembly failed: {s}\n", .{@errorName(err)});
                 return 1;

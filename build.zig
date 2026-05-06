@@ -922,6 +922,7 @@ pub fn build(b: *std.Build) void {
     // Wire serializer and section_writer into the circ-compile binary
     circ_compile_mod.addImport("serializer", topology_serializer_tests_mod);
     circ_compile_mod.addImport("section_writer", section_writer_mod);
+    // full_serializer added below; the import wiring happens after the module is created.
 
     const section_writer_tests = b.addTest(.{
         .root_module = section_writer_mod,
@@ -949,6 +950,7 @@ pub fn build(b: *std.Build) void {
     });
     topology_full_serializer_mod.addImport("full_format", topology_full_format_mod);
     topology_full_serializer_mod.addImport("ir_types", ir_types_mod);
+    circ_compile_mod.addImport("full_serializer", topology_full_serializer_mod);
     const topology_full_serializer_tests = b.addTest(.{
         .root_module = topology_full_serializer_mod,
     });
@@ -980,6 +982,33 @@ pub fn build(b: *std.Build) void {
     });
     const run_topology_full_roundtrip_tests = b.addRunArtifact(topology_full_roundtrip_tests);
     test_step.dependOn(&run_topology_full_roundtrip_tests.step);
+
+    // Phase 0 slice 5: end-to-end integration test for two-section emit.
+    const topology_full_emit_integration_mod = b.createModule(.{
+        .root_source_file = b.path("tests/topology/full_emit_integration_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    topology_full_emit_integration_mod.addImport("scan_imports", resolver_scan_imports_mod);
+    topology_full_emit_integration_mod.addImport("import_cycle", resolver_import_cycle_mod);
+    topology_full_emit_integration_mod.addImport("resolve_bodies", resolver_resolve_bodies_mod);
+    topology_full_emit_integration_mod.addImport("validator_run_project", validator_run_project_mod);
+    topology_full_emit_integration_mod.addImport("diagnostics", validator_diagnostics_mod);
+    topology_full_emit_integration_mod.addImport("serializer", topology_serializer_tests_mod);
+    topology_full_emit_integration_mod.addImport("full_serializer", topology_full_serializer_mod);
+    topology_full_emit_integration_mod.addImport("full_decoder", topology_full_decoder_mod);
+    topology_full_emit_integration_mod.addImport("section_writer", section_writer_mod);
+    topology_full_emit_integration_mod.addImport("runtime_embed", runtime_embed_mod);
+    const topology_full_emit_integration_tests = b.addTest(.{
+        .root_module = topology_full_emit_integration_mod,
+    });
+    topology_full_emit_integration_tests.addIncludePath(b.path("."));
+    topology_full_emit_integration_tests.addIncludePath(b.path("./lib"));
+    topology_full_emit_integration_tests.linkLibrary(parser_lib);
+    topology_full_emit_integration_tests.linkLibC();
+    const run_topology_full_emit_integration_tests = b.addRunArtifact(topology_full_emit_integration_tests);
+    run_topology_full_emit_integration_tests.step.dependOn(&install_runtime.step);
+    test_step.dependOn(&run_topology_full_emit_integration_tests.step);
 
     const section_writer_fixtures_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/e2e/section_writer_fixtures_test.zig"),
