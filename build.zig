@@ -1200,6 +1200,8 @@ pub fn build(b: *std.Build) void {
     preview_layout_orchestrator_mod.addImport("rows", preview_layout_rows_mod);
     preview_layout_orchestrator_mod.addImport("place", preview_layout_place_mod);
     preview_layout_orchestrator_mod.addImport("route", preview_layout_route_mod);
+    circ_compile_mod.addImport("layout_orchestrator", preview_layout_orchestrator_mod);
+    circ_compile_mod.addImport("preview_render", preview_render_mod);
 
     // Phase 2 slice 6b: golden integration tests via the orchestrator + dumpLayout
     const preview_layout_integration_mod = b.createModule(.{

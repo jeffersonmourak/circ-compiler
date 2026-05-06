@@ -1,16 +1,3 @@
-Topology (v0.full)
-  components: 5
-  connections: 4
-
-Components:
-  [0] input_pin "a"
-  [1] not_gate "n1"
-  [2] not_gate "n2"
-  [3] not_gate "n3"
-  [4] output_pin "out"
-
-Connections:
-  0.out -> 1.in
-  1.out -> 2.in
-  2.out -> 3.in
-  3.out -> 4.in
+a─────╮                          ╭──────out
+      ╰────▷○──+────▷○──+────▷○──╯         
+                                           

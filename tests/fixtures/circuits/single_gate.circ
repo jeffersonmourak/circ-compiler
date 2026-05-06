@@ -1,0 +1,3 @@
+input a
+not n(in=a)
+output out(in=n.out)

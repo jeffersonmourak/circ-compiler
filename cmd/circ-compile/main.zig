@@ -15,6 +15,8 @@ const full_serializer = @import("full_serializer");
 const section_writer = @import("section_writer");
 const runtime_embed = @import("runtime_embed");
 const preview_dump = @import("preview_dump");
+const layout_orchestrator = @import("layout_orchestrator");
+const preview_render = @import("preview_render");
 
 fn makePathAny(path: []const u8) !void {
     if (!std.fs.path.isAbsolute(path)) {
@@ -289,8 +291,19 @@ pub fn run(
                 };
             defer topology.deinit(allocator);
 
-            preview_dump.dump(stdout_writer, topology) catch |err| {
-                try stderr_writer.print("dump failed: {s}\n", .{@errorName(err)});
+            const grid = layout_orchestrator.build(allocator, topology, .{ .expand_macros = args.expand_macros }) catch |err| {
+                try stderr_writer.print("layout build failed: {s}\n", .{@errorName(err)});
+                return 1;
+            };
+
+            const no_color = std.process.getEnvVarOwned(allocator, "NO_COLOR") catch null;
+            const stdout_handle = std.fs.File.stdout().handle;
+            preview_render.render(allocator, stdout_writer, grid, .{
+                .color = args.color,
+                .stdout_handle = stdout_handle,
+                .no_color_value = no_color,
+            }) catch |err| {
+                try stderr_writer.print("render failed: {s}\n", .{@errorName(err)});
                 return 1;
             };
             return 0;
@@ -404,4 +417,133 @@ test "phase1_preview_parse_error_to_stderr" {
     try std.testing.expect(exit_code != 0);
     try std.testing.expectEqual(@as(usize, 0), stdout_buf.items.len);
     try std.testing.expect(stderr_buf.items.len > 0);
+}
+
+fn runPreviewWithFlags(
+    allocator: std.mem.Allocator,
+    fixture_path: []const u8,
+    extra_flags: []const []const u8,
+    stdout_buf: *std.ArrayList(u8),
+    stderr_buf: *std.ArrayList(u8),
+) !u8 {
+    var argv = std.ArrayList([]const u8){};
+    defer argv.deinit(allocator);
+    try argv.append(allocator, "circ-compile");
+    try argv.append(allocator, fixture_path);
+    try argv.append(allocator, "--preview");
+    for (extra_flags) |f| try argv.append(allocator, f);
+    return run(allocator, argv.items, stdout_buf.writer(allocator), stderr_buf.writer(allocator));
+}
+
+test "phase3_render_single_gate" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+    const exit_code = try runPreview(allocator, "tests/fixtures/circuits/single_gate.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/circuits/single_gate.render.golden");
+}
+
+test "phase3_render_fan_out" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+    const exit_code = try runPreview(allocator, "tests/fixtures/circuits/fan_out.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/circuits/fan_out.render.golden");
+}
+
+test "phase3_render_fan_in" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+    const exit_code = try runPreview(allocator, "tests/fixtures/circuits/fan_in.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/circuits/fan_in.render.golden");
+}
+
+test "phase3_render_multi_led" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+    const exit_code = try runPreview(allocator, "tests/fixtures/circuits/multi_led.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/circuits/multi_led.render.golden");
+}
+
+test "phase3_render_builtin_xor_expanded" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+    const exit_code = try runPreviewWithFlags(allocator, "tests/fixtures/circuits/builtin_xor.circ", &.{"--expand-macros"}, &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/circuits/builtin_xor.render.expanded.golden");
+}
+
+test "phase3_render_builtin_xnor_expanded" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+    const exit_code = try runPreviewWithFlags(allocator, "tests/fixtures/circuits/builtin_xnor.circ", &.{"--expand-macros"}, &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/circuits/builtin_xnor.render.expanded.golden");
+}
+
+test "phase3_render_color_always" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+    const exit_code = try runPreviewWithFlags(allocator, "tests/fixtures/circuits/single_gate.circ", &.{"--color=always"}, &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    // Color-on output contains ANSI escape bytes.
+    var saw_esc = false;
+    for (stdout_buf.items) |b| {
+        if (b == 0x1B) {
+            saw_esc = true;
+            break;
+        }
+    }
+    try std.testing.expect(saw_esc);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/circuits/single_gate.render.color.golden");
+}
+
+test "phase3_render_color_never_no_escapes" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+    const exit_code = try runPreviewWithFlags(allocator, "tests/fixtures/circuits/single_gate.circ", &.{"--color=never"}, &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    for (stdout_buf.items) |b| try std.testing.expect(b != 0x1B);
 }
