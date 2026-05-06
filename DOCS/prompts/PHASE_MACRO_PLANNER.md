@@ -92,12 +92,14 @@ The execution agent follows this loop every session without exception:
 1. Implement the full slice as specified. Do not stop mid-slice.
 2. Run the project's test command for the affected modules. Do not ship a slice that breaks the suite.
 3. Append a STATUS entry (template below).
-4. **Stop.** Wait for human review and commit before beginning the next slice.
+4. Stage the slice's files (`git add <files>`).
+5. Display the proposed commit message and **stop**. Wait for explicit human approval before running `git commit`. Do not begin the next slice until the commit is confirmed and made.
 
 ### Git Rules
 
-- Do **not** commit, push, or run any write `git` or `gh` command on the human's behalf.
 - Read-only git commands (`status`, `log`, `diff`) are encouraged for situational awareness.
+- **Committing:** At the end of a slice — and only at the end of a slice — the agent stages the slice's files (`git add <files>`), then displays the full proposed commit message to the human and waits for explicit approval before running `git commit`. Staging first lets the human inspect the diff in any git client before approving. Do not commit without that confirmation.
+- Do **not** push, force-push, amend, rebase, reset, delete branches, or run any other write `git` or `gh` command under any circumstances.
 
 ## STATUS Entry Template
 
