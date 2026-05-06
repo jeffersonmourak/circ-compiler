@@ -11,5 +11,11 @@
 **Files touched:** `templates/interpreter.zig`, `templates/main.zig`, `build.zig`, `lib/orchestrator/embed.zig`
 **Tests:** added `interpreter: single not-gate topology`, `interpreter: rejects wrong magic`, `interpreter: rejects unknown version`, `interpreter: rejects truncated payload`, ran `zig build test`, result pass
 **Next slice:** Pre-built runtime embed
-**Notes:** `templates/main.zig` uses `@hasDecl(compiled, "is_prebuilt_runtime")` to conditionally export the generic runtime API. In the next slice, the dummy `compiled.zig` must export `pub const is_prebuilt_runtime = true;` to activate this generic runtime API.
+## 2026-05-05 — Phase 0 — Pre-built runtime embed
+
+**What shipped:** Added a `zig build` step to pre-compile the runtime template into a standalone WASM binary and embedded it into the `circ-compile` executable via `lib/topology/runtime_embed.zig`.
+**Files touched:** `build.zig`, `lib/topology/runtime_embed.zig`
+**Tests:** ran `zig build test`, result pass
+**Next slice:** Hand-crafted Node integration test (proving Phase 0)
+**Notes:** 
 

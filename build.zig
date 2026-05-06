@@ -718,6 +718,102 @@ pub fn build(b: *std.Build) void {
     resolver_file_loader_tests.linkLibrary(parser_lib);
     resolver_file_loader_tests.linkLibC();
     const run_resolver_file_loader_tests = b.addRunArtifact(resolver_file_loader_tests);
+
+    // --- Pre-built Runtime WASM ---
+    const wasm_target = b.resolveTargetQuery(.{
+        .cpu_arch = .wasm32,
+        .os_tag = .freestanding,
+    });
+    
+    // We create a dummy compiled.zig file for the runtime embed
+    const write_dummy_compiled = b.addWriteFiles();
+    const dummy_compiled_file = write_dummy_compiled.add("compiled.zig", "pub const is_prebuilt_runtime = true;\n");
+
+    const runtime_module = b.createModule(.{
+        .root_source_file = b.path("templates/main.zig"),
+        .target = wasm_target,
+        .optimize = optimize, // Usually ReleaseSmall or ReleaseFast for WASM, but follow global optimize option
+    });
+    
+    runtime_module.addImport("compiled.zig", b.createModule(.{
+        .root_source_file = dummy_compiled_file,
+        .target = wasm_target,
+        .optimize = optimize,
+    }));
+    
+    const circuit_mod_for_wasm = b.createModule(.{
+        .root_source_file = b.path("lib/circuit.zig"),
+        .target = wasm_target,
+        .optimize = optimize,
+    });
+    
+    const memory_mod_for_wasm = b.createModule(.{
+        .root_source_file = b.path("lib/memory.zig"),
+        .target = wasm_target,
+        .optimize = optimize,
+    });
+    
+    const transport_mod_for_wasm = b.createModule(.{
+        .root_source_file = b.path("lib/transport.zig"),
+        .target = wasm_target,
+        .optimize = optimize,
+    });
+    
+    const log_mod_for_wasm = b.createModule(.{
+        .root_source_file = b.path("lib/log.zig"),
+        .target = wasm_target,
+        .optimize = optimize,
+    });
+    
+    log_mod_for_wasm.addImport("memory.zig", memory_mod_for_wasm);
+    
+    circuit_mod_for_wasm.addImport("memory.zig", memory_mod_for_wasm);
+    circuit_mod_for_wasm.addImport("log.zig", log_mod_for_wasm);
+    circuit_mod_for_wasm.addImport("transport.zig", transport_mod_for_wasm);
+    
+    transport_mod_for_wasm.addImport("circuit.zig", circuit_mod_for_wasm);
+    
+    const interpreter_mod_for_wasm = b.createModule(.{
+        .root_source_file = b.path("templates/interpreter.zig"),
+        .target = wasm_target,
+        .optimize = optimize,
+    });
+    
+    const format_mod_for_wasm = b.createModule(.{
+        .root_source_file = b.path("lib/topology/format.zig"),
+        .target = wasm_target,
+        .optimize = optimize,
+    });
+    
+    interpreter_mod_for_wasm.addImport("format", format_mod_for_wasm);
+    interpreter_mod_for_wasm.addImport("circuit.zig", circuit_mod_for_wasm);
+    
+    runtime_module.addImport("circuit.zig", circuit_mod_for_wasm);
+    runtime_module.addImport("memory.zig", memory_mod_for_wasm);
+    runtime_module.addImport("interpreter.zig", interpreter_mod_for_wasm);
+    
+    const runtime_artifact = b.addExecutable(.{
+        .name = "circ-runtime",
+        .root_module = runtime_module,
+    });
+    runtime_artifact.entry = .disabled;
+    runtime_artifact.rdynamic = true;
+    
+    // We install the WASM so we can use it as a dependency for the CLI embed
+    const install_runtime = b.addInstallArtifact(runtime_artifact, .{
+        .dest_dir = .{ .override = .{ .custom = "lib" } },
+    });
+    
+    const runtime_embed_mod = b.createModule(.{
+        .root_source_file = b.path("lib/topology/runtime_embed.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    // Add the installed wasm as an anonymous import that runtime_embed.zig can @embedFile
+    runtime_embed_mod.addAnonymousImport("circ-runtime.wasm", .{
+        .root_source_file = runtime_artifact.getEmittedBin(),
+    });
+
     const circ_compile_mod = b.createModule(.{
         .root_source_file = b.path("cmd/circ-compile/main.zig"),
         .target = target,
@@ -736,10 +832,12 @@ pub fn build(b: *std.Build) void {
     circ_compile_mod.addImport("import_cycle", resolver_import_cycle_mod);
     circ_compile_mod.addImport("resolve_bodies", resolver_resolve_bodies_mod);
     circ_compile_mod.addImport("ir_types", ir_types_mod);
+    circ_compile_mod.addImport("runtime_embed", runtime_embed_mod);
     const circ_compile_exe = b.addExecutable(.{
         .name = "circ-compile",
         .root_module = circ_compile_mod,
     });
+    circ_compile_exe.step.dependOn(&install_runtime.step);
     circ_compile_exe.addIncludePath(b.path("."));
     circ_compile_exe.addIncludePath(b.path("./lib"));
     circ_compile_exe.linkLibrary(parser_lib);
