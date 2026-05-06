@@ -55,3 +55,12 @@
 **Next slice:** Phase 2 Slice 2 — Integration tests (`WebAssembly.validate()` + full behavioral fixture tests via Node using `section_writer.combine`)
 **Notes:** 
 
+
+## 2026-05-06 — Phase 2 — Integration tests
+
+**What shipped:** Added `tests/e2e/phase2_node_test.zig` with three tests: structural validity (`WebAssembly.validate()` for all 32 fixtures), and behavioral correctness for 20 circuit and 12 project fixtures. All tests use `section_writer.combine` to build the WASM and include a `WebAssembly.validate()` assertion at the start of every Node script.
+**Files touched:** `tests/e2e/phase2_node_test.zig`, `build.zig`, `DOCS/STATUS.md`
+**Tests:** added `phase2: combined wasm is structurally valid`, `phase2: circuits fixtures behavioral correctness`, `phase2: project fixtures behavioral correctness`, ran `zig build test`, result 132/132 pass
+**Next slice:** Phase 3 Slice 1 — CLI wiring (`cmd/circ-compile/main.zig` calls `section_writer.combine` instead of `orchestrator.compile`)
+**Notes:** Phase 2 is complete. `section_writer.combine` is the stable surface Phase 3 will call.
+

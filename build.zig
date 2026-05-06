@@ -1021,6 +1021,30 @@ pub fn build(b: *std.Build) void {
     const run_section_writer_tests = b.addRunArtifact(section_writer_tests);
     test_step.dependOn(&run_section_writer_tests.step);
 
+    const phase2_node_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/e2e/phase2_node_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    phase2_node_tests_mod.addImport("scan_imports", resolver_scan_imports_mod);
+    phase2_node_tests_mod.addImport("import_cycle", resolver_import_cycle_mod);
+    phase2_node_tests_mod.addImport("resolve_bodies", resolver_resolve_bodies_mod);
+    phase2_node_tests_mod.addImport("validator_run_project", validator_run_project_mod);
+    phase2_node_tests_mod.addImport("diagnostics", validator_diagnostics_mod);
+    phase2_node_tests_mod.addImport("serializer", topology_serializer_tests_mod);
+    phase2_node_tests_mod.addImport("section_writer", section_writer_mod);
+    phase2_node_tests_mod.addImport("runtime_embed", runtime_embed_mod);
+    const phase2_node_tests = b.addTest(.{
+        .root_module = phase2_node_tests_mod,
+    });
+    phase2_node_tests.addIncludePath(b.path("."));
+    phase2_node_tests.addIncludePath(b.path("./lib"));
+    phase2_node_tests.linkLibrary(parser_lib);
+    phase2_node_tests.linkLibC();
+    const run_phase2_node_tests = b.addRunArtifact(phase2_node_tests);
+    run_phase2_node_tests.step.dependOn(&install_runtime.step);
+    test_step.dependOn(&run_phase2_node_tests.step);
+
     const phase1_node_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/e2e/phase1_node_test.zig"),
         .target = target,
