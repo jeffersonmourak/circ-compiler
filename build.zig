@@ -1014,6 +1014,44 @@ pub fn build(b: *std.Build) void {
     const run_preview_dump_tests = b.addRunArtifact(preview_dump_tests);
     test_step.dependOn(&run_preview_dump_tests.step);
 
+    // Phase 2 slice 1: layout public types + sizing constants
+    const preview_layout_mod = b.createModule(.{
+        .root_source_file = b.path("lib/preview/layout.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    preview_layout_mod.addImport("full_format", topology_full_format_mod);
+    const preview_layout_tests = b.addTest(.{
+        .root_module = preview_layout_mod,
+    });
+    const run_preview_layout_tests = b.addRunArtifact(preview_layout_tests);
+    test_step.dependOn(&run_preview_layout_tests.step);
+
+    const preview_layout_types_mod = b.createModule(.{
+        .root_source_file = b.path("lib/preview/layout/types.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    preview_layout_types_mod.addImport("full_format", topology_full_format_mod);
+    preview_layout_types_mod.addImport("layout", preview_layout_mod);
+    const preview_layout_types_tests = b.addTest(.{
+        .root_module = preview_layout_types_mod,
+    });
+    const run_preview_layout_types_tests = b.addRunArtifact(preview_layout_types_tests);
+    test_step.dependOn(&run_preview_layout_types_tests.step);
+
+    const preview_layout_sizing_mod = b.createModule(.{
+        .root_source_file = b.path("lib/preview/layout/sizing.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    preview_layout_sizing_mod.addImport("full_format", topology_full_format_mod);
+    const preview_layout_sizing_tests = b.addTest(.{
+        .root_module = preview_layout_sizing_mod,
+    });
+    const run_preview_layout_sizing_tests = b.addRunArtifact(preview_layout_sizing_tests);
+    test_step.dependOn(&run_preview_layout_sizing_tests.step);
+
     const topology_full_emit_integration_mod = b.createModule(.{
         .root_source_file = b.path("tests/topology/full_emit_integration_test.zig"),
         .target = target,

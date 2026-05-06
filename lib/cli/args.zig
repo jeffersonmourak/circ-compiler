@@ -12,6 +12,7 @@ pub const Args = struct {
     mode: Mode,
     output_path: ?[]const u8 = null,
     warnings_as_errors: bool = false,
+    expand_macros: bool = false,
 };
 
 pub const ParseError = error{
@@ -61,6 +62,10 @@ pub fn parse(argv: []const []const u8) ParseError!Args {
             args.warnings_as_errors = true;
             continue;
         }
+        if (std.mem.eql(u8, token, "--expand-macros")) {
+            args.expand_macros = true;
+            continue;
+        }
         if (std.mem.eql(u8, token, "-o")) {
             if (i + 1 >= argv.len) return error.InvalidFlagValue;
             i += 1;
@@ -79,6 +84,7 @@ pub fn parse(argv: []const []const u8) ParseError!Args {
     if (!have_input) return error.MissingInput;
     if (args.mode != .inspect and args.mode != .preview and args.output_path == null) return error.MissingOutput;
     if (args.mode == .preview and args.output_path != null) return error.InvalidFlagValue;
+    if (args.expand_macros and args.mode != .preview) return error.InvalidFlagValue;
 
     return args;
 }
@@ -151,4 +157,18 @@ test "cli_args_preview_rejects_inspect" {
 test "cli_args_preview_rejects_output_path" {
     try std.testing.expectError(error.InvalidFlagValue, parse(&.{ "circ-compile", "in.circ", "--preview", "-o", "out.wasm" }));
     try std.testing.expectError(error.InvalidFlagValue, parse(&.{ "circ-compile", "in.circ", "-o", "out.wasm", "--preview" }));
+}
+
+test "cli_args_parse_expand_macros_flag" {
+    const parsed = try parse(&.{ "circ-compile", "in.circ", "--preview", "--expand-macros" });
+    try std.testing.expectEqual(Mode.preview, parsed.mode);
+    try std.testing.expect(parsed.expand_macros);
+
+    const parsed_default = try parse(&.{ "circ-compile", "in.circ", "--preview" });
+    try std.testing.expect(!parsed_default.expand_macros);
+}
+
+test "cli_args_expand_macros_rejects_outside_preview" {
+    try std.testing.expectError(error.InvalidFlagValue, parse(&.{ "circ-compile", "in.circ", "--inspect", "--expand-macros" }));
+    try std.testing.expectError(error.InvalidFlagValue, parse(&.{ "circ-compile", "in.circ", "-o", "out.wasm", "--expand-macros" }));
 }
