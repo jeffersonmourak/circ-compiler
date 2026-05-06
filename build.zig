@@ -1111,6 +1111,21 @@ pub fn build(b: *std.Build) void {
     const run_preview_layout_place_tests = b.addRunArtifact(preview_layout_place_tests);
     test_step.dependOn(&run_preview_layout_place_tests.step);
 
+    // Phase 2 slice 6a: Stage 5 — route
+    const preview_layout_route_mod = b.createModule(.{
+        .root_source_file = b.path("lib/preview/layout/route.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    preview_layout_route_mod.addImport("full_format", topology_full_format_mod);
+    preview_layout_route_mod.addImport("layout", preview_layout_mod);
+    preview_layout_route_mod.addImport("layout_types", preview_layout_types_mod);
+    const preview_layout_route_tests = b.addTest(.{
+        .root_module = preview_layout_route_mod,
+    });
+    const run_preview_layout_route_tests = b.addRunArtifact(preview_layout_route_tests);
+    test_step.dependOn(&run_preview_layout_route_tests.step);
+
     const topology_full_emit_integration_mod = b.createModule(.{
         .root_source_file = b.path("tests/topology/full_emit_integration_test.zig"),
         .target = target,
