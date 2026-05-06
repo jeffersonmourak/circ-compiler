@@ -56,7 +56,7 @@ pub fn emitModuleSource(allocator: std.mem.Allocator, module: *const ir.Module, 
     defer allocator.free(debug_paths_snippet);
     try writer.writeRaw(debug_paths_snippet);
     try writer.writeLine("");
-    try writer.writeLine("const topology_blob: []const u8 = \"debug-paths-v1\";");
+    try writer.writeLine("const topology_blob: []const u8 = \"circ.topology.v0.min\";");
     try writer.writeLine("");
 
     const runtime_snippet = try runtime.emitRuntimeExports(allocator, module);

@@ -733,7 +733,7 @@ pub fn emitProjectSource(
 
     try emitDebugPathsBlock(allocator, &writer, &layout);
     try writer.writeLine("");
-    try writer.writeLine("const topology_blob: []const u8 = \"debug-paths-v1\";");
+    try writer.writeLine("const topology_blob: []const u8 = \"circ.topology.v0.min\";");
     try writer.writeLine("");
 
     try emitRuntimeBlock(&writer, &layout, project.root_file_id.value);

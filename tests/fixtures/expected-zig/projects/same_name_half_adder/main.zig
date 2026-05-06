@@ -205,7 +205,7 @@ const debug_paths: []const DebugPath = &.{
     .{ .component_id = 8, .segments = &.{ "root.circ", "out" } },
 };
 
-const topology_blob: []const u8 = "debug-paths-v1";
+const topology_blob: []const u8 = "circ.topology.v0.min";
 
 const PtrLen = extern struct { ptr: ?[*]const u8, len: usize };
 const expected_component_count: usize = 9;
