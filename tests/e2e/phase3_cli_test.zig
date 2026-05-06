@@ -174,7 +174,7 @@ test "phase3: --inspect output unchanged" {
     try std.testing.expect(std.mem.indexOf(u8, result.stdout, "Resolved IR") != null);
 }
 
-test "phase3: --build-dir emits warning not error" {
+test "phase3: --build-dir is rejected as unknown flag" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -188,8 +188,7 @@ test "phase3: --build-dir emits warning not error" {
         .allocator = allocator,
         .argv = &.{ circ_compile_path, "tests/fixtures/circuits/inverter.circ", "-o", out_wasm, "--build-dir", "/tmp/ignored" },
     });
-    // Must exit 0 — --build-dir is now a warning-only flag in compile mode
-    try std.testing.expectEqual(@as(u32, 0), result.term.Exited);
-    // Must emit a warning to stderr
-    try std.testing.expect(std.mem.indexOf(u8, result.stderr, "warning:") != null);
+    // --build-dir is now an unknown flag — must exit 2
+    try std.testing.expectEqual(@as(u32, 2), result.term.Exited);
+    try std.testing.expect(std.mem.indexOf(u8, result.stderr, "usage error") != null);
 }

@@ -6,7 +6,6 @@ const diagnostics = @import("diagnostics");
 const validator_run = @import("validator_run");
 const validator_run_project = @import("validator_run_project");
 const emit_main = @import("emit_main");
-const orchestrator = @import("orchestrator_main");
 const inspect_dump = @import("inspect_dump");
 const scan_imports = @import("scan_imports");
 const import_cycle = @import("import_cycle");
@@ -44,7 +43,6 @@ fn parseErrorMessage(err: anyerror) []const u8 {
         error.MissingOutput => "missing -o <output> for this mode",
         error.UnknownFlag => "unknown flag",
         error.ConflictingModes => "cannot combine --emit-zig and --inspect",
-        error.BuildDirInWrongMode => "--build-dir is only valid in compile mode",
         error.InvalidFlagValue => "invalid flag value",
         else => "invalid arguments",
     };
@@ -198,29 +196,28 @@ fn run() !u8 {
         return 1;
     }
 
-    const emitted = blk: {
-        if (maybe_project) |*project| {
-            break :blk emit_main.emitProjectSource(allocator, project, .{
-                .source_name = std.fs.path.basename(args.input_path),
-                .compile_timestamp = "2026-05-01T22:00:00Z",
-                .compiler_version = "circ-compiler/dev",
-            }) catch |err| {
-                try stderr_writer.print("emission failed: {s}\n", .{@errorName(err)});
-                return 1;
-            };
-        }
-        break :blk emit_main.emitModuleSource(allocator, &ir_module, .{
-            .source_name = std.fs.path.basename(args.input_path),
-            .compile_timestamp = "2026-05-01T22:00:00Z",
-            .compiler_version = "circ-compiler/dev",
-        }) catch |err| {
-            try stderr_writer.print("emission failed: {s}\n", .{@errorName(err)});
-            return 1;
-        };
-    };
-
     switch (args.mode) {
         .emit_zig => {
+            const emitted = blk: {
+                if (maybe_project) |*project| {
+                    break :blk emit_main.emitProjectSource(allocator, project, .{
+                        .source_name = std.fs.path.basename(args.input_path),
+                        .compile_timestamp = "2026-05-01T22:00:00Z",
+                        .compiler_version = "circ-compiler/dev",
+                    }) catch |err| {
+                        try stderr_writer.print("emission failed: {s}\n", .{@errorName(err)});
+                        return 1;
+                    };
+                }
+                break :blk emit_main.emitModuleSource(allocator, &ir_module, .{
+                    .source_name = std.fs.path.basename(args.input_path),
+                    .compile_timestamp = "2026-05-01T22:00:00Z",
+                    .compiler_version = "circ-compiler/dev",
+                }) catch |err| {
+                    try stderr_writer.print("emission failed: {s}\n", .{@errorName(err)});
+                    return 1;
+                };
+            };
             writeFileAny(args.output_path.?, emitted) catch |err| {
                 try stderr_writer.print("failed writing zig output: {s}\n", .{@errorName(err)});
                 return 1;
@@ -228,12 +225,6 @@ fn run() !u8 {
             return 0;
         },
         .compile => {
-            if (args.build_dir != null) {
-                try stderr_writer.writeAll(
-                    "warning: --build-dir is unused in the new compile path and will be removed in a future release\n",
-                );
-            }
-
             const topology_bytes = blk: {
                 if (maybe_project) |*project| {
                     break :blk serializer.serializeProject(allocator, project) catch |err| {

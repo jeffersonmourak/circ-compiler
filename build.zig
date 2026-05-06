@@ -488,97 +488,6 @@ pub fn build(b: *std.Build) void {
     emit_behavior_tests.linkLibrary(parser_lib);
     emit_behavior_tests.linkLibC();
     const run_emit_behavior_tests = b.addRunArtifact(emit_behavior_tests);
-    const orchestrator_embed_mod = b.createModule(.{
-        .root_source_file = b.path("orchestrator_embed_module.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    const orchestrator_embed_tests_mod = b.createModule(.{
-        .root_source_file = b.path("tests/orchestrator/embed_test.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    orchestrator_embed_tests_mod.addImport("orchestrator_embed", orchestrator_embed_mod);
-    const orchestrator_embed_tests = b.addTest(.{
-        .root_module = orchestrator_embed_tests_mod,
-    });
-    const run_orchestrator_embed_tests = b.addRunArtifact(orchestrator_embed_tests);
-    const orchestrator_workspace_mod = b.createModule(.{
-        .root_source_file = b.path("lib/orchestrator/workspace.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    orchestrator_workspace_mod.addImport("orchestrator_embed", orchestrator_embed_mod);
-    const orchestrator_workspace_tests_mod = b.createModule(.{
-        .root_source_file = b.path("tests/orchestrator/workspace_test.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    orchestrator_workspace_tests_mod.addImport("orchestrator_workspace", orchestrator_workspace_mod);
-    orchestrator_workspace_tests_mod.addImport("orchestrator_embed", orchestrator_embed_mod);
-    const orchestrator_workspace_tests = b.addTest(.{
-        .root_module = orchestrator_workspace_tests_mod,
-    });
-    const run_orchestrator_workspace_tests = b.addRunArtifact(orchestrator_workspace_tests);
-    const orchestrator_subprocess_mod = b.createModule(.{
-        .root_source_file = b.path("lib/orchestrator/subprocess.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    const orchestrator_subprocess_tests_mod = b.createModule(.{
-        .root_source_file = b.path("tests/orchestrator/subprocess_test.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    orchestrator_subprocess_tests_mod.addImport("orchestrator_subprocess", orchestrator_subprocess_mod);
-    const orchestrator_subprocess_tests = b.addTest(.{
-        .root_module = orchestrator_subprocess_tests_mod,
-    });
-    const run_orchestrator_subprocess_tests = b.addRunArtifact(orchestrator_subprocess_tests);
-    const orchestrator_finalize_mod = b.createModule(.{
-        .root_source_file = b.path("lib/orchestrator/finalize.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    orchestrator_finalize_mod.addImport("orchestrator_workspace", orchestrator_workspace_mod);
-    const orchestrator_finalize_tests_mod = b.createModule(.{
-        .root_source_file = b.path("tests/orchestrator/finalize_test.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    orchestrator_finalize_tests_mod.addImport("orchestrator_workspace", orchestrator_workspace_mod);
-    orchestrator_finalize_tests_mod.addImport("orchestrator_finalize", orchestrator_finalize_mod);
-    const orchestrator_finalize_tests = b.addTest(.{
-        .root_module = orchestrator_finalize_tests_mod,
-    });
-    const run_orchestrator_finalize_tests = b.addRunArtifact(orchestrator_finalize_tests);
-    const orchestrator_main_mod = b.createModule(.{
-        .root_source_file = b.path("lib/orchestrator/main.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    orchestrator_main_mod.addImport("orchestrator_workspace", orchestrator_workspace_mod);
-    orchestrator_main_mod.addImport("orchestrator_subprocess", orchestrator_subprocess_mod);
-    orchestrator_main_mod.addImport("orchestrator_finalize", orchestrator_finalize_mod);
-    const orchestrator_main_tests_mod = b.createModule(.{
-        .root_source_file = b.path("tests/orchestrator/main_test.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    orchestrator_main_tests_mod.addImport("translate", translate_mod);
-    orchestrator_main_tests_mod.addImport("resolver", resolver_mod);
-    orchestrator_main_tests_mod.addImport("validator_run", validator_run_mod);
-    orchestrator_main_tests_mod.addImport("diagnostics", validator_diagnostics_mod);
-    orchestrator_main_tests_mod.addImport("emit_main", emit_main_mod);
-    orchestrator_main_tests_mod.addImport("orchestrator_main", orchestrator_main_mod);
-    const orchestrator_main_tests = b.addTest(.{
-        .root_module = orchestrator_main_tests_mod,
-    });
-    orchestrator_main_tests.addIncludePath(b.path("."));
-    orchestrator_main_tests.addIncludePath(b.path("./lib"));
-    orchestrator_main_tests.linkLibrary(parser_lib);
-    orchestrator_main_tests.linkLibC();
-    const run_orchestrator_main_tests = b.addRunArtifact(orchestrator_main_tests);
     const cli_args_mod = b.createModule(.{
         .root_source_file = b.path("lib/cli/args.zig"),
         .target = target,
@@ -841,7 +750,6 @@ pub fn build(b: *std.Build) void {
     circ_compile_mod.addImport("validator_run", validator_run_mod);
     circ_compile_mod.addImport("validator_run_project", validator_run_project_mod);
     circ_compile_mod.addImport("emit_main", emit_main_mod);
-    circ_compile_mod.addImport("orchestrator_main", orchestrator_main_mod);
     circ_compile_mod.addImport("inspect_dump", cli_inspect_dump_mod);
     circ_compile_mod.addImport("scan_imports", resolver_scan_imports_mod);
     circ_compile_mod.addImport("import_cycle", resolver_import_cycle_mod);
@@ -920,11 +828,6 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_emit_metadata_tests.step);
     test_step.dependOn(&run_emit_full_tests.step);
     test_step.dependOn(&run_emit_behavior_tests.step);
-    test_step.dependOn(&run_orchestrator_embed_tests.step);
-    test_step.dependOn(&run_orchestrator_workspace_tests.step);
-    test_step.dependOn(&run_orchestrator_subprocess_tests.step);
-    test_step.dependOn(&run_orchestrator_finalize_tests.step);
-    test_step.dependOn(&run_orchestrator_main_tests.step);
     test_step.dependOn(&run_cli_args_tests.step);
     test_step.dependOn(&circ_compile_exe.step);
     test_step.dependOn(&run_cli_integration_tests.step);

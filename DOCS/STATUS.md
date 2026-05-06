@@ -73,3 +73,12 @@
 **Next slice:** Phase 4 — Cleanup (remove orchestrator, old embed.zig, templates/; update TypeScript SDK host protocol)
 **Notes:** Phase 3 is complete. `zig` subprocess is no longer spawned in compile mode. The `emitted` variable and orchestrator import are intentionally left as dead code for Phase 4 to remove.
 
+
+## 2026-05-06 — Phase 4 — Cleanup
+
+**What shipped:** Removed all orchestrator dead code. `lib/cli/args.zig`: removed `build_dir` field, `BuildDirInWrongMode` error, and `--build-dir` flag parsing (now `error.UnknownFlag`). `cmd/circ-compile/main.zig`: removed orchestrator import and eager `emitted` computation; moved emit call inside the `.emit_zig` branch. `build.zig`: removed all orchestrator module declarations and test_step dependencies. Deleted `lib/orchestrator/`, `orchestrator_embed_module.zig`, `templates/build.zig`, `templates/builtins/`, `tests/orchestrator/`. Updated `DOCS/getting-started.md` step 3 and step 4 with the new interpreter-based pipeline and `topology_alloc` host protocol. Replaced the "zig build subprocess" and "vendored runtime template" sections in `DOCS/decisions/compiler-pipeline.md` with the new pipeline design. Updated CLI integration tests to expect `--build-dir` as an unknown flag.
+**Files touched:** `lib/cli/args.zig`, `cmd/circ-compile/main.zig`, `build.zig`, `tests/cli/integration_test.zig`, `tests/e2e/phase3_cli_test.zig`, `DOCS/getting-started.md`, `DOCS/decisions/compiler-pipeline.md`, `DOCS/STATUS.md`; deleted `lib/orchestrator/`, `orchestrator_embed_module.zig`, `templates/build.zig`, `templates/builtins/`, `tests/orchestrator/`
+**Tests:** ran `zig build test`, result 121/121 pass (16 orchestrator tests removed with the deleted modules)
+**Next slice:** Initiative complete — all phases shipped.
+**Notes:** The `--emit-zig` mode and its test harness (`tests/helpers/wasm_run.zig`, `tests/harness/loader.js`) are intentionally preserved and unchanged. Those WASMs still use direct `init()` (old Zig-emitter pipeline) which is correct for their format.
+

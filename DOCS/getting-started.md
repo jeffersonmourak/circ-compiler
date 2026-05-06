@@ -50,7 +50,7 @@ This declares one input pin `a`, drives it through a `not` gate, mirrors the res
 zig-out/bin/circ-compile examples/inverter.circ -o examples/inverter.wasm
 ```
 
-The CLI runs the parser, validator, Zig source emitter, and `zig build` orchestrator end-to-end. On success it copies the resulting `.wasm` to the path given to `-o`. On failure it streams the underlying `zig build` stderr verbatim and preserves the build directory for inspection.
+The CLI runs the parser, validator, and topology serializer end-to-end, then appends the serialized circuit as a `circ.topology` custom WASM section to the pre-built runtime blob. No `zig` subprocess is spawned. On success it writes the combined `.wasm` to the path given to `-o`.
 
 Inspect the compiled circuit's interface:
 
@@ -71,21 +71,30 @@ Outputs (1)
 
 ## 4. Drive the compiled `.wasm` from Node
 
-Create `examples/run.mjs`:
+The compiled `.wasm` contains the runtime and a `circ.topology` custom section. The host must load that section into WASM linear memory before calling `init()`. Create `examples/run.mjs`:
 
 ```js
 import fs from "node:fs";
 
 const bytes = fs.readFileSync(process.argv[2]);
-const { instance } = await WebAssembly.instantiate(bytes, {
-  env: { debugEnabled: () => 0, onDebugLog: () => {} },
+const mod = await WebAssembly.compile(bytes);
+const { exports: w } = await WebAssembly.instantiate(mod, {
+  env: {
+    print: () => {}, printFmt: () => {}, flushBuffer: () => {},
+    _log: () => {}, _log_flush: () => {}, _log_set_name: () => {},
+    debugEnabled: () => 0, onDebugLog: () => {},
+  },
 });
-const w = instance.exports;
+
+// Load the circ.topology custom section into WASM linear memory
+const [topoSection] = WebAssembly.Module.customSections(mod, "circ.topology");
+const topoBytes = new Uint8Array(topoSection);
+const ptr = w.topology_alloc(topoBytes.length);
+new Uint8Array(w.memory.buffer).set(topoBytes, ptr);
 
 w.init();
 w.setPin(0, 0); w.run(); console.log("a=0 -> NOT a =", w.getOutputState(1));
 w.setPin(0, 1); w.run(); console.log("a=1 -> NOT a =", w.getOutputState(1));
-w.deinit();
 ```
 
 Run it:
@@ -163,7 +172,7 @@ Compile from the root:
 zig-out/bin/circ-compile examples/half_adder/root.circ -o examples/half_adder.wasm
 ```
 
-The compiler emits one `buildXxx` function per source file and call sites at instantiation points — sub-circuits are never specialised per-instance. Loading from JS uses the same pattern as step 4; discovering global IDs in deeper hierarchies is best done through `getFileInfo()`.
+Sub-circuits are fully flattened by the serializer into a single ordered sequence of primitive components — no function calls, no hierarchy in the runtime. Loading from JS uses the same `topology_alloc` + `init()` pattern as step 4; discovering global IDs in deeper hierarchies is best done through `getFileInfo()`.
 
 More worked project fixtures, including a full-adder built from two half-adders and a 4-bit AND/OR network, live under `tests/fixtures/projects/` and double as integration tests.
 

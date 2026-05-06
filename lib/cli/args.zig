@@ -11,7 +11,6 @@ pub const Args = struct {
     mode: Mode,
     output_path: ?[]const u8 = null,
     warnings_as_errors: bool = false,
-    build_dir: ?[]const u8 = null,
 };
 
 pub const ParseError = error{
@@ -19,7 +18,6 @@ pub const ParseError = error{
     MissingOutput,
     UnknownFlag,
     ConflictingModes,
-    BuildDirInWrongMode,
     InvalidFlagValue,
 };
 
@@ -29,7 +27,6 @@ pub fn parse(argv: []const []const u8) ParseError!Args {
         .mode = .compile,
         .output_path = null,
         .warnings_as_errors = false,
-        .build_dir = null,
     };
 
     var have_input = false;
@@ -62,12 +59,6 @@ pub fn parse(argv: []const []const u8) ParseError!Args {
             args.output_path = argv[i];
             continue;
         }
-        if (std.mem.eql(u8, token, "--build-dir")) {
-            if (i + 1 >= argv.len) return error.InvalidFlagValue;
-            i += 1;
-            args.build_dir = argv[i];
-            continue;
-        }
         if (std.mem.startsWith(u8, token, "-")) {
             return error.UnknownFlag;
         }
@@ -79,7 +70,6 @@ pub fn parse(argv: []const []const u8) ParseError!Args {
 
     if (!have_input) return error.MissingInput;
     if (args.mode != .inspect and args.output_path == null) return error.MissingOutput;
-    if (args.mode != .compile and args.build_dir != null) return error.BuildDirInWrongMode;
 
     return args;
 }
@@ -90,7 +80,6 @@ test "parse compile mode with output" {
     try std.testing.expectEqual(Mode.compile, parsed.mode);
     try std.testing.expectEqualStrings("out.wasm", parsed.output_path.?);
     try std.testing.expect(!parsed.warnings_as_errors);
-    try std.testing.expect(parsed.build_dir == null);
 }
 
 test "parse emit-zig mode with output" {
@@ -113,11 +102,6 @@ test "parse warnings-as-errors long and short" {
     try std.testing.expect(parsed_short.warnings_as_errors);
 }
 
-test "parse build-dir in compile mode" {
-    const parsed = try parse(&.{ "circ-compile", "in.circ", "-o", "out.wasm", "--build-dir", "/tmp/x" });
-    try std.testing.expectEqualStrings("/tmp/x", parsed.build_dir.?);
-}
-
 test "parse error missing input" {
     try std.testing.expectError(error.MissingInput, parse(&.{ "circ-compile" }));
 }
@@ -134,6 +118,6 @@ test "parse error unknown flag" {
     try std.testing.expectError(error.UnknownFlag, parse(&.{ "circ-compile", "in.circ", "--bogus" }));
 }
 
-test "parse error build-dir in emit-zig mode" {
-    try std.testing.expectError(error.BuildDirInWrongMode, parse(&.{ "circ-compile", "in.circ", "--emit-zig", "-o", "out.zig", "--build-dir", "/tmp/x" }));
+test "parse error build-dir is unknown flag" {
+    try std.testing.expectError(error.UnknownFlag, parse(&.{ "circ-compile", "in.circ", "-o", "out.wasm", "--build-dir", "/tmp/x" }));
 }
