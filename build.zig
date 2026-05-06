@@ -499,6 +499,18 @@ pub fn build(b: *std.Build) void {
     });
     const run_preview_render_color_tests = b.addRunArtifact(preview_render_color_tests);
 
+    // Phase 3 slice 2: Canvas — in-memory cell grid with per-cell color tags.
+    const preview_render_canvas_mod = b.createModule(.{
+        .root_source_file = b.path("lib/preview/render/canvas.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    preview_render_canvas_mod.addImport("color", preview_render_color_mod);
+    const preview_render_canvas_tests = b.addTest(.{
+        .root_module = preview_render_canvas_mod,
+    });
+    const run_preview_render_canvas_tests = b.addRunArtifact(preview_render_canvas_tests);
+
     const cli_args_mod = b.createModule(.{
         .root_source_file = b.path("lib/cli/args.zig"),
         .target = target,
@@ -852,6 +864,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_emit_behavior_tests.step);
     test_step.dependOn(&run_cli_args_tests.step);
     test_step.dependOn(&run_preview_render_color_tests.step);
+    test_step.dependOn(&run_preview_render_canvas_tests.step);
     test_step.dependOn(&run_circ_compile_tests.step);
     test_step.dependOn(&circ_compile_exe.step);
     test_step.dependOn(&run_cli_integration_tests.step);
