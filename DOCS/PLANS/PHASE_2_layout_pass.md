@@ -1,17 +1,21 @@
 # Phase 2 — Layout Pass
 
-> **Dependencies:** Phase 0 (`lib/topology/schema.zig` types and the IR `macro_origin` extension) and Phase 1 (`lib/preview/dump.zig`, the `--preview` flag, the `run(...)` CLI refactor) must be complete.
-> **Warnings:** Phase 2 is **invisible to the CLI surface**. `--preview` continues to print Phase 1's `Topology` dump throughout Phase 2; the layout pipeline runs only through tests. Phase 3 is the cutover. Resist the temptation to wire `dumpLayout` to the CLI mid-phase — it would force two waves of golden-file churn for no user benefit.
+> **Dependencies:** Phase 0 (`lib/topology/full_format.zig` types — `FullTopology`, `FullComponentRecord`, `OriginFrame`, `ComponentKind`) and Phase 1 (`lib/preview/dump.zig`, the `--preview` flag, the widened `run(...)` CLI signature) must be complete.
+> **Warnings (post-Phase-0 review, 2026-05-06):** This spec was patched after Phase 0 landed. Two corrections from the original draft:
+> - The original spec referenced `Topology` from a hypothetical `lib/topology/schema.zig` plus a `MacroKind` enum (`xor_macro`, `xnor_macro`, ...) and `MacroFrame { instance_name, kind: MacroKind }`. Phase 0 landed differently: macros are open strings (import aliases) rather than a closed enum, and the canonical type is `FullTopology` from `lib/topology/full_format.zig` carrying `OriginFrame { alias, subcircuit, target_file }` chains. The opaque-mode collapse logic still works — it just groups by the outermost-frame `subcircuit` string instead of by `MacroKind` value.
+> - Fixture paths were `tests/fixtures/topology/` (doesn't exist). Real fixtures live under `tests/fixtures/circuits/` and the existing `builtin_xor.circ` / `builtin_xnor.circ` cover the single-macro and nested-macro cases without needing new source files.
+>
+> Phase 2 itself is **invisible to the CLI surface**. `--preview` continues to print Phase 1's textual dump throughout Phase 2; the layout pipeline runs only through tests. Phase 3 is the cutover. Resist the temptation to wire `dumpLayout` to the CLI mid-phase — it would force two waves of golden-file churn for no user benefit.
 
 ## Goal
 
-After this phase, the codebase contains a deterministic, pure-function layout pipeline that converts a decoded `Topology` into a typed `LayoutGrid` describing where every component sits on a character grid and where every wire's segments and crossings land. The pipeline supports two modes selected via `LayoutOptions.expand_macros`: opaque (default — macro-origin groups collapse into single virtual nodes) and expanded (every gate produced by macro expansion appears separately). Both modes share the same five-stage pipeline (`collapse → columns → rows → place → route`) and the same `LayoutGrid` output shape, differing only in the virtual-node set fed into stage 1. The phase ships with a `dumpLayout(writer, grid)` function that produces a testable textual rendering of the grid, golden-file integration tests across all three Phase-0 fixtures in both modes, per-stage unit tests, and a `--expand-macros` flag in the CLI argument parser. The CLI dispatch path is unchanged; Phase 3 cuts `--preview` over to the rendered output.
+After this phase, the codebase contains a deterministic, pure-function layout pipeline that converts a `FullTopology` into a typed `LayoutGrid` describing where every component sits on a character grid and where every wire's segments and crossings land. The pipeline supports two modes selected via `LayoutOptions.expand_macros`: opaque (default — primitives sharing an outermost-frame `subcircuit` collapse into a single virtual subcircuit node) and expanded (every primitive produced by subcircuit expansion appears separately, preserving its full origin chain). Both modes share the same five-stage pipeline (`collapse → columns → rows → place → route`) and the same `LayoutGrid` output shape, differing only in the virtual-node set fed into stage 1. The phase ships with a `dumpLayout(writer, grid)` function that produces a testable textual rendering of the grid, golden-file integration tests across three existing fixtures in both modes, per-stage unit tests, and a `--expand-macros` flag in the CLI argument parser. The CLI dispatch path is unchanged; Phase 3 cuts `--preview` over to the rendered output.
 
 ## Scope
 
 **In scope:**
-- New `lib/preview/layout/` module with five stage files plus shared types and per-kind sizing constants. Public entry: `pub fn layout(allocator: std.mem.Allocator, topology: Topology, opts: LayoutOptions) !LayoutGrid`.
-- Stage 1 (`collapse.zig`): drop `wire` primitives by short-circuiting the edges they pass through; in opaque mode, collapse macro-origin groups into virtual nodes with synthetic ids allocated above `topology.max_id`. In expanded mode, every gate becomes its own virtual node preserving its real id and full origin chain.
+- New `lib/preview/layout/` module with five stage files plus shared types and per-kind sizing constants. Public entry: `pub fn layout(allocator: std.mem.Allocator, topology: FullTopology, opts: LayoutOptions) !LayoutGrid`.
+- Stage 1 (`collapse.zig`): drop `wire` primitives by short-circuiting the edges they pass through; in opaque mode, group primitives sharing the same outermost `OriginFrame.subcircuit` (and `alias`) into one virtual subcircuit node with a synthetic id allocated above the maximum component id in the input topology. In expanded mode, every primitive becomes its own virtual node preserving its real id and full origin chain.
 - Stage 2 (`columns.zig`): longest-path layering. `column_of[node] = 1 + max(column_of[upstream])`; input pins force column 0; LEDs land in `num_columns - 1`.
 - Stage 3 (`rows.zig`): barycenter-method row assignment with two sweeps (left-to-right then right-to-left). Deterministic tie-breaker by ascending node id when barycenter values are equal.
 - Stage 4 (`place.zig`): per-kind cell sizing per the locked table; absolute (x, y) computation accounting for column gutters; per-component port-coordinate resolution producing `PortSlot` lists for inputs and a `PortCoord` for the output.
@@ -23,7 +27,7 @@ After this phase, the codebase contains a deterministic, pure-function layout pi
 
 **Explicitly deferred:**
 - Glyph rendering, ANSI color, `--color` flag, the `render(...)` function — Phase 3.
-- CLI dispatch change. `--preview` continues to print the Phase-1 `Topology` dump until Phase 3.
+- CLI dispatch change. `--preview` continues to print Phase 1's textual `FullTopology` dump until Phase 3.
 - Wiring `--expand-macros` into the CLI's actual behaviour. The flag is parsed in Phase 2 but only consumed in Phase 3.
 - Any tunable parameter for cell sizes (the table is locked in `sizing.zig` constants; Phase 3 may rev it but no `LayoutOptions` field exposes it).
 - Sophisticated crossing-minimization beyond the two-sweep barycenter method (e.g. Sugiyama with median or hybrid). For typical `.circ` sizes (rarely >50 components), barycenter is overkill-quality.
@@ -44,11 +48,11 @@ After this phase, the codebase contains a deterministic, pure-function layout pi
 | `lib/preview/layout/` | `place.zig` | Stage 4: `pub fn place(arena, graph, columns, rows) ![]PlacedComponent`. Cell sizing + absolute coords + port resolution. |
 | `lib/preview/layout/` | `route.zig` | Stage 5: `pub fn route(arena, graph, placed) ![]RoutedWire`. Channel allocation + segment computation + crossing detection. Returns wires plus the final grid `width`/`height`. |
 | `tests/` | `preview_layout.zig` | All Phase-2 unit and integration tests. |
-| `tests/fixtures/topology/` | `primitives.layout.opaque.golden` | Locked `dumpLayout` output for `primitives.circ` opaque mode. |
-| `tests/fixtures/topology/` | `xor_macro.layout.opaque.golden` | Same, `xor_macro.circ` opaque. |
-| `tests/fixtures/topology/` | `xor_macro.layout.expanded.golden` | `xor_macro.circ` expanded. |
-| `tests/fixtures/topology/` | `xnor_nested.layout.opaque.golden` | `xnor_nested.circ` opaque. |
-| `tests/fixtures/topology/` | `xnor_nested.layout.expanded.golden` | `xnor_nested.circ` expanded. |
+| `tests/fixtures/circuits/` | `<primitives>.layout.opaque.golden` | Locked `dumpLayout` output for the chosen primitives-only fixture (slice 6 picks; e.g. `chain.layout.opaque.golden`). |
+| `tests/fixtures/circuits/` | `builtin_xor.layout.opaque.golden` | `builtin_xor.circ` opaque (subcircuit collapsed to one virtual node). |
+| `tests/fixtures/circuits/` | `builtin_xor.layout.expanded.golden` | `builtin_xor.circ` expanded (xor's primitive children laid out individually). |
+| `tests/fixtures/circuits/` | `builtin_xnor.layout.opaque.golden` | `builtin_xnor.circ` opaque (outermost xnor collapsed; inner xor hidden). |
+| `tests/fixtures/circuits/` | `builtin_xnor.layout.expanded.golden` | `builtin_xnor.circ` expanded (both nesting levels visible). |
 
 **Modified files:**
 
@@ -72,21 +76,21 @@ pub const PortSlot = struct {
 };
 
 pub const NodeKind = union(enum) {
-    primitive: ComponentKind,
-    macro:     MacroKind,
+    primitive:  full_format.ComponentKind,
+    subcircuit: []const u8,                 // import alias of the collapsed subcircuit (opaque mode); e.g. "xor"
 };
 
 pub const PlacedComponent = struct {
-    id:           u32,                      // real Topology id, or synthetic id above topology.max_id for opaque virtual macro nodes
-    kind:         NodeKind,
-    name:         []const u8,
-    macro_origin: []const MacroFrame,       // for opaque virtual nodes: the collapsed chain. For expanded gates: full chain
-    x:            u32,
-    y:            u32,
-    width:        u32,
-    height:       u32,
-    in_ports:     []const PortSlot,
-    out_port:     PortCoord,
+    id:        u32,                         // real FullTopology id, or synthetic id above topology.max_id for opaque virtual subcircuit nodes
+    kind:      NodeKind,
+    name:      []const u8,
+    origin:    []const full_format.OriginFrame, // for opaque virtual nodes: the collapsed outermost frame's tail. For expanded gates: full chain inherited from FullComponentRecord.origin
+    x:         u32,
+    y:         u32,
+    width:     u32,
+    height:    u32,
+    in_ports:  []const PortSlot,
+    out_port:  PortCoord,
 };
 
 pub const Segment = struct {
@@ -96,9 +100,9 @@ pub const Segment = struct {
 
 pub const RoutedWire = struct {
     src_id:    u32,
-    src_port:  u8,                          // 0 = "out"
+    src_port:  u8,                          // matches full_format.PortName: out = 3
     dst_id:    u32,
-    dst_port:  u8,                          // 1=in, 2=a, 3=b
+    dst_port:  u8,                          // matches full_format.PortName: in=0, a=1, b=2
     segments:  []const Segment,             // ordered head→tail; corner = segment[N].to == segment[N+1].from
     crossings: []const PortCoord,           // cells where this wire visually crosses another wire
 };
@@ -120,13 +124,13 @@ pub const LayoutOptions = struct {
 ```zig
 pub const InputEdge = struct {
     src_id:   u32,
-    src_port: u8,    // always 0 today; kept for future
-    dst_port: u8,    // 1=in, 2=a, 3=b
+    src_port: u8,    // matches full_format.PortName: out = 3 today
+    dst_port: u8,    // matches full_format.PortName: in=0, a=1, b=2
 };
 
 pub const OutputEdge = struct {
     dst_id:   u32,
-    src_port: u8,    // 0
+    src_port: u8,    // out = 3
     dst_port: u8,
 };
 
@@ -134,7 +138,7 @@ pub const VirtualNode = struct {
     id:      u32,                       // real id OR synthetic above topology.max_id
     kind:    NodeKind,
     name:    []const u8,
-    origin:  []const MacroFrame,
+    origin:  []const full_format.OriginFrame,
     inputs:  []const InputEdge,
     outputs: []const OutputEdge,
 };
@@ -164,7 +168,7 @@ pub const RowAssignment = struct {
 | `and_gate` | 5 | 3 | D-shape glyph |
 | `led` | 3 | 3 | Compact terminal cap |
 | `wire` | — | — | Collapsed; never placed |
-| Macro (opaque) | `max(8, label_width + 2)` | 3 | Label = `[<kind>:<name>]` plus padding |
+| Subcircuit (opaque) | `max(8, label_width + 2)` | 3 | Label = `[<subcircuit>:<alias>]` plus padding (e.g. `[xor:g]`) |
 
 These values are locked for Phase 2 to give golden coordinates a stable basis. Phase 3 may rev the table when glyphs are designed; that revision is a single deliberate commit that updates `sizing.zig` and re-captures the goldens.
 
@@ -178,7 +182,7 @@ This phase is fully synchronous. No background goroutines/threads/workers are in
 
 ## Persistence & I/O
 
-This phase has no persistence or external I/O beyond what prior phases established. The CLI dispatch path is unchanged — `--preview` continues to print Phase 1's `Topology` dump throughout Phase 2; tests exercise the layout pipeline directly via `layout(...)` and assert against golden files via `dumpLayout(...)`. No `.wasm` is read or written, no temp directories are touched, no network I/O occurs. Phase 1's three preview goldens (`*.preview.golden`) stay green throughout this phase.
+This phase has no persistence or external I/O beyond what prior phases established. The CLI dispatch path is unchanged — `--preview` continues to print Phase 1's textual `FullTopology` dump throughout Phase 2; tests exercise the layout pipeline directly via `layout(...)` and assert against golden files via `dumpLayout(...)`. No `.wasm` is read or written, no temp directories are touched, no network I/O occurs. Phase 1's three preview goldens (`*.preview.golden` under `tests/fixtures/circuits/`) stay green throughout this phase.
 
 ## Slices
 
@@ -187,11 +191,11 @@ The execution agent implements this phase one slice at a time, stopping for revi
 | # | Slice Title | Deliverable | Test Proof |
 |---|---|---|---|
 | 1 | Public types + sizing constants + flag plumbing | `lib/preview/layout.zig` skeleton with all public types defined and `pub fn layout(...)` returning a stub error (`error.NotImplemented`). `lib/preview/layout/types.zig` and `sizing.zig` complete. `--expand-macros` flag parsed and stored in `Args`, with rejection-when-not-preview-mode validation. No actual stages implemented. | `cli_args_parse_expand_macros_flag`, `cli_args_expand_macros_rejects_outside_preview`, plus a comptime test that the public types compile and round-trip through `@TypeOf` introspection. Existing tests stay green. |
-| 2 | Stage 1 — collapse | `collapse.zig` complete. Produces a `VirtualGraph` from a `Topology` honoring `LayoutOptions.expand_macros`. Drops wires, collapses opaque macro groups, allocates synthetic ids correctly. | `collapse_drops_wire_primitives`, `collapse_chains_of_wires`, `collapse_opaque_macro`, `collapse_expanded_macro`. |
+| 2 | Stage 1 — collapse | `collapse.zig` complete. Produces a `VirtualGraph` from a `FullTopology` honoring `LayoutOptions.expand_macros`. Drops wires, collapses opaque subcircuit groups (by outermost `OriginFrame.subcircuit`+`alias`), allocates synthetic ids correctly. | `collapse_drops_wire_primitives`, `collapse_chains_of_wires`, `collapse_opaque_subcircuit`, `collapse_expanded_subcircuit`. |
 | 3 | Stage 2 — columns | `columns.zig` complete. Longest-path layering over a `VirtualGraph`. | `columns_longest_path`, `columns_diamond`, `columns_input_pins_at_zero`, `columns_leds_rightmost`. |
 | 4 | Stage 3 — rows | `rows.zig` complete. Barycenter sweep with deterministic tie-break. | `rows_barycenter_simple`, `rows_deterministic_tie_break`. |
 | 5 | Stage 4 — place | `place.zig` complete. Cell sizing + absolute coords + port resolution. | `place_cell_sizing`, `place_port_coords_and_gate`, `place_macro_label_width`. |
-| 6 | Stage 5 — route + `dumpLayout` + integration | `route.zig` complete. `dumpLayout(...)` added to `lib/preview/dump.zig`. `layout(...)` orchestrator wired up to call all five stages. All six golden integration tests pass. | `route_two_wires_no_crossing`, `route_two_wires_with_crossing`, `route_segments_are_axis_aligned`; `phase2_layout_primitives_opaque`, `phase2_layout_xor_macro_opaque`, `phase2_layout_xor_macro_expanded`, `phase2_layout_xnor_nested_opaque`, `phase2_layout_xnor_nested_expanded`, `phase2_layout_deterministic`. |
+| 6 | Stage 5 — route + `dumpLayout` + integration | `route.zig` complete. `dumpLayout(...)` added to `lib/preview/dump.zig`. `layout(...)` orchestrator wired up to call all five stages. All six golden integration tests pass. | `route_two_wires_no_crossing`, `route_two_wires_with_crossing`, `route_segments_are_axis_aligned`; `phase2_layout_primitives_opaque`, `phase2_layout_builtin_xor_opaque`, `phase2_layout_builtin_xor_expanded`, `phase2_layout_builtin_xnor_opaque`, `phase2_layout_builtin_xnor_expanded`, `phase2_layout_deterministic`. |
 
 Slices are ordered by dependency. Each slice must be fully reviewable on its own. Slice 6 is the largest; it could be split into `route` + `dumpLayout` + `integration` if review surface gets uncomfortable — defer that judgment to the executor.
 
@@ -203,10 +207,10 @@ Slices are ordered by dependency. Each slice must be fully reviewable on its own
 |---|---|---|
 | `cli_args_parse_expand_macros_flag` | `lib/cli/args.zig` | `circ-compile in.circ --preview --expand-macros` parses with `expand_macros = true`. |
 | `cli_args_expand_macros_rejects_outside_preview` | `lib/cli/args.zig` | `circ-compile in.circ --emit-zig -o out.wasm --expand-macros` returns a typed error. |
-| `collapse_drops_wire_primitives` | `lib/preview/layout/collapse.zig` | Topology `pin → wire → led` produces a `VirtualGraph` with 2 nodes and 1 direct edge. |
+| `collapse_drops_wire_primitives` | `lib/preview/layout/collapse.zig` | `FullTopology` `pin → wire → led` produces a `VirtualGraph` with 2 nodes and 1 direct edge. |
 | `collapse_chains_of_wires` | `collapse.zig` | `pin → wire → wire → wire → led` collapses to one direct edge. |
-| `collapse_opaque_macro` | `collapse.zig` | Topology with `xor combine` (5 expanded gates) under opaque mode produces 1 virtual macro node with synthetic id and `kind = .macro(.xor_macro)`; external connections remap to its published ports. |
-| `collapse_expanded_macro` | `collapse.zig` | Same topology under expanded mode produces 5 virtual nodes preserving real ids and full origin chains. |
+| `collapse_opaque_subcircuit` | `collapse.zig` | A `FullTopology` containing primitives whose `origin[0]` shares `(subcircuit = "xor", alias = "g")` (i.e. produced by expanding one `xor g(...)` instance) under opaque mode produces 1 virtual subcircuit node with synthetic id and `kind = .subcircuit("xor")`; external connections remap to its published ports. The exact primitive count depends on `lib/resolver/builtin_circ/xor.circ`'s body — captured at slice 2 implementation time, not pre-specified. |
+| `collapse_expanded_subcircuit` | `collapse.zig` | Same topology under expanded mode produces N virtual nodes (N = primitive count from xor.circ's body) preserving real ids and full origin chains. |
 | `columns_longest_path` | `lib/preview/layout/columns.zig` | `pin → not → and → led` → columns `[0, 1, 2, 3]`. |
 | `columns_diamond` | `columns.zig` | Fan-out + fan-in graph assigns the inner pair the same column index. |
 | `columns_input_pins_at_zero` | `columns.zig` | All input pins land in column 0 regardless of graph shape. |
@@ -224,11 +228,11 @@ Slices are ordered by dependency. Each slice must be fully reviewable on its own
 
 | Test name | Scope | What it asserts |
 |---|---|---|
-| `phase2_layout_primitives_opaque` | `layout(primitives_topology, .{ .expand_macros = false })` | `dumpLayout(...)` output matches `tests/fixtures/topology/primitives.layout.opaque.golden` byte-for-byte. |
-| `phase2_layout_xor_macro_opaque` | `layout(xor_topology, .{ .expand_macros = false })` | Macro renders as one virtual node; matches `xor_macro.layout.opaque.golden`. |
-| `phase2_layout_xor_macro_expanded` | `layout(xor_topology, .{ .expand_macros = true })` | Five expanded gates render separately; matches `xor_macro.layout.expanded.golden`. |
-| `phase2_layout_xnor_nested_opaque` | `layout(xnor_topology, .{ .expand_macros = false })` | Outermost `xnor` collapses; inner anonymous `xor` is hidden; matches `xnor_nested.layout.opaque.golden`. |
-| `phase2_layout_xnor_nested_expanded` | same, `expand_macros = true` | Both nesting levels expanded; matches `xnor_nested.layout.expanded.golden`. |
+| `phase2_layout_primitives_opaque` | `layout(primitives_topology, .{ .expand_macros = false })` | `dumpLayout(...)` output matches `tests/fixtures/circuits/<primitives-fixture>.layout.opaque.golden` byte-for-byte. Slice 6 picks the fixture; e.g. `chain.circ`. |
+| `phase2_layout_builtin_xor_opaque` | `layout(xor_topology, .{ .expand_macros = false })` | The `xor` subcircuit collapses to one virtual node; matches `tests/fixtures/circuits/builtin_xor.layout.opaque.golden`. |
+| `phase2_layout_builtin_xor_expanded` | `layout(xor_topology, .{ .expand_macros = true })` | xor's primitive children render separately; matches `tests/fixtures/circuits/builtin_xor.layout.expanded.golden`. |
+| `phase2_layout_builtin_xnor_opaque` | `layout(xnor_topology, .{ .expand_macros = false })` | Outermost `xnor` subcircuit collapses; nested `xor` inside it is hidden. Matches `tests/fixtures/circuits/builtin_xnor.layout.opaque.golden`. |
+| `phase2_layout_builtin_xnor_expanded` | same, `expand_macros = true` | Both nesting levels expanded; matches `tests/fixtures/circuits/builtin_xnor.layout.expanded.golden`. |
 | `phase2_layout_deterministic` | any fixture | Run `layout(...)` twice on the same topology; assert `dumpLayout` output is byte-identical. Locks the determinism contract end-to-end. |
 
 Run command: `zig build test`
