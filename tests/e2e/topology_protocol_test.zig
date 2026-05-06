@@ -2,7 +2,7 @@ const std = @import("std");
 const format = @import("format");
 const runtime_embed = @import("runtime_embed");
 
-test "phase0: inverter round-trip via Node" {
+test "topology host protocol: inverter round-trip via Node" {
     const allocator = std.testing.allocator;
 
     // Check if node is on PATH. If not, skip the test.

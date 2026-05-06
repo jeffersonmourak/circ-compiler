@@ -725,18 +725,18 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    const phase0_node_tests_mod = b.createModule(.{
-        .root_source_file = b.path("tests/e2e/phase0_node_test.zig"),
+    const topology_protocol_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/e2e/topology_protocol_test.zig"),
         .target = target,
         .optimize = optimize,
     });
-    phase0_node_tests_mod.addImport("format", format_mod_for_wasm);
-    phase0_node_tests_mod.addImport("runtime_embed", runtime_embed_mod);
-    const phase0_node_tests = b.addTest(.{
-        .root_module = phase0_node_tests_mod,
+    topology_protocol_tests_mod.addImport("format", format_mod_for_wasm);
+    topology_protocol_tests_mod.addImport("runtime_embed", runtime_embed_mod);
+    const topology_protocol_tests = b.addTest(.{
+        .root_module = topology_protocol_tests_mod,
     });
-    const run_phase0_node_tests = b.addRunArtifact(phase0_node_tests);
-    run_phase0_node_tests.step.dependOn(&install_runtime.step);
+    const run_topology_protocol_tests = b.addRunArtifact(topology_protocol_tests);
+    run_topology_protocol_tests.step.dependOn(&install_runtime.step);
 
     const circ_compile_mod = b.createModule(.{
         .root_source_file = b.path("cmd/circ-compile/main.zig"),
@@ -837,7 +837,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_resolver_builtins_tests.step);
     test_step.dependOn(&run_resolver_file_loader_tests.step);
     test_step.dependOn(&run_validator_project_passes_tests.step);
-    test_step.dependOn(&run_phase0_node_tests.step);
+    test_step.dependOn(&run_topology_protocol_tests.step);
 
     const emit_project_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/emit/project_emit_test.zig"),
@@ -929,67 +929,67 @@ pub fn build(b: *std.Build) void {
     const run_section_writer_tests = b.addRunArtifact(section_writer_tests);
     test_step.dependOn(&run_section_writer_tests.step);
 
-    const phase2_node_tests_mod = b.createModule(.{
-        .root_source_file = b.path("tests/e2e/phase2_node_test.zig"),
+    const section_writer_fixtures_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/e2e/section_writer_fixtures_test.zig"),
         .target = target,
         .optimize = optimize,
     });
-    phase2_node_tests_mod.addImport("scan_imports", resolver_scan_imports_mod);
-    phase2_node_tests_mod.addImport("import_cycle", resolver_import_cycle_mod);
-    phase2_node_tests_mod.addImport("resolve_bodies", resolver_resolve_bodies_mod);
-    phase2_node_tests_mod.addImport("validator_run_project", validator_run_project_mod);
-    phase2_node_tests_mod.addImport("diagnostics", validator_diagnostics_mod);
-    phase2_node_tests_mod.addImport("serializer", topology_serializer_tests_mod);
-    phase2_node_tests_mod.addImport("section_writer", section_writer_mod);
-    phase2_node_tests_mod.addImport("runtime_embed", runtime_embed_mod);
-    const phase2_node_tests = b.addTest(.{
-        .root_module = phase2_node_tests_mod,
+    section_writer_fixtures_tests_mod.addImport("scan_imports", resolver_scan_imports_mod);
+    section_writer_fixtures_tests_mod.addImport("import_cycle", resolver_import_cycle_mod);
+    section_writer_fixtures_tests_mod.addImport("resolve_bodies", resolver_resolve_bodies_mod);
+    section_writer_fixtures_tests_mod.addImport("validator_run_project", validator_run_project_mod);
+    section_writer_fixtures_tests_mod.addImport("diagnostics", validator_diagnostics_mod);
+    section_writer_fixtures_tests_mod.addImport("serializer", topology_serializer_tests_mod);
+    section_writer_fixtures_tests_mod.addImport("section_writer", section_writer_mod);
+    section_writer_fixtures_tests_mod.addImport("runtime_embed", runtime_embed_mod);
+    const section_writer_fixtures_tests = b.addTest(.{
+        .root_module = section_writer_fixtures_tests_mod,
     });
-    phase2_node_tests.addIncludePath(b.path("."));
-    phase2_node_tests.addIncludePath(b.path("./lib"));
-    phase2_node_tests.linkLibrary(parser_lib);
-    phase2_node_tests.linkLibC();
-    const run_phase2_node_tests = b.addRunArtifact(phase2_node_tests);
-    run_phase2_node_tests.step.dependOn(&install_runtime.step);
-    test_step.dependOn(&run_phase2_node_tests.step);
+    section_writer_fixtures_tests.addIncludePath(b.path("."));
+    section_writer_fixtures_tests.addIncludePath(b.path("./lib"));
+    section_writer_fixtures_tests.linkLibrary(parser_lib);
+    section_writer_fixtures_tests.linkLibC();
+    const run_section_writer_fixtures_tests = b.addRunArtifact(section_writer_fixtures_tests);
+    run_section_writer_fixtures_tests.step.dependOn(&install_runtime.step);
+    test_step.dependOn(&run_section_writer_fixtures_tests.step);
 
-    const phase1_node_tests_mod = b.createModule(.{
-        .root_source_file = b.path("tests/e2e/phase1_node_test.zig"),
+    const serializer_fixtures_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/e2e/serializer_fixtures_test.zig"),
         .target = target,
         .optimize = optimize,
     });
-    phase1_node_tests_mod.addImport("scan_imports", resolver_scan_imports_mod);
-    phase1_node_tests_mod.addImport("import_cycle", resolver_import_cycle_mod);
-    phase1_node_tests_mod.addImport("resolve_bodies", resolver_resolve_bodies_mod);
-    phase1_node_tests_mod.addImport("validator_run_project", validator_run_project_mod);
-    phase1_node_tests_mod.addImport("diagnostics", validator_diagnostics_mod);
-    phase1_node_tests_mod.addImport("serializer", topology_serializer_tests_mod);
-    phase1_node_tests_mod.addImport("runtime_embed", runtime_embed_mod);
-    const phase1_node_tests = b.addTest(.{
-        .root_module = phase1_node_tests_mod,
+    serializer_fixtures_tests_mod.addImport("scan_imports", resolver_scan_imports_mod);
+    serializer_fixtures_tests_mod.addImport("import_cycle", resolver_import_cycle_mod);
+    serializer_fixtures_tests_mod.addImport("resolve_bodies", resolver_resolve_bodies_mod);
+    serializer_fixtures_tests_mod.addImport("validator_run_project", validator_run_project_mod);
+    serializer_fixtures_tests_mod.addImport("diagnostics", validator_diagnostics_mod);
+    serializer_fixtures_tests_mod.addImport("serializer", topology_serializer_tests_mod);
+    serializer_fixtures_tests_mod.addImport("runtime_embed", runtime_embed_mod);
+    const serializer_fixtures_tests = b.addTest(.{
+        .root_module = serializer_fixtures_tests_mod,
     });
-    phase1_node_tests.addIncludePath(b.path("."));
-    phase1_node_tests.addIncludePath(b.path("./lib"));
-    phase1_node_tests.linkLibrary(parser_lib);
-    phase1_node_tests.linkLibC();
-    const run_phase1_node_tests = b.addRunArtifact(phase1_node_tests);
-    run_phase1_node_tests.step.dependOn(&install_runtime.step);
-    test_step.dependOn(&run_phase1_node_tests.step);
+    serializer_fixtures_tests.addIncludePath(b.path("."));
+    serializer_fixtures_tests.addIncludePath(b.path("./lib"));
+    serializer_fixtures_tests.linkLibrary(parser_lib);
+    serializer_fixtures_tests.linkLibC();
+    const run_serializer_fixtures_tests = b.addRunArtifact(serializer_fixtures_tests);
+    run_serializer_fixtures_tests.step.dependOn(&install_runtime.step);
+    test_step.dependOn(&run_serializer_fixtures_tests.step);
 
-    const phase3_cli_options = b.addOptions();
-    phase3_cli_options.addOption([]const u8, "circ_compile_path", b.getInstallPath(.bin, "circ-compile"));
-    const phase3_cli_tests_mod = b.createModule(.{
-        .root_source_file = b.path("tests/e2e/phase3_cli_test.zig"),
+    const cli_e2e_options = b.addOptions();
+    cli_e2e_options.addOption([]const u8, "circ_compile_path", b.getInstallPath(.bin, "circ-compile"));
+    const cli_e2e_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/e2e/cli_e2e_test.zig"),
         .target = target,
         .optimize = optimize,
     });
-    phase3_cli_tests_mod.addOptions("build_options", phase3_cli_options);
-    const phase3_cli_tests = b.addTest(.{
-        .root_module = phase3_cli_tests_mod,
+    cli_e2e_tests_mod.addOptions("build_options", cli_e2e_options);
+    const cli_e2e_tests = b.addTest(.{
+        .root_module = cli_e2e_tests_mod,
     });
-    const run_phase3_cli_tests = b.addRunArtifact(phase3_cli_tests);
-    run_phase3_cli_tests.step.dependOn(&circ_compile_exe.step);
-    test_step.dependOn(&run_phase3_cli_tests.step);
+    const run_cli_e2e_tests = b.addRunArtifact(cli_e2e_tests);
+    run_cli_e2e_tests.step.dependOn(&circ_compile_exe.step);
+    test_step.dependOn(&run_cli_e2e_tests.step);
 
     const topology_interpreter_tests_mod = b.createModule(.{
         .root_source_file = b.path("templates/interpreter.zig"),

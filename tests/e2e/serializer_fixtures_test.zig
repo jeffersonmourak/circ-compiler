@@ -262,7 +262,7 @@ const circuit_fixtures = [_]Fixture{
     .{ .root_path = "tests/fixtures/circuits/stress_grid_10x10.circ", .spec_path = "tests/fixtures/expected-wasm/stress_grid_10x10.txt" },
 };
 
-test "phase1: circuits fixtures via Node" {
+test "serializer: circuits fixtures via Node" {
     for (circuit_fixtures) |fx| {
         try runFixture(fx);
     }
@@ -283,7 +283,7 @@ const project_fixtures = [_]Fixture{
     .{ .root_path = "tests/fixtures/projects/stress_deep_subcircuit/root.circ", .spec_path = "tests/fixtures/expected-wasm/projects/stress_deep_subcircuit.txt" },
 };
 
-test "phase1: project fixtures via Node" {
+test "serializer: project fixtures via Node" {
     for (project_fixtures) |fx| {
         try runFixture(fx);
     }

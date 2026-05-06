@@ -290,7 +290,7 @@ const project_fixtures = [_]Fixture{
     .{ .root_path = "tests/fixtures/projects/stress_deep_subcircuit/root.circ", .spec_path = "tests/fixtures/expected-wasm/projects/stress_deep_subcircuit.txt" },
 };
 
-test "phase2: combined wasm is structurally valid" {
+test "section_writer: combined wasm is structurally valid" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -304,7 +304,7 @@ test "phase2: combined wasm is structurally valid" {
     }
 }
 
-test "phase2: circuits fixtures behavioral correctness" {
+test "section_writer: circuits fixtures behavioral correctness" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -318,7 +318,7 @@ test "phase2: circuits fixtures behavioral correctness" {
     }
 }
 
-test "phase2: project fixtures behavioral correctness" {
+test "section_writer: project fixtures behavioral correctness" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();

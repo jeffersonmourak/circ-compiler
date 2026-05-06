@@ -16,7 +16,7 @@ fn checkNodeAvailable(allocator: std.mem.Allocator) !bool {
     return result.term == .Exited and result.term.Exited == 0;
 }
 
-test "phase3: circ-compile inverter end-to-end" {
+test "cli: circ-compile inverter end-to-end" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -78,7 +78,7 @@ test "phase3: circ-compile inverter end-to-end" {
     try std.testing.expectEqualStrings("PASS\n", node.stdout);
 }
 
-test "phase3: circ-compile project end-to-end" {
+test "cli: circ-compile project end-to-end" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -138,7 +138,7 @@ test "phase3: circ-compile project end-to-end" {
     try std.testing.expectEqualStrings("PASS\n", node.stdout);
 }
 
-test "phase3: --emit-zig output unchanged" {
+test "cli: --emit-zig produces valid zig source" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -160,7 +160,7 @@ test "phase3: --emit-zig output unchanged" {
         std.mem.indexOf(u8, content, "input_pin") != null);
 }
 
-test "phase3: --inspect output unchanged" {
+test "cli: --inspect outputs parse tree and resolved IR" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -174,7 +174,7 @@ test "phase3: --inspect output unchanged" {
     try std.testing.expect(std.mem.indexOf(u8, result.stdout, "Resolved IR") != null);
 }
 
-test "phase3: --build-dir is rejected as unknown flag" {
+test "cli: --build-dir is rejected as unknown flag" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
