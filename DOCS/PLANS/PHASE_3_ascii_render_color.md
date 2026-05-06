@@ -1,11 +1,15 @@
 # Phase 3 — ASCII Rendering + Color
 
-> **Dependencies:** Phase 0 (`lib/topology/`), Phase 1 (`lib/preview/dump.zig`, `--preview` flag, `run(...)` refactor), Phase 2 (`lib/preview/layout/`, `LayoutGrid`, `--expand-macros` flag) must all be complete.
-> **Warnings:** This phase is the **user-visible cutover**. `--preview` stops printing the Phase-1 `Topology` dump and starts printing rendered schematics. The Phase-1 integration test names (`phase1_preview_*_fixture`) are kept; their golden file *contents* are replaced. Resist renaming the tests — git history of the golden files is the chronological record of how `--preview` evolved.
+> **Dependencies:** Phase 0 (`lib/topology/`), Phase 1 (`lib/preview/dump.zig`, `--preview` flag, widened `run(...)` signature), Phase 2 (`lib/preview/layout/`, `LayoutGrid`, `--expand-macros` flag) must all be complete.
+> **Warnings (post-Phase-0 review, 2026-05-06):** This phase is the **user-visible cutover**. `--preview` stops printing the Phase-1 `FullTopology` dump and starts printing rendered schematics. The Phase-1 integration test names are kept (note: per the Phase 1 spec patch, the canonical names are `phase1_preview_primitives_fixture`, `phase1_preview_xor_fixture`, `phase1_preview_xnor_fixture` — not the originally-planned `_xor_macro_` / `_xnor_nested_` variants); their golden file *contents* are replaced. Resist renaming the tests — git history of the golden files is the chronological record of how `--preview` evolved.
+>
+> Two corrections from the original draft of this spec:
+> - Render path is `parse → resolve → translate → buildFromProject (or buildFromModule) → layout → render → stdout`. The original plan's encode-then-decode round-trip was dropped in the Phase 1 review (Phase 0's IR walk produces a `FullTopology` directly).
+> - Fixture paths were `tests/fixtures/topology/` (doesn't exist) and used names like `xor_macro.circ` / `xnor_nested.circ`. Real fixtures live at `tests/fixtures/circuits/builtin_xor.circ` and `builtin_xnor.circ`. New fixtures introduced by this phase land alongside them in `tests/fixtures/circuits/`.
 
 ## Goal
 
-After this phase, running `circ-compile <foo.circ> --preview` prints a styled ASCII schematic of the circuit to stdout, with optional ANSI color controlled by `--color=auto|always|never`. The schematic uses `╭╮╰╯─│●` line art for wires and junctions, jump-arc rendering (`─╯╰─`) for crossings, per-kind glyphs for components (input pins, NOT, AND, LED, opaque macro boxes), and per-kind color tags when color is enabled. The render path is `parse → resolve → translate → encode → decode → layout → render → stdout`, fully synchronous over a single arena. The phase ships golden-file integration tests covering single gates, fan-out, fan-in, multi-LED, opaque and expanded macro modes, and both color modes, plus per-component-type unit tests for glyph correctness, canvas semantics, and color resolution. Phase 1's `dump(topology)` function survives as a callable library function (still used by tests) but is no longer wired to the CLI.
+After this phase, running `circ-compile <foo.circ> --preview` prints a styled ASCII schematic of the circuit to stdout, with optional ANSI color controlled by `--color=auto|always|never`. The schematic uses `╭╮╰╯─│●` line art for wires and junctions, jump-arc rendering (`─╯╰─`) for crossings, per-kind glyphs for components (input pins, NOT, AND, LED, opaque subcircuit boxes), and per-kind color tags when color is enabled. The render path is `parse → resolve → translate → buildFromProject (or buildFromModule) → layout → render → stdout`, fully synchronous over a single arena. The phase ships golden-file integration tests covering single gates, fan-out, fan-in, multi-LED, opaque and expanded subcircuit modes, and both color modes, plus per-component-type unit tests for glyph correctness, canvas semantics, and color resolution. Phase 1's `dump(topology)` function survives as a callable library function (still used by tests) but is no longer wired to the CLI.
 
 ## Scope
 
@@ -17,8 +21,8 @@ After this phase, running `circ-compile <foo.circ> --preview` prints a styled AS
   - `canvas.zig` — in-memory character grid abstraction with cell setters, segment drawers, and a single `writeOut(writer, use_color)` pass.
 - New `--color=auto|always|never` flag in `lib/cli/args.zig`. Defaults to `auto`. Rejects unknown values with `error.InvalidFlagValue`. Only meaningful in `--preview` mode (analogous to `--expand-macros`).
 - Replacement of the Phase-1 preview branch in `cmd/circ-compile/main.zig`: build `LayoutGrid` via `layout(...)` honoring `args.expand_macros`, then `render(stdout, grid, .{ .color = args.color, .stdout_handle = std.io.getStdOut().handle })`. The Phase-1 `dump(topology)` call is removed from the CLI dispatch path.
-- Update of the three Phase-1 golden files (`primitives.preview.golden`, `xor_macro.preview.golden`, `xnor_nested.preview.golden`) — content replaced with rendered schematics, file paths and test names retained.
-- Four new fixtures (`single_gate.circ`, `fan_out.circ`, `fan_in.circ`, `multi_led.circ`) plus their render goldens.
+- Update of the three Phase-1 golden files (locations carried over from the Phase 1 spec patch — under `tests/fixtures/circuits/`: the primitives-only fixture's `*.preview.golden`, `builtin_xor.preview.golden`, and `builtin_xnor.preview.golden`) — content replaced with rendered schematics, file paths and test names retained.
+- Four new fixtures (`single_gate.circ`, `fan_out.circ`, `fan_in.circ`, `multi_led.circ`) plus their render goldens, all under `tests/fixtures/circuits/`.
 - Color-on and color-off golden coverage for at least one fixture (locks the ANSI emission behaviour).
 - Jump-arc crossing rendering: at every `RoutedWire.crossings` cell, the *horizontal* wire deflects (`─╯` / `╰─`); the vertical wire renders continuously.
 
@@ -42,24 +46,24 @@ After this phase, running `circ-compile <foo.circ> --preview` prints a styled AS
 | `lib/preview/render/` | `glyphs.zig` | `pub fn drawComponent(canvas, placed)` dispatching on `NodeKind`. Per-kind drawing functions: `drawInputPin`, `drawNotGate`, `drawAndGate`, `drawLed`, `drawMacroBox`. Concrete byte content captured at slice time. |
 | `lib/preview/render/` | `color.zig` | `pub const ColorMode = enum { auto, always, never };` `pub fn shouldColor(mode, stdout_handle: ?std.fs.File.Handle, no_color_value: ?[]const u8) bool;` Per-`ColorTag` ANSI escape constants. |
 | `tests/` | `preview_render.zig` | All Phase-3 unit and integration tests. |
-| `tests/fixtures/topology/` | `single_gate.circ` | One input pin → one NOT → one LED. Minimal frame for per-kind glyph correctness. |
-| `tests/fixtures/topology/` | `fan_out.circ` | One input pin driving multiple gates. Stresses tap rendering. |
-| `tests/fixtures/topology/` | `fan_in.circ` | Multiple pins → one gate. Stresses inbound channel routing. |
-| `tests/fixtures/topology/` | `multi_led.circ` | Multiple LEDs in the rightmost column. Stresses vertical packing. |
-| `tests/fixtures/topology/` | `single_gate.render.golden`, `fan_out.render.golden`, `fan_in.render.golden`, `multi_led.render.golden` | Captured rendered output per new fixture (color-off). |
-| `tests/fixtures/topology/` | `xor_macro.render.opaque.golden`, `xor_macro.render.expanded.golden`, `xnor_nested.render.opaque.golden` | Mode-specific render goldens for existing fixtures. |
-| `tests/fixtures/topology/` | `single_gate.render.color.golden` | Same fixture rendered with `--color=always`. Locks ANSI escape emission. |
+| `tests/fixtures/circuits/` | `single_gate.circ` | One input pin → one NOT → one LED. Minimal frame for per-kind glyph correctness. |
+| `tests/fixtures/circuits/` | `fan_out.circ` | One input pin driving multiple gates. Stresses tap rendering. |
+| `tests/fixtures/circuits/` | `fan_in.circ` | Multiple pins → one gate. Stresses inbound channel routing. |
+| `tests/fixtures/circuits/` | `multi_led.circ` | Multiple LEDs in the rightmost column. Stresses vertical packing. (Note: LEDs may need to be encoded as `output_pin` in the IR — slice 5 verifies the fixture parses cleanly.) |
+| `tests/fixtures/circuits/` | `single_gate.render.golden`, `fan_out.render.golden`, `fan_in.render.golden`, `multi_led.render.golden` | Captured rendered output per new fixture (color-off). |
+| `tests/fixtures/circuits/` | `builtin_xor.render.opaque.golden`, `builtin_xor.render.expanded.golden`, `builtin_xnor.render.opaque.golden` | Mode-specific render goldens for existing single-file subcircuit fixtures. |
+| `tests/fixtures/circuits/` | `single_gate.render.color.golden` | Same fixture rendered with `--color=always`. Locks ANSI escape emission. |
 
 **Modified files:**
 
 | Module/Package | File | Change |
 |---|---|---|
 | `lib/cli/args.zig` | — | Add `color: ColorMode = .auto` field. Parse `--color=<value>`. Validate value against `auto`/`always`/`never`. Reject outside `--preview` mode (same pattern as `--expand-macros`). |
-| `cmd/circ-compile/main.zig` | — | Preview branch rewritten: parse → resolve → translate → encode → decode → `layout(arena, topology, .{ .expand_macros = args.expand_macros })` → `render(stdout, grid, .{ .color = args.color, .stdout_handle = stdout_handle })`. Replace the Phase-1 `dump(topology)` call. |
+| `cmd/circ-compile/main.zig` | — | Preview branch rewritten: parse → resolve → translate → `full_serializer.buildFromProject` (or `buildFromModule`) → `layout(arena, topology, .{ .expand_macros = args.expand_macros })` → `render(stdout, grid, .{ .color = args.color, .stdout_handle = stdout_handle })`. Replace the Phase-1 `dump(topology)` call. |
 | `lib/preview/dump.zig` | — | No code change. The `dump` function remains; it is no longer called from the CLI dispatch path but stays in the public surface for tests and future tooling. |
-| `tests/fixtures/topology/primitives.preview.golden` | — | Content replaced with rendered schematic. Path retained. |
-| `tests/fixtures/topology/xor_macro.preview.golden` | — | Same. |
-| `tests/fixtures/topology/xnor_nested.preview.golden` | — | Same. |
+| `tests/fixtures/circuits/<primitives>.preview.golden` | — | Content replaced with rendered schematic. Path retained. |
+| `tests/fixtures/circuits/builtin_xor.preview.golden` | — | Same. |
+| `tests/fixtures/circuits/builtin_xnor.preview.golden` | — | Same. |
 | `tests/preview_cli.zig` | — | The `phase1_preview_*_fixture` tests are *kept* under their existing names; only the byte content of their expected goldens changes. The `phase1_preview_parse_error_to_stderr` test is unchanged (parse errors still go to stderr; preview produces no stdout on parse failure). |
 
 **New dependencies:** None. Pure Zig stdlib (`std.posix.isatty`, `std.process.getEnvVarOwned` for `NO_COLOR`).
@@ -178,7 +182,7 @@ The execution agent implements this phase one slice at a time, stopping for revi
 | 2 | `Canvas` | `lib/preview/render/canvas.zig` complete: cell storage, segment drawers, color-aware write-out. | `canvas_set_cell`, `canvas_draw_h_segment`, `canvas_draw_v_segment`, `canvas_write_out_no_color`, `canvas_write_out_with_color`. |
 | 3 | Glyphs | `lib/preview/render/glyphs.zig` complete with one drawing function per `NodeKind`. Concrete art captured into glyph-level unit-test expectations. | `glyphs_draws_input_pin`, `glyphs_draws_not_gate`, `glyphs_draws_and_gate`, `glyphs_draws_led`, `glyphs_draws_macro_box`. |
 | 4 | `render(...)` orchestration + line-art and crossings | `lib/preview/render.zig` orchestrator. Wire segment routing translated into `Canvas` segment draws. Corner glyph selection (`╭╮╰╯`) based on segment direction. Tap detection (3+ wires meeting → `●`). Jump-arc rendering at every `RoutedWire.crossings` cell. | `render_single_segment_horizontal`, `render_corner_glyphs`, `render_tap_at_fanout`, `render_jump_arc_horizontal_over_vertical`. |
-| 5 | CLI cutover + golden update + new fixtures | `cmd/circ-compile/main.zig`'s preview branch swapped from `dump(topology)` to `layout → render`. Four new fixtures + their goldens added. Phase-1 `*.preview.golden` files have their content replaced with rendered output (test names retained). Color-on golden for at least one fixture. | `phase3_render_single_gate`, `phase3_render_fan_out`, `phase3_render_fan_in`, `phase3_render_xor_macro_opaque`, `phase3_render_xor_macro_expanded`, `phase3_render_xnor_nested_opaque`, `phase3_render_multi_led`, `phase3_render_color_always`, `phase3_render_color_never_no_escapes`, plus the updated `phase1_preview_primitives_fixture`, `phase1_preview_xor_macro_fixture`, `phase1_preview_xnor_nested_fixture`. |
+| 5 | CLI cutover + golden update + new fixtures | `cmd/circ-compile/main.zig`'s preview branch swapped from `dump(topology)` to `layout → render`. Four new fixtures + their goldens added. Phase-1 `*.preview.golden` files have their content replaced with rendered output (test names retained). Color-on golden for at least one fixture. | `phase3_render_single_gate`, `phase3_render_fan_out`, `phase3_render_fan_in`, `phase3_render_builtin_xor_opaque`, `phase3_render_builtin_xor_expanded`, `phase3_render_builtin_xnor_opaque`, `phase3_render_multi_led`, `phase3_render_color_always`, `phase3_render_color_never_no_escapes`, plus the updated `phase1_preview_primitives_fixture`, `phase1_preview_xor_fixture`, `phase1_preview_xnor_fixture` (Phase 1's revised test names). |
 
 Slices are ordered by dependency. Each slice must be fully reviewable on its own. Slice 5 is the largest; it could be split into 5a (CLI cutover + Phase-1 golden updates) and 5b (new fixtures + new goldens) if review surface gets uncomfortable — defer that judgment to the executor.
 
@@ -220,14 +224,14 @@ Slices are ordered by dependency. Each slice must be fully reviewable on its own
 | `phase3_render_fan_out` | new fixture, color off | `fan_out.circ` renders to `fan_out.render.golden`. Verifies tap rendering. |
 | `phase3_render_fan_in` | new fixture, color off | `fan_in.circ` renders to `fan_in.render.golden`. Verifies inbound channel routing. |
 | `phase3_render_multi_led` | new fixture, color off | `multi_led.circ` renders to `multi_led.render.golden`. Verifies rightmost-column packing. |
-| `phase3_render_xor_macro_opaque` | existing fixture, opaque mode, color off | Macro renders as one labeled box. |
-| `phase3_render_xor_macro_expanded` | existing fixture, expanded mode, color off | All five expanded gates render separately with appropriate crossings. |
-| `phase3_render_xnor_nested_opaque` | existing fixture, opaque mode, color off | Outer `xnor` collapses; inner `xor` hidden. |
+| `phase3_render_builtin_xor_opaque` | `builtin_xor.circ`, opaque mode, color off | The `xor` subcircuit renders as one labeled box (e.g. `[xor:g]`). |
+| `phase3_render_builtin_xor_expanded` | `builtin_xor.circ`, expanded mode, color off | xor's primitive children render separately with appropriate crossings. (Exact gate count captured at slice 5 implementation time.) |
+| `phase3_render_builtin_xnor_opaque` | `builtin_xnor.circ`, opaque mode, color off | Outer `xnor` collapses to one box; inner `xor` is hidden inside it. |
 | `phase3_render_color_always` | `single_gate.circ`, `--color=always` | Output matches `single_gate.render.color.golden` byte-for-byte (includes ANSI escapes). |
 | `phase3_render_color_never_no_escapes` | any fixture, `--color=never` | Output contains zero `\x1b` bytes. |
-| `phase1_preview_primitives_fixture` (golden updated) | `primitives.circ` via `run(...)` | Stdout matches the *new* `primitives.preview.golden` (rendered schematic, not topology dump). |
-| `phase1_preview_xor_macro_fixture` (golden updated) | `xor_macro.circ` via `run(...)` | Stdout matches new `xor_macro.preview.golden`. |
-| `phase1_preview_xnor_nested_fixture` (golden updated) | `xnor_nested.circ` via `run(...)` | Stdout matches new `xnor_nested.preview.golden`. |
+| `phase1_preview_primitives_fixture` (golden updated) | primitives-only fixture via `run(...)` | Stdout matches the *new* `<primitives>.preview.golden` (rendered schematic, not topology dump). |
+| `phase1_preview_xor_fixture` (golden updated) | `builtin_xor.circ` via `run(...)` | Stdout matches new `builtin_xor.preview.golden`. |
+| `phase1_preview_xnor_fixture` (golden updated) | `builtin_xnor.circ` via `run(...)` | Stdout matches new `builtin_xnor.preview.golden`. |
 
 Run command: `zig build test`
 
