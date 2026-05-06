@@ -1052,6 +1052,21 @@ pub fn build(b: *std.Build) void {
     const run_preview_layout_sizing_tests = b.addRunArtifact(preview_layout_sizing_tests);
     test_step.dependOn(&run_preview_layout_sizing_tests.step);
 
+    // Phase 2 slice 2: Stage 1 — collapse
+    const preview_layout_collapse_mod = b.createModule(.{
+        .root_source_file = b.path("lib/preview/layout/collapse.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    preview_layout_collapse_mod.addImport("full_format", topology_full_format_mod);
+    preview_layout_collapse_mod.addImport("layout", preview_layout_mod);
+    preview_layout_collapse_mod.addImport("layout_types", preview_layout_types_mod);
+    const preview_layout_collapse_tests = b.addTest(.{
+        .root_module = preview_layout_collapse_mod,
+    });
+    const run_preview_layout_collapse_tests = b.addRunArtifact(preview_layout_collapse_tests);
+    test_step.dependOn(&run_preview_layout_collapse_tests.step);
+
     const topology_full_emit_integration_mod = b.createModule(.{
         .root_source_file = b.path("tests/topology/full_emit_integration_test.zig"),
         .target = target,
