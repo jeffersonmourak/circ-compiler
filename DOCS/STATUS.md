@@ -19,3 +19,12 @@
 **Next slice:** Topology serializer (Phase 1, Slice 1)
 **Notes:** Phase 0 is now complete. The `circ-runtime.wasm` is pre-compiled and embedded in the CLI, and the Host Protocol for loading topology has been verified in Node.js.
 
+
+## 2026-05-05 — Phase 1 — Single-file serializer
+
+**What shipped:** Implemented `serializeModule` in `lib/topology/serializer.zig` which encodes a flat `ir.Module` into the `circ.topology` binary format.
+**Files touched:** `lib/topology/serializer.zig`, `build.zig`
+**Tests:** added `serialize: inverter module bytes`, `serialize: unknown port name returns error`, ran `zig build test`, result pass
+**Next slice:** Recursive expander + project serializer
+**Notes:** 
+

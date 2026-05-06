@@ -997,6 +997,19 @@ pub fn build(b: *std.Build) void {
     const run_topology_format_tests = b.addRunArtifact(topology_format_tests);
     test_step.dependOn(&run_topology_format_tests.step);
 
+    const topology_serializer_tests_mod = b.createModule(.{
+        .root_source_file = b.path("lib/topology/serializer.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    topology_serializer_tests_mod.addImport("format", topology_format_tests_mod);
+    topology_serializer_tests_mod.addImport("ir_types", ir_types_mod);
+    const topology_serializer_tests = b.addTest(.{
+        .root_module = topology_serializer_tests_mod,
+    });
+    const run_topology_serializer_tests = b.addRunArtifact(topology_serializer_tests);
+    test_step.dependOn(&run_topology_serializer_tests.step);
+
     const topology_interpreter_tests_mod = b.createModule(.{
         .root_source_file = b.path("templates/interpreter.zig"),
         .target = target,
