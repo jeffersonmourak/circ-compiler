@@ -1170,6 +1170,23 @@ pub fn build(b: *std.Build) void {
     const run_preview_render_glyphs_tests = b.addRunArtifact(preview_render_glyphs_tests);
     test_step.dependOn(&run_preview_render_glyphs_tests.step);
 
+    // Phase 3 slice 4: render orchestrator — composes Canvas + glyphs + wire rendering.
+    const preview_render_mod = b.createModule(.{
+        .root_source_file = b.path("lib/preview/render.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    preview_render_mod.addImport("layout", preview_layout_mod);
+    preview_render_mod.addImport("layout_types", preview_layout_types_mod);
+    preview_render_mod.addImport("canvas", preview_render_canvas_mod);
+    preview_render_mod.addImport("color", preview_render_color_mod);
+    preview_render_mod.addImport("glyphs", preview_render_glyphs_mod);
+    const preview_render_tests = b.addTest(.{
+        .root_module = preview_render_mod,
+    });
+    const run_preview_render_tests = b.addRunArtifact(preview_render_tests);
+    test_step.dependOn(&run_preview_render_tests.step);
+
     // Phase 2 slice 6b: orchestrator composing all five stages
     const preview_layout_orchestrator_mod = b.createModule(.{
         .root_source_file = b.path("lib/preview/layout/orchestrator.zig"),
