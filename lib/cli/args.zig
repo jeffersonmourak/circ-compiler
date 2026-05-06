@@ -4,6 +4,7 @@ pub const Mode = enum {
     compile,
     emit_zig,
     inspect,
+    preview,
 };
 
 pub const Args = struct {
@@ -32,21 +33,28 @@ pub fn parse(argv: []const []const u8) ParseError!Args {
     var have_input = false;
     var seen_emit_zig = false;
     var seen_inspect = false;
+    var seen_preview = false;
 
     var i: usize = if (argv.len > 0) 1 else 0;
     while (i < argv.len) : (i += 1) {
         const token = argv[i];
 
         if (std.mem.eql(u8, token, "--emit-zig")) {
-            if (seen_inspect) return error.ConflictingModes;
+            if (seen_inspect or seen_preview) return error.ConflictingModes;
             seen_emit_zig = true;
             args.mode = .emit_zig;
             continue;
         }
         if (std.mem.eql(u8, token, "--inspect")) {
-            if (seen_emit_zig) return error.ConflictingModes;
+            if (seen_emit_zig or seen_preview) return error.ConflictingModes;
             seen_inspect = true;
             args.mode = .inspect;
+            continue;
+        }
+        if (std.mem.eql(u8, token, "--preview")) {
+            if (seen_emit_zig or seen_inspect) return error.ConflictingModes;
+            seen_preview = true;
+            args.mode = .preview;
             continue;
         }
         if (std.mem.eql(u8, token, "--warnings-as-errors") or std.mem.eql(u8, token, "-Werror")) {
@@ -69,7 +77,8 @@ pub fn parse(argv: []const []const u8) ParseError!Args {
     }
 
     if (!have_input) return error.MissingInput;
-    if (args.mode != .inspect and args.output_path == null) return error.MissingOutput;
+    if (args.mode != .inspect and args.mode != .preview and args.output_path == null) return error.MissingOutput;
+    if (args.mode == .preview and args.output_path != null) return error.InvalidFlagValue;
 
     return args;
 }
@@ -120,4 +129,26 @@ test "parse error unknown flag" {
 
 test "parse error build-dir is unknown flag" {
     try std.testing.expectError(error.UnknownFlag, parse(&.{ "circ-compile", "in.circ", "-o", "out.wasm", "--build-dir", "/tmp/x" }));
+}
+
+test "cli_args_parse_preview_flag" {
+    const parsed = try parse(&.{ "circ-compile", "in.circ", "--preview" });
+    try std.testing.expectEqual(Mode.preview, parsed.mode);
+    try std.testing.expect(parsed.output_path == null);
+    try std.testing.expectEqualStrings("in.circ", parsed.input_path);
+}
+
+test "cli_args_preview_rejects_emit_zig" {
+    try std.testing.expectError(error.ConflictingModes, parse(&.{ "circ-compile", "in.circ", "--preview", "--emit-zig" }));
+    try std.testing.expectError(error.ConflictingModes, parse(&.{ "circ-compile", "in.circ", "--emit-zig", "--preview" }));
+}
+
+test "cli_args_preview_rejects_inspect" {
+    try std.testing.expectError(error.ConflictingModes, parse(&.{ "circ-compile", "in.circ", "--preview", "--inspect" }));
+    try std.testing.expectError(error.ConflictingModes, parse(&.{ "circ-compile", "in.circ", "--inspect", "--preview" }));
+}
+
+test "cli_args_preview_rejects_output_path" {
+    try std.testing.expectError(error.InvalidFlagValue, parse(&.{ "circ-compile", "in.circ", "--preview", "-o", "out.wasm" }));
+    try std.testing.expectError(error.InvalidFlagValue, parse(&.{ "circ-compile", "in.circ", "-o", "out.wasm", "--preview" }));
 }

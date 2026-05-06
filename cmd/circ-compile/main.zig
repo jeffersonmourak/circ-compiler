@@ -272,6 +272,11 @@ fn run() !u8 {
             return 0;
         },
         .inspect => unreachable,
+        .preview => {
+            // Slice 1 placeholder. Real preview behaviour lands in slices 2–4.
+            try stderr_writer.writeAll("preview mode not yet implemented\n");
+            return 1;
+        },
     }
 }
 
