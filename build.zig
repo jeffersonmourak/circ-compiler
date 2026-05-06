@@ -511,6 +511,9 @@ pub fn build(b: *std.Build) void {
     });
     const run_preview_render_canvas_tests = b.addRunArtifact(preview_render_canvas_tests);
 
+    // Phase 3 slice 3: glyphs — per-kind drawing functions that fill a Canvas.
+    // (preview_layout_mod is already declared earlier in the build script.)
+
     const cli_args_mod = b.createModule(.{
         .root_source_file = b.path("lib/cli/args.zig"),
         .target = target,
@@ -1151,6 +1154,21 @@ pub fn build(b: *std.Build) void {
     });
     const run_preview_layout_route_tests = b.addRunArtifact(preview_layout_route_tests);
     test_step.dependOn(&run_preview_layout_route_tests.step);
+
+    // Phase 3 slice 3: glyphs — depends on layout types.
+    const preview_render_glyphs_mod = b.createModule(.{
+        .root_source_file = b.path("lib/preview/render/glyphs.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    preview_render_glyphs_mod.addImport("layout", preview_layout_mod);
+    preview_render_glyphs_mod.addImport("canvas", preview_render_canvas_mod);
+    preview_render_glyphs_mod.addImport("color", preview_render_color_mod);
+    const preview_render_glyphs_tests = b.addTest(.{
+        .root_module = preview_render_glyphs_mod,
+    });
+    const run_preview_render_glyphs_tests = b.addRunArtifact(preview_render_glyphs_tests);
+    test_step.dependOn(&run_preview_render_glyphs_tests.step);
 
     // Phase 2 slice 6b: orchestrator composing all five stages
     const preview_layout_orchestrator_mod = b.createModule(.{
