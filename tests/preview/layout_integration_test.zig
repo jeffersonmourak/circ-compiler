@@ -52,7 +52,7 @@ test "phase2_layout_primitives_opaque" {
     const a = arena.allocator();
 
     const dump = try buildAndDumpLayout(a, "tests/fixtures/circuits/chain.circ", false);
-    try golden.expectGolden(dump, "tests/fixtures/circuits/chain.layout.opaque.golden");
+    try golden.expectGolden(dump, "tests/fixtures/preview/layouts/chain.layout.opaque.golden");
 }
 
 test "phase2_layout_builtin_xor_opaque" {
@@ -61,7 +61,7 @@ test "phase2_layout_builtin_xor_opaque" {
     const a = arena.allocator();
 
     const dump = try buildAndDumpLayout(a, "tests/fixtures/circuits/builtin_xor.circ", false);
-    try golden.expectGolden(dump, "tests/fixtures/circuits/builtin_xor.layout.opaque.golden");
+    try golden.expectGolden(dump, "tests/fixtures/preview/layouts/builtin_xor.layout.opaque.golden");
 }
 
 test "phase2_layout_builtin_xor_expanded" {
@@ -70,7 +70,7 @@ test "phase2_layout_builtin_xor_expanded" {
     const a = arena.allocator();
 
     const dump = try buildAndDumpLayout(a, "tests/fixtures/circuits/builtin_xor.circ", true);
-    try golden.expectGolden(dump, "tests/fixtures/circuits/builtin_xor.layout.expanded.golden");
+    try golden.expectGolden(dump, "tests/fixtures/preview/layouts/builtin_xor.layout.expanded.golden");
 }
 
 test "phase2_layout_builtin_xnor_opaque" {
@@ -79,7 +79,7 @@ test "phase2_layout_builtin_xnor_opaque" {
     const a = arena.allocator();
 
     const dump = try buildAndDumpLayout(a, "tests/fixtures/circuits/builtin_xnor.circ", false);
-    try golden.expectGolden(dump, "tests/fixtures/circuits/builtin_xnor.layout.opaque.golden");
+    try golden.expectGolden(dump, "tests/fixtures/preview/layouts/builtin_xnor.layout.opaque.golden");
 }
 
 test "phase2_layout_builtin_xnor_expanded" {
@@ -88,7 +88,7 @@ test "phase2_layout_builtin_xnor_expanded" {
     const a = arena.allocator();
 
     const dump = try buildAndDumpLayout(a, "tests/fixtures/circuits/builtin_xnor.circ", true);
-    try golden.expectGolden(dump, "tests/fixtures/circuits/builtin_xnor.layout.expanded.golden");
+    try golden.expectGolden(dump, "tests/fixtures/preview/layouts/builtin_xnor.layout.expanded.golden");
 }
 
 test "phase2_layout_deterministic" {

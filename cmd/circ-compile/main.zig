@@ -365,7 +365,7 @@ test "phase1_preview_primitives_fixture" {
     const exit_code = try runPreview(allocator, "tests/fixtures/circuits/chain.circ", &stdout_buf, &stderr_buf);
     try std.testing.expectEqual(@as(u8, 0), exit_code);
     try std.testing.expectEqual(@as(usize, 0), stderr_buf.items.len);
-    try golden.expectGolden(stdout_buf.items, "tests/fixtures/circuits/chain.preview.golden");
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/chain.preview.golden");
 }
 
 test "phase1_preview_xor_fixture" {
@@ -381,7 +381,7 @@ test "phase1_preview_xor_fixture" {
     const exit_code = try runPreview(allocator, "tests/fixtures/circuits/builtin_xor.circ", &stdout_buf, &stderr_buf);
     try std.testing.expectEqual(@as(u8, 0), exit_code);
     try std.testing.expectEqual(@as(usize, 0), stderr_buf.items.len);
-    try golden.expectGolden(stdout_buf.items, "tests/fixtures/circuits/builtin_xor.preview.golden");
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/builtin_xor.preview.golden");
 }
 
 test "phase1_preview_xnor_fixture" {
@@ -397,7 +397,7 @@ test "phase1_preview_xnor_fixture" {
     const exit_code = try runPreview(allocator, "tests/fixtures/circuits/builtin_xnor.circ", &stdout_buf, &stderr_buf);
     try std.testing.expectEqual(@as(u8, 0), exit_code);
     try std.testing.expectEqual(@as(usize, 0), stderr_buf.items.len);
-    try golden.expectGolden(stdout_buf.items, "tests/fixtures/circuits/builtin_xnor.preview.golden");
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/builtin_xnor.preview.golden");
 }
 
 test "phase1_preview_parse_error_to_stderr" {
@@ -445,7 +445,7 @@ test "phase3_render_single_gate" {
     defer stderr_buf.deinit(allocator);
     const exit_code = try runPreview(allocator, "tests/fixtures/circuits/single_gate.circ", &stdout_buf, &stderr_buf);
     try std.testing.expectEqual(@as(u8, 0), exit_code);
-    try golden.expectGolden(stdout_buf.items, "tests/fixtures/circuits/single_gate.render.golden");
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/single_gate.render.golden");
 }
 
 test "phase3_render_fan_out" {
@@ -458,7 +458,7 @@ test "phase3_render_fan_out" {
     defer stderr_buf.deinit(allocator);
     const exit_code = try runPreview(allocator, "tests/fixtures/circuits/fan_out.circ", &stdout_buf, &stderr_buf);
     try std.testing.expectEqual(@as(u8, 0), exit_code);
-    try golden.expectGolden(stdout_buf.items, "tests/fixtures/circuits/fan_out.render.golden");
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/fan_out.render.golden");
 }
 
 test "phase3_render_fan_in" {
@@ -471,7 +471,7 @@ test "phase3_render_fan_in" {
     defer stderr_buf.deinit(allocator);
     const exit_code = try runPreview(allocator, "tests/fixtures/circuits/fan_in.circ", &stdout_buf, &stderr_buf);
     try std.testing.expectEqual(@as(u8, 0), exit_code);
-    try golden.expectGolden(stdout_buf.items, "tests/fixtures/circuits/fan_in.render.golden");
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/fan_in.render.golden");
 }
 
 test "phase3_render_multi_led" {
@@ -484,7 +484,87 @@ test "phase3_render_multi_led" {
     defer stderr_buf.deinit(allocator);
     const exit_code = try runPreview(allocator, "tests/fixtures/circuits/multi_led.circ", &stdout_buf, &stderr_buf);
     try std.testing.expectEqual(@as(u8, 0), exit_code);
-    try golden.expectGolden(stdout_buf.items, "tests/fixtures/circuits/multi_led.render.golden");
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/multi_led.render.golden");
+}
+
+test "phase3_render_and_of_not_detours_around_inv" {
+    // Wire from `a` reaches the AND gate's `a` port two columns away — without
+    // the route detour fix, the wire ran straight across row 1 and overdrew
+    // the intermediate NOT gate's body. Lock in the detour rendering.
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+    const exit_code = try runPreview(allocator, "tests/fixtures/circuits/and_of_not.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/and_of_not.render.golden");
+}
+
+test "phase3_render_clean_gated_feedback_leftward" {
+    // Two NOT gates form a feedback loop: n1.out→n2.in (forward) and
+    // n2.out→n1.in (leftward). The leftward wire must wrap UNDER both gates
+    // rather than draw a straight line across their body row.
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+    const exit_code = try runPreview(allocator, "tests/fixtures/circuits/clean_gated_feedback.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/clean_gated_feedback.render.golden");
+}
+
+test "phase3_render_regression_led_out_drives_gate" {
+    // LED's spurious out-port drives an AND gate further right; the
+    // resulting routing must stay clear of every component body cell.
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+    const exit_code = try runPreview(allocator, "tests/fixtures/circuits/regression_led_out_drives_gate.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/regression_led_out_drives_gate.render.golden");
+}
+
+test "phase3_render_edge_single_component_led_loops_back" {
+    // LED has an out-port that loops back to an output pin; without the
+    // detour the loop wire ran across the LED body row.
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+    const exit_code = try runPreview(allocator, "tests/fixtures/circuits/edge_single_component.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/edge_single_component.render.golden");
+}
+
+test "phase3_render_full_adder_from_builtins_expanded" {
+    // Stress test for the routing pipeline: 5 XOR macros expanded into NOT
+    // and AND primitives, packed into a dense layout. Locks in the
+    // tx_dst-fallback (clean wire termination instead of east-then-west
+    // backtracking) and the port-aware trunk allocation that keeps `┼`
+    // crossings off port-approach columns.
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+    const exit_code = try runPreviewWithFlags(allocator, "tests/fixtures/circuits/full_adder_from_builtins.circ", &.{"--expand-macros"}, &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/full_adder_from_builtins.render.expanded.golden");
 }
 
 test "phase3_render_builtin_xor_expanded" {
@@ -497,7 +577,7 @@ test "phase3_render_builtin_xor_expanded" {
     defer stderr_buf.deinit(allocator);
     const exit_code = try runPreviewWithFlags(allocator, "tests/fixtures/circuits/builtin_xor.circ", &.{"--expand-macros"}, &stdout_buf, &stderr_buf);
     try std.testing.expectEqual(@as(u8, 0), exit_code);
-    try golden.expectGolden(stdout_buf.items, "tests/fixtures/circuits/builtin_xor.render.expanded.golden");
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/builtin_xor.render.expanded.golden");
 }
 
 test "phase3_render_builtin_xnor_expanded" {
@@ -510,7 +590,7 @@ test "phase3_render_builtin_xnor_expanded" {
     defer stderr_buf.deinit(allocator);
     const exit_code = try runPreviewWithFlags(allocator, "tests/fixtures/circuits/builtin_xnor.circ", &.{"--expand-macros"}, &stdout_buf, &stderr_buf);
     try std.testing.expectEqual(@as(u8, 0), exit_code);
-    try golden.expectGolden(stdout_buf.items, "tests/fixtures/circuits/builtin_xnor.render.expanded.golden");
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/builtin_xnor.render.expanded.golden");
 }
 
 test "phase3_render_color_always" {
@@ -532,7 +612,7 @@ test "phase3_render_color_always" {
         }
     }
     try std.testing.expect(saw_esc);
-    try golden.expectGolden(stdout_buf.items, "tests/fixtures/circuits/single_gate.render.color.golden");
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/single_gate.render.color.golden");
 }
 
 test "phase3_render_color_never_no_escapes" {
