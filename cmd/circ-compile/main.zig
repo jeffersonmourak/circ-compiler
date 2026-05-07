@@ -487,6 +487,68 @@ test "phase3_render_multi_led" {
     try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/multi_led.render.golden");
 }
 
+test "phase3_render_and_of_not_detours_around_inv" {
+    // Wire from `a` reaches the AND gate's `a` port two columns away — without
+    // the route detour fix, the wire ran straight across row 1 and overdrew
+    // the intermediate NOT gate's body. Lock in the detour rendering.
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+    const exit_code = try runPreview(allocator, "tests/fixtures/circuits/and_of_not.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/and_of_not.render.golden");
+}
+
+test "phase3_render_clean_gated_feedback_leftward" {
+    // Two NOT gates form a feedback loop: n1.out→n2.in (forward) and
+    // n2.out→n1.in (leftward). The leftward wire must wrap UNDER both gates
+    // rather than draw a straight line across their body row.
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+    const exit_code = try runPreview(allocator, "tests/fixtures/circuits/clean_gated_feedback.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/clean_gated_feedback.render.golden");
+}
+
+test "phase3_render_regression_led_out_drives_gate" {
+    // LED's spurious out-port drives an AND gate further right; the
+    // resulting routing must stay clear of every component body cell.
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+    const exit_code = try runPreview(allocator, "tests/fixtures/circuits/regression_led_out_drives_gate.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/regression_led_out_drives_gate.render.golden");
+}
+
+test "phase3_render_edge_single_component_led_loops_back" {
+    // LED has an out-port that loops back to an output pin; without the
+    // detour the loop wire ran across the LED body row.
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+    const exit_code = try runPreview(allocator, "tests/fixtures/circuits/edge_single_component.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/edge_single_component.render.golden");
+}
+
 test "phase3_render_builtin_xor_expanded" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();

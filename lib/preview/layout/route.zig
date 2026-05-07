@@ -231,16 +231,37 @@ pub fn route(arena: std.mem.Allocator, graph: VirtualGraph, placed: []const Plac
     }
 
     // ---------- 4. Generate segments ----------
+    // Compute placement bounds so the detour search has a finite ceiling.
+    var placement_max_y: u32 = 0;
+    for (placed) |p| {
+        if (p.y + p.height > placement_max_y) placement_max_y = p.y + p.height;
+    }
+
     for (pending.items) |*w| {
         const tx = w.track_x;
         var segs: std.ArrayList(Segment) = .{};
-        if (w.sy == w.dy and tx == w.sx + 1 and tx + 1 == w.dx) {
-            // Special-case nearly-direct wire — still split for axis-aligned shape.
+
+        // Special-case nearly-direct wire — still split for axis-aligned shape.
+        const adjacent_direct = w.sy == w.dy and tx == w.sx + 1 and tx + 1 == w.dx;
+
+        // The natural path is the canonical 3-leg L. It works whenever the
+        // wire moves left-to-right AND every leg's cell range stays clear of
+        // any component body (excluding the wire's own endpoints). When the
+        // path is leftward, or any leg would plow through an intermediate
+        // gate's body row, the wire detours through a "free" row found by
+        // scanning outward from sy — this is what keeps `│NOT│` visible
+        // instead of getting overwritten by a passing wire.
+        const can_use_l = w.dx > w.sx and
+            !isHSegBlocked(placed, w.sx, tx, w.sy) and
+            !isVSegBlocked(placed, tx, w.sy, w.dy) and
+            !isHSegBlocked(placed, tx, w.dx, w.dy);
+
+        if (adjacent_direct) {
             try segs.append(arena, .{
                 .from = .{ .x = w.sx, .y = w.sy },
                 .to = .{ .x = w.dx, .y = w.dy },
             });
-        } else {
+        } else if (can_use_l) {
             // Three-leg L: horizontal source → track_x, vertical track_x at sy → dy,
             // horizontal track_x → destination.
             try segs.append(arena, .{
@@ -257,6 +278,76 @@ pub fn route(arena: std.mem.Allocator, graph: VirtualGraph, placed: []const Plac
                 .from = .{ .x = tx, .y = w.dy },
                 .to = .{ .x = w.dx, .y = w.dy },
             });
+        } else {
+            // Five-leg detour: source's east gutter → free row → dest's west
+            // gutter → dest. tx_dst sits one cell west of the destination
+            // port, in the gutter that owns the dst column's left boundary.
+            // For column-0 destinations dx may be 0 (in_port saturated by
+            // place.zig's `x -| 1`); in that pathological case there is no
+            // west-gutter cell to anchor the detour, so we fall back to the
+            // straight 3-leg L and accept the body crossing — the layout is
+            // already malformed there.
+            const have_room = w.dx >= 1;
+            const tx_dst: u32 = if (have_room) w.dx - 1 else w.dx;
+            const x_lo = @min(tx, tx_dst);
+            const x_hi = @max(tx, tx_dst);
+
+            const free_y_opt = if (have_room)
+                findFreeY(placed, x_lo, x_hi, tx, tx_dst, w.sy, w.dy, placement_max_y)
+            else
+                null;
+
+            if (free_y_opt) |free_y| {
+                // (sx, sy) → (tx, sy)
+                try segs.append(arena, .{
+                    .from = .{ .x = w.sx, .y = w.sy },
+                    .to = .{ .x = tx, .y = w.sy },
+                });
+                // (tx, sy) → (tx, free_y)
+                if (free_y != w.sy) {
+                    try segs.append(arena, .{
+                        .from = .{ .x = tx, .y = w.sy },
+                        .to = .{ .x = tx, .y = free_y },
+                    });
+                }
+                // (tx, free_y) → (tx_dst, free_y)
+                if (tx != tx_dst) {
+                    try segs.append(arena, .{
+                        .from = .{ .x = tx, .y = free_y },
+                        .to = .{ .x = tx_dst, .y = free_y },
+                    });
+                }
+                // (tx_dst, free_y) → (tx_dst, dy)
+                if (free_y != w.dy) {
+                    try segs.append(arena, .{
+                        .from = .{ .x = tx_dst, .y = free_y },
+                        .to = .{ .x = tx_dst, .y = w.dy },
+                    });
+                }
+                // (tx_dst, dy) → (dx, dy)
+                if (tx_dst != w.dx) {
+                    try segs.append(arena, .{
+                        .from = .{ .x = tx_dst, .y = w.dy },
+                        .to = .{ .x = w.dx, .y = w.dy },
+                    });
+                }
+            } else {
+                // No free row found — fall back to straight 3-leg L.
+                try segs.append(arena, .{
+                    .from = .{ .x = w.sx, .y = w.sy },
+                    .to = .{ .x = tx, .y = w.sy },
+                });
+                if (w.sy != w.dy) {
+                    try segs.append(arena, .{
+                        .from = .{ .x = tx, .y = w.sy },
+                        .to = .{ .x = tx, .y = w.dy },
+                    });
+                }
+                try segs.append(arena, .{
+                    .from = .{ .x = tx, .y = w.dy },
+                    .to = .{ .x = w.dx, .y = w.dy },
+                });
+            }
         }
         w.segments = try segs.toOwnedSlice(arena);
     }
@@ -323,6 +414,109 @@ fn portByteOf(name: []const u8) u8 {
     if (std.mem.eql(u8, name, "b")) return @intFromEnum(full_format.PortName.b);
     if (std.mem.eql(u8, name, "out")) return @intFromEnum(full_format.PortName.out);
     return 0xFF;
+}
+
+/// True when `(x, y)` lies inside any placed component's bounding box. We don't
+/// special-case the wire's own src/dst because both endpoints sit ONE cell
+/// outside their owning box (the port marker `○` lives east of source's right
+/// border, the arrow `▶` west of dest's left border) — so the natural wire
+/// path never enters either component's bounding box, and excluding them
+/// would let leftward wires think the destination's body is empty.
+fn isCellBlocked(
+    placed: []const PlacedComponent,
+    x: u32,
+    y: u32,
+) bool {
+    for (placed) |p| {
+        if (x < p.x or x >= p.x + p.width) continue;
+        if (y < p.y or y >= p.y + p.height) continue;
+        return true;
+    }
+    return false;
+}
+
+fn isHSegBlocked(
+    placed: []const PlacedComponent,
+    x_a: u32,
+    x_b: u32,
+    y: u32,
+) bool {
+    const lo = @min(x_a, x_b);
+    const hi = @max(x_a, x_b);
+    var x = lo;
+    while (x <= hi) : (x += 1) {
+        if (isCellBlocked(placed, x, y)) return true;
+    }
+    return false;
+}
+
+fn isVSegBlocked(
+    placed: []const PlacedComponent,
+    x: u32,
+    y_a: u32,
+    y_b: u32,
+) bool {
+    const lo = @min(y_a, y_b);
+    const hi = @max(y_a, y_b);
+    var y = lo;
+    while (y <= hi) : (y += 1) {
+        if (isCellBlocked(placed, x, y)) return true;
+    }
+    return false;
+}
+
+/// Walk outward from `prefer_y` to find a row where the entire 5-leg detour
+/// stays clear of every non-endpoint component. We need three legs to pass:
+/// the cross-channel horizontal at the candidate row, and the two vertical
+/// risers anchoring tx and tx_dst from sy/dy down or up to the candidate.
+/// The search prefers rows close to sy so the detour doesn't dive
+/// unnecessarily far across the canvas. `bound` is the placement extent —
+/// rows beyond it are still allowed (the canvas grows to accommodate the
+/// wire), but the search scope is capped at `bound + 16` so we don't loop
+/// forever on truly stuck circuits.
+fn findFreeY(
+    placed: []const PlacedComponent,
+    x_lo: u32,
+    x_hi: u32,
+    tx: u32,
+    tx_dst: u32,
+    sy: u32,
+    dy: u32,
+    bound: u32,
+) ?u32 {
+    const search_limit = bound + 16;
+    var radius: u32 = 0;
+    while (radius <= search_limit) : (radius += 1) {
+        if (radius > 0) {
+            const below = sy + radius;
+            if (below <= search_limit and detourYIsClear(placed, x_lo, x_hi, tx, tx_dst, sy, dy, below)) {
+                return below;
+            }
+        }
+        if (sy >= radius) {
+            const above = sy - radius;
+            if (detourYIsClear(placed, x_lo, x_hi, tx, tx_dst, sy, dy, above)) {
+                return above;
+            }
+        }
+    }
+    return null;
+}
+
+fn detourYIsClear(
+    placed: []const PlacedComponent,
+    x_lo: u32,
+    x_hi: u32,
+    tx: u32,
+    tx_dst: u32,
+    sy: u32,
+    dy: u32,
+    candidate: u32,
+) bool {
+    if (isHSegBlocked(placed, x_lo, x_hi, candidate)) return false;
+    if (isVSegBlocked(placed, tx, sy, candidate)) return false;
+    if (isVSegBlocked(placed, tx_dst, candidate, dy)) return false;
+    return true;
 }
 
 fn segmentCross(a: Segment, b: Segment) ?PortCoord {
@@ -602,4 +796,159 @@ test "route_two_wires_with_crossing" {
     // Both wires have at least one crossing recorded.
     try std.testing.expect(result.wires[0].crossings.len > 0);
     try std.testing.expect(result.wires[1].crossings.len > 0);
+}
+
+test "route_detours_around_blocking_component" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // Layout mimics the and_of_not bug: a pin at column 0 drives a sink at
+    // column 2; a NOT-shaped block sits at column 1 directly on the path's
+    // row. Without detour, the wire's horizontal would overdraw the NOT
+    // body (`│NOT│`) on row 1.
+    const pin = PlacedComponent{
+        .id = 0,
+        .kind = .{ .primitive = .input_pin },
+        .name = "a",
+        .origin = &.{},
+        .x = 0,
+        .y = 0,
+        .width = 5,
+        .height = 3,
+        .in_ports = &.{},
+        .out_port = .{ .x = 5, .y = 1 },
+    };
+    const not_block = PlacedComponent{
+        .id = 1,
+        .kind = .{ .primitive = .not_gate },
+        .name = "n",
+        .origin = &.{},
+        .x = 10,
+        .y = 0,
+        .width = 5,
+        .height = 3,
+        .in_ports = &[_]PortSlot{.{ .port_name = "in", .coord = .{ .x = 9, .y = 1 } }},
+        .out_port = .{ .x = 15, .y = 1 },
+    };
+    const sink = PlacedComponent{
+        .id = 2,
+        .kind = .{ .primitive = .led },
+        .name = "l",
+        .origin = &.{},
+        .x = 20,
+        .y = 0,
+        .width = 3,
+        .height = 3,
+        .in_ports = &[_]PortSlot{.{ .port_name = "in", .coord = .{ .x = 19, .y = 1 } }},
+        .out_port = .{ .x = 22, .y = 1 },
+    };
+    const placed = [_]PlacedComponent{ pin, not_block, sink };
+
+    // pin → sink only — the NOT block is just an obstacle on the path.
+    const nodes = [_]types.VirtualNode{
+        .{
+            .id = 0,
+            .kind = .{ .primitive = .input_pin },
+            .name = "a",
+            .origin = &.{},
+            .inputs = &.{},
+            .outputs = &[_]types.OutputEdge{
+                .{ .dst_id = 2, .src_port = SRC_OUT, .dst_port = @intFromEnum(full_format.PortName.in) },
+            },
+        },
+        .{ .id = 1, .kind = .{ .primitive = .not_gate }, .name = "n", .origin = &.{}, .inputs = &.{}, .outputs = &.{} },
+        .{ .id = 2, .kind = .{ .primitive = .led }, .name = "l", .origin = &.{}, .inputs = &.{}, .outputs = &.{} },
+    };
+    const graph = VirtualGraph{ .nodes = &nodes, .next_id = 3 };
+
+    const result = try route(a, graph, &placed);
+    try std.testing.expectEqual(@as(usize, 1), result.wires.len);
+
+    // Detour produces 5 segments (vs 2-3 for the natural L). Walking each
+    // segment, no horizontal segment may pass through the NOT block on its
+    // body row — that's the bug we're guarding against.
+    const wire = result.wires[0];
+    try std.testing.expect(wire.segments.len >= 4);
+    for (wire.segments) |seg| {
+        if (seg.from.y != seg.to.y) continue; // vertical: skip
+        const lo = @min(seg.from.x, seg.to.x);
+        const hi = @max(seg.from.x, seg.to.x);
+        // NOT block occupies x=10..14 on body row y=1. If any horizontal
+        // segment overlaps that range AT y=1, the body would be overdrawn.
+        if (seg.from.y == 1) {
+            try std.testing.expect(hi < 10 or lo > 14);
+        }
+    }
+}
+
+test "route_leftward_wire_uses_5leg_detour" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // Two NOT gates side-by-side; a feedback wire from gate1.out → gate0.in
+    // travels right-to-left. The natural 3-leg L (which assumes dst.x > src.x)
+    // would route through both gate bodies; the detour wraps under the row.
+    const gate0 = PlacedComponent{
+        .id = 0,
+        .kind = .{ .primitive = .not_gate },
+        .name = "n0",
+        .origin = &.{},
+        .x = 10,
+        .y = 0,
+        .width = 5,
+        .height = 3,
+        .in_ports = &[_]PortSlot{.{ .port_name = "in", .coord = .{ .x = 9, .y = 1 } }},
+        .out_port = .{ .x = 15, .y = 1 },
+    };
+    const gate1 = PlacedComponent{
+        .id = 1,
+        .kind = .{ .primitive = .not_gate },
+        .name = "n1",
+        .origin = &.{},
+        .x = 20,
+        .y = 0,
+        .width = 5,
+        .height = 3,
+        .in_ports = &[_]PortSlot{.{ .port_name = "in", .coord = .{ .x = 19, .y = 1 } }},
+        .out_port = .{ .x = 25, .y = 1 },
+    };
+    const placed = [_]PlacedComponent{ gate0, gate1 };
+
+    // Single edge: gate1.out → gate0.in (leftward).
+    const nodes = [_]types.VirtualNode{
+        .{ .id = 0, .kind = .{ .primitive = .not_gate }, .name = "n0", .origin = &.{}, .inputs = &.{}, .outputs = &.{} },
+        .{
+            .id = 1,
+            .kind = .{ .primitive = .not_gate },
+            .name = "n1",
+            .origin = &.{},
+            .inputs = &.{},
+            .outputs = &[_]types.OutputEdge{
+                .{ .dst_id = 0, .src_port = SRC_OUT, .dst_port = @intFromEnum(full_format.PortName.in) },
+            },
+        },
+    };
+    const graph = VirtualGraph{ .nodes = &nodes, .next_id = 2 };
+
+    const result = try route(a, graph, &placed);
+    try std.testing.expectEqual(@as(usize, 1), result.wires.len);
+
+    // Leftward path must avoid both gates' body rows. y=1 horizontals would
+    // collide with `│NOT│` cells on either gate.
+    const wire = result.wires[0];
+    for (wire.segments) |seg| {
+        if (seg.from.y != seg.to.y) continue;
+        const lo = @min(seg.from.x, seg.to.x);
+        const hi = @max(seg.from.x, seg.to.x);
+        if (seg.from.y == 1) {
+            // Allowed to touch the port-adjacent cells (sx=25, dx=9), but no
+            // horizontal at y=1 may stray into either gate's body.
+            const overlaps_gate0 = !(hi < 10 or lo > 14);
+            const overlaps_gate1 = !(hi < 20 or lo > 24);
+            try std.testing.expect(!overlaps_gate0);
+            try std.testing.expect(!overlaps_gate1);
+        }
+    }
 }

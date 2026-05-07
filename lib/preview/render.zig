@@ -222,12 +222,37 @@ fn pickJunctionsForFallbacks(canvas: *Canvas) void {
         var x: u32 = 0;
         while (x < w) : (x += 1) {
             const idx = @as(usize, y) * @as(usize, w) + @as(usize, x);
-            if (!std.mem.eql(u8, canvas.cells[idx], "+")) continue;
+            const cell = canvas.cells[idx];
+            const is_fallback = std.mem.eql(u8, cell, "+");
+            const is_cross = std.mem.eql(u8, cell, "┼");
+            if (!is_fallback and !is_cross) continue;
+
             const conn_w = (x > 0) and cellExtendsToward(canvas.cells[idx - 1], .E);
             const conn_e = (x + 1 < w) and cellExtendsToward(canvas.cells[idx + 1], .W);
             const conn_n = (y > 0) and cellExtendsToward(canvas.cells[idx - w], .S);
             const conn_s = (y + 1 < h) and cellExtendsToward(canvas.cells[idx + w], .N);
-            canvas.setCell(x, y, pickJunctionGlyph(conn_w, conn_e, conn_n, conn_s), .wire);
+
+            if (is_fallback) {
+                // `+` is a corner-picker fallback; trust whatever junctionGlyph
+                // computes from the neighbours.
+                canvas.setCell(x, y, pickJunctionGlyph(conn_w, conn_e, conn_n, conn_s), .wire);
+                continue;
+            }
+
+            // `┼` was stamped at a true (non-connecting) crossing of two
+            // unrelated signals. If only three of the four sides actually
+            // connect, the cell is really a T-junction — one wire's corner
+            // happens to land where another wire passes through. Replacing
+            // with `┬┴├┤` removes the visual claim of a fourth dangling line.
+            // Keep the `.crossing` tag so the cell still reads as a
+            // signal-boundary junction rather than ordinary wire art.
+            const n_conn: u8 = (if (conn_w) @as(u8, 1) else 0) +
+                (if (conn_e) @as(u8, 1) else 0) +
+                (if (conn_n) @as(u8, 1) else 0) +
+                (if (conn_s) @as(u8, 1) else 0);
+            if (n_conn == 3) {
+                canvas.setCell(x, y, pickJunctionGlyph(conn_w, conn_e, conn_n, conn_s), .crossing);
+            }
         }
     }
 }
