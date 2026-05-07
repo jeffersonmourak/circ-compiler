@@ -216,15 +216,33 @@ pub fn route(arena: std.mem.Allocator, graph: VirtualGraph, placed: []const Plac
             }
         }.lt);
 
-        // Assign each super-trunk a unique track in allocation order.
-        for (super_order.items, 0..) |st_idx, alloc_order| {
+        // Assign each super-trunk a unique track. Walk east from `sx + 1`,
+        // skipping any candidate that would:
+        //   - Already be `taken` by an earlier super-trunk in this bucket.
+        //   - Fall inside a component's bounding box at any row in the
+        //     trunk's y-range (the V leg would overdraw `│NOT│`).
+        //   - Land on a port cell or its port-1 neighbour for a port whose
+        //     row sits in the trunk's y-range. The port cell itself collides
+        //     with the `▶` arrow; the port-1 cell is where the port-bound
+        //     wire's last horizontal lives, and a foreign track there
+        //     produces a `┼` adjacent to `▶` that reads as two unrelated
+        //     wires both terminating at the same port.
+        var taken: std.AutoHashMap(u32, void) = .init(arena);
+        for (super_order.items) |st_idx| {
             const st = &supers.items[st_idx];
             const sx = trunks.items[st.members.items[0]].sx;
-            const tx: u32 = sx + 1 + @as(u32, @intCast(alloc_order));
+            var candidate: u32 = sx + 1;
+            while (taken.contains(candidate) or
+                bboxBlocksColumn(placed, candidate, st.y_min, st.y_max) or
+                portApproachInRange(placed, candidate, st.y_min, st.y_max))
+            {
+                candidate += 1;
+            }
+            try taken.put(candidate, {});
             for (st.members.items) |ti| {
-                trunks.items[ti].track_x = tx;
+                trunks.items[ti].track_x = candidate;
                 for (trunks.items[ti].wires.items) |wi| {
-                    pending.items[wi].track_x = tx;
+                    pending.items[wi].track_x = candidate;
                 }
             }
         }
@@ -244,24 +262,35 @@ pub fn route(arena: std.mem.Allocator, graph: VirtualGraph, placed: []const Plac
         // Special-case nearly-direct wire — still split for axis-aligned shape.
         const adjacent_direct = w.sy == w.dy and tx == w.sx + 1 and tx + 1 == w.dx;
 
-        // The natural path is the canonical 3-leg L. It works whenever the
-        // wire moves left-to-right AND every leg's cell range stays clear of
-        // any component body (excluding the wire's own endpoints). When the
-        // path is leftward, or any leg would plow through an intermediate
-        // gate's body row, the wire detours through a "free" row found by
-        // scanning outward from sy — this is what keeps `│NOT│` visible
-        // instead of getting overwritten by a passing wire.
-        const can_use_l = w.dx > w.sx and
+        // The natural path is the canonical 3-leg L through the source's
+        // allocated track `tx`. It works whenever the wire moves
+        // left-to-right AND every leg's cell range stays clear of any
+        // component body (excluding the wire's own endpoints).
+        const can_use_l_at_tx = w.dx > w.sx and
             !isHSegBlocked(placed, w.sx, tx, w.sy) and
             !isVSegBlocked(placed, tx, w.sy, w.dy) and
             !isHSegBlocked(placed, tx, w.dx, w.dy);
+
+        // Fallback track: the gutter cell immediately west of the
+        // destination. When the source bucket has many trunks, `tx` can
+        // land at or past `dst.x` (inside the destination's column), which
+        // both blocks the natural L *and* would force the detour to
+        // backtrack east-then-west on `sy`. Try a 3-leg L through `tx_dst`
+        // before reaching for the 5-leg path. This sacrifices same-source
+        // trunk coalescing for *this* wire, which is the right trade when
+        // the trunk's column can't reach the destination cleanly anyway.
+        const tx_dst: u32 = if (w.dx >= 1) w.dx - 1 else w.dx;
+        const can_use_l_at_tx_dst = w.dx > w.sx and tx_dst != tx and tx_dst > w.sx and
+            !isHSegBlocked(placed, w.sx, tx_dst, w.sy) and
+            !isVSegBlocked(placed, tx_dst, w.sy, w.dy) and
+            !isHSegBlocked(placed, tx_dst, w.dx, w.dy);
 
         if (adjacent_direct) {
             try segs.append(arena, .{
                 .from = .{ .x = w.sx, .y = w.sy },
                 .to = .{ .x = w.dx, .y = w.dy },
             });
-        } else if (can_use_l) {
+        } else if (can_use_l_at_tx) {
             // Three-leg L: horizontal source → track_x, vertical track_x at sy → dy,
             // horizontal track_x → destination.
             try segs.append(arena, .{
@@ -278,17 +307,33 @@ pub fn route(arena: std.mem.Allocator, graph: VirtualGraph, placed: []const Plac
                 .from = .{ .x = tx, .y = w.dy },
                 .to = .{ .x = w.dx, .y = w.dy },
             });
+        } else if (can_use_l_at_tx_dst) {
+            // Three-leg L through `tx_dst` — used when the source's
+            // bucket-allocated track is unreachable.
+            try segs.append(arena, .{
+                .from = .{ .x = w.sx, .y = w.sy },
+                .to = .{ .x = tx_dst, .y = w.sy },
+            });
+            if (w.sy != w.dy) {
+                try segs.append(arena, .{
+                    .from = .{ .x = tx_dst, .y = w.sy },
+                    .to = .{ .x = tx_dst, .y = w.dy },
+                });
+            }
+            try segs.append(arena, .{
+                .from = .{ .x = tx_dst, .y = w.dy },
+                .to = .{ .x = w.dx, .y = w.dy },
+            });
         } else {
             // Five-leg detour: source's east gutter → free row → dest's west
-            // gutter → dest. tx_dst sits one cell west of the destination
-            // port, in the gutter that owns the dst column's left boundary.
-            // For column-0 destinations dx may be 0 (in_port saturated by
-            // place.zig's `x -| 1`); in that pathological case there is no
-            // west-gutter cell to anchor the detour, so we fall back to the
-            // straight 3-leg L and accept the body crossing — the layout is
-            // already malformed there.
+            // gutter → dest. `tx_dst` (declared above) sits one cell west of
+            // the destination port, in the gutter that owns the dst column's
+            // left boundary. For column-0 destinations dx may be 0 (in_port
+            // saturated by place.zig's `x -| 1`); in that pathological case
+            // there is no west-gutter cell to anchor the detour, so we fall
+            // back to the straight 3-leg L and accept the body crossing —
+            // the layout is already malformed there.
             const have_room = w.dx >= 1;
-            const tx_dst: u32 = if (have_room) w.dx - 1 else w.dx;
             const x_lo = @min(tx, tx_dst);
             const x_hi = @max(tx, tx_dst);
 
@@ -414,6 +459,36 @@ fn portByteOf(name: []const u8) u8 {
     if (std.mem.eql(u8, name, "b")) return @intFromEnum(full_format.PortName.b);
     if (std.mem.eql(u8, name, "out")) return @intFromEnum(full_format.PortName.out);
     return 0xFF;
+}
+
+/// True when any component's bounding box covers column `x` at some row in
+/// `[y_min, y_max]`. Used by trunk allocation to keep a vertical track from
+/// running through a gate body — the V leg's `│` would overdraw the box label
+/// (`│NOT│` etc.).
+fn bboxBlocksColumn(placed: []const PlacedComponent, x: u32, y_min: u32, y_max: u32) bool {
+    for (placed) |p| {
+        if (x < p.x or x >= p.x + p.width) continue;
+        const py_top = p.y;
+        const py_bot = if (p.height > 0) p.y + p.height - 1 else p.y;
+        if (y_min > py_bot) continue;
+        if (y_max < py_top) continue;
+        return true;
+    }
+    return false;
+}
+
+/// True when column `x` is a port-approach cell (`port.coord.x`) for any
+/// in_port whose row sits within `[y_min, y_max]`. Used by trunk allocation
+/// to keep vertical tracks off the port cell itself — a track there would
+/// collide with the `▶` arrow that step 6 stamps.
+fn portApproachInRange(placed: []const PlacedComponent, x: u32, y_min: u32, y_max: u32) bool {
+    for (placed) |p| {
+        for (p.in_ports) |port| {
+            if (port.coord.x != x) continue;
+            if (port.coord.y >= y_min and port.coord.y <= y_max) return true;
+        }
+    }
+    return false;
 }
 
 /// True when `(x, y)` lies inside any placed component's bounding box. We don't

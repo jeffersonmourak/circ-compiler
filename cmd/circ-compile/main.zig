@@ -549,6 +549,24 @@ test "phase3_render_edge_single_component_led_loops_back" {
     try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/edge_single_component.render.golden");
 }
 
+test "phase3_render_full_adder_from_builtins_expanded" {
+    // Stress test for the routing pipeline: 5 XOR macros expanded into NOT
+    // and AND primitives, packed into a dense layout. Locks in the
+    // tx_dst-fallback (clean wire termination instead of east-then-west
+    // backtracking) and the port-aware trunk allocation that keeps `┼`
+    // crossings off port-approach columns.
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+    const exit_code = try runPreviewWithFlags(allocator, "tests/fixtures/circuits/full_adder_from_builtins.circ", &.{"--expand-macros"}, &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/full_adder_from_builtins.render.expanded.golden");
+}
+
 test "phase3_render_builtin_xor_expanded" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();

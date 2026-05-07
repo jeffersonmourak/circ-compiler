@@ -30,9 +30,11 @@ pub const RenderOptions = struct {
 ///   5. Resolve crossings: each `.crossings` cell becomes `●` (split — wires
 ///      share a source — or merge — wires share a destination port) or `┼`
 ///      (true non-connecting cross between unrelated wires).
-///   5b. Junction picker: replace any leftover `+` corner-fallbacks with the
-///       proper Unicode glyph (`─ │ ┬ ┴ ├ ┤ ┼ ╭ ╮ ╰ ╯`) inferred from
-///       neighbour cells.
+///   5b. Junction picker: replace `+` corner-fallbacks and re-evaluate `┼`
+///       crossings with the glyph implied by neighbour cells. Runs BEFORE
+///       step 6 so the picker sees full wire rails, not port arrows — port
+///       arrows are uni-directional and would degrade 3-way junctions
+///       adjacent to ports into 2-way corners.
 ///   6. Port markers: `○` at every wire's source-side cell, directional arrow
 ///      (`▶◀▲▼`) at the sink-side cell pointing into the destination box.
 ///   7. Fan-out tap (`●`) overwrites `○` where ≥3 wires share a source.
@@ -90,10 +92,15 @@ pub fn render(
     }
 
     // Step 5b: junction picker. Inspect every cell currently holding the `+`
-    // fallback (emitted by `pickCornerGlyph` when two co-linear segments share
-    // a corner) and replace it with the glyph implied by its 4 cardinal
-    // neighbours: `─ │ ╭ ╮ ╰ ╯ ┬ ┴ ├ ┤ ┼`. Single pass, snapshot-free — `+`
-    // cells aren't neighbours of other `+` cells under L-route topology.
+    // fallback (from `pickCornerGlyph` when co-linear segments share a corner)
+    // OR a `┼` crossing (from step 5). Replace with the glyph implied by 4
+    // cardinal neighbours. Runs BEFORE port markers so the picker sees raw
+    // wire rails — `▶◀▲▼` would drop the back-side connection (the arrow
+    // doesn't extend toward its wire base), which would degrade legit
+    // 3-way junctions adjacent to ports into 2-way corners. The cleaner
+    // visual at port-adjacent cells comes from the routing layer
+    // (`portApproachInRange` keeps unrelated tracks off the port column),
+    // not from glyph rewriting.
     pickJunctionsForFallbacks(&canvas);
 
     // Step 6: port markers. Replace the wire-overwritten box-border cells at
@@ -174,10 +181,20 @@ const Dir = enum { N, E, S, W };
 /// Does `glyph` extend toward direction `dir`? Used by the junction picker to
 /// determine whether a neighbour cell connects to the cell under inspection.
 /// Treats box-drawing characters and wire characters identically — they share
-/// the same glyph repertoire and the same connection semantics. Port-marker
-/// arrowheads (`▶◀▲▼`) connect on their *opposite* side (the arrow points
-/// into the box; the wire enters from behind).
+/// the same glyph repertoire and the same connection semantics.
+///
+/// Port markers split into two classes:
+///   - **Sink arrows** `▶◀▲▼` extend ONLY toward where they point (their tip).
+///     They don't extend back toward their wire base, so a `┼` immediately
+///     adjacent to an arrow's base downgrades to a T-junction (the arrow is
+///     a wire terminator, not a fourth crossing direction).
+///   - **Source / fan-out markers** `○ ●` are bidirectional — they extend in
+///     all four directions. They sit on a wire's source cell where one or
+///     more wires emerge in arbitrary directions, so the picker shouldn't
+///     drop a connection just because a neighbour is a marker rather than a
+///     rail.
 fn cellExtendsToward(glyph: []const u8, dir: Dir) bool {
+    if (std.mem.eql(u8, glyph, "○") or std.mem.eql(u8, glyph, "●")) return true;
     return switch (dir) {
         .N => isOneOf(glyph, &.{ "│", "╰", "╯", "┴", "├", "┤", "┼", "▲" }),
         .E => isOneOf(glyph, &.{ "─", "╭", "╰", "┬", "┴", "├", "┼", "▶" }),
@@ -239,20 +256,16 @@ fn pickJunctionsForFallbacks(canvas: *Canvas) void {
                 continue;
             }
 
-            // `┼` was stamped at a true (non-connecting) crossing of two
-            // unrelated signals. If only three of the four sides actually
-            // connect, the cell is really a T-junction — one wire's corner
-            // happens to land where another wire passes through. Replacing
-            // with `┬┴├┤` removes the visual claim of a fourth dangling line.
-            // Keep the `.crossing` tag so the cell still reads as a
-            // signal-boundary junction rather than ordinary wire art.
-            const n_conn: u8 = (if (conn_w) @as(u8, 1) else 0) +
-                (if (conn_e) @as(u8, 1) else 0) +
-                (if (conn_n) @as(u8, 1) else 0) +
-                (if (conn_s) @as(u8, 1) else 0);
-            if (n_conn == 3) {
-                canvas.setCell(x, y, pickJunctionGlyph(conn_w, conn_e, conn_n, conn_s), .crossing);
-            }
+            // `┼` was stamped at a crossing detected by route.zig's segment
+            // pair-checker. After step 6 stamps port arrows, the actual
+            // connection set at this cell may be smaller than 4: a port
+            // arrow's base side doesn't extend back, and corners/endpoints
+            // of one of the two wires can leave a side dangling. Trust
+            // `pickJunctionGlyph` to map any connection set to the right
+            // glyph — `┼` for genuine 4-ways, `┬┴├┤` for 3-ways, corners
+            // `╭╮╰╯` for 2-ways. Keep the `.crossing` tag so non-trivial
+            // junctions still read as signal-boundary points.
+            canvas.setCell(x, y, pickJunctionGlyph(conn_w, conn_e, conn_n, conn_s), .crossing);
         }
     }
 }
