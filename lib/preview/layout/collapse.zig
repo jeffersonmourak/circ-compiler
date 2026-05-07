@@ -40,33 +40,46 @@ const SRC_PORT_OUT: u8 = @intFromEnum(full_format.PortName.out);
 ///   - Every non-wire primitive becomes its own VirtualNode preserving its real
 ///     id and full origin chain.
 pub fn collapse(arena: std.mem.Allocator, topology: FullTopology, opts: layout.LayoutOptions) !VirtualGraph {
-    // ---------- 1. Build kind + name lookups ----------
+    // ---------- 1. Build kind + name lookups, identify passthroughs ----------
     var kind_of = std.AutoHashMap(u32, full_format.ComponentKind).init(arena);
     var name_of = std.AutoHashMap(u32, []const u8).init(arena);
+    // Inner subcircuit pins (non-empty origin chain) act as signal pass-throughs
+    // in expanded mode: they only exist to give a macro its `a`/`b`/`out` ports
+    // a name, and have no electrical effect. We collapse them into the wire
+    // chain so the rendered graph shows only the OUTER pins plus the actual
+    // gates inside expanded macros.
+    var is_inner_pin = std.AutoHashMap(u32, void).init(arena);
     var max_id: u32 = 0;
     for (topology.components) |comp| {
         try kind_of.put(comp.id, comp.kind);
         try name_of.put(comp.id, comp.name);
+        if (comp.origin.len > 0 and (comp.kind == .input_pin or comp.kind == .output_pin)) {
+            try is_inner_pin.put(comp.id, {});
+        }
         if (comp.id > max_id) max_id = comp.id;
     }
 
-    // ---------- 2. Resolve wire chains ----------
-    // For each wire, find the non-wire source that ultimately drives it.
-    // A wire with no driver leaves no entry in the map (its dangling edges are dropped).
+    // ---------- 2. Resolve passthrough chains ----------
+    // A *passthrough* is any component the renderer should look past:
+    //   - Wires (always).
+    //   - Inner subcircuit pins (only in expanded mode).
+    // For each passthrough, find the non-passthrough source that ultimately
+    // drives it. Components with no driver leave no entry; their dangling
+    // edges are silently dropped downstream.
     var driver_of = std.AutoHashMap(u32, u32).init(arena);
     for (topology.connections) |conn| {
-        const dst_kind = kind_of.get(conn.to_id) orelse continue;
-        if (dst_kind == .wire) try driver_of.put(conn.to_id, conn.from_id);
+        if (isPassthrough(conn.to_id, kind_of, is_inner_pin, opts.expand_macros)) {
+            try driver_of.put(conn.to_id, conn.from_id);
+        }
     }
     var resolved_source = std.AutoHashMap(u32, u32).init(arena);
     for (topology.components) |comp| {
-        if (comp.kind != .wire) continue;
+        if (!isPassthrough(comp.id, kind_of, is_inner_pin, opts.expand_macros)) continue;
         var current = comp.id;
         var depth: u8 = 0;
         while (depth < 64) : (depth += 1) {
             const drv = driver_of.get(current) orelse break;
-            const drv_kind = kind_of.get(drv) orelse break;
-            if (drv_kind != .wire) {
+            if (!isPassthrough(drv, kind_of, is_inner_pin, opts.expand_macros)) {
                 try resolved_source.put(comp.id, drv);
                 break;
             }
@@ -109,7 +122,7 @@ pub fn collapse(arena: std.mem.Allocator, topology: FullTopology, opts: layout.L
 
     var virtual_id_of = std.AutoHashMap(u32, u32).init(arena);
     for (topology.components) |comp| {
-        if (comp.kind == .wire) continue;
+        if (isPassthrough(comp.id, kind_of, is_inner_pin, opts.expand_macros)) continue;
         if (group_of_id.get(comp.id)) |group_idx| {
             try virtual_id_of.put(comp.id, group_virtual_id[group_idx]);
         } else {
@@ -123,7 +136,7 @@ pub fn collapse(arena: std.mem.Allocator, topology: FullTopology, opts: layout.L
 
     // Initialize per-virtual-node edge buckets.
     for (topology.components) |comp| {
-        if (comp.kind == .wire) continue;
+        if (isPassthrough(comp.id, kind_of, is_inner_pin, opts.expand_macros)) continue;
         const vid = virtual_id_of.get(comp.id) orelse continue;
         if (!node_inputs.contains(vid)) {
             try node_inputs.put(vid, .{});
@@ -132,16 +145,16 @@ pub fn collapse(arena: std.mem.Allocator, topology: FullTopology, opts: layout.L
     }
 
     for (topology.connections) |conn| {
-        // Skip edges whose destination is a wire — they'll be reissued from the
-        // wire's resolved upstream when we encounter the wire's downstream connections.
-        const dst_kind = kind_of.get(conn.to_id) orelse continue;
-        if (dst_kind == .wire) continue;
+        // Skip edges whose destination is a passthrough — the renderer will
+        // reissue them from the passthrough's resolved upstream when we
+        // encounter the next non-passthrough downstream of the chain.
+        if (isPassthrough(conn.to_id, kind_of, is_inner_pin, opts.expand_macros)) continue;
 
-        // Resolve source: if the from is a wire, follow its chain to a real source.
+        // Resolve source: if `from` is a passthrough (wire or inner pin),
+        // walk through it to the real driving component upstream.
         var effective_source = conn.from_id;
-        const src_kind_initial = kind_of.get(conn.from_id) orelse continue;
-        if (src_kind_initial == .wire) {
-            effective_source = resolved_source.get(conn.from_id) orelse continue; // dangling wire
+        if (isPassthrough(conn.from_id, kind_of, is_inner_pin, opts.expand_macros)) {
+            effective_source = resolved_source.get(conn.from_id) orelse continue; // dangling
         }
 
         const src_vid = virtual_id_of.get(effective_source) orelse continue;
@@ -176,7 +189,7 @@ pub fn collapse(arena: std.mem.Allocator, topology: FullTopology, opts: layout.L
     var nodes: std.ArrayList(VirtualNode) = .{};
 
     for (topology.components) |comp| {
-        if (comp.kind == .wire) continue;
+        if (isPassthrough(comp.id, kind_of, is_inner_pin, opts.expand_macros)) continue;
         if (group_of_id.contains(comp.id)) continue;
         const vid = virtual_id_of.get(comp.id).?;
         const inputs_list = node_inputs.get(vid).?;
@@ -216,6 +229,22 @@ pub fn collapse(arena: std.mem.Allocator, topology: FullTopology, opts: layout.L
         .nodes = try nodes.toOwnedSlice(arena),
         .next_id = next_synthetic_id,
     };
+}
+
+/// True when this component should be looked past during edge resolution.
+/// Wires are always passthroughs. Inner subcircuit pins (origin chain non-
+/// empty) are passthroughs only in expanded mode — opaque mode swallows
+/// them via group collapsing instead.
+fn isPassthrough(
+    id: u32,
+    kind_of: std.AutoHashMap(u32, full_format.ComponentKind),
+    is_inner_pin: std.AutoHashMap(u32, void),
+    expand: bool,
+) bool {
+    const k = kind_of.get(id) orelse return false;
+    if (k == .wire) return true;
+    if (!expand) return false;
+    return is_inner_pin.contains(id);
 }
 
 /// When `real_id` was collapsed into a macro group (`real_id != vid`) and the

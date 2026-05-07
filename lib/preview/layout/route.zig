@@ -43,6 +43,27 @@ const Trunk = struct {
     track_x: u32,
 };
 
+/// One vertical track shared by trunks whose y-ranges chain (touch at one
+/// row). Visually a super-trunk reads as a single continuous bus column even
+/// though it carries multiple distinct signals (each member's `┼`-marked
+/// crossings indicate the touching points).
+const SuperTrunk = struct {
+    members: std.ArrayList(usize), // indices into the `trunks` list
+    y_min: u32,
+    y_max: u32,
+};
+
+fn isSuperTrunkBilateral(st: SuperTrunk, trunks: []const Trunk) bool {
+    var min_sy: u32 = std.math.maxInt(u32);
+    var max_sy: u32 = 0;
+    for (st.members.items) |ti| {
+        const sy = trunks[ti].sy;
+        if (sy < min_sy) min_sy = sy;
+        if (sy > max_sy) max_sy = sy;
+    }
+    return st.y_min < min_sy and st.y_max > max_sy;
+}
+
 const SRC_OUT: u8 = @intFromEnum(full_format.PortName.out);
 
 /// Stage 5: route every edge in `graph` as a sequence of axis-aligned segments
@@ -119,12 +140,13 @@ pub fn route(arena: std.mem.Allocator, graph: VirtualGraph, placed: []const Plac
         }
     }
 
-    // ---------- 4. Allocate vertical tracks per source-x channel ----------
-    // For each sx, allocate one track per trunk (greedy first-fit by trunk's
-    // union y-range). Process trunks bilateral-first: a trunk whose dests
-    // straddle its source row needs a column "central" to its branches, so
-    // give those preferential (closer) tracks. Tie-break by sy descending
-    // (lower-in-layout sources first) for stability.
+    // ---------- 4. Build super-trunks and allocate one unique track each ----
+    // Within each sx-bucket, trunks whose y-ranges *touch* (one's y_max equals
+    // another's y_min) form a chained vertical bus and are merged into one
+    // super-trunk. Each super-trunk gets a unique track-x — different signals
+    // never share a column. Within a bucket the sort is bilateral first
+    // (super-trunks whose combined range straddles all member sources go to
+    // the closer track), then by lowest member sy ascending.
     var sx_buckets = std.AutoHashMap(u32, std.ArrayList(usize)).init(arena);
     for (trunks.items, 0..) |t, ti| {
         const entry = try sx_buckets.getOrPut(t.sx);
@@ -132,44 +154,78 @@ pub fn route(arena: std.mem.Allocator, graph: VirtualGraph, placed: []const Plac
         try entry.value_ptr.append(arena, ti);
     }
 
-    const SortCtx = struct { trunks: []const Trunk };
+    const ChainSortCtx = struct { trunks: []const Trunk };
     var bucket_iter = sx_buckets.iterator();
     while (bucket_iter.next()) |entry| {
         const trunk_indices = entry.value_ptr.items;
-        std.mem.sort(usize, trunk_indices, SortCtx{ .trunks = trunks.items }, struct {
-            fn lt(ctx: SortCtx, a: usize, b: usize) bool {
+
+        // Sort trunks by y_min ascending so consecutive scan can detect
+        // chains (touching ranges) in one pass.
+        std.mem.sort(usize, trunk_indices, ChainSortCtx{ .trunks = trunks.items }, struct {
+            fn lt(ctx: ChainSortCtx, a: usize, b: usize) bool {
                 const ta = ctx.trunks[a];
                 const tb = ctx.trunks[b];
-                const a_bilateral = (ta.y_min < ta.sy) and (ta.y_max > ta.sy);
-                const b_bilateral = (tb.y_min < tb.sy) and (tb.y_max > tb.sy);
-                if (a_bilateral != b_bilateral) return a_bilateral;
-                if (ta.sy != tb.sy) return ta.sy > tb.sy;
+                if (ta.y_min != tb.y_min) return ta.y_min < tb.y_min;
                 return a < b;
             }
         }.lt);
 
-        var allocated: std.ArrayList(struct { y_min: u32, y_max: u32 }) = .{};
+        // Build super-trunks: append each trunk to the last super-trunk if
+        // ranges are *contiguous* — touching (`prev.y_max == curr.y_min`) or
+        // adjacent (`prev.y_max + 1 == curr.y_min`, no rows between). Trunks
+        // separated by ≥1 empty row get their own super-trunk so each owns a
+        // visually distinct vertical bus.
+        var supers: std.ArrayList(SuperTrunk) = .{};
         for (trunk_indices) |ti| {
-            const t = &trunks.items[ti];
-            var assigned: ?usize = null;
-            for (allocated.items, 0..) |alloc, ai| {
-                if (t.y_max < alloc.y_min or t.y_min > alloc.y_max) {
-                    assigned = ai;
-                    break;
+            const t = trunks.items[ti];
+            if (supers.items.len > 0) {
+                const last = &supers.items[supers.items.len - 1];
+                const contiguous = t.y_min >= last.y_max and t.y_min <= last.y_max + 1;
+                if (contiguous) {
+                    if (t.y_max > last.y_max) last.y_max = t.y_max;
+                    try last.members.append(arena, ti);
+                    continue;
                 }
             }
-            const track_idx = if (assigned) |ai| blk: {
-                const alloc = &allocated.items[ai];
-                alloc.y_min = @min(alloc.y_min, t.y_min);
-                alloc.y_max = @max(alloc.y_max, t.y_max);
-                break :blk ai;
-            } else blk: {
-                try allocated.append(arena, .{ .y_min = t.y_min, .y_max = t.y_max });
-                break :blk allocated.items.len - 1;
-            };
-            t.track_x = t.sx + 1 + @as(u32, @intCast(track_idx));
-            for (t.wires.items) |wi| {
-                pending.items[wi].track_x = t.track_x;
+            var nst = SuperTrunk{ .members = .{}, .y_min = t.y_min, .y_max = t.y_max };
+            try nst.members.append(arena, ti);
+            try supers.append(arena, nst);
+        }
+
+        // Sort super-trunks: bilateral first, then min-member-sy ascending.
+        var super_order: std.ArrayList(usize) = .{};
+        for (supers.items, 0..) |_, i| try super_order.append(arena, i);
+
+        const SuperSortCtx = struct {
+            supers: []const SuperTrunk,
+            trunks: []const Trunk,
+        };
+        std.mem.sort(usize, super_order.items, SuperSortCtx{ .supers = supers.items, .trunks = trunks.items }, struct {
+            fn lt(ctx: SuperSortCtx, a: usize, b: usize) bool {
+                const sa = ctx.supers[a];
+                const sb = ctx.supers[b];
+                const a_bi = isSuperTrunkBilateral(sa, ctx.trunks);
+                const b_bi = isSuperTrunkBilateral(sb, ctx.trunks);
+                if (a_bi != b_bi) return a_bi;
+                // Smaller y-extent first → compact trunks claim the inner
+                // tracks closer to the source channel.
+                const a_spread = sa.y_max - sa.y_min;
+                const b_spread = sb.y_max - sb.y_min;
+                if (a_spread != b_spread) return a_spread < b_spread;
+                return a < b;
+            }
+        }.lt);
+
+        // Assign each super-trunk a unique track in allocation order.
+        for (super_order.items, 0..) |st_idx, alloc_order| {
+            const st = &supers.items[st_idx];
+            const sx = trunks.items[st.members.items[0]].sx;
+            const tx: u32 = sx + 1 + @as(u32, @intCast(alloc_order));
+            for (st.members.items) |ti| {
+                trunks.items[ti].track_x = tx;
+                for (trunks.items[ti].wires.items) |wi| {
+                    pending.items[wi].track_x = tx;
+                }
             }
         }
     }
@@ -442,11 +498,13 @@ test "route_two_wires_no_crossing" {
     const result = try route(a, graph, &placed);
     try std.testing.expectEqual(@as(usize, 2), result.wires.len);
 
-    // Both wires use track at x = sx + 1 = 6 (same track index 0 since y-disjoint).
+    // Each super-trunk gets its own column even when y-ranges are disjoint:
+    // pin0's super-trunk lands on track 0 (x=6), pin1's on track 1 (x=7).
+    // Lower-sy first by tie-break, so pin0 (sy=0) gets the closer column.
     try std.testing.expectEqual(@as(u32, 6), result.wires[0].segments[0].to.x);
-    try std.testing.expectEqual(@as(u32, 6), result.wires[1].segments[0].to.x);
+    try std.testing.expectEqual(@as(u32, 7), result.wires[1].segments[0].to.x);
 
-    // No crossings.
+    // No crossings (geometries don't intersect).
     try std.testing.expectEqual(@as(usize, 0), result.wires[0].crossings.len);
     try std.testing.expectEqual(@as(usize, 0), result.wires[1].crossings.len);
 }

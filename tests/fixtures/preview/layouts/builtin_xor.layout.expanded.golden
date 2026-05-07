@@ -1,134 +1,42 @@
-LayoutGrid 57x35
+LayoutGrid 57x15
 
 Components:
-  [0] input_pin "a" @(0,10) 5x3
-  [1] input_pin "b" @(0,24) 5x3
-  [2] input_pin "a" @(0,28) 5x3
-  [3] input_pin "b" @(0,32) 5x3
-  [4] input_pin "a" @(0,0) 5x3
-  [5] input_pin "b" @(0,6) 5x3
+  [0] input_pin "a" @(0,0) 5x3
+  [1] input_pin "b" @(0,6) 5x3
   [6] not_gate "na" @(10,0) 5x3
   [7] not_gate "nb" @(10,6) 5x3
   [8] and_gate "inner" @(20,0) 5x5
   [9] not_gate "n" @(30,0) 5x3
-  [10] output_pin "out" @(50,0) 7x3
-  [11] input_pin "a" @(0,16) 5x3
-  [12] input_pin "b" @(0,20) 5x3
   [13] and_gate "inner" @(10,10) 5x5
   [14] not_gate "n" @(20,6) 5x3
-  [15] output_pin "out" @(50,16) 7x3
   [16] and_gate "gate" @(40,0) 5x5
-  [17] output_pin "out" @(50,6) 7x3
-  [18] output_pin "out" @(50,10) 7x3
+  [18] output_pin "out" @(50,0) 7x3
 
 Wires:
-  0.out -> 2.in: (5,11) -> (10,11) -> (10,28) -> (0,28)
-  1.out -> 3.in: (5,25) -> (8,25) -> (8,32) -> (0,32)
-  2.out -> 4.in: (5,29) -> (7,29) -> (7,0) -> (0,0)
-  2.out -> 11.in: (5,29) -> (7,29) -> (7,16) -> (0,16)
-  3.out -> 5.in: (5,33) -> (6,33) -> (6,6) -> (0,6)
-  3.out -> 12.in: (5,33) -> (6,33) -> (6,20) -> (0,20)
-  4.out -> 6.in: (5,1) -> (6,1) -> (9,1)
-  5.out -> 7.in: (5,7) -> (8,7) -> (9,7)
+  0.out -> 6.in: (5,1) -> (7,1) -> (9,1)
+  0.out -> 13.a: (5,1) -> (7,1) -> (7,11) -> (9,11)
+  1.out -> 7.in: (5,7) -> (6,7) -> (9,7)
+  1.out -> 13.b: (5,7) -> (6,7) -> (6,13) -> (9,13)
   6.out -> 8.a: (15,1) -> (16,1) -> (19,1)
   7.out -> 8.b: (15,7) -> (17,7) -> (17,3) -> (19,3)
   8.out -> 9.in: (25,2) -> (26,2) -> (26,1) -> (29,1)
-  9.out -> 10.in: (35,1) -> (36,1) -> (49,1)
   9.out -> 16.a: (35,1) -> (36,1) -> (39,1)
-  11.out -> 13.a: (5,17) -> (9,17) -> (9,11) -> (9,11)
-  12.out -> 13.b: (5,21) -> (8,21) -> (8,13) -> (9,13)
-  13.out -> 14.in: (15,12) -> (16,12) -> (16,7) -> (19,7)
-  14.out -> 15.in: (25,7) -> (26,7) -> (26,17) -> (49,17)
+  13.out -> 14.in: (15,12) -> (17,12) -> (17,7) -> (19,7)
   14.out -> 16.b: (25,7) -> (26,7) -> (26,3) -> (39,3)
-  16.out -> 17.in: (45,2) -> (46,2) -> (46,7) -> (49,7)
-  16.out -> 18.in: (45,2) -> (46,2) -> (46,11) -> (49,11)
+  16.out -> 18.in: (45,2) -> (46,2) -> (46,1) -> (49,1)
 
 Crossings:
-  wire 0.out->2.in @(8,28)
-  wire 0.out->2.in @(7,11)
-  wire 0.out->2.in @(7,28)
-  wire 0.out->2.in @(7,28)
-  wire 0.out->2.in @(6,11)
-  wire 0.out->2.in @(6,28)
-  wire 0.out->2.in @(6,28)
-  wire 0.out->2.in @(9,11)
-  wire 1.out->3.in @(8,28)
-  wire 1.out->3.in @(7,25)
-  wire 1.out->3.in @(7,25)
-  wire 1.out->3.in @(6,25)
-  wire 1.out->3.in @(6,32)
-  wire 1.out->3.in @(6,25)
-  wire 1.out->3.in @(6,32)
-  wire 2.out->4.in @(7,11)
-  wire 2.out->4.in @(7,28)
-  wire 2.out->4.in @(7,25)
-  wire 2.out->4.in @(7,29)
-  wire 2.out->4.in @(7,29)
-  wire 2.out->4.in @(7,16)
-  wire 2.out->4.in @(6,29)
-  wire 2.out->4.in @(6,29)
-  wire 2.out->4.in @(7,1)
-  wire 2.out->4.in @(7,7)
-  wire 2.out->4.in @(7,17)
-  wire 2.out->4.in @(7,21)
-  wire 2.out->11.in @(7,28)
-  wire 2.out->11.in @(7,25)
-  wire 2.out->11.in @(7,29)
-  wire 2.out->11.in @(7,29)
-  wire 2.out->11.in @(7,16)
-  wire 2.out->11.in @(6,29)
-  wire 2.out->11.in @(6,16)
-  wire 2.out->11.in @(6,29)
-  wire 2.out->11.in @(7,17)
-  wire 2.out->11.in @(7,21)
-  wire 3.out->5.in @(6,11)
-  wire 3.out->5.in @(6,28)
-  wire 3.out->5.in @(6,25)
-  wire 3.out->5.in @(6,32)
-  wire 3.out->5.in @(6,29)
-  wire 3.out->5.in @(6,29)
-  wire 3.out->5.in @(6,16)
-  wire 3.out->5.in @(6,33)
-  wire 3.out->5.in @(6,33)
-  wire 3.out->5.in @(6,20)
-  wire 3.out->5.in @(6,7)
-  wire 3.out->5.in @(6,17)
-  wire 3.out->5.in @(6,21)
-  wire 3.out->12.in @(6,28)
-  wire 3.out->12.in @(6,25)
-  wire 3.out->12.in @(6,32)
-  wire 3.out->12.in @(6,29)
-  wire 3.out->12.in @(6,29)
-  wire 3.out->12.in @(6,33)
-  wire 3.out->12.in @(6,33)
-  wire 3.out->12.in @(6,20)
-  wire 3.out->12.in @(6,21)
-  wire 4.out->6.in @(7,1)
-  wire 5.out->7.in @(7,7)
-  wire 5.out->7.in @(6,7)
-  wire 7.out->8.b @(16,7)
+  wire 0.out->6.in @(7,1)
+  wire 0.out->6.in @(7,1)
+  wire 0.out->13.a @(7,1)
+  wire 0.out->13.a @(7,1)
+  wire 0.out->13.a @(7,7)
+  wire 1.out->7.in @(7,7)
+  wire 1.out->7.in @(6,7)
+  wire 1.out->7.in @(6,7)
+  wire 1.out->13.b @(6,7)
+  wire 1.out->13.b @(6,7)
   wire 7.out->8.b @(17,7)
-  wire 11.out->13.a @(9,11)
-  wire 11.out->13.a @(7,17)
-  wire 11.out->13.a @(7,17)
-  wire 11.out->13.a @(6,17)
-  wire 11.out->13.a @(8,17)
-  wire 11.out->13.a @(9,13)
-  wire 12.out->13.b @(7,21)
-  wire 12.out->13.b @(7,21)
-  wire 12.out->13.b @(6,21)
-  wire 12.out->13.b @(6,21)
-  wire 12.out->13.b @(8,17)
-  wire 12.out->13.b @(9,13)
-  wire 13.out->14.in @(16,7)
+  wire 7.out->8.b @(17,7)
   wire 13.out->14.in @(17,7)
-  wire 14.out->15.in @(26,7)
-  wire 14.out->15.in @(26,7)
-  wire 14.out->16.b @(26,7)
-  wire 14.out->16.b @(26,7)
-  wire 16.out->17.in @(46,2)
-  wire 16.out->17.in @(46,2)
-  wire 16.out->17.in @(46,7)
-  wire 16.out->18.in @(46,2)
-  wire 16.out->18.in @(46,2)
-  wire 16.out->18.in @(46,7)
+  wire 13.out->14.in @(17,7)
