@@ -13,7 +13,9 @@ const PortSlot = layout.PortSlot;
 const PortCoord = layout.PortCoord;
 
 /// Spacing between adjacent column cells (used for wire routing).
-const COL_GUTTER: u32 = 4;
+/// Sized to fit `[├][○][─][─][─][▶][┤]` — one source marker, ≥1 wire body
+/// cell, one sink marker — between two adjacent boxes' border cells.
+const COL_GUTTER: u32 = 5;
 /// Spacing between adjacent row cells.
 const ROW_GUTTER: u32 = 1;
 
@@ -107,44 +109,76 @@ pub fn place(
 
 fn sizeOf(node: VirtualNode) sizing.PrimitiveSize {
     return switch (node.kind) {
-        .primitive => |p| sizing.primitive_sizing.get(p),
-        .subcircuit => |sub| sizing.macroSize(sub.len + node.name.len + 3), // [, :, ]
+        .primitive => |p| switch (p) {
+            .input_pin, .output_pin => sizing.pinSize(node.name.len),
+            else => sizing.primitive_sizing.get(p),
+        },
+        .subcircuit => |sub| sizing.macroSize(
+            sub.len + node.name.len + 3, // [, :, ]
+            countActiveSubcircuitInputs(node),
+        ),
     };
+}
+
+fn countActiveSubcircuitInputs(node: VirtualNode) u32 {
+    var has_in = false;
+    var has_a = false;
+    var has_b = false;
+    for (node.inputs) |edge| {
+        switch (edge.dst_port) {
+            @intFromEnum(full_format.PortName.in) => has_in = true,
+            @intFromEnum(full_format.PortName.a) => has_a = true,
+            @intFromEnum(full_format.PortName.b) => has_b = true,
+            else => {},
+        }
+    }
+    var n: u32 = 0;
+    if (has_a) n += 1;
+    if (has_in) n += 1;
+    if (has_b) n += 1;
+    return n;
 }
 
 fn resolvePortCoords(arena: std.mem.Allocator, node: VirtualNode, x: u32, y: u32, w: u32, h: u32) !Ports {
     var in_list: std.ArrayList(PortSlot) = .{};
-    // Default out_port at middle-right; specific kinds override below.
-    var out_port = PortCoord{ .x = x + w - 1, .y = y + h / 2 };
+    // Default out_port one cell east of right border, middle row; specific
+    // kinds override below.
+    var out_port = PortCoord{ .x = x + w, .y = y + h / 2 };
 
+    // Port coordinates live ONE CELL OUTSIDE the box border. This keeps the
+    // box rectangle visually intact: the box-border cell at the port row
+    // becomes `├` (source) or `┤` (sink) during glyph drawing, and the
+    // marker (`○` / `▶◀▲▼`) lives at the adjacent outside cell where the
+    // wire actually begins or ends.
     switch (node.kind) {
         .primitive => |p| switch (p) {
             .input_pin => {
-                out_port = .{ .x = x + w - 1, .y = y };
+                out_port = .{ .x = x + w, .y = y + 1 };
             },
             .output_pin => {
-                try in_list.append(arena, .{ .port_name = "in", .coord = .{ .x = x, .y = y } });
+                try in_list.append(arena, .{ .port_name = "in", .coord = .{ .x = x -| 1, .y = y + 1 } });
                 // out_port unused on sinks; keep default.
             },
             .not_gate => {
-                try in_list.append(arena, .{ .port_name = "in", .coord = .{ .x = x, .y = y + 1 } });
-                out_port = .{ .x = x + w - 1, .y = y + 1 };
+                try in_list.append(arena, .{ .port_name = "in", .coord = .{ .x = x -| 1, .y = y + 1 } });
+                out_port = .{ .x = x + w, .y = y + 1 };
             },
             .and_gate => {
-                try in_list.append(arena, .{ .port_name = "a", .coord = .{ .x = x, .y = y } });
-                try in_list.append(arena, .{ .port_name = "b", .coord = .{ .x = x, .y = y + 2 } });
-                out_port = .{ .x = x + w - 1, .y = y + 1 };
+                // 5×5 box: inputs on rows 1 & 3 (non-corner), output centered on row 2.
+                try in_list.append(arena, .{ .port_name = "a", .coord = .{ .x = x -| 1, .y = y + 1 } });
+                try in_list.append(arena, .{ .port_name = "b", .coord = .{ .x = x -| 1, .y = y + 3 } });
+                out_port = .{ .x = x + w, .y = y + 2 };
             },
             .led => {
-                try in_list.append(arena, .{ .port_name = "in", .coord = .{ .x = x, .y = y + 1 } });
+                try in_list.append(arena, .{ .port_name = "in", .coord = .{ .x = x -| 1, .y = y + 1 } });
                 // out_port unused on sinks.
             },
             .wire => unreachable, // wires were collapsed in stage 1.
         },
         .subcircuit => {
-            // Inspect the virtual node's incoming edges to decide which boundary
-            // ports to expose. Maps PortName bytes to the same slot positions
-            // as gate primitives (in=middle, a=top, b=bottom).
+            // Active inputs land on consecutive non-corner border rows (y+1, y+3, …)
+            // in canonical port order: a, in, b. Box height grows in `sizing.macroSize`
+            // to make sure those rows fit between the corners.
             var has_in = false;
             var has_a = false;
             var has_b = false;
@@ -156,10 +190,20 @@ fn resolvePortCoords(arena: std.mem.Allocator, node: VirtualNode, x: u32, y: u32
                     else => {},
                 }
             }
-            if (has_a) try in_list.append(arena, .{ .port_name = "a", .coord = .{ .x = x, .y = y } });
-            if (has_in) try in_list.append(arena, .{ .port_name = "in", .coord = .{ .x = x, .y = y + h / 2 } });
-            if (has_b) try in_list.append(arena, .{ .port_name = "b", .coord = .{ .x = x, .y = y + h - 1 } });
-            out_port = .{ .x = x + w - 1, .y = y + h / 2 };
+            var slot_idx: u32 = 0;
+            if (has_a) {
+                try in_list.append(arena, .{ .port_name = "a", .coord = .{ .x = x -| 1, .y = y + 1 + 2 * slot_idx } });
+                slot_idx += 1;
+            }
+            if (has_in) {
+                try in_list.append(arena, .{ .port_name = "in", .coord = .{ .x = x -| 1, .y = y + 1 + 2 * slot_idx } });
+                slot_idx += 1;
+            }
+            if (has_b) {
+                try in_list.append(arena, .{ .port_name = "b", .coord = .{ .x = x -| 1, .y = y + 1 + 2 * slot_idx } });
+                slot_idx += 1;
+            }
+            out_port = .{ .x = x + w, .y = y + h / 2 };
         },
     }
 
@@ -212,9 +256,9 @@ test "place_cell_sizing: not_gate at column 1 row 0" {
     try std.testing.expectEqual(@as(usize, 2), placed.len);
 
     // not at col 1 row 0:
-    //   col_widths = [pin=6, not=5] → col_x = [0, 6+4=10]
-    //   row_heights = [max(1, 3)=3] → row_y = [0]
-    // → not.x = 10, not.y = 0, width = 5, height = 3
+    //   col_widths = [pin (anonymous) = 5, not = 5] → col_x = [0, 5+5=10]
+    //   row_heights = [max(3, 3) = 3] → row_y = [0]
+    // → not.x = 10, not.y = 0, width = 5, height = 3.
     try std.testing.expectEqual(@as(u32, 10), placed[1].x);
     try std.testing.expectEqual(@as(u32, 0), placed[1].y);
     try std.testing.expectEqual(@as(u32, 5), placed[1].width);
@@ -245,21 +289,25 @@ test "place_port_coords_and_gate: a, b, out at expected offsets" {
 
     const placed = try place(a_alloc, graph, cols, rows);
 
-    // and_gate: col_x[1] = 6 + 4 = 10, row_y[0] = 0 → (10, 0). width=5, height=3.
+    // and_gate: col_x[1] = 5 + 5 = 10, row_y[0] = 0 → (10, 0). width=5, height=5
+    // (5×5 box: ports on rows 1, 3 with output centered on row 2).
     const and_p = placed[2];
     try std.testing.expectEqual(@as(u32, 10), and_p.x);
     try std.testing.expectEqual(@as(u32, 0), and_p.y);
 
-    // Ports per spec: a at (x, y), b at (x, y+2), out at (x+4, y+1).
+    // Ports live one cell OUTSIDE the box border:
+    //   a at (x-1, y+1) = (9, 1)
+    //   b at (x-1, y+3) = (9, 3)
+    //   out at (x+w, y+2) = (15, 2)
     try std.testing.expectEqual(@as(usize, 2), and_p.in_ports.len);
     try std.testing.expectEqualStrings("a", and_p.in_ports[0].port_name);
-    try std.testing.expectEqual(@as(u32, 10), and_p.in_ports[0].coord.x);
-    try std.testing.expectEqual(@as(u32, 0), and_p.in_ports[0].coord.y);
+    try std.testing.expectEqual(@as(u32, 9), and_p.in_ports[0].coord.x);
+    try std.testing.expectEqual(@as(u32, 1), and_p.in_ports[0].coord.y);
     try std.testing.expectEqualStrings("b", and_p.in_ports[1].port_name);
-    try std.testing.expectEqual(@as(u32, 10), and_p.in_ports[1].coord.x);
-    try std.testing.expectEqual(@as(u32, 2), and_p.in_ports[1].coord.y);
-    try std.testing.expectEqual(@as(u32, 14), and_p.out_port.x);
-    try std.testing.expectEqual(@as(u32, 1), and_p.out_port.y);
+    try std.testing.expectEqual(@as(u32, 9), and_p.in_ports[1].coord.x);
+    try std.testing.expectEqual(@as(u32, 3), and_p.in_ports[1].coord.y);
+    try std.testing.expectEqual(@as(u32, 15), and_p.out_port.x);
+    try std.testing.expectEqual(@as(u32, 2), and_p.out_port.y);
 }
 
 test "place_macro_label_width: long subcircuit alias widens the box" {
@@ -279,6 +327,7 @@ test "place_macro_label_width: long subcircuit alias widens the box" {
 
     const placed = try place(a, graph, cols, rows);
     try std.testing.expectEqual(@as(u32, 23), placed[0].width);
+    // Subcircuit has 0 inputs in this test → height stays at the 3-row floor.
     try std.testing.expectEqual(@as(u32, 3), placed[0].height);
     // Verify the box widened beyond the 8-char floor.
     try std.testing.expect(placed[0].width > 8);

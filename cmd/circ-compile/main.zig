@@ -365,7 +365,7 @@ test "phase1_preview_primitives_fixture" {
     const exit_code = try runPreview(allocator, "tests/fixtures/circuits/chain.circ", &stdout_buf, &stderr_buf);
     try std.testing.expectEqual(@as(u8, 0), exit_code);
     try std.testing.expectEqual(@as(usize, 0), stderr_buf.items.len);
-    try golden.expectGolden(stdout_buf.items, "tests/fixtures/circuits/chain.preview.golden");
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/chain.preview.golden");
 }
 
 test "phase1_preview_xor_fixture" {
@@ -381,7 +381,7 @@ test "phase1_preview_xor_fixture" {
     const exit_code = try runPreview(allocator, "tests/fixtures/circuits/builtin_xor.circ", &stdout_buf, &stderr_buf);
     try std.testing.expectEqual(@as(u8, 0), exit_code);
     try std.testing.expectEqual(@as(usize, 0), stderr_buf.items.len);
-    try golden.expectGolden(stdout_buf.items, "tests/fixtures/circuits/builtin_xor.preview.golden");
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/builtin_xor.preview.golden");
 }
 
 test "phase1_preview_xnor_fixture" {
@@ -397,7 +397,7 @@ test "phase1_preview_xnor_fixture" {
     const exit_code = try runPreview(allocator, "tests/fixtures/circuits/builtin_xnor.circ", &stdout_buf, &stderr_buf);
     try std.testing.expectEqual(@as(u8, 0), exit_code);
     try std.testing.expectEqual(@as(usize, 0), stderr_buf.items.len);
-    try golden.expectGolden(stdout_buf.items, "tests/fixtures/circuits/builtin_xnor.preview.golden");
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/builtin_xnor.preview.golden");
 }
 
 test "phase1_preview_parse_error_to_stderr" {
@@ -445,7 +445,7 @@ test "phase3_render_single_gate" {
     defer stderr_buf.deinit(allocator);
     const exit_code = try runPreview(allocator, "tests/fixtures/circuits/single_gate.circ", &stdout_buf, &stderr_buf);
     try std.testing.expectEqual(@as(u8, 0), exit_code);
-    try golden.expectGolden(stdout_buf.items, "tests/fixtures/circuits/single_gate.render.golden");
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/single_gate.render.golden");
 }
 
 test "phase3_render_fan_out" {
@@ -458,7 +458,7 @@ test "phase3_render_fan_out" {
     defer stderr_buf.deinit(allocator);
     const exit_code = try runPreview(allocator, "tests/fixtures/circuits/fan_out.circ", &stdout_buf, &stderr_buf);
     try std.testing.expectEqual(@as(u8, 0), exit_code);
-    try golden.expectGolden(stdout_buf.items, "tests/fixtures/circuits/fan_out.render.golden");
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/fan_out.render.golden");
 }
 
 test "phase3_render_fan_in" {
@@ -471,7 +471,7 @@ test "phase3_render_fan_in" {
     defer stderr_buf.deinit(allocator);
     const exit_code = try runPreview(allocator, "tests/fixtures/circuits/fan_in.circ", &stdout_buf, &stderr_buf);
     try std.testing.expectEqual(@as(u8, 0), exit_code);
-    try golden.expectGolden(stdout_buf.items, "tests/fixtures/circuits/fan_in.render.golden");
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/fan_in.render.golden");
 }
 
 test "phase3_render_multi_led" {
@@ -484,7 +484,7 @@ test "phase3_render_multi_led" {
     defer stderr_buf.deinit(allocator);
     const exit_code = try runPreview(allocator, "tests/fixtures/circuits/multi_led.circ", &stdout_buf, &stderr_buf);
     try std.testing.expectEqual(@as(u8, 0), exit_code);
-    try golden.expectGolden(stdout_buf.items, "tests/fixtures/circuits/multi_led.render.golden");
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/multi_led.render.golden");
 }
 
 test "phase3_render_builtin_xor_expanded" {
@@ -497,7 +497,7 @@ test "phase3_render_builtin_xor_expanded" {
     defer stderr_buf.deinit(allocator);
     const exit_code = try runPreviewWithFlags(allocator, "tests/fixtures/circuits/builtin_xor.circ", &.{"--expand-macros"}, &stdout_buf, &stderr_buf);
     try std.testing.expectEqual(@as(u8, 0), exit_code);
-    try golden.expectGolden(stdout_buf.items, "tests/fixtures/circuits/builtin_xor.render.expanded.golden");
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/builtin_xor.render.expanded.golden");
 }
 
 test "phase3_render_builtin_xnor_expanded" {
@@ -510,7 +510,7 @@ test "phase3_render_builtin_xnor_expanded" {
     defer stderr_buf.deinit(allocator);
     const exit_code = try runPreviewWithFlags(allocator, "tests/fixtures/circuits/builtin_xnor.circ", &.{"--expand-macros"}, &stdout_buf, &stderr_buf);
     try std.testing.expectEqual(@as(u8, 0), exit_code);
-    try golden.expectGolden(stdout_buf.items, "tests/fixtures/circuits/builtin_xnor.render.expanded.golden");
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/builtin_xnor.render.expanded.golden");
 }
 
 test "phase3_render_color_always" {
@@ -532,7 +532,7 @@ test "phase3_render_color_always" {
         }
     }
     try std.testing.expect(saw_esc);
-    try golden.expectGolden(stdout_buf.items, "tests/fixtures/circuits/single_gate.render.color.golden");
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/single_gate.render.color.golden");
 }
 
 test "phase3_render_color_never_no_escapes" {

@@ -29,6 +29,20 @@ const PendingWire = struct {
     segments: []const Segment = &.{},
 };
 
+/// One source's fan-out family. Every wire sharing `(sx, src_id, src_port)`
+/// gets routed onto this trunk's `track_x`, so the verticals collapse into a
+/// single shared column with branches splitting off via `●` taps.
+const Trunk = struct {
+    sx: u32,
+    sy: u32,
+    src_id: u32,
+    src_port: u8,
+    y_min: u32,
+    y_max: u32,
+    wires: std.ArrayList(usize),
+    track_x: u32,
+};
+
 const SRC_OUT: u8 = @intFromEnum(full_format.PortName.out);
 
 /// Stage 5: route every edge in `graph` as a sequence of axis-aligned segments
@@ -69,47 +83,94 @@ pub fn route(arena: std.mem.Allocator, graph: VirtualGraph, placed: []const Plac
         }
     }
 
-    // ---------- 3. Allocate vertical tracks per source-x channel ----------
-    // For each source x value, collect wires originating there and assign each
-    // an offset (track index) so their vertical legs don't share a column when
-    // their y-ranges overlap.
-    var sx_buckets = std.AutoHashMap(u32, std.ArrayList(usize)).init(arena);
+    // ---------- 3. Group wires into trunks by (sx, src_id, src_port) ----------
+    // A *trunk* is the family of fan-out wires sharing one source. They share
+    // a single vertical track so the fan-out reads as one branch point with
+    // signals diverging up and/or down, rather than as N parallel verticals.
+    var trunks: std.ArrayList(Trunk) = .{};
     for (pending.items, 0..) |w, i| {
-        const entry = try sx_buckets.getOrPut(w.sx);
-        if (!entry.found_existing) entry.value_ptr.* = .{};
-        try entry.value_ptr.append(arena, i);
+        const y_min = @min(w.sy, w.dy);
+        const y_max = @max(w.sy, w.dy);
+        var found: ?usize = null;
+        for (trunks.items, 0..) |t, ti| {
+            if (t.sx == w.sx and t.src_id == w.src_id and t.src_port == w.src_port) {
+                found = ti;
+                break;
+            }
+        }
+        if (found) |ti| {
+            const t = &trunks.items[ti];
+            t.y_min = @min(t.y_min, y_min);
+            t.y_max = @max(t.y_max, y_max);
+            try t.wires.append(arena, i);
+        } else {
+            var nt = Trunk{
+                .sx = w.sx,
+                .sy = w.sy,
+                .src_id = w.src_id,
+                .src_port = w.src_port,
+                .y_min = y_min,
+                .y_max = y_max,
+                .wires = .{},
+                .track_x = 0,
+            };
+            try nt.wires.append(arena, i);
+            try trunks.append(arena, nt);
+        }
     }
 
+    // ---------- 4. Allocate vertical tracks per source-x channel ----------
+    // For each sx, allocate one track per trunk (greedy first-fit by trunk's
+    // union y-range). Process trunks bilateral-first: a trunk whose dests
+    // straddle its source row needs a column "central" to its branches, so
+    // give those preferential (closer) tracks. Tie-break by sy descending
+    // (lower-in-layout sources first) for stability.
+    var sx_buckets = std.AutoHashMap(u32, std.ArrayList(usize)).init(arena);
+    for (trunks.items, 0..) |t, ti| {
+        const entry = try sx_buckets.getOrPut(t.sx);
+        if (!entry.found_existing) entry.value_ptr.* = .{};
+        try entry.value_ptr.append(arena, ti);
+    }
+
+    const SortCtx = struct { trunks: []const Trunk };
     var bucket_iter = sx_buckets.iterator();
     while (bucket_iter.next()) |entry| {
-        const sx = entry.key_ptr.*;
-        const indices = entry.value_ptr.items;
-        // Assign tracks: greedy first-fit by ascending wire index (deterministic).
-        // tracks[i] holds the y-range [y_min, y_max] of the wire on that track.
-        var tracks: std.ArrayList(struct { y_min: u32, y_max: u32 }) = .{};
-        for (indices) |wi| {
-            const w = &pending.items[wi];
-            const y_min = @min(w.sy, w.dy);
-            const y_max = @max(w.sy, w.dy);
-            // Find first track with no overlap.
+        const trunk_indices = entry.value_ptr.items;
+        std.mem.sort(usize, trunk_indices, SortCtx{ .trunks = trunks.items }, struct {
+            fn lt(ctx: SortCtx, a: usize, b: usize) bool {
+                const ta = ctx.trunks[a];
+                const tb = ctx.trunks[b];
+                const a_bilateral = (ta.y_min < ta.sy) and (ta.y_max > ta.sy);
+                const b_bilateral = (tb.y_min < tb.sy) and (tb.y_max > tb.sy);
+                if (a_bilateral != b_bilateral) return a_bilateral;
+                if (ta.sy != tb.sy) return ta.sy > tb.sy;
+                return a < b;
+            }
+        }.lt);
+
+        var allocated: std.ArrayList(struct { y_min: u32, y_max: u32 }) = .{};
+        for (trunk_indices) |ti| {
+            const t = &trunks.items[ti];
             var assigned: ?usize = null;
-            for (tracks.items, 0..) |t, ti| {
-                if (y_max < t.y_min or y_min > t.y_max) {
-                    assigned = ti;
+            for (allocated.items, 0..) |alloc, ai| {
+                if (t.y_max < alloc.y_min or t.y_min > alloc.y_max) {
+                    assigned = ai;
                     break;
                 }
             }
-            const track_idx = if (assigned) |ti| blk: {
-                // Extend track's range.
-                const t = &tracks.items[ti];
-                t.y_min = @min(t.y_min, y_min);
-                t.y_max = @max(t.y_max, y_max);
-                break :blk ti;
+            const track_idx = if (assigned) |ai| blk: {
+                const alloc = &allocated.items[ai];
+                alloc.y_min = @min(alloc.y_min, t.y_min);
+                alloc.y_max = @max(alloc.y_max, t.y_max);
+                break :blk ai;
             } else blk: {
-                try tracks.append(arena, .{ .y_min = y_min, .y_max = y_max });
-                break :blk tracks.items.len - 1;
+                try allocated.append(arena, .{ .y_min = t.y_min, .y_max = t.y_max });
+                break :blk allocated.items.len - 1;
             };
-            w.track_x = sx + 1 + @as(u32, @intCast(track_idx));
+            t.track_x = t.sx + 1 + @as(u32, @intCast(track_idx));
+            for (t.wires.items) |wi| {
+                pending.items[wi].track_x = t.track_x;
+            }
         }
     }
 

@@ -19,19 +19,24 @@ pub const RenderOptions = struct {
     no_color_value: ?[]const u8 = null,
 };
 
-/// Phase 3 slice 4 orchestrator. Composes Canvas + glyph drawing + wire
-/// rendering + crossing handling, then calls writeOut on the underlying writer.
+/// Render orchestrator. Composes Canvas + glyph drawing + wire rendering +
+/// crossing handling + monosketch-style port markers, then calls writeOut.
 ///
 /// Order of operations:
 ///   1. Init Canvas at grid.width × grid.height.
-///   2. Draw every component glyph (cells own their bounding box).
+///   2. Draw every component glyph (labeled box; cells own bounding box).
 ///   3. Draw every wire's segments using `─` and `│`.
 ///   4. Patch corners at intra-wire segment junctions (`╭╮╰╯`).
-///   5. Detect fan-out taps: sources that are `from` for ≥3 wires get `●`.
-///   6. Apply jump-arcs at every RoutedWire.crossings cell — the horizontal
-///      wire's neighbours become `╯`/`╰`, the vertical wire renders `│`
-///      continuously through the crossing.
-///   7. Resolve color mode and writeOut.
+///   5. Resolve crossings: each `.crossings` cell becomes `●` (split — wires
+///      share a source — or merge — wires share a destination port) or `┼`
+///      (true non-connecting cross between unrelated wires).
+///   5b. Junction picker: replace any leftover `+` corner-fallbacks with the
+///       proper Unicode glyph (`─ │ ┬ ┴ ├ ┤ ┼ ╭ ╮ ╰ ╯`) inferred from
+///       neighbour cells.
+///   6. Port markers: `○` at every wire's source-side cell, directional arrow
+///      (`▶◀▲▼`) at the sink-side cell pointing into the destination box.
+///   7. Fan-out tap (`●`) overwrites `○` where ≥3 wires share a source.
+///   8. Resolve color mode and writeOut.
 pub fn render(
     arena: std.mem.Allocator,
     writer: anytype,
@@ -61,7 +66,54 @@ pub fn render(
         }
     }
 
-    // Step 5: fan-out taps. Count distinct wires per source point.
+    // Step 5: resolve crossings. Each cell registered in any wire's
+    // `.crossings` list falls into one of three buckets:
+    //   - *Split* — two wires sharing `src_id` + `src_port` cross at the cell
+    //     where one fan-out branch leaves the other's path. Stamp `●`.
+    //   - *Merge* — two wires sharing `dst_id` + `dst_port` cross at a fan-in
+    //     junction. Stamp `●`.
+    //   - *True crossing* — unrelated wires pass over each other. Stamp `┼`
+    //     (non-connecting cross, standard schematic convention).
+    // Dedupe by point so we process each cell once.
+    var crossing_seen = std.AutoHashMap(u64, void).init(arena);
+    for (grid.wires, 0..) |w, ai| {
+        for (w.crossings) |pt| {
+            const key: u64 = (@as(u64, pt.y) << 32) | @as(u64, pt.x);
+            const seen = try crossing_seen.getOrPut(key);
+            if (seen.found_existing) continue;
+            if (isSplitPoint(grid.wires, ai, pt) or isMergePoint(grid.wires, ai, pt)) {
+                canvas.setCell(pt.x, pt.y, "●", .wire);
+            } else {
+                canvas.setCell(pt.x, pt.y, "┼", .crossing);
+            }
+        }
+    }
+
+    // Step 5b: junction picker. Inspect every cell currently holding the `+`
+    // fallback (emitted by `pickCornerGlyph` when two co-linear segments share
+    // a corner) and replace it with the glyph implied by its 4 cardinal
+    // neighbours: `─ │ ╭ ╮ ╰ ╯ ┬ ┴ ├ ┤ ┼`. Single pass, snapshot-free — `+`
+    // cells aren't neighbours of other `+` cells under L-route topology.
+    pickJunctionsForFallbacks(&canvas);
+
+    // Step 6: port markers. Replace the wire-overwritten box-border cells at
+    // both ends of each wire with monosketch-style affordances: `○` at the
+    // source-side cell, and a directional arrow (`▶◀▲▼`) at the sink-side cell
+    // pointing into the destination box. Walks every wire; later steps may
+    // override individual cells (e.g. fan-out's `●` overwrites `○`).
+    for (grid.wires) |w| {
+        if (w.segments.len == 0) continue;
+        const src = w.segments[0].from;
+        canvas.setCell(src.x, src.y, "○", .wire);
+
+        const last = w.segments[w.segments.len - 1];
+        const sink = last.to;
+        canvas.setCell(sink.x, sink.y, sinkArrowFor(last), .wire);
+    }
+
+    // Step 7: fan-out taps. Count distinct wires per source point and overlay
+    // `●` where ≥3 wires share a source — visually heavier than the `○` placed
+    // in step 6, signalling a true branch point.
     var source_counts = std.AutoHashMap(u64, u32).init(arena);
     for (grid.wires) |w| {
         if (w.segments.len == 0) continue;
@@ -80,13 +132,7 @@ pub fn render(
         }
     }
 
-    // Step 6: jump-arcs at crossings. Idempotent — applying twice (once per wire
-    // in the crossing) produces the same canvas state.
-    for (grid.wires) |w| {
-        for (w.crossings) |pt| applyJumpArc(&canvas, grid.wires, pt);
-    }
-
-    // Step 7: writeOut with resolved color mode.
+    // Step 8: writeOut with resolved color mode.
     const use_color = color_mod.shouldColor(opts.color, opts.stdout_handle, opts.no_color_value);
     try canvas.writeOut(writer, use_color);
 }
@@ -123,33 +169,118 @@ fn pickCornerGlyph(seg_in: Segment, seg_out: Segment) []const u8 {
     return "+";
 }
 
-fn applyJumpArc(canvas: *Canvas, all_wires: []const RoutedWire, pt: PortCoord) void {
-    // Identify which wire is horizontal at this cell and which is vertical.
-    // Only the horizontal wire's neighbours are modified; the vertical's `│`
-    // already at the crossing is preserved by setting the cell explicitly.
-    var has_horizontal = false;
-    for (all_wires) |w| {
-        if (wireHasHorizontalAt(w, pt)) {
-            has_horizontal = true;
-            break;
-        }
-    }
-    if (!has_horizontal) return;
+const Dir = enum { N, E, S, W };
 
-    // Crossing cell: vertical wire continues with `│`.
-    canvas.setCell(pt.x, pt.y, "│", .wire);
-    // Neighbours on the horizontal row: jump arcs.
-    if (pt.x >= 1) canvas.setCell(pt.x - 1, pt.y, "╯", .crossing);
-    if (pt.x + 1 < canvas.width) canvas.setCell(pt.x + 1, pt.y, "╰", .crossing);
+/// Does `glyph` extend toward direction `dir`? Used by the junction picker to
+/// determine whether a neighbour cell connects to the cell under inspection.
+/// Treats box-drawing characters and wire characters identically — they share
+/// the same glyph repertoire and the same connection semantics. Port-marker
+/// arrowheads (`▶◀▲▼`) connect on their *opposite* side (the arrow points
+/// into the box; the wire enters from behind).
+fn cellExtendsToward(glyph: []const u8, dir: Dir) bool {
+    return switch (dir) {
+        .N => isOneOf(glyph, &.{ "│", "╰", "╯", "┴", "├", "┤", "┼", "▲" }),
+        .E => isOneOf(glyph, &.{ "─", "╭", "╰", "┬", "┴", "├", "┼", "▶" }),
+        .S => isOneOf(glyph, &.{ "│", "╭", "╮", "┬", "├", "┤", "┼", "▼" }),
+        .W => isOneOf(glyph, &.{ "─", "╮", "╯", "┬", "┴", "┤", "┼", "◀" }),
+    };
 }
 
-fn wireHasHorizontalAt(wire: RoutedWire, pt: PortCoord) bool {
+fn isOneOf(needle: []const u8, haystack: []const []const u8) bool {
+    for (haystack) |s| if (std.mem.eql(u8, needle, s)) return true;
+    return false;
+}
+
+/// Choose the wire glyph implied by a connection set. T-junctions and the
+/// 4-way cross are added on top of the corner picker's repertoire so genuine
+/// branch points get the right shape instead of `+`. Empty connection sets
+/// fall back to `─` — caller shouldn't invoke for unconnected cells.
+fn pickJunctionGlyph(conn_w: bool, conn_e: bool, conn_n: bool, conn_s: bool) []const u8 {
+    const ns = conn_n and conn_s;
+    const we = conn_w and conn_e;
+    if (we and ns) return "┼";
+    if (we and conn_s) return "┬";
+    if (we and conn_n) return "┴";
+    if (ns and conn_e) return "├";
+    if (ns and conn_w) return "┤";
+    if (we) return "─";
+    if (ns) return "│";
+    if (conn_e and conn_s) return "╭";
+    if (conn_w and conn_s) return "╮";
+    if (conn_e and conn_n) return "╰";
+    if (conn_w and conn_n) return "╯";
+    if (conn_w or conn_e) return "─";
+    if (conn_n or conn_s) return "│";
+    return "+"; // genuinely unconnected — leave the visible warning glyph
+}
+
+fn pickJunctionsForFallbacks(canvas: *Canvas) void {
+    const w = canvas.width;
+    const h = canvas.height;
+    var y: u32 = 0;
+    while (y < h) : (y += 1) {
+        var x: u32 = 0;
+        while (x < w) : (x += 1) {
+            const idx = @as(usize, y) * @as(usize, w) + @as(usize, x);
+            if (!std.mem.eql(u8, canvas.cells[idx], "+")) continue;
+            const conn_w = (x > 0) and cellExtendsToward(canvas.cells[idx - 1], .E);
+            const conn_e = (x + 1 < w) and cellExtendsToward(canvas.cells[idx + 1], .W);
+            const conn_n = (y > 0) and cellExtendsToward(canvas.cells[idx - w], .S);
+            const conn_s = (y + 1 < h) and cellExtendsToward(canvas.cells[idx + w], .N);
+            canvas.setCell(x, y, pickJunctionGlyph(conn_w, conn_e, conn_n, conn_s), .wire);
+        }
+    }
+}
+
+/// Pick the directional arrow glyph that matches the *approach* direction
+/// of a wire's terminating segment. The arrow points INTO the sink box,
+/// i.e. it shows where the signal is going. A horizontal segment moving
+/// rightward means the wire approaches the sink from the west, so the
+/// arrow is `▶`.
+fn sinkArrowFor(last: Segment) []const u8 {
+    if (last.from.y == last.to.y) {
+        // Horizontal segment.
+        if (last.to.x >= last.from.x) return "▶"; // moving east, sink is east → arrow points east
+        return "◀";
+    }
+    // Vertical segment.
+    if (last.to.y >= last.from.y) return "▼"; // moving south
+    return "▲";
+}
+
+/// True when `pt` is a crossing between two wires that both terminate at the
+/// same destination port — i.e., a fan-in merge.
+fn isMergePoint(all_wires: []const RoutedWire, my_index: usize, pt: PortCoord) bool {
+    const me = all_wires[my_index];
+    for (all_wires, 0..) |other, oi| {
+        if (oi == my_index) continue;
+        if (other.dst_id != me.dst_id) continue;
+        if (other.dst_port != me.dst_port) continue;
+        if (wirePassesThrough(other, pt)) return true;
+    }
+    return false;
+}
+
+/// True when `pt` is a crossing between two wires that share the same source
+/// port — i.e., a fan-out branch where one wire diverges from the other.
+fn isSplitPoint(all_wires: []const RoutedWire, my_index: usize, pt: PortCoord) bool {
+    const me = all_wires[my_index];
+    for (all_wires, 0..) |other, oi| {
+        if (oi == my_index) continue;
+        if (other.src_id != me.src_id) continue;
+        if (other.src_port != me.src_port) continue;
+        if (wirePassesThrough(other, pt)) return true;
+    }
+    return false;
+}
+
+fn wirePassesThrough(wire: RoutedWire, pt: PortCoord) bool {
     for (wire.segments) |seg| {
-        if (seg.from.y != seg.to.y) continue; // not horizontal
-        if (seg.from.y != pt.y) continue;
         const min_x = @min(seg.from.x, seg.to.x);
         const max_x = @max(seg.from.x, seg.to.x);
-        if (pt.x >= min_x and pt.x <= max_x) return true;
+        const min_y = @min(seg.from.y, seg.to.y);
+        const max_y = @max(seg.from.y, seg.to.y);
+        if (pt.x >= min_x and pt.x <= max_x and pt.y >= min_y and pt.y <= max_y) return true;
     }
     return false;
 }
@@ -195,7 +326,109 @@ test "render_single_segment_horizontal" {
 
     const out = try captureRender(std.testing.allocator, a, grid);
     defer std.testing.allocator.free(out);
-    try std.testing.expectEqualStrings("  ───── \n", out);
+    // Source cell (x=2) → `○`; sink cell (x=6) → `▶` (wire moves east).
+    try std.testing.expectEqualStrings("  ○───▶ \n", out);
+}
+
+test "render_port_markers: vertical sink directions" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // Wire moving south: ▼ at sink. Wire moving north: ▲ at sink.
+    const south = [_]Segment{.{ .from = .{ .x = 2, .y = 0 }, .to = .{ .x = 2, .y = 3 } }};
+    const north = [_]Segment{.{ .from = .{ .x = 5, .y = 3 }, .to = .{ .x = 5, .y = 0 } }};
+
+    const wires = [_]RoutedWire{
+        .{ .src_id = 0, .src_port = SRC_OUT, .dst_id = 1, .dst_port = DST_IN, .segments = &south, .crossings = &.{} },
+        .{ .src_id = 2, .src_port = SRC_OUT, .dst_id = 3, .dst_port = DST_IN, .segments = &north, .crossings = &.{} },
+    };
+    const grid = LayoutGrid{ .width = 7, .height = 4, .components = &.{}, .wires = &wires };
+
+    const out = try captureRender(std.testing.allocator, a, grid);
+    defer std.testing.allocator.free(out);
+    try std.testing.expect(std.mem.indexOf(u8, out, "▼") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "▲") != null);
+}
+
+test "render_port_markers: fanout dot overrides source circle" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // Three wires from one source — fan-out tap `●` should win over `○`.
+    const seg_a = [_]Segment{.{ .from = .{ .x = 5, .y = 1 }, .to = .{ .x = 8, .y = 1 } }};
+    const seg_b = [_]Segment{.{ .from = .{ .x = 5, .y = 1 }, .to = .{ .x = 8, .y = 0 } }};
+    const seg_c = [_]Segment{.{ .from = .{ .x = 5, .y = 1 }, .to = .{ .x = 8, .y = 2 } }};
+
+    const wires = [_]RoutedWire{
+        .{ .src_id = 0, .src_port = SRC_OUT, .dst_id = 1, .dst_port = DST_IN, .segments = &seg_a, .crossings = &.{} },
+        .{ .src_id = 0, .src_port = SRC_OUT, .dst_id = 2, .dst_port = DST_IN, .segments = &seg_b, .crossings = &.{} },
+        .{ .src_id = 0, .src_port = SRC_OUT, .dst_id = 3, .dst_port = DST_IN, .segments = &seg_c, .crossings = &.{} },
+    };
+    const grid = LayoutGrid{ .width = 10, .height = 3, .components = &.{}, .wires = &wires };
+
+    const out = try captureRender(std.testing.allocator, a, grid);
+    defer std.testing.allocator.free(out);
+
+    // `●` present at source; `○` would only appear at single-wire sources.
+    try std.testing.expect(std.mem.indexOf(u8, out, "●") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "○") == null);
+}
+
+test "render_junction_picker: replaces + with continuation when co-linear" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // Two co-linear horizontal segments meeting at (5, 1) — the corner picker
+    // emits `+` (no W/E rule fires); the junction picker should rewrite it to
+    // `─` because both neighbours extend horizontally.
+    const segs = [_]Segment{
+        .{ .from = .{ .x = 2, .y = 1 }, .to = .{ .x = 5, .y = 1 } },
+        .{ .from = .{ .x = 5, .y = 1 }, .to = .{ .x = 8, .y = 1 } },
+    };
+    const wire = RoutedWire{
+        .src_id = 0,
+        .src_port = SRC_OUT,
+        .dst_id = 1,
+        .dst_port = DST_IN,
+        .segments = &segs,
+        .crossings = &.{},
+    };
+    const grid = LayoutGrid{ .width = 10, .height = 3, .components = &.{}, .wires = &[_]RoutedWire{wire} };
+
+    const out = try captureRender(std.testing.allocator, a, grid);
+    defer std.testing.allocator.free(out);
+
+    // No `+` should remain anywhere in the output.
+    try std.testing.expect(std.mem.indexOf(u8, out, "+") == null);
+}
+
+test "render_junction_picker: 4-way cross when both wires pass through" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // Horizontal wire (1,1)→(4,1)→(7,1) — corner picker writes `+` at (4,1).
+    // Vertical wire (4,0)→(4,3) passes THROUGH (4,1); endpoints elsewhere
+    // avoid the port-marker overlay rewriting (4,1) to `○`/`▼`.
+    const seg_we = [_]Segment{
+        .{ .from = .{ .x = 1, .y = 1 }, .to = .{ .x = 4, .y = 1 } },
+        .{ .from = .{ .x = 4, .y = 1 }, .to = .{ .x = 7, .y = 1 } },
+    };
+    const seg_v = [_]Segment{.{ .from = .{ .x = 4, .y = 0 }, .to = .{ .x = 4, .y = 3 } }};
+    const wires = [_]RoutedWire{
+        .{ .src_id = 0, .src_port = SRC_OUT, .dst_id = 1, .dst_port = DST_IN, .segments = &seg_we, .crossings = &.{} },
+        .{ .src_id = 2, .src_port = SRC_OUT, .dst_id = 3, .dst_port = DST_IN, .segments = &seg_v, .crossings = &.{} },
+    };
+    const grid = LayoutGrid{ .width = 9, .height = 4, .components = &.{}, .wires = &wires };
+
+    const out = try captureRender(std.testing.allocator, a, grid);
+    defer std.testing.allocator.free(out);
+
+    try std.testing.expect(std.mem.indexOf(u8, out, "┼") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "+") == null);
 }
 
 test "render_corner_glyphs: all four corner cases" {
@@ -274,13 +507,41 @@ test "render_tap_at_fanout" {
     try std.testing.expect(std.mem.indexOf(u8, out, "●") != null);
 }
 
-test "render_jump_arc_horizontal_over_vertical" {
+test "render_merge_dot: shared-dst crossings become ● not jump-arc" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // Two wires that both terminate at dst_id=99, dst_port=DST_IN, crossing
+    // at (5, 2). Should render as `●` instead of `╯│╰`.
+    const horiz_segs = [_]Segment{.{ .from = .{ .x = 2, .y = 2 }, .to = .{ .x = 8, .y = 2 } }};
+    const vert_segs = [_]Segment{
+        .{ .from = .{ .x = 5, .y = 0 }, .to = .{ .x = 5, .y = 2 } },
+        .{ .from = .{ .x = 5, .y = 2 }, .to = .{ .x = 8, .y = 2 } },
+    };
+    const crossing_pt = PortCoord{ .x = 5, .y = 2 };
+
+    const wires = [_]RoutedWire{
+        .{ .src_id = 0, .src_port = SRC_OUT, .dst_id = 99, .dst_port = DST_IN, .segments = &horiz_segs, .crossings = &[_]PortCoord{crossing_pt} },
+        .{ .src_id = 1, .src_port = SRC_OUT, .dst_id = 99, .dst_port = DST_IN, .segments = &vert_segs, .crossings = &[_]PortCoord{crossing_pt} },
+    };
+    const grid = LayoutGrid{ .width = 10, .height = 4, .components = &.{}, .wires = &wires };
+
+    const out = try captureRender(std.testing.allocator, a, grid);
+    defer std.testing.allocator.free(out);
+
+    try std.testing.expect(std.mem.indexOf(u8, out, "●") != null);
+    // Jump-arc neighbours `╯│╰` should not appear at the merge.
+    try std.testing.expect(std.mem.indexOf(u8, out, "╯│╰") == null);
+}
+
+test "render_crossing_uses_plus_glyph: unrelated wires cross with ┼" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
 
     // Hand-construct a horizontal wire and a vertical wire that cross at (5, 2).
-    // Horizontal: (2, 2) → (8, 2). Vertical: (5, 0) → (5, 4).
+    // Different src AND different dst → not a split, not a merge → `┼`.
     const horiz_segs = [_]Segment{.{ .from = .{ .x = 2, .y = 2 }, .to = .{ .x = 8, .y = 2 } }};
     const vert_segs = [_]Segment{.{ .from = .{ .x = 5, .y = 0 }, .to = .{ .x = 5, .y = 4 } }};
     const crossing_pt = PortCoord{ .x = 5, .y = 2 };
@@ -294,7 +555,34 @@ test "render_jump_arc_horizontal_over_vertical" {
     const out = try captureRender(std.testing.allocator, a, grid);
     defer std.testing.allocator.free(out);
 
-    // Crossing cell = vertical wire continues = `│`.
-    // Cell to the left = `╯`. Cell to the right = `╰`.
-    try std.testing.expect(std.mem.indexOf(u8, out, "╯│╰") != null);
+    // Crossing now stamps single-cell `┼`; jump-arc `╯│╰` is gone.
+    try std.testing.expect(std.mem.indexOf(u8, out, "┼") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "╯│╰") == null);
+}
+
+test "render_split_dot: shared-src crossings become ● not ┼" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // Two wires from same src (id=0, SRC_OUT) — one stays horizontal, the
+    // other turns down. Their geometries cross at (5, 2). Expect `●`.
+    const wire_a_segs = [_]Segment{.{ .from = .{ .x = 2, .y = 2 }, .to = .{ .x = 8, .y = 2 } }};
+    const wire_b_segs = [_]Segment{
+        .{ .from = .{ .x = 2, .y = 2 }, .to = .{ .x = 5, .y = 2 } },
+        .{ .from = .{ .x = 5, .y = 2 }, .to = .{ .x = 5, .y = 4 } },
+    };
+    const crossing_pt = PortCoord{ .x = 5, .y = 2 };
+
+    const wires = [_]RoutedWire{
+        .{ .src_id = 0, .src_port = SRC_OUT, .dst_id = 1, .dst_port = DST_IN, .segments = &wire_a_segs, .crossings = &[_]PortCoord{crossing_pt} },
+        .{ .src_id = 0, .src_port = SRC_OUT, .dst_id = 2, .dst_port = DST_IN, .segments = &wire_b_segs, .crossings = &[_]PortCoord{crossing_pt} },
+    };
+    const grid = LayoutGrid{ .width = 10, .height = 5, .components = &.{}, .wires = &wires };
+
+    const out = try captureRender(std.testing.allocator, a, grid);
+    defer std.testing.allocator.free(out);
+
+    try std.testing.expect(std.mem.indexOf(u8, out, "●") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out, "┼") == null);
 }

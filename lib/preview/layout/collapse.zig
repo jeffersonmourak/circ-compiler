@@ -40,11 +40,13 @@ const SRC_PORT_OUT: u8 = @intFromEnum(full_format.PortName.out);
 ///   - Every non-wire primitive becomes its own VirtualNode preserving its real
 ///     id and full origin chain.
 pub fn collapse(arena: std.mem.Allocator, topology: FullTopology, opts: layout.LayoutOptions) !VirtualGraph {
-    // ---------- 1. Build kind lookup ----------
+    // ---------- 1. Build kind + name lookups ----------
     var kind_of = std.AutoHashMap(u32, full_format.ComponentKind).init(arena);
+    var name_of = std.AutoHashMap(u32, []const u8).init(arena);
     var max_id: u32 = 0;
     for (topology.components) |comp| {
         try kind_of.put(comp.id, comp.kind);
+        try name_of.put(comp.id, comp.name);
         if (comp.id > max_id) max_id = comp.id;
     }
 
@@ -146,18 +148,26 @@ pub fn collapse(arena: std.mem.Allocator, topology: FullTopology, opts: layout.L
         const dst_vid = virtual_id_of.get(conn.to_id) orelse continue;
         if (src_vid == dst_vid) continue; // internal to a collapsed group
 
+        // Boundary remap: when the destination is a collapsed group, the
+        // raw `conn.port` describes the *internal* component's port (e.g.
+        // an input_pin's `in`), not the macro's external port. Re-key by
+        // the internal pin's name (`a`, `b`, …) so each macro input lands
+        // on a distinct slot. Same idea on the source side for completeness.
+        const dst_port = remappedPort(conn.port, conn.to_id, dst_vid, kind_of, name_of);
+        const src_port = remappedPort(SRC_PORT_OUT, effective_source, src_vid, kind_of, name_of);
+
         if (node_outputs.getPtr(src_vid)) |outputs| {
             try outputs.append(arena, .{
                 .dst_id = dst_vid,
-                .src_port = SRC_PORT_OUT,
-                .dst_port = conn.port,
+                .src_port = src_port,
+                .dst_port = dst_port,
             });
         }
         if (node_inputs.getPtr(dst_vid)) |inputs| {
             try inputs.append(arena, .{
                 .src_id = src_vid,
-                .src_port = SRC_PORT_OUT,
-                .dst_port = conn.port,
+                .src_port = src_port,
+                .dst_port = dst_port,
             });
         }
     }
@@ -206,6 +216,32 @@ pub fn collapse(arena: std.mem.Allocator, topology: FullTopology, opts: layout.L
         .nodes = try nodes.toOwnedSlice(arena),
         .next_id = next_synthetic_id,
     };
+}
+
+/// When `real_id` was collapsed into a macro group (`real_id != vid`) and the
+/// underlying primitive is an `input_pin` / `output_pin` whose `name` matches a
+/// known `PortName` (`a`, `b`, `in`, `out`), return that name's port byte.
+/// Otherwise return `default_port` unchanged.
+fn remappedPort(
+    default_port: u8,
+    real_id: u32,
+    vid: u32,
+    kind_of: std.AutoHashMap(u32, full_format.ComponentKind),
+    name_of: std.AutoHashMap(u32, []const u8),
+) u8 {
+    if (real_id == vid) return default_port; // not collapsed.
+    const inner_kind = kind_of.get(real_id) orelse return default_port;
+    if (inner_kind != .input_pin and inner_kind != .output_pin) return default_port;
+    const inner_name = name_of.get(real_id) orelse return default_port;
+    return portByteFromName(inner_name) orelse default_port;
+}
+
+fn portByteFromName(name: []const u8) ?u8 {
+    if (std.mem.eql(u8, name, "in")) return @intFromEnum(full_format.PortName.in);
+    if (std.mem.eql(u8, name, "a")) return @intFromEnum(full_format.PortName.a);
+    if (std.mem.eql(u8, name, "b")) return @intFromEnum(full_format.PortName.b);
+    if (std.mem.eql(u8, name, "out")) return @intFromEnum(full_format.PortName.out);
+    return null;
 }
 
 // ---------- Tests ----------
