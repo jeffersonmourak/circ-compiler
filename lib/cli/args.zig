@@ -25,6 +25,7 @@ pub const Args = struct {
     expand_macros: bool = false,
     color: ColorMode = .auto,
     truth_table_format: TruthTableFormat = .markdown,
+    truth_table_strict: bool = false,
 };
 
 pub const ParseError = error{
@@ -85,6 +86,10 @@ pub fn parse(argv: []const []const u8) ParseError!Args {
             args.expand_macros = true;
             continue;
         }
+        if (std.mem.eql(u8, token, "--strict")) {
+            args.truth_table_strict = true;
+            continue;
+        }
         if (std.mem.startsWith(u8, token, "--color=")) {
             const value = token["--color=".len..];
             if (std.mem.eql(u8, value, "auto")) {
@@ -132,6 +137,7 @@ pub fn parse(argv: []const []const u8) ParseError!Args {
     if (args.mode == .truth_table and args.output_path != null) return error.InvalidFlagValue;
     if (args.expand_macros and args.mode != .preview) return error.InvalidFlagValue;
     if (args.truth_table_format != .markdown and args.mode != .truth_table) return error.InvalidFlagValue;
+    if (args.truth_table_strict and args.mode != .truth_table) return error.InvalidFlagValue;
 
     return args;
 }
@@ -287,4 +293,21 @@ test "cli_args_format_rejects_outside_truth_table" {
     try std.testing.expectError(error.InvalidFlagValue, parse(&.{ "circ-compile", "in.circ", "--preview", "--format=csv" }));
     try std.testing.expectError(error.InvalidFlagValue, parse(&.{ "circ-compile", "in.circ", "--inspect", "--format=json" }));
     try std.testing.expectError(error.InvalidFlagValue, parse(&.{ "circ-compile", "in.circ", "-o", "out.wasm", "--format=csv" }));
+}
+
+test "cli_args_parse_strict_flag" {
+    const parsed = try parse(&.{ "circ-compile", "in.circ", "--truth-table", "--strict" });
+    try std.testing.expectEqual(Mode.truth_table, parsed.mode);
+    try std.testing.expect(parsed.truth_table_strict);
+}
+
+test "cli_args_strict_default_is_false" {
+    const parsed = try parse(&.{ "circ-compile", "in.circ", "--truth-table" });
+    try std.testing.expect(!parsed.truth_table_strict);
+}
+
+test "cli_args_strict_rejects_outside_truth_table" {
+    try std.testing.expectError(error.InvalidFlagValue, parse(&.{ "circ-compile", "in.circ", "--preview", "--strict" }));
+    try std.testing.expectError(error.InvalidFlagValue, parse(&.{ "circ-compile", "in.circ", "--inspect", "--strict" }));
+    try std.testing.expectError(error.InvalidFlagValue, parse(&.{ "circ-compile", "in.circ", "-o", "out.wasm", "--strict" }));
 }

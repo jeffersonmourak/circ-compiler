@@ -45,6 +45,26 @@ fn writeFileAny(path: []const u8, data: []const u8) !void {
     try file.writeAll(data);
 }
 
+/// Walks `table.rows` looking for any output cell that settled to `.undef`.
+/// Writes one diagnostic line per offending cell to `stderr_writer` and
+/// returns true if at least one was found. Used by --truth-table --strict to
+/// turn "I observed undefined output" from a quiet `?` into a hard exit.
+fn scanStrict(table: truth_table_builder.Table, stderr_writer: anytype) !bool {
+    var found = false;
+    for (table.rows, 0..) |row, row_idx| {
+        for (row.outputs, 0..) |out_state, col_idx| {
+            if (out_state == .undef) {
+                found = true;
+                try stderr_writer.print(
+                    "truth-table: undefined output at row {d}, output '{s}'\n",
+                    .{ row_idx, table.header.outputs[col_idx].name },
+                );
+            }
+        }
+    }
+    return found;
+}
+
 fn parseErrorMessage(err: anyerror) []const u8 {
     return switch (err) {
         error.MissingInput => "missing input path",
@@ -340,6 +360,14 @@ pub fn run(
                 try stderr_writer.print("render failed: {s}\n", .{@errorName(err)});
                 return 1;
             };
+
+            if (args.truth_table_strict) {
+                const found_undef = scanStrict(table, stderr_writer) catch |err| {
+                    try stderr_writer.print("strict scan failed: {s}\n", .{@errorName(err)});
+                    return 1;
+                };
+                if (found_undef) return 1;
+            }
             return 0;
         },
     }
@@ -934,4 +962,87 @@ test "truth_table_two_bit_adder" {
         "tests/fixtures/circuits/two_bit_adder.circ",
         "tests/fixtures/truth_table/two_bit_adder.truth.golden",
     );
+}
+
+// scanStrict is unit-tested directly because no parser-valid, validator-
+// accepting fixture currently produces .undef under the truth-table mode —
+// the validator rejects every shape that would reach an undefined output.
+// So we synthesise a Table by hand to exercise both branches.
+
+fn synthTableForStrict(
+    arena: *std.heap.ArenaAllocator,
+    output_states: []const truth_table_builder.State,
+) !truth_table_builder.Table {
+    const a = arena.allocator();
+    const inputs = try a.alloc(truth_table_builder.PinRef, 1);
+    inputs[0] = .{ .name = "a", .component_id = 0 };
+    const outputs = try a.alloc(truth_table_builder.PinRef, 1);
+    outputs[0] = .{ .name = "out", .component_id = 1 };
+
+    const rows = try a.alloc(truth_table_builder.Row, output_states.len);
+    for (output_states, 0..) |state, i| {
+        const cell = try a.alloc(truth_table_builder.State, 1);
+        cell[0] = state;
+        rows[i] = .{ .input_bits = i, .outputs = cell };
+    }
+    return .{
+        .arena = arena.*,
+        .header = .{ .inputs = inputs, .outputs = outputs },
+        .rows = rows,
+    };
+}
+
+test "scan_strict_reports_undef_rows" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    var table = try synthTableForStrict(&arena, &.{ .low, .undef, .high, .undef });
+    defer table.deinit();
+
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(std.testing.allocator);
+    const found = try scanStrict(table, stderr_buf.writer(std.testing.allocator));
+    try std.testing.expect(found);
+    // Both undef rows should produce diagnostics, neither defined row should.
+    const text = stderr_buf.items;
+    try std.testing.expect(std.mem.indexOf(u8, text, "row 1") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "row 3") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "row 0") == null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "row 2") == null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "'out'") != null);
+}
+
+test "scan_strict_clean_table_returns_false" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    var table = try synthTableForStrict(&arena, &.{ .low, .high });
+    defer table.deinit();
+
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(std.testing.allocator);
+    const found = try scanStrict(table, stderr_buf.writer(std.testing.allocator));
+    try std.testing.expect(!found);
+    try std.testing.expectEqual(@as(usize, 0), stderr_buf.items.len);
+}
+
+test "truth_table_strict_passes_on_xor" {
+    // XOR's truth table is fully defined — strict mode should exit 0 and
+    // write nothing to stderr (no diagnostics, no extra noise).
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const argv = [_][]const u8{ "circ-compile", "tests/fixtures/circuits/builtin_xor.circ", "--truth-table", "--strict" };
+    const exit_code = try run(allocator, &argv, stdout_buf.writer(allocator), stderr_buf.writer(allocator));
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try std.testing.expect(stdout_buf.items.len > 0);
+    // Strict produces no stderr output when the table is fully defined.
+    for (stderr_buf.items) |b| {
+        if (b != ' ' and b != '\n' and b != '\t') {
+            // Allow no non-whitespace characters on stderr.
+            try std.testing.expect(false);
+        }
+    }
 }
