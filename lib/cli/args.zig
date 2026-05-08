@@ -34,9 +34,58 @@ pub const ParseError = error{
     UnknownFlag,
     ConflictingModes,
     InvalidFlagValue,
+    HelpRequested,
 };
 
+pub const help_text =
+    \\circ-compile — compile and inspect .circ digital-logic source files
+    \\
+    \\USAGE:
+    \\    circ-compile <input.circ> [mode] [options]
+    \\
+    \\MODES (mutually exclusive; default is compile):
+    \\    (none)            Compile to a self-contained .wasm artifact. Requires -o.
+    \\    --emit-zig        Emit standalone generated Zig source. Requires -o.
+    \\    --inspect         Print parse tree, resolved IR, and diagnostics to stdout.
+    \\    --preview         Render an ASCII schematic of the circuit to stdout.
+    \\    --truth-table     Enumerate every input vector and print a truth table to stdout.
+    \\
+    \\OPTIONS:
+    \\    -o <path>                       Output file. Required by compile and --emit-zig modes.
+    \\    -h, --help                      Show this help text and exit.
+    \\    --warnings-as-errors, -Werror   Treat warnings (W001–W003) as errors.
+    \\
+    \\  Preview-only:
+    \\    --expand-macros                 Render builtin macros (xor, nand, …) as expanded primitives.
+    \\    --color=auto|always|never       ANSI styling. Default 'auto' (on when stdout is a TTY;
+    \\                                    the NO_COLOR environment variable also disables colour).
+    \\
+    \\  Truth-table-only:
+    \\    --format=markdown|csv|json      Output format. Default 'markdown'. CSV uses 0/1/? cells;
+    \\                                    JSON encodes undefined cells as null.
+    \\    --strict                        Exit 1 on any undefined ('?') output cell, with one
+    \\                                    diagnostic line per offending row on stderr.
+    \\
+    \\EXIT CODES:
+    \\    0   Success.
+    \\    1   Diagnostic errors, build failure, or --strict regression.
+    \\    2   Usage error (bad flags, missing input, etc).
+    \\
+    \\EXAMPLES:
+    \\    circ-compile inverter.circ -o inverter.wasm
+    \\    circ-compile alu.circ --inspect
+    \\    circ-compile half_adder.circ --preview --color=always
+    \\    circ-compile xor.circ --truth-table --format=json
+    \\
+;
+
 pub fn parse(argv: []const []const u8) ParseError!Args {
+    for (argv[@min(argv.len, 1)..]) |token| {
+        if (std.mem.eql(u8, token, "--help") or std.mem.eql(u8, token, "-h")) {
+            return error.HelpRequested;
+        }
+    }
+
     var args = Args{
         .input_path = undefined,
         .mode = .compile,
@@ -310,4 +359,35 @@ test "cli_args_strict_rejects_outside_truth_table" {
     try std.testing.expectError(error.InvalidFlagValue, parse(&.{ "circ-compile", "in.circ", "--preview", "--strict" }));
     try std.testing.expectError(error.InvalidFlagValue, parse(&.{ "circ-compile", "in.circ", "--inspect", "--strict" }));
     try std.testing.expectError(error.InvalidFlagValue, parse(&.{ "circ-compile", "in.circ", "-o", "out.wasm", "--strict" }));
+}
+
+test "cli_args_help_long_returns_help_requested" {
+    try std.testing.expectError(error.HelpRequested, parse(&.{ "circ-compile", "--help" }));
+}
+
+test "cli_args_help_short_returns_help_requested" {
+    try std.testing.expectError(error.HelpRequested, parse(&.{ "circ-compile", "-h" }));
+}
+
+test "cli_args_help_short_circuits_other_validation" {
+    // --help bypasses MissingInput, MissingOutput, ConflictingModes, and
+    // UnknownFlag — users should be able to ask for help even when their
+    // command line is otherwise broken.
+    try std.testing.expectError(error.HelpRequested, parse(&.{ "circ-compile", "--help", "--bogus" }));
+    try std.testing.expectError(error.HelpRequested, parse(&.{ "circ-compile", "in.circ", "--inspect", "--emit-zig", "--help" }));
+    try std.testing.expectError(error.HelpRequested, parse(&.{ "circ-compile", "in.circ", "--help" }));
+}
+
+test "cli_args_help_text_mentions_every_mode_and_flag" {
+    // Lock the help text against accidental drift — if a flag is added to
+    // parse() without a corresponding line here, this assertion fires.
+    const needles = [_][]const u8{
+        "--emit-zig",   "--inspect",     "--preview",          "--truth-table",
+        "-o",           "--help",        "-h",                 "--warnings-as-errors",
+        "-Werror",      "--expand-macros", "--color=",        "--format=",
+        "--strict",
+    };
+    inline for (needles) |needle| {
+        try std.testing.expect(std.mem.indexOf(u8, help_text, needle) != null);
+    }
 }

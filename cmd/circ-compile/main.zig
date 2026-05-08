@@ -124,6 +124,10 @@ pub fn run(
     stderr_writer: anytype,
 ) !u8 {
     const args = cli_args.parse(argv) catch |err| {
+        if (err == error.HelpRequested) {
+            try stdout_writer.writeAll(cli_args.help_text);
+            return 0;
+        }
         try stderr_writer.print("usage error: {s}\n", .{parseErrorMessage(err)});
         return 2;
     };
@@ -384,6 +388,29 @@ pub fn main() !void {
 
     const exit_code = try run(allocator, argv, stdout_writer, stderr_writer);
     if (exit_code != 0) std.process.exit(exit_code);
+}
+
+test "run with --help writes help text to stdout and exits 0" {
+    // End-to-end: --help propagates from cli_args.parse all the way through
+    // run(), goes to stdout (not stderr), and produces a clean exit. Locks
+    // the contract that `circ-compile --help` is a success path, not a
+    // usage error.
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const argv = [_][]const u8{ "circ-compile", "--help" };
+    const exit_code = try run(allocator, &argv, stdout_buf.writer(allocator), stderr_buf.writer(allocator));
+
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try std.testing.expectEqual(@as(usize, 0), stderr_buf.items.len);
+    try std.testing.expect(std.mem.indexOf(u8, stdout_buf.items, "USAGE:") != null);
+    try std.testing.expect(std.mem.indexOf(u8, stdout_buf.items, "--truth-table") != null);
 }
 
 test "run with --inspect on existing fixture" {
