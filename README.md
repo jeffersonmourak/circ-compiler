@@ -55,18 +55,22 @@ zig build test
 
 ## Usage
 
-`circ-compile` has three mutually exclusive modes:
+`circ-compile` has four mutually exclusive modes:
 
-| Invocation                                | Produces                                                 |
-|-------------------------------------------|----------------------------------------------------------|
-| `circ-compile input.circ -o out.wasm`     | A self-contained `.wasm` artifact (default mode).        |
-| `circ-compile input.circ --emit-zig -o out.zig` | The generated Zig source that would be compiled to WASM. |
-| `circ-compile input.circ --inspect`       | Pretty-printed parse tree, resolved IR, and diagnostics on stdout. |
+| Invocation                                       | Produces                                                                                       |
+|--------------------------------------------------|------------------------------------------------------------------------------------------------|
+| `circ-compile input.circ -o out.wasm`            | A self-contained `.wasm` artifact (default mode).                                              |
+| `circ-compile input.circ --emit-zig -o out.zig`  | The generated standalone Zig source for the experimental emit pipeline.                        |
+| `circ-compile input.circ --inspect`              | Pretty-printed parse tree, resolved IR, and diagnostics on stdout.                             |
+| `circ-compile input.circ --preview`              | ASCII schematic of the resolved circuit on stdout (no artifact written).                       |
+
+In default compile mode, `circ-compile` runs the parser, resolver, validator, and topology serializers in-process and splices the resulting `circ.topology.v0.min` and `circ.topology.v0.full` blobs into a vendored prebuilt runtime `.wasm` (embedded in the CLI via `@embedFile`). No `zig` toolchain or subprocess is required at user runtime.
 
 Additional flags:
 
-- `--warnings-as-errors` — promote warnings to hard errors (suppresses emission).
-- `--build-dir <path>` — use this directory for the intermediate `zig build` invocation in default compile mode (default: a fresh `/tmp/circ-compile-<rand>/`). Preserved on success when explicitly set; the default temp dir cleans on success and is preserved on failure.
+- `--warnings-as-errors` (alias `-Werror`) — promote warnings to hard errors (suppresses emission).
+- `--expand-macros` — only valid with `--preview`; renders builtin macros (`xor`, `nand`, …) as their expanded primitive sub-circuits.
+- `--color=auto|always|never` — only valid with `--preview`; controls ANSI styling of the schematic. Default is `auto` (on when stdout is a TTY; the `NO_COLOR` env var also disables colour).
 
 Hard errors block emission — partial or "best-effort" artifacts are never produced. Diagnostics use stable codes (`E001`–`E013`, `W001`–`W003`) so downstream tooling can match on them.
 
