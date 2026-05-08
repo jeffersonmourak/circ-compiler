@@ -17,6 +17,8 @@ const runtime_embed = @import("runtime_embed");
 const preview_dump = @import("preview_dump");
 const layout_orchestrator = @import("layout_orchestrator");
 const preview_render = @import("preview_render");
+const truth_table_builder = @import("truth_table_builder");
+const truth_table_markdown = @import("truth_table_markdown");
 
 fn makePathAny(path: []const u8) !void {
     if (!std.fs.path.isAbsolute(path)) {
@@ -132,11 +134,12 @@ pub fn run(
     var diagnostic_list: diagnostics.DiagnosticList = undefined;
     var maybe_project: ?@import("ir_types").Project = null;
 
-    // Preview always goes through the project pipeline so implicit builtin-macro
-    // usages (e.g. `xor` without an explicit import) get resolved via scan_imports'
-    // implicit_builtin path. Compile/emit_zig keep the cheaper has_imports gate to
-    // avoid the extra disk I/O on macro-free fixtures (locked by perf-budget tests).
-    const needs_project_resolution = args.mode != .inspect and (has_imports or args.mode == .preview);
+    // Preview and truth_table always go through the project pipeline so implicit
+    // builtin-macro usages (e.g. `xor` without an explicit import) get resolved via
+    // scan_imports' implicit_builtin path. Compile/emit_zig keep the cheaper
+    // has_imports gate to avoid the extra disk I/O on macro-free fixtures (locked
+    // by perf-budget tests).
+    const needs_project_resolution = args.mode != .inspect and (has_imports or args.mode == .preview or args.mode == .truth_table);
 
     if (needs_project_resolution) {
         const scan_result = scan_imports.scanProjectImports(allocator, args.input_path) catch |err| {
@@ -303,6 +306,31 @@ pub fn run(
                 .stdout_handle = stdout_handle,
                 .no_color_value = no_color,
             }) catch |err| {
+                try stderr_writer.print("render failed: {s}\n", .{@errorName(err)});
+                return 1;
+            };
+            return 0;
+        },
+        .truth_table => {
+            var topology = if (maybe_project) |*project|
+                full_serializer.buildFromProject(allocator, project) catch |err| {
+                    try stderr_writer.print("topology build failed: {s}\n", .{@errorName(err)});
+                    return 1;
+                }
+            else
+                full_serializer.buildFromModule(allocator, &ir_module) catch |err| {
+                    try stderr_writer.print("topology build failed: {s}\n", .{@errorName(err)});
+                    return 1;
+                };
+            defer topology.deinit(allocator);
+
+            var table = truth_table_builder.build(allocator, topology, .{}) catch |err| {
+                try stderr_writer.print("truth-table build failed: {s}\n", .{@errorName(err)});
+                return 1;
+            };
+            defer table.deinit();
+
+            truth_table_markdown.render(stdout_writer, table) catch |err| {
                 try stderr_writer.print("render failed: {s}\n", .{@errorName(err)});
                 return 1;
             };
@@ -626,4 +654,188 @@ test "phase3_render_color_never_no_escapes" {
     const exit_code = try runPreviewWithFlags(allocator, "tests/fixtures/circuits/single_gate.circ", &.{"--color=never"}, &stdout_buf, &stderr_buf);
     try std.testing.expectEqual(@as(u8, 0), exit_code);
     for (stdout_buf.items) |b| try std.testing.expect(b != 0x1B);
+}
+
+fn runTruthTable(
+    allocator: std.mem.Allocator,
+    fixture_path: []const u8,
+    stdout_buf: *std.ArrayList(u8),
+    stderr_buf: *std.ArrayList(u8),
+) !u8 {
+    const argv = [_][]const u8{ "circ-compile", fixture_path, "--truth-table" };
+    return run(allocator, &argv, stdout_buf.writer(allocator), stderr_buf.writer(allocator));
+}
+
+test "truth_table_and_two_inputs_fixture" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const exit_code = try runTruthTable(allocator, "tests/fixtures/circuits/and_two_inputs.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/truth_table/and_two_inputs.truth.golden");
+}
+
+test "truth_table_xor_fixture_through_macro_pipeline" {
+    // XOR exercises buildFromProject (macro expansion via implicit_builtin), not
+    // buildFromModule. The truth table must show only the root circuit's a/b/out
+    // pins; the inlined or/nand/and bodies emit their own input/output_pin
+    // primitives but those carry non-empty origin chains and must be filtered.
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const exit_code = try runTruthTable(allocator, "tests/fixtures/circuits/builtin_xor.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/truth_table/builtin_xor.truth.golden");
+}
+
+test "truth_table_chain_fixture" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const exit_code = try runTruthTable(allocator, "tests/fixtures/circuits/chain.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/truth_table/chain.truth.golden");
+}
+
+test "truth_table_rejects_output_path" {
+    // -o is only meaningful for compile/emit-zig modes. Truth tables go to stdout.
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const argv = [_][]const u8{ "circ-compile", "tests/fixtures/circuits/and_two_inputs.circ", "--truth-table", "-o", "out.txt" };
+    const exit_code = try run(allocator, &argv, stdout_buf.writer(allocator), stderr_buf.writer(allocator));
+    try std.testing.expectEqual(@as(u8, 2), exit_code);
+    try std.testing.expectEqual(@as(usize, 0), stdout_buf.items.len);
+    try std.testing.expect(stderr_buf.items.len > 0);
+}
+
+test "truth_table_propagates_validator_errors_e008" {
+    // Combinational loops (E008) are validator errors. The CLI exits before the
+    // truth-table arm runs, so the truth-table code itself never has to defend
+    // against feedback loops — it relies on this upstream guarantee.
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const exit_code = try runTruthTable(allocator, "tests/fixtures/circuits/E008_simple_loop.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 1), exit_code);
+    try std.testing.expectEqual(@as(usize, 0), stdout_buf.items.len);
+    try std.testing.expect(stderr_buf.items.len > 0);
+}
+
+fn expectTruthTableGolden(fixture_path: []const u8, golden_path: []const u8) !void {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const exit_code = try runTruthTable(allocator, fixture_path, &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, golden_path);
+}
+
+// Primitive coverage — one fixture per simulation primitive that has observable
+// boolean behaviour. input_pin / output_pin aren't exercised standalone; they
+// appear in every other fixture as the boundary primitives.
+
+test "truth_table_primitive_and" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/and_gate.circ",
+        "tests/fixtures/truth_table/primitive_and.truth.golden",
+    );
+}
+
+test "truth_table_primitive_not" {
+    // single_gate.circ is the canonical NOT fixture: input a → not n → output out.
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/single_gate.circ",
+        "tests/fixtures/truth_table/primitive_not.truth.golden",
+    );
+}
+
+test "truth_table_primitive_wire" {
+    // The wire primitive relays its input dominant-state through to its `out`
+    // port. The truth table should be the identity function.
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/wire_passthrough.circ",
+        "tests/fixtures/truth_table/primitive_wire.truth.golden",
+    );
+}
+
+test "truth_table_primitive_led" {
+    // LED is a leaf in the simulation engine: lib/circuit.zig sets the LED's
+    // output_state directly and returns without enqueueing a downstream event.
+    // Per DOCS/simulation-engine.md "led → mirrors dominant('in'); does not
+    // enqueue further events". So in input → led → output_pin the output_pin
+    // never receives a propagation event and stays .undefined ('?'). This
+    // golden locks that semantic — if the LED is later promoted to a
+    // signal-passing primitive, this fixture will flag the change.
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/edge_single_component.circ",
+        "tests/fixtures/truth_table/primitive_led.truth.golden",
+    );
+}
+
+// Built-in coverage — one fixture per macro in lib/resolver/builtin_circ/. XOR
+// is already locked by truth_table_xor_fixture_through_macro_pipeline above.
+
+test "truth_table_builtin_nand" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/builtin_nand.circ",
+        "tests/fixtures/truth_table/builtin_nand.truth.golden",
+    );
+}
+
+test "truth_table_builtin_nor" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/builtin_nor.circ",
+        "tests/fixtures/truth_table/builtin_nor.truth.golden",
+    );
+}
+
+test "truth_table_builtin_or" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/builtin_or.circ",
+        "tests/fixtures/truth_table/builtin_or.truth.golden",
+    );
+}
+
+test "truth_table_builtin_xnor" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/builtin_xnor.circ",
+        "tests/fixtures/truth_table/builtin_xnor.truth.golden",
+    );
 }

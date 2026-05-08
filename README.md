@@ -55,7 +55,7 @@ zig build test
 
 ## Usage
 
-`circ-compile` has four mutually exclusive modes:
+`circ-compile` has five mutually exclusive modes:
 
 | Invocation                                       | Produces                                                                                       |
 |--------------------------------------------------|------------------------------------------------------------------------------------------------|
@@ -63,6 +63,7 @@ zig build test
 | `circ-compile input.circ --emit-zig -o out.zig`  | The generated standalone Zig source for the experimental emit pipeline.                        |
 | `circ-compile input.circ --inspect`              | Pretty-printed parse tree, resolved IR, and diagnostics on stdout.                             |
 | `circ-compile input.circ --preview`              | ASCII schematic of the resolved circuit on stdout (no artifact written).                       |
+| `circ-compile input.circ --truth-table`          | Markdown truth table enumerating every input vector against the simulated circuit, on stdout.  |
 
 In default compile mode, `circ-compile` runs the parser, resolver, validator, and topology serializers in-process and splices the resulting `circ.topology.v0.min` and `circ.topology.v0.full` blobs into a vendored prebuilt runtime `.wasm` (embedded in the CLI via `@embedFile`). No `zig` toolchain or subprocess is required at user runtime.
 
