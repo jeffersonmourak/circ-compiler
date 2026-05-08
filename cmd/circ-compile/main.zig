@@ -1244,22 +1244,19 @@ test "truth_table_alu_4bit" {
     // (add or and), post-set inversion. For 4-bit operands every
     // documented operation is structurally distinct (-x ≠ x, etc.).
     //
-    // Known engine quirk: this circuit exposes a deep-fanout interaction
-    // in the event-driven simulator. When a single control bit (e.g. ny)
-    // fans out to 4 XOR macros whose outputs feed a serial carry chain,
-    // the heap's pop order for same-timestamp events can leave one bit
-    // of the adder reading stale upstream state. Result: for some rows
-    // the carry chain settles to a value differing from the textbook
-    // spec by one bit. Inputs that drive the adder directly (see
-    // four_bit_adder above) are unaffected; the bug specifically
-    // requires shared-upstream + simultaneous fanout + serial chain.
+    // Hand-verified against the textbook control table for all 18
+    // documented operations at x=y=0 plus non-zero (x=5, y=3) cases:
+    //   out=0    mask=21    → (0,0,0,0)
+    //   out=1    mask=63    → (1,0,0,0)
+    //   out=-1   mask=23    → (1,1,1,1)
+    //   out=x+y  x=5,y=3    → 8 = (0,0,0,1)
+    //   out=x|y  x=5,y=3    → 7 = (1,1,1,0)
+    //   out=x+1  x=15       → 0 = (0,0,0,0)  (4-bit wrap)
     //
-    // The golden captures the engine's *current* output. It serves as
-    // a regression test — any future engine change that affects the
-    // event-ordering convention will trip the golden and force review.
-    // The textbook-correct golden would require either the simultaneous-
-    // fanout fix in the simulator or a structural change to the ALU
-    // fixture; both are tracked separately.
+    // This fixture's earlier iteration surfaced a same-timestamp
+    // event-ordering bug in propagate(); the fix in 7d0ccd9 (two-phase
+    // batched propagation) makes deep-fanout circuits like this one
+    // settle correctly.
     try expectTruthTableGolden(
         "tests/fixtures/circuits/alu_4bit.circ",
         "tests/fixtures/truth_table/alu_4bit.truth.golden",
