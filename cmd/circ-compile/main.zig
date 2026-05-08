@@ -964,6 +964,59 @@ test "truth_table_two_bit_adder" {
     );
 }
 
+// Selector / wide-primitive coverage. mux and demux are the canonical
+// "control selects which signal flows where" primitives; the *_2bit
+// fixtures exercise the parallel-replication pattern that scales any
+// per-bit primitive to a wider operand.
+
+test "truth_table_mux_2to1" {
+    // 2-to-1 multiplexer: out = sel ? b : a. 8 rows.
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/mux_2to1.circ",
+        "tests/fixtures/truth_table/mux_2to1.truth.golden",
+    );
+}
+
+test "truth_table_demux_1to2" {
+    // 1-to-2 demultiplexer. When sel=0, out_a=in and out_b=0; when sel=1,
+    // out_a=0 and out_b=in. The unselected output is held at 0 so a
+    // downstream consumer can OR multiple demux outputs onto a shared bus
+    // without conflicts.
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/demux_1to2.circ",
+        "tests/fixtures/truth_table/demux_1to2.truth.golden",
+    );
+}
+
+test "truth_table_and_2bit" {
+    // 2-bit bitwise AND: out_i = a_i AND b_i for i in {0, 1}. 16 rows.
+    // Exercises N-parallel single-bit primitives — the standard scaling
+    // pattern for any per-bit operation.
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/and_2bit.circ",
+        "tests/fixtures/truth_table/and_2bit.truth.golden",
+    );
+}
+
+test "truth_table_not_2bit" {
+    // 2-bit bitwise NOT: out_i = !a_i. 4 rows.
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/not_2bit.circ",
+        "tests/fixtures/truth_table/not_2bit.truth.golden",
+    );
+}
+
+test "truth_table_mux_2bit_2to1" {
+    // 2-bit 2-to-1 multiplexer: selects between two 2-bit operands. One
+    // single-bit mux per output bit, sharing the inverted-select line.
+    // 32 rows. Combines the wide-primitive pattern (parallel per-bit
+    // logic) with the selector pattern (sel routes one input to output).
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/mux_2bit_2to1.circ",
+        "tests/fixtures/truth_table/mux_2bit_2to1.truth.golden",
+    );
+}
+
 // scanStrict is unit-tested directly because no parser-valid, validator-
 // accepting fixture currently produces .undef under the truth-table mode —
 // the validator rejects every shape that would reach an undefined output.
