@@ -1,0 +1,8 @@
+// 2-bit bitwise AND: (a1 a0) AND (b1 b0) → (out1 out0)
+// N parallel single-bit ANDs; the standard "wide primitive" pattern that
+// scales to any width by replicating the per-bit slice.
+input a0, a1, b0, b1
+and bit0(a=a0, b=b0)
+and bit1(a=a1, b=b1)
+output out0(in=bit0.out)
+output out1(in=bit1.out)

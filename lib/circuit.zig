@@ -55,15 +55,10 @@ fn recalculateAndReschedule(
         },
         .led => |*led_internals| {
             const inputPortComponents = led_internals.inputs.get(IN_PORT_NAME) orelse return error.InvalidInputPort;
-
-            const inputState = calculateDominantState(inputPortComponents);
-
-            const currentLedState = component.output_state;
-            if (currentLedState != inputState) {
-                component.output_state = inputState;
-                log.info("💡 LED (id={d}) state is now {s}", .{ component.id, @tagName(component.output_state) });
+            calculated_state = calculateDominantState(inputPortComponents);
+            if (calculated_state != component.output_state) {
+                log.info("💡 LED (id={d}) state will be {s}", .{ component.id, @tagName(calculated_state) });
             }
-            return;
         },
         .wire => |*wire| {
             // Wire relays the first non-null input to the output
@@ -93,7 +88,7 @@ fn recalculateAndReschedule(
         log.info(" - Component (id={d}, type={s}) output changed from {s} -> {s}. Scheduling new event.", .{ component.id, @tagName(component.kind), @tagName(component.output_state), @tagName(calculated_state) });
 
         const delay = switch (component.kind) {
-            .wire, .output_pin => WIRE_PROPAGATION_DELAY,
+            .wire, .output_pin, .led => WIRE_PROPAGATION_DELAY,
             else => PROPAGATION_DELAY,
         };
 

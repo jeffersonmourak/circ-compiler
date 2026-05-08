@@ -198,7 +198,7 @@ and_gate    → low if either of "a"/"b" is low
 wire        → first defined input on "in" (collapsed via dominant)
 output_pin  → dominant("in")
 input_pin   → dominant("in") if wired (sub-circuit case); host-driven otherwise
-led         → mirrors dominant("in"); does not enqueue further events
+led         → mirrors dominant("in"); propagates downstream like a wire
 ```
 
 Delays:
@@ -208,7 +208,7 @@ const PROPAGATION_DELAY: Timestamp = 5;
 const WIRE_PROPAGATION_DELAY: Timestamp = 1;
 ```
 
-`wire` and `output_pin` use the wire delay; everything else uses the gate delay. A chain of `N` gates plus `M` wires/output_pins settles after `N*5 + M*1` time units.
+`wire`, `output_pin`, and `led` use the wire delay; everything else uses the gate delay. A chain of `N` gates plus `M` wires/output_pins/leds settles after `N*5 + M*1` time units.
 
 ### State snapshot
 

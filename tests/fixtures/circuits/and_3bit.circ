@@ -1,0 +1,9 @@
+// 3-bit bitwise AND: (a2 a1 a0) AND (b2 b1 b0) → (out2 out1 out0).
+// Three parallel single-bit ANDs.
+input a0, a1, a2, b0, b1, b2
+and bit0(a=a0, b=b0)
+and bit1(a=a1, b=b1)
+and bit2(a=a2, b=b2)
+output out0(in=bit0.out)
+output out1(in=bit1.out)
+output out2(in=bit2.out)

@@ -47,6 +47,10 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("tests/helpers/golden_test.zig"),
             .target = target,
             .optimize = optimize,
+            // golden_test.zig uses @cImport to call setenv/unsetenv. macOS
+            // SDK ships libc headers by default; Linux runners need an
+            // explicit link_libc flag for Zig to find <stdlib.h>.
+            .link_libc = true,
         }),
     });
     const run_golden_tests = b.addRunArtifact(golden_tests);
@@ -752,6 +756,15 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // Native build of the simulation engine. Used by the topology interpreter
+    // tests and by the truth-table mode (which drives the engine on the host
+    // to enumerate input vectors).
+    const circuit_mod = b.createModule(.{
+        .root_source_file = b.path("lib/circuit.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     const topology_protocol_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/e2e/topology_protocol_test.zig"),
         .target = target,
@@ -1056,6 +1069,61 @@ pub fn build(b: *std.Build) void {
     const run_preview_dump_tests = b.addRunArtifact(preview_dump_tests);
     test_step.dependOn(&run_preview_dump_tests.step);
 
+    // Truth-table mode: enumerates input vectors against a native engine.Circuit
+    // built from the full topology, then renders to Markdown.
+    const truth_table_builder_mod = b.createModule(.{
+        .root_source_file = b.path("lib/truth_table/builder.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    truth_table_builder_mod.addImport("circuit", circuit_mod);
+    truth_table_builder_mod.addImport("full_format", topology_full_format_mod);
+    circ_compile_mod.addImport("truth_table_builder", truth_table_builder_mod);
+    const truth_table_builder_tests = b.addTest(.{
+        .root_module = truth_table_builder_mod,
+    });
+    const run_truth_table_builder_tests = b.addRunArtifact(truth_table_builder_tests);
+    test_step.dependOn(&run_truth_table_builder_tests.step);
+
+    const truth_table_markdown_mod = b.createModule(.{
+        .root_source_file = b.path("lib/truth_table/markdown.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    truth_table_markdown_mod.addImport("builder", truth_table_builder_mod);
+    circ_compile_mod.addImport("truth_table_markdown", truth_table_markdown_mod);
+    const truth_table_markdown_tests = b.addTest(.{
+        .root_module = truth_table_markdown_mod,
+    });
+    const run_truth_table_markdown_tests = b.addRunArtifact(truth_table_markdown_tests);
+    test_step.dependOn(&run_truth_table_markdown_tests.step);
+
+    const truth_table_csv_mod = b.createModule(.{
+        .root_source_file = b.path("lib/truth_table/csv.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    truth_table_csv_mod.addImport("builder", truth_table_builder_mod);
+    circ_compile_mod.addImport("truth_table_csv", truth_table_csv_mod);
+    const truth_table_csv_tests = b.addTest(.{
+        .root_module = truth_table_csv_mod,
+    });
+    const run_truth_table_csv_tests = b.addRunArtifact(truth_table_csv_tests);
+    test_step.dependOn(&run_truth_table_csv_tests.step);
+
+    const truth_table_json_mod = b.createModule(.{
+        .root_source_file = b.path("lib/truth_table/json.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    truth_table_json_mod.addImport("builder", truth_table_builder_mod);
+    circ_compile_mod.addImport("truth_table_json", truth_table_json_mod);
+    const truth_table_json_tests = b.addTest(.{
+        .root_module = truth_table_json_mod,
+    });
+    const run_truth_table_json_tests = b.addRunArtifact(truth_table_json_tests);
+    test_step.dependOn(&run_truth_table_json_tests.step);
+
     const preview_layout_types_mod = b.createModule(.{
         .root_source_file = b.path("lib/preview/layout/types.zig"),
         .target = target,
@@ -1318,7 +1386,11 @@ pub fn build(b: *std.Build) void {
         .root_module = cli_e2e_tests_mod,
     });
     const run_cli_e2e_tests = b.addRunArtifact(cli_e2e_tests);
-    run_cli_e2e_tests.step.dependOn(&circ_compile_exe.step);
+    // The test spawns the *installed* circ-compile binary via
+    // b.getInstallPath(.bin, "circ-compile"). Depending on circ_compile_exe.step
+    // alone only builds it; we also need the install step to run so the
+    // binary actually lands at the path the test queries.
+    run_cli_e2e_tests.step.dependOn(b.getInstallStep());
     test_step.dependOn(&run_cli_e2e_tests.step);
 
     const topology_interpreter_tests_mod = b.createModule(.{
@@ -1327,13 +1399,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     topology_interpreter_tests_mod.addImport("format", topology_format_tests_mod);
-    
-    const circuit_mod = b.createModule(.{
-        .root_source_file = b.path("lib/circuit.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    
     topology_interpreter_tests_mod.addImport("circuit.zig", circuit_mod);
     const topology_interpreter_tests = b.addTest(.{
         .root_module = topology_interpreter_tests_mod,

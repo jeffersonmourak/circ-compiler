@@ -17,6 +17,10 @@ const runtime_embed = @import("runtime_embed");
 const preview_dump = @import("preview_dump");
 const layout_orchestrator = @import("layout_orchestrator");
 const preview_render = @import("preview_render");
+const truth_table_builder = @import("truth_table_builder");
+const truth_table_markdown = @import("truth_table_markdown");
+const truth_table_csv = @import("truth_table_csv");
+const truth_table_json = @import("truth_table_json");
 
 fn makePathAny(path: []const u8) !void {
     if (!std.fs.path.isAbsolute(path)) {
@@ -39,6 +43,26 @@ fn writeFileAny(path: []const u8, data: []const u8) !void {
     var file = try std.fs.cwd().createFile(path, .{ .truncate = true });
     defer file.close();
     try file.writeAll(data);
+}
+
+/// Walks `table.rows` looking for any output cell that settled to `.undef`.
+/// Writes one diagnostic line per offending cell to `stderr_writer` and
+/// returns true if at least one was found. Used by --truth-table --strict to
+/// turn "I observed undefined output" from a quiet `?` into a hard exit.
+fn scanStrict(table: truth_table_builder.Table, stderr_writer: anytype) !bool {
+    var found = false;
+    for (table.rows, 0..) |row, row_idx| {
+        for (row.outputs, 0..) |out_state, col_idx| {
+            if (out_state == .undef) {
+                found = true;
+                try stderr_writer.print(
+                    "truth-table: undefined output at row {d}, output '{s}'\n",
+                    .{ row_idx, table.header.outputs[col_idx].name },
+                );
+            }
+        }
+    }
+    return found;
 }
 
 fn parseErrorMessage(err: anyerror) []const u8 {
@@ -132,11 +156,12 @@ pub fn run(
     var diagnostic_list: diagnostics.DiagnosticList = undefined;
     var maybe_project: ?@import("ir_types").Project = null;
 
-    // Preview always goes through the project pipeline so implicit builtin-macro
-    // usages (e.g. `xor` without an explicit import) get resolved via scan_imports'
-    // implicit_builtin path. Compile/emit_zig keep the cheaper has_imports gate to
-    // avoid the extra disk I/O on macro-free fixtures (locked by perf-budget tests).
-    const needs_project_resolution = args.mode != .inspect and (has_imports or args.mode == .preview);
+    // Preview and truth_table always go through the project pipeline so implicit
+    // builtin-macro usages (e.g. `xor` without an explicit import) get resolved via
+    // scan_imports' implicit_builtin path. Compile/emit_zig keep the cheaper
+    // has_imports gate to avoid the extra disk I/O on macro-free fixtures (locked
+    // by perf-budget tests).
+    const needs_project_resolution = args.mode != .inspect and (has_imports or args.mode == .preview or args.mode == .truth_table);
 
     if (needs_project_resolution) {
         const scan_result = scan_imports.scanProjectImports(allocator, args.input_path) catch |err| {
@@ -306,6 +331,43 @@ pub fn run(
                 try stderr_writer.print("render failed: {s}\n", .{@errorName(err)});
                 return 1;
             };
+            return 0;
+        },
+        .truth_table => {
+            var topology = if (maybe_project) |*project|
+                full_serializer.buildFromProject(allocator, project) catch |err| {
+                    try stderr_writer.print("topology build failed: {s}\n", .{@errorName(err)});
+                    return 1;
+                }
+            else
+                full_serializer.buildFromModule(allocator, &ir_module) catch |err| {
+                    try stderr_writer.print("topology build failed: {s}\n", .{@errorName(err)});
+                    return 1;
+                };
+            defer topology.deinit(allocator);
+
+            var table = truth_table_builder.build(allocator, topology, .{}) catch |err| {
+                try stderr_writer.print("truth-table build failed: {s}\n", .{@errorName(err)});
+                return 1;
+            };
+            defer table.deinit();
+
+            (switch (args.truth_table_format) {
+                .markdown => truth_table_markdown.render(stdout_writer, table),
+                .csv => truth_table_csv.render(stdout_writer, table),
+                .json => truth_table_json.render(stdout_writer, table),
+            }) catch |err| {
+                try stderr_writer.print("render failed: {s}\n", .{@errorName(err)});
+                return 1;
+            };
+
+            if (args.truth_table_strict) {
+                const found_undef = scanStrict(table, stderr_writer) catch |err| {
+                    try stderr_writer.print("strict scan failed: {s}\n", .{@errorName(err)});
+                    return 1;
+                };
+                if (found_undef) return 1;
+            }
             return 0;
         },
     }
@@ -626,4 +688,633 @@ test "phase3_render_color_never_no_escapes" {
     const exit_code = try runPreviewWithFlags(allocator, "tests/fixtures/circuits/single_gate.circ", &.{"--color=never"}, &stdout_buf, &stderr_buf);
     try std.testing.expectEqual(@as(u8, 0), exit_code);
     for (stdout_buf.items) |b| try std.testing.expect(b != 0x1B);
+}
+
+fn runTruthTable(
+    allocator: std.mem.Allocator,
+    fixture_path: []const u8,
+    stdout_buf: *std.ArrayList(u8),
+    stderr_buf: *std.ArrayList(u8),
+) !u8 {
+    const argv = [_][]const u8{ "circ-compile", fixture_path, "--truth-table" };
+    return run(allocator, &argv, stdout_buf.writer(allocator), stderr_buf.writer(allocator));
+}
+
+test "truth_table_and_two_inputs_fixture" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const exit_code = try runTruthTable(allocator, "tests/fixtures/circuits/and_two_inputs.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/truth_table/and_two_inputs.truth.golden");
+}
+
+test "truth_table_xor_fixture_through_macro_pipeline" {
+    // XOR exercises buildFromProject (macro expansion via implicit_builtin), not
+    // buildFromModule. The truth table must show only the root circuit's a/b/out
+    // pins; the inlined or/nand/and bodies emit their own input/output_pin
+    // primitives but those carry non-empty origin chains and must be filtered.
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const exit_code = try runTruthTable(allocator, "tests/fixtures/circuits/builtin_xor.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/truth_table/builtin_xor.truth.golden");
+}
+
+test "truth_table_chain_fixture" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const exit_code = try runTruthTable(allocator, "tests/fixtures/circuits/chain.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/truth_table/chain.truth.golden");
+}
+
+test "truth_table_rejects_output_path" {
+    // -o is only meaningful for compile/emit-zig modes. Truth tables go to stdout.
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const argv = [_][]const u8{ "circ-compile", "tests/fixtures/circuits/and_two_inputs.circ", "--truth-table", "-o", "out.txt" };
+    const exit_code = try run(allocator, &argv, stdout_buf.writer(allocator), stderr_buf.writer(allocator));
+    try std.testing.expectEqual(@as(u8, 2), exit_code);
+    try std.testing.expectEqual(@as(usize, 0), stdout_buf.items.len);
+    try std.testing.expect(stderr_buf.items.len > 0);
+}
+
+test "truth_table_propagates_validator_errors_e008" {
+    // Combinational loops (E008) are validator errors. The CLI exits before the
+    // truth-table arm runs, so the truth-table code itself never has to defend
+    // against feedback loops — it relies on this upstream guarantee.
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const exit_code = try runTruthTable(allocator, "tests/fixtures/circuits/E008_simple_loop.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 1), exit_code);
+    try std.testing.expectEqual(@as(usize, 0), stdout_buf.items.len);
+    try std.testing.expect(stderr_buf.items.len > 0);
+}
+
+fn expectTruthTableGolden(fixture_path: []const u8, golden_path: []const u8) !void {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const exit_code = try runTruthTable(allocator, fixture_path, &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, golden_path);
+}
+
+// Primitive coverage — one fixture per simulation primitive that has observable
+// boolean behaviour. input_pin / output_pin aren't exercised standalone; they
+// appear in every other fixture as the boundary primitives.
+
+test "truth_table_primitive_and" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/and_gate.circ",
+        "tests/fixtures/truth_table/primitive_and.truth.golden",
+    );
+}
+
+test "truth_table_primitive_not" {
+    // single_gate.circ is the canonical NOT fixture: input a → not n → output out.
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/single_gate.circ",
+        "tests/fixtures/truth_table/primitive_not.truth.golden",
+    );
+}
+
+test "truth_table_primitive_wire" {
+    // The wire primitive relays its input dominant-state through to its `out`
+    // port. The truth table should be the identity function.
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/wire_passthrough.circ",
+        "tests/fixtures/truth_table/primitive_wire.truth.golden",
+    );
+}
+
+test "truth_table_primitive_led" {
+    // LED mirrors its input on its `out` port and propagates downstream with
+    // the wire delay (per DOCS/simulation-engine.md). The fixture wires
+    // input → led → output, so the table is the identity function.
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/edge_single_component.circ",
+        "tests/fixtures/truth_table/primitive_led.truth.golden",
+    );
+}
+
+// Built-in coverage — one fixture per macro in lib/resolver/builtin_circ/. XOR
+// is already locked by truth_table_xor_fixture_through_macro_pipeline above.
+
+test "truth_table_builtin_nand" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/builtin_nand.circ",
+        "tests/fixtures/truth_table/builtin_nand.truth.golden",
+    );
+}
+
+test "truth_table_builtin_nor" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/builtin_nor.circ",
+        "tests/fixtures/truth_table/builtin_nor.truth.golden",
+    );
+}
+
+test "truth_table_builtin_or" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/builtin_or.circ",
+        "tests/fixtures/truth_table/builtin_or.truth.golden",
+    );
+}
+
+test "truth_table_builtin_xnor" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/builtin_xnor.circ",
+        "tests/fixtures/truth_table/builtin_xnor.truth.golden",
+    );
+}
+
+fn runTruthTableWithFormat(
+    allocator: std.mem.Allocator,
+    fixture_path: []const u8,
+    format_flag: []const u8,
+    stdout_buf: *std.ArrayList(u8),
+    stderr_buf: *std.ArrayList(u8),
+) !u8 {
+    const argv = [_][]const u8{ "circ-compile", fixture_path, "--truth-table", format_flag };
+    return run(allocator, &argv, stdout_buf.writer(allocator), stderr_buf.writer(allocator));
+}
+
+test "truth_table_xor_csv_fixture" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const exit_code = try runTruthTableWithFormat(allocator, "tests/fixtures/circuits/builtin_xor.circ", "--format=csv", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/truth_table/builtin_xor.csv.golden");
+}
+
+test "truth_table_xor_json_fixture" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const exit_code = try runTruthTableWithFormat(allocator, "tests/fixtures/circuits/builtin_xor.circ", "--format=json", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/truth_table/builtin_xor.json.golden");
+}
+
+test "truth_table_format_markdown_default_matches_explicit" {
+    // --format=markdown is the default; the two invocations must produce
+    // byte-identical output. This guards against drift if the default ever
+    // changes silently.
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var implicit_buf: std.ArrayList(u8) = .{};
+    defer implicit_buf.deinit(allocator);
+    var explicit_buf: std.ArrayList(u8) = .{};
+    defer explicit_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    _ = try runTruthTable(allocator, "tests/fixtures/circuits/builtin_xor.circ", &implicit_buf, &stderr_buf);
+    _ = try runTruthTableWithFormat(allocator, "tests/fixtures/circuits/builtin_xor.circ", "--format=markdown", &explicit_buf, &stderr_buf);
+    try std.testing.expectEqualStrings(implicit_buf.items, explicit_buf.items);
+}
+
+// Boolean arithmetic coverage. Each circuit's truth table was hand-verified
+// against the algebraic specification before being locked in as a golden.
+
+test "truth_table_half_adder" {
+    // Half adder: (a, b) → (sum, cout). sum = a XOR b; cout = a AND b.
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/half_adder.circ",
+        "tests/fixtures/truth_table/half_adder.truth.golden",
+    );
+}
+
+test "truth_table_full_adder" {
+    // Full adder: (a, b, cin) → (sum, cout). sum = a XOR b XOR cin;
+    // cout = (a AND b) OR ((a XOR b) AND cin). Eight rows enumerating
+    // every binary combination of three inputs.
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/full_adder_from_builtins.circ",
+        "tests/fixtures/truth_table/full_adder.truth.golden",
+    );
+}
+
+test "truth_table_two_bit_adder" {
+    // 2-bit ripple-carry adder: (a1 a0) + (b1 b0) → (cout s1 s0). Sixteen
+    // rows. The bit order in input_bits matches declaration order:
+    // bit0=a0, bit1=a1, bit2=b0, bit3=b1. The golden was hand-verified
+    // against integer addition for every row (e.g. input_bits=0b1111 →
+    // a=3, b=3, sum=6 → s0=0, s1=1, cout=1).
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/two_bit_adder.circ",
+        "tests/fixtures/truth_table/two_bit_adder.truth.golden",
+    );
+}
+
+// Selector / wide-primitive coverage. mux and demux are the canonical
+// "control selects which signal flows where" primitives; the *_2bit
+// fixtures exercise the parallel-replication pattern that scales any
+// per-bit primitive to a wider operand.
+
+test "truth_table_mux_2to1" {
+    // 2-to-1 multiplexer: out = sel ? b : a. 8 rows.
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/mux_2to1.circ",
+        "tests/fixtures/truth_table/mux_2to1.truth.golden",
+    );
+}
+
+test "truth_table_demux_1to2" {
+    // 1-to-2 demultiplexer. When sel=0, out_a=in and out_b=0; when sel=1,
+    // out_a=0 and out_b=in. The unselected output is held at 0 so a
+    // downstream consumer can OR multiple demux outputs onto a shared bus
+    // without conflicts.
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/demux_1to2.circ",
+        "tests/fixtures/truth_table/demux_1to2.truth.golden",
+    );
+}
+
+test "truth_table_and_2bit" {
+    // 2-bit bitwise AND: out_i = a_i AND b_i for i in {0, 1}. 16 rows.
+    // Exercises N-parallel single-bit primitives — the standard scaling
+    // pattern for any per-bit operation.
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/and_2bit.circ",
+        "tests/fixtures/truth_table/and_2bit.truth.golden",
+    );
+}
+
+test "truth_table_not_2bit" {
+    // 2-bit bitwise NOT: out_i = !a_i. 4 rows.
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/not_2bit.circ",
+        "tests/fixtures/truth_table/not_2bit.truth.golden",
+    );
+}
+
+test "truth_table_mux_2bit_2to1" {
+    // 2-bit 2-to-1 multiplexer: selects between two 2-bit operands. One
+    // single-bit mux per output bit, sharing the inverted-select line.
+    // 32 rows. Combines the wide-primitive pattern (parallel per-bit
+    // logic) with the selector pattern (sel routes one input to output).
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/mux_2bit_2to1.circ",
+        "tests/fixtures/truth_table/mux_2bit_2to1.truth.golden",
+    );
+}
+
+// 3-bit and 4-bit replications of the same patterns. The fixtures are
+// parallel: each one is the 2-bit version with the per-bit slice
+// repeated. The goldens grow as 2^N where N is the input count, so
+// these scale tests verify both the row enumeration and the macro/
+// primitive-fanout pipeline at progressively wider sizes.
+
+test "truth_table_and_3bit" {
+    // 3-bit bitwise AND: 6 inputs, 3 outputs, 64 rows.
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/and_3bit.circ",
+        "tests/fixtures/truth_table/and_3bit.truth.golden",
+    );
+}
+
+test "truth_table_not_3bit" {
+    // 3-bit bitwise NOT: 3 inputs, 3 outputs, 8 rows.
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/not_3bit.circ",
+        "tests/fixtures/truth_table/not_3bit.truth.golden",
+    );
+}
+
+test "truth_table_mux_3bit_2to1" {
+    // 3-bit 2-to-1 multiplexer: 7 inputs (a0..a2, b0..b2, sel), 3 outputs,
+    // 128 rows. The shared inverted-select line now fans out to three
+    // pick_a* gates instead of two — exercises wider single-source fan-out.
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/mux_3bit_2to1.circ",
+        "tests/fixtures/truth_table/mux_3bit_2to1.truth.golden",
+    );
+}
+
+test "truth_table_and_4bit" {
+    // 4-bit bitwise AND: 8 inputs, 4 outputs, 256 rows.
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/and_4bit.circ",
+        "tests/fixtures/truth_table/and_4bit.truth.golden",
+    );
+}
+
+test "truth_table_not_4bit" {
+    // 4-bit bitwise NOT: 4 inputs, 4 outputs, 16 rows.
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/not_4bit.circ",
+        "tests/fixtures/truth_table/not_4bit.truth.golden",
+    );
+}
+
+test "truth_table_mux_4bit_2to1" {
+    // 4-bit 2-to-1 multiplexer: 9 inputs (a0..a3, b0..b3, sel), 4 outputs,
+    // 512 rows. Largest table in the suite; doubles as a stress test for
+    // the row-enumeration loop and topology fan-out.
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/mux_4bit_2to1.circ",
+        "tests/fixtures/truth_table/mux_4bit_2to1.truth.golden",
+    );
+}
+
+// Multi-bit macro coverage. Each macro (or, xor, nand, nor, xnor) is
+// expanded into primitives by the project pipeline; the parallel-bit
+// replication then exercises N copies of the macro's expansion within
+// the same flat topology. Locks both the macro expansion and the
+// origin-field filtering at width.
+
+test "truth_table_or_2bit" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/or_2bit.circ",
+        "tests/fixtures/truth_table/or_2bit.truth.golden",
+    );
+}
+
+test "truth_table_or_3bit" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/or_3bit.circ",
+        "tests/fixtures/truth_table/or_3bit.truth.golden",
+    );
+}
+
+test "truth_table_or_4bit" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/or_4bit.circ",
+        "tests/fixtures/truth_table/or_4bit.truth.golden",
+    );
+}
+
+test "truth_table_xor_2bit" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/xor_2bit.circ",
+        "tests/fixtures/truth_table/xor_2bit.truth.golden",
+    );
+}
+
+test "truth_table_xor_3bit" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/xor_3bit.circ",
+        "tests/fixtures/truth_table/xor_3bit.truth.golden",
+    );
+}
+
+test "truth_table_xor_4bit" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/xor_4bit.circ",
+        "tests/fixtures/truth_table/xor_4bit.truth.golden",
+    );
+}
+
+test "truth_table_nand_2bit" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/nand_2bit.circ",
+        "tests/fixtures/truth_table/nand_2bit.truth.golden",
+    );
+}
+
+test "truth_table_nand_3bit" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/nand_3bit.circ",
+        "tests/fixtures/truth_table/nand_3bit.truth.golden",
+    );
+}
+
+test "truth_table_nand_4bit" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/nand_4bit.circ",
+        "tests/fixtures/truth_table/nand_4bit.truth.golden",
+    );
+}
+
+test "truth_table_nor_2bit" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/nor_2bit.circ",
+        "tests/fixtures/truth_table/nor_2bit.truth.golden",
+    );
+}
+
+test "truth_table_nor_3bit" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/nor_3bit.circ",
+        "tests/fixtures/truth_table/nor_3bit.truth.golden",
+    );
+}
+
+test "truth_table_nor_4bit" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/nor_4bit.circ",
+        "tests/fixtures/truth_table/nor_4bit.truth.golden",
+    );
+}
+
+test "truth_table_xnor_2bit" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/xnor_2bit.circ",
+        "tests/fixtures/truth_table/xnor_2bit.truth.golden",
+    );
+}
+
+test "truth_table_xnor_3bit" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/xnor_3bit.circ",
+        "tests/fixtures/truth_table/xnor_3bit.truth.golden",
+    );
+}
+
+test "truth_table_xnor_4bit" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/xnor_4bit.circ",
+        "tests/fixtures/truth_table/xnor_4bit.truth.golden",
+    );
+}
+
+// Multi-bit demux coverage. Each fixture routes an N-bit data input to
+// one of two N-bit destinations via a single sel line. The unselected
+// destination's bits are all held at 0 — same wired-OR-friendly contract
+// as the single-bit demux_1to2.
+
+test "truth_table_demux_2bit_1to2" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/demux_2bit_1to2.circ",
+        "tests/fixtures/truth_table/demux_2bit_1to2.truth.golden",
+    );
+}
+
+test "truth_table_demux_3bit_1to2" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/demux_3bit_1to2.circ",
+        "tests/fixtures/truth_table/demux_3bit_1to2.truth.golden",
+    );
+}
+
+test "truth_table_demux_4bit_1to2" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/demux_4bit_1to2.circ",
+        "tests/fixtures/truth_table/demux_4bit_1to2.truth.golden",
+    );
+}
+
+// Wider arithmetic coverage. half_adder + full_adder + two_bit_adder
+// already cover 1-bit and 2-bit arithmetic; these extend the chain to
+// 3 and 4 bits. Each new bit slice is a full adder taking the previous
+// bit's carry-out as cin.
+
+test "truth_table_three_bit_adder" {
+    // 3-bit adder: 6 inputs, 4 outputs (s0, s1, s2, cout). 64 rows.
+    // Hand-verified: a=7 b=7 mask=63 → 14 = 0b1110 → s0=0 s1=1 s2=1 cout=1.
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/three_bit_adder.circ",
+        "tests/fixtures/truth_table/three_bit_adder.truth.golden",
+    );
+}
+
+test "truth_table_four_bit_adder" {
+    // 4-bit adder: 8 inputs, 5 outputs (s0..s3, cout). 256 rows.
+    // Hand-verified: a=8 b=8 mask=136 → 16 = 0b10000 → s0..s3 all 0, cout=1
+    // (largest single-bit overflow case in the table).
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/four_bit_adder.circ",
+        "tests/fixtures/truth_table/four_bit_adder.truth.golden",
+    );
+}
+
+// scanStrict is unit-tested directly because no parser-valid, validator-
+// accepting fixture currently produces .undef under the truth-table mode —
+// the validator rejects every shape that would reach an undefined output.
+// So we synthesise a Table by hand to exercise both branches.
+
+fn synthTableForStrict(
+    arena: *std.heap.ArenaAllocator,
+    output_states: []const truth_table_builder.State,
+) !truth_table_builder.Table {
+    const a = arena.allocator();
+    const inputs = try a.alloc(truth_table_builder.PinRef, 1);
+    inputs[0] = .{ .name = "a", .component_id = 0 };
+    const outputs = try a.alloc(truth_table_builder.PinRef, 1);
+    outputs[0] = .{ .name = "out", .component_id = 1 };
+
+    const rows = try a.alloc(truth_table_builder.Row, output_states.len);
+    for (output_states, 0..) |state, i| {
+        const cell = try a.alloc(truth_table_builder.State, 1);
+        cell[0] = state;
+        rows[i] = .{ .input_bits = i, .outputs = cell };
+    }
+    return .{
+        .arena = arena.*,
+        .header = .{ .inputs = inputs, .outputs = outputs },
+        .rows = rows,
+    };
+}
+
+test "scan_strict_reports_undef_rows" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    var table = try synthTableForStrict(&arena, &.{ .low, .undef, .high, .undef });
+    defer table.deinit();
+
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(std.testing.allocator);
+    const found = try scanStrict(table, stderr_buf.writer(std.testing.allocator));
+    try std.testing.expect(found);
+    // Both undef rows should produce diagnostics, neither defined row should.
+    const text = stderr_buf.items;
+    try std.testing.expect(std.mem.indexOf(u8, text, "row 1") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "row 3") != null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "row 0") == null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "row 2") == null);
+    try std.testing.expect(std.mem.indexOf(u8, text, "'out'") != null);
+}
+
+test "scan_strict_clean_table_returns_false" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    var table = try synthTableForStrict(&arena, &.{ .low, .high });
+    defer table.deinit();
+
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(std.testing.allocator);
+    const found = try scanStrict(table, stderr_buf.writer(std.testing.allocator));
+    try std.testing.expect(!found);
+    try std.testing.expectEqual(@as(usize, 0), stderr_buf.items.len);
+}
+
+test "truth_table_strict_passes_on_xor" {
+    // XOR's truth table is fully defined — strict mode should exit 0 and
+    // write nothing to stderr (no diagnostics, no extra noise).
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const argv = [_][]const u8{ "circ-compile", "tests/fixtures/circuits/builtin_xor.circ", "--truth-table", "--strict" };
+    const exit_code = try run(allocator, &argv, stdout_buf.writer(allocator), stderr_buf.writer(allocator));
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try std.testing.expect(stdout_buf.items.len > 0);
+    // Strict produces no stderr output when the table is fully defined.
+    for (stderr_buf.items) |b| {
+        if (b != ' ' and b != '\n' and b != '\t') {
+            // Allow no non-whitespace characters on stderr.
+            try std.testing.expect(false);
+        }
+    }
 }

@@ -1,0 +1,8 @@
+// 1-to-2 demultiplexer: routes `in` to `out_a` when sel=0, to `out_b` when sel=1.
+// The unselected output is held at 0.
+input in, sel
+not sel_inv(in=sel)
+and route_a(a=in, b=sel_inv.out)
+and route_b(a=in, b=sel)
+output out_a(in=route_a.out)
+output out_b(in=route_b.out)

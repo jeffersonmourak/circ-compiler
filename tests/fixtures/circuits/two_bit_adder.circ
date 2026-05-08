@@ -1,0 +1,19 @@
+// 2-bit ripple-carry adder: (a1 a0) + (b1 b0) → (cout s1 s0)
+// Lower bit is a half adder (no carry-in); upper bit is a full adder
+// taking the carry from the lower stage.
+input a0, a1, b0, b1
+
+// Lower bit (half adder)
+xor s0_xor(a=a0, b=b0)
+and s0_carry(a=a0, b=b0)
+
+// Upper bit (full adder, cin = s0_carry.out)
+xor s1_x1(a=a1, b=b1)
+xor s1_x2(a=s1_x1.out, b=s0_carry.out)
+and s1_a1(a=a1, b=b1)
+and s1_a2(a=s1_x1.out, b=s0_carry.out)
+or s1_or(a=s1_a1.out, b=s1_a2.out)
+
+output s0(in=s0_xor.out)
+output s1(in=s1_x2.out)
+output cout(in=s1_or.out)

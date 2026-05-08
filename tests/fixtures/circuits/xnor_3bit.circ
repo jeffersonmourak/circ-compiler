@@ -1,0 +1,8 @@
+// 3-bit bitwise XNOR.
+input a0, a1, a2, b0, b1, b2
+xnor bit0(a=a0, b=b0)
+xnor bit1(a=a1, b=b1)
+xnor bit2(a=a2, b=b2)
+output out0(in=bit0.out)
+output out1(in=bit1.out)
+output out2(in=bit2.out)

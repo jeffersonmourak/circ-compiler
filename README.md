@@ -55,7 +55,7 @@ zig build test
 
 ## Usage
 
-`circ-compile` has four mutually exclusive modes:
+`circ-compile` has five mutually exclusive modes:
 
 | Invocation                                       | Produces                                                                                       |
 |--------------------------------------------------|------------------------------------------------------------------------------------------------|
@@ -63,6 +63,7 @@ zig build test
 | `circ-compile input.circ --emit-zig -o out.zig`  | The generated standalone Zig source for the experimental emit pipeline.                        |
 | `circ-compile input.circ --inspect`              | Pretty-printed parse tree, resolved IR, and diagnostics on stdout.                             |
 | `circ-compile input.circ --preview`              | ASCII schematic of the resolved circuit on stdout (no artifact written).                       |
+| `circ-compile input.circ --truth-table`          | Markdown truth table enumerating every input vector against the simulated circuit, on stdout.  |
 
 In default compile mode, `circ-compile` runs the parser, resolver, validator, and topology serializers in-process and splices the resulting `circ.topology.v0.min` and `circ.topology.v0.full` blobs into a vendored prebuilt runtime `.wasm` (embedded in the CLI via `@embedFile`). No `zig` toolchain or subprocess is required at user runtime.
 
@@ -71,6 +72,8 @@ Additional flags:
 - `--warnings-as-errors` (alias `-Werror`) — promote warnings to hard errors (suppresses emission).
 - `--expand-macros` — only valid with `--preview`; renders builtin macros (`xor`, `nand`, …) as their expanded primitive sub-circuits.
 - `--color=auto|always|never` — only valid with `--preview`; controls ANSI styling of the schematic. Default is `auto` (on when stdout is a TTY; the `NO_COLOR` env var also disables colour).
+- `--format=markdown|csv|json` — only valid with `--truth-table`; selects the output format. Default is `markdown`. CSV uses `0`/`1`/`?` cells; JSON encodes undefined cells as `null` so consumers can branch on type.
+- `--strict` — only valid with `--truth-table`; promotes any `?` (undefined) output cell into a hard exit-1 with one diagnostic line per offending row on stderr. The table itself still renders. Useful as a CI gate — a regression that introduces a dangling output now fails the build instead of silently producing `?` rows.
 
 Hard errors block emission — partial or "best-effort" artifacts are never produced. Diagnostics use stable codes (`E001`–`E013`, `W001`–`W003`) so downstream tooling can match on them.
 

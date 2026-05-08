@@ -74,6 +74,21 @@ a─────╮        ╭──────out
 
 See [`preview.md`](preview.md) for `--expand-macros`, `--color`, and the rendering conventions.
 
+Or enumerate the circuit's behaviour against every input combination as a Markdown truth table:
+
+```sh
+zig-out/bin/circ-compile examples/inverter.circ --truth-table
+```
+
+```
+| a | out |
+|---|-----|
+| 0 | 1   |
+| 1 | 0   |
+```
+
+`--truth-table` runs the resolver and validator first; circuits with combinational loops (E008) are rejected before any simulation. The mode caps at 16 inputs (2^16 = 65,536 rows) to avoid accidental blow-up — wider circuits should be exercised through the `.wasm` runtime instead.
+
 The relevant block tells you which component IDs to drive from JavaScript:
 
 ```

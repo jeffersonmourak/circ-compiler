@@ -1,0 +1,8 @@
+// 2-to-1 multiplexer: out = sel ? b : a
+// When sel=0 the gate routes `a` through; when sel=1 it routes `b`.
+input a, b, sel
+not sel_inv(in=sel)
+and pick_a(a=sel_inv.out, b=a)
+and pick_b(a=sel, b=b)
+or out_or(a=pick_a.out, b=pick_b.out)
+output out(in=out_or.out)

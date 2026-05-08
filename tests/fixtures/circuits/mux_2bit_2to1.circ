@@ -1,0 +1,18 @@
+// 2-bit 2-to-1 multiplexer: selects between two 2-bit operands.
+// When sel=0 the output is (a1 a0); when sel=1 it's (b1 b0).
+// One single-bit mux per output bit, sharing the inverted-select line.
+input a0, a1, b0, b1, sel
+not sel_inv(in=sel)
+
+// Bit 0
+and pick_a0(a=sel_inv.out, b=a0)
+and pick_b0(a=sel, b=b0)
+or merge0(a=pick_a0.out, b=pick_b0.out)
+
+// Bit 1
+and pick_a1(a=sel_inv.out, b=a1)
+and pick_b1(a=sel, b=b1)
+or merge1(a=pick_a1.out, b=pick_b1.out)
+
+output out0(in=merge0.out)
+output out1(in=merge1.out)

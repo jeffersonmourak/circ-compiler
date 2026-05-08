@@ -1,0 +1,3 @@
+input a
+wire w(in=a)
+output out(in=w.out)
