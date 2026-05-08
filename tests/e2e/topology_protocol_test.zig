@@ -78,45 +78,43 @@ test "topology host protocol: inverter round-trip via Node" {
     const wasm_path = try tmp_dir.dir.realpathAlloc(allocator, "combined.wasm");
     defer allocator.free(wasm_path);
 
-    const script = 
-        \\const fs = require('fs');
-        \\const wasmBytes = fs.readFileSync(process.argv[2]);
-        \\
-        \\(async () => {
-        \\    const mod = await WebAssembly.compile(wasmBytes);
-        \\    const instance = await WebAssembly.instantiate(mod, { env: {
-        \\        print: () => {}, printFmt: () => {}, flushBuffer: () => {},
-        \\        _log: () => {}, _log_flush: () => {}, _log_set_name: () => {},
-        \\        debugEnabled: () => 0,
-        \\        onDebugLog: () => {}
-        \\    } });
-        \\    
-        \\    const topoSections = WebAssembly.Module.customSections(mod, 'circ.topology.v0.min');
-        \\    if (topoSections.length === 0) throw new Error("No circ.topology.v0.min section found");
-        \\    
-        \\    const topoBytes = new Uint8Array(topoSections[0]);
-        \\    const ptr = instance.exports.topology_alloc(topoBytes.length);
-        \\    new Uint8Array(instance.exports.memory.buffer).set(topoBytes, ptr);
-        \\    
-        \\    instance.exports.init();
-        \\    
-        \\    // Test 0 -> 1
-        \\    instance.exports.setPin(0, 0);
-        \\    instance.exports.run();
-        \\    const out0 = instance.exports.getOutputState(1);
-        \\    if (out0 !== 1) throw new Error("Expected 1, got " + out0);
-        \\    
-        \\    // Test 1 -> 0
-        \\    instance.exports.setPin(0, 1);
-        \\    instance.exports.run();
-        \\    const out1 = instance.exports.getOutputState(1);
-        \\    if (out1 !== 0) throw new Error("Expected 0, got " + out1);
-        \\    
-        \\    console.log("PASS");
-        \\})().catch(e => {
-        \\    console.error(e);
-        \\    process.exit(1);
-        \\});
+    // Top-level try wraps the sync requires + readFileSync so any error
+    // there surfaces on stderr instead of getting swallowed. The async IIFE
+    // handles its own rejections via .catch.
+    const script =
+        \\process.on('uncaughtException', e => { console.error('UNCAUGHT:', e && e.stack || e); process.exit(2); });
+        \\process.on('unhandledRejection', e => { console.error('UNHANDLED:', e && e.stack || e); process.exit(3); });
+        \\try {
+        \\    const fs = require('fs');
+        \\    const wasmBytes = fs.readFileSync(process.argv[2]);
+        \\    (async () => {
+        \\        const mod = await WebAssembly.compile(wasmBytes);
+        \\        const instance = await WebAssembly.instantiate(mod, { env: {
+        \\            print: () => {}, printFmt: () => {}, flushBuffer: () => {},
+        \\            _log: () => {}, _log_flush: () => {}, _log_set_name: () => {},
+        \\            debugEnabled: () => 0,
+        \\            onDebugLog: () => {}
+        \\        } });
+        \\        const topoSections = WebAssembly.Module.customSections(mod, 'circ.topology.v0.min');
+        \\        if (topoSections.length === 0) throw new Error("No circ.topology.v0.min section found");
+        \\        const topoBytes = new Uint8Array(topoSections[0]);
+        \\        const ptr = instance.exports.topology_alloc(topoBytes.length);
+        \\        new Uint8Array(instance.exports.memory.buffer).set(topoBytes, ptr);
+        \\        instance.exports.init();
+        \\        instance.exports.setPin(0, 0);
+        \\        instance.exports.run();
+        \\        const out0 = instance.exports.getOutputState(1);
+        \\        if (out0 !== 1) throw new Error("Expected 1, got " + out0);
+        \\        instance.exports.setPin(0, 1);
+        \\        instance.exports.run();
+        \\        const out1 = instance.exports.getOutputState(1);
+        \\        if (out1 !== 0) throw new Error("Expected 0, got " + out1);
+        \\        console.log("PASS");
+        \\    })().catch(e => { console.error('REJECTED:', e && e.stack || e); process.exit(1); });
+        \\} catch (e) {
+        \\    console.error('SYNC:', e && e.stack || e);
+        \\    process.exit(4);
+        \\}
     ;
 
     try tmp_dir.dir.writeFile(.{ .sub_path = "runner.js", .data = script });

@@ -30,5 +30,12 @@ jobs:
         with:
           version: ${{ env.ZIG_VERSION }}
 
+      # Pinned so the topology_protocol_test (which spawns Node to load the
+      # compiled WASM end-to-end) runs against a known runtime instead of
+      # whatever the runner image happens to ship with.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
       - name: Run all tests (includes every golden)
         run: zig build test --summary all
