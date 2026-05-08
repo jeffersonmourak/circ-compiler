@@ -53,6 +53,18 @@ const SuperTrunk = struct {
     y_max: u32,
 };
 
+/// One horizontal segment already laid by a previously-routed wire, indexed by
+/// its row in `HUsage`. The detour search consults this to keep the middle H
+/// leg of a 5-leg detour from running visually adjacent to (or on top of) an
+/// unrelated wire's H leg in the same channel.
+const HSeg = struct {
+    src_id: u32,
+    x_min: u32,
+    x_max: u32,
+};
+
+const HUsage = std.AutoHashMap(u32, std.ArrayList(HSeg));
+
 fn isSuperTrunkBilateral(st: SuperTrunk, trunks: []const Trunk) bool {
     var min_sy: u32 = std.math.maxInt(u32);
     var max_sy: u32 = 0;
@@ -255,6 +267,13 @@ pub fn route(arena: std.mem.Allocator, graph: VirtualGraph, placed: []const Plac
         if (p.y + p.height > placement_max_y) placement_max_y = p.y + p.height;
     }
 
+    // Tracks every H leg already emitted by an earlier wire. The detour
+    // search reads this so a second wire's middle H leg won't land in the
+    // same channel one row away from a first wire's leg (different signals,
+    // visually merged). Same-source rails are exempt (fan-out trunks are
+    // *meant* to share rails).
+    var h_usage = HUsage.init(arena);
+
     for (pending.items) |*w| {
         const tx = w.track_x;
         var segs: std.ArrayList(Segment) = .{};
@@ -338,7 +357,7 @@ pub fn route(arena: std.mem.Allocator, graph: VirtualGraph, placed: []const Plac
             const x_hi = @max(tx, tx_dst);
 
             const free_y_opt = if (have_room)
-                findFreeY(placed, x_lo, x_hi, tx, tx_dst, w.sy, w.dy, placement_max_y)
+                findFreeY(placed, &h_usage, w.src_id, x_lo, x_hi, tx, tx_dst, w.sy, w.dy, placement_max_y)
             else
                 null;
 
@@ -395,6 +414,23 @@ pub fn route(arena: std.mem.Allocator, graph: VirtualGraph, placed: []const Plac
             }
         }
         w.segments = try segs.toOwnedSlice(arena);
+
+        // Record this wire's H legs for the next wire's detour search. We
+        // record on every wire (not just the detour case) so a later detour
+        // can see the natural-L rails it should also avoid running adjacent
+        // to.
+        for (w.segments) |seg| {
+            if (seg.from.y != seg.to.y) continue;
+            const x_min = @min(seg.from.x, seg.to.x);
+            const x_max = @max(seg.from.x, seg.to.x);
+            const entry = try h_usage.getOrPut(seg.from.y);
+            if (!entry.found_existing) entry.value_ptr.* = .{};
+            try entry.value_ptr.append(arena, .{
+                .src_id = w.src_id,
+                .x_min = x_min,
+                .x_max = x_max,
+            });
+        }
     }
 
     // ---------- 5. Detect crossings pairwise ----------
@@ -540,17 +576,31 @@ fn isVSegBlocked(
     return false;
 }
 
-/// Walk outward from `prefer_y` to find a row where the entire 5-leg detour
-/// stays clear of every non-endpoint component. We need three legs to pass:
-/// the cross-channel horizontal at the candidate row, and the two vertical
-/// risers anchoring tx and tx_dst from sy/dy down or up to the candidate.
-/// The search prefers rows close to sy so the detour doesn't dive
-/// unnecessarily far across the canvas. `bound` is the placement extent —
-/// rows beyond it are still allowed (the canvas grows to accommodate the
-/// wire), but the search scope is capped at `bound + 16` so we don't loop
-/// forever on truly stuck circuits.
+/// Walk outward from `sy` to find a row where the entire 5-leg detour stays
+/// clear of every non-endpoint component AND, when possible, avoids running
+/// visually adjacent to a previously-routed wire's H leg. Three
+/// component-collision legs check here: the cross-channel horizontal at the
+/// candidate row, and the two vertical risers anchoring tx and tx_dst.
+///
+/// Three-pass cascade with progressively relaxed H-usage constraints:
+///   - Pass 0 (preferred): one-row gutter on each side. Any of `row-1`,
+///     `row`, `row+1` carrying a different-source H leg overlapping
+///     `[x_lo, x_hi]` disqualifies the candidate. Different-color wires
+///     running one row apart visually merge into a single thick wire on
+///     canvas, which is why the gutter is the preferred constraint.
+///   - Pass 1 (fallback): exact-row only. Reject if the candidate row itself
+///     has a different-source H overlap. Wires can sit one row apart.
+///   - Pass 2 (last resort): no H-usage check at all. Different signals may
+///     share the candidate row. The renderer handles this via `┴`/`┼`
+///     junction glyphs — visually a shared rail rather than a parallel
+///     bus, which is acceptable when no separated row exists.
+///
+/// Same-source overlaps are always allowed: fan-out wires deliberately share
+/// rails, so `hUsageRowOverlap` skips any segment matching `self_src_id`.
 fn findFreeY(
     placed: []const PlacedComponent,
+    h_usage: *const HUsage,
+    self_src_id: u32,
     x_lo: u32,
     x_hi: u32,
     tx: u32,
@@ -560,18 +610,23 @@ fn findFreeY(
     bound: u32,
 ) ?u32 {
     const search_limit = bound + 16;
-    var radius: u32 = 0;
-    while (radius <= search_limit) : (radius += 1) {
-        if (radius > 0) {
-            const below = sy + radius;
-            if (below <= search_limit and detourYIsClear(placed, x_lo, x_hi, tx, tx_dst, sy, dy, below)) {
-                return below;
+    var pass: u32 = 0;
+    while (pass < 3) : (pass += 1) {
+        var radius: u32 = 0;
+        while (radius <= search_limit) : (radius += 1) {
+            if (radius > 0) {
+                const below = sy + radius;
+                if (below <= search_limit and
+                    detourYIsClear(placed, h_usage, self_src_id, x_lo, x_hi, tx, tx_dst, sy, dy, below, pass))
+                {
+                    return below;
+                }
             }
-        }
-        if (sy >= radius) {
-            const above = sy - radius;
-            if (detourYIsClear(placed, x_lo, x_hi, tx, tx_dst, sy, dy, above)) {
-                return above;
+            if (sy >= radius) {
+                const above = sy - radius;
+                if (detourYIsClear(placed, h_usage, self_src_id, x_lo, x_hi, tx, tx_dst, sy, dy, above, pass)) {
+                    return above;
+                }
             }
         }
     }
@@ -580,6 +635,8 @@ fn findFreeY(
 
 fn detourYIsClear(
     placed: []const PlacedComponent,
+    h_usage: *const HUsage,
+    self_src_id: u32,
     x_lo: u32,
     x_hi: u32,
     tx: u32,
@@ -587,11 +644,44 @@ fn detourYIsClear(
     sy: u32,
     dy: u32,
     candidate: u32,
+    pass: u32,
 ) bool {
     if (isHSegBlocked(placed, x_lo, x_hi, candidate)) return false;
     if (isVSegBlocked(placed, tx, sy, candidate)) return false;
     if (isVSegBlocked(placed, tx_dst, candidate, dy)) return false;
+
+    switch (pass) {
+        0 => {
+            if (candidate > 0 and hUsageRowOverlap(h_usage, self_src_id, candidate - 1, x_lo, x_hi)) return false;
+            if (hUsageRowOverlap(h_usage, self_src_id, candidate, x_lo, x_hi)) return false;
+            if (hUsageRowOverlap(h_usage, self_src_id, candidate + 1, x_lo, x_hi)) return false;
+        },
+        1 => {
+            if (hUsageRowOverlap(h_usage, self_src_id, candidate, x_lo, x_hi)) return false;
+        },
+        else => {},
+    }
     return true;
+}
+
+/// True when `row` already carries an H leg from a *different* source whose
+/// x-range overlaps `[x_lo, x_hi]`. Same-source siblings are skipped: a
+/// fan-out family deliberately shares rails, and rejecting them would block
+/// the trunk's own branches.
+fn hUsageRowOverlap(
+    h_usage: *const HUsage,
+    self_src_id: u32,
+    row: u32,
+    x_lo: u32,
+    x_hi: u32,
+) bool {
+    const list = h_usage.get(row) orelse return false;
+    for (list.items) |seg| {
+        if (seg.src_id == self_src_id) continue;
+        if (seg.x_max < x_lo or seg.x_min > x_hi) continue;
+        return true;
+    }
+    return false;
 }
 
 fn segmentCross(a: Segment, b: Segment) ?PortCoord {

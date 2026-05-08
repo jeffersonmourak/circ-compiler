@@ -608,6 +608,25 @@ test "phase3_render_clean_gated_feedback_leftward" {
     try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/clean_gated_feedback.render.golden");
 }
 
+test "phase3_render_parallel_leftward_detours" {
+    // Two stacked feedback loops, each producing one leftward wire that
+    // needs a 5-leg detour. Without the H-usage gutter pass in findFreeY,
+    // the second loop's detour row would land one row above or below the
+    // first loop's detour, producing a paired-bus visual where two
+    // unrelated signals merge into a single thick wire on canvas. Locks in
+    // the gutter pass keeping those rows visibly separated.
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+    const exit_code = try runPreview(allocator, "tests/fixtures/circuits/parallel_leftward_detours.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/parallel_leftward_detours.render.golden");
+}
+
 test "phase3_render_regression_led_out_drives_gate" {
     // LED's spurious out-port drives an AND gate further right; the
     // resulting routing must stay clear of every component body cell.
