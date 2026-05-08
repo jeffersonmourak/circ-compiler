@@ -296,6 +296,10 @@ const EventQueue = struct {
     pub fn pop(self: *EventQueue) ?Event {
         return self.heap.removeOrNull();
     }
+
+    pub fn peek(self: *EventQueue) ?Event {
+        return self.heap.peek();
+    }
 };
 
 pub fn assertValidInputPin(component: *Component, pin: u32) !void {
@@ -412,24 +416,54 @@ pub const Circuit = struct {
     }
 
     pub fn propagate(self: *Circuit) !void {
-        while (self.event_queue.pop()) |event| {
-            self.current_time = event.timestamp;
-            const component = event.component;
+        // Two-phase processing per timestamp: first commit ALL state changes
+        // at time T, then walk every changed component's outputs to schedule
+        // downstream events. Without this batching, a downstream gate's
+        // recalculateAndReschedule could read partially-updated upstream
+        // state when multiple upstream events fire at the same timestamp,
+        // computing an intermediate value that then gets dedup'd by the
+        // "if state == new_state, continue" check, leaving the gate stuck
+        // at the wrong final value. Manifests in deep-fanout circuits where
+        // a single control bit drives many parallel gates whose outputs
+        // converge into a serial carry chain (e.g. 4-bit ALU with shared
+        // nx/ny normalization).
+        var changed_at_step: std.ArrayList(*Component) = .{};
+        defer changed_at_step.deinit(memory.allocator);
 
-            if (component.output_state == event.new_state) continue;
+        while (self.event_queue.peek()) |first| {
+            const step_time = first.timestamp;
+            self.current_time = step_time;
 
-            log.info("[Time: {d}] Updating component id={d} to {s}", .{ self.current_time, component.id, @tagName(event.new_state) });
-            component.output_state = event.new_state;
+            // Phase 1: drain all events at this timestamp, applying state
+            // changes immediately. Components whose state actually flipped
+            // get queued for downstream notification.
+            while (self.event_queue.peek()) |next_event| {
+                if (next_event.timestamp != step_time) break;
+                const event = self.event_queue.pop().?;
+                const component = event.component;
 
-            var outputsIterator = component.outputs.valueIterator();
-            while (outputsIterator.next()) |output_list| {
-                for (output_list.items) |output| {
-                    log.info("  -> Notifying downstream component id={d}", .{output.id});
-                    try recalculateAndReschedule(output, &self.event_queue, self.current_time);
+                if (component.output_state == event.new_state) continue;
 
-                    self.notifyStateChange(output, output.output_state);
+                log.info("[Time: {d}] Updating component id={d} to {s}", .{ self.current_time, component.id, @tagName(event.new_state) });
+                component.output_state = event.new_state;
+                try changed_at_step.append(memory.allocator, component);
+            }
+
+            // Phase 2: with all state at this timestamp committed, walk
+            // outputs of every changed component. Now downstream recalcs
+            // see consistent upstream state.
+            for (changed_at_step.items) |component| {
+                var outputsIterator = component.outputs.valueIterator();
+                while (outputsIterator.next()) |output_list| {
+                    for (output_list.items) |output| {
+                        log.info("  -> Notifying downstream component id={d}", .{output.id});
+                        try recalculateAndReschedule(output, &self.event_queue, self.current_time);
+
+                        self.notifyStateChange(output, output.output_state);
+                    }
                 }
             }
+            changed_at_step.clearRetainingCapacity();
         }
     }
 
