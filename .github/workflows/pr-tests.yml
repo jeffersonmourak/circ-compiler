@@ -1,0 +1,34 @@
+# Runs the full Zig test suite — including every golden test under
+# tests/fixtures/truth_table/ and tests/fixtures/preview/renders/ — on any
+# pull request targeting main. PRs cannot merge until this gate is green.
+#
+# Goldens are byte-equal frozen expected outputs; the helper at
+# tests/helpers/golden.zig only regenerates when UPDATE_GOLDENS=1 is set in
+# the environment, which CI never does. So any divergence between source
+# behavior and committed golden surfaces as a failed test here.
+name: PR tests
+
+on:
+  pull_request:
+    branches: [main]
+
+env:
+  ZIG_VERSION: "0.15.1"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: zig build test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+
+      - name: Run all tests (includes every golden)
+        run: zig build test --summary all
