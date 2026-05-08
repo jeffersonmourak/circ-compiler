@@ -1017,6 +1017,64 @@ test "truth_table_mux_2bit_2to1" {
     );
 }
 
+// 3-bit and 4-bit replications of the same patterns. The fixtures are
+// parallel: each one is the 2-bit version with the per-bit slice
+// repeated. The goldens grow as 2^N where N is the input count, so
+// these scale tests verify both the row enumeration and the macro/
+// primitive-fanout pipeline at progressively wider sizes.
+
+test "truth_table_and_3bit" {
+    // 3-bit bitwise AND: 6 inputs, 3 outputs, 64 rows.
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/and_3bit.circ",
+        "tests/fixtures/truth_table/and_3bit.truth.golden",
+    );
+}
+
+test "truth_table_not_3bit" {
+    // 3-bit bitwise NOT: 3 inputs, 3 outputs, 8 rows.
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/not_3bit.circ",
+        "tests/fixtures/truth_table/not_3bit.truth.golden",
+    );
+}
+
+test "truth_table_mux_3bit_2to1" {
+    // 3-bit 2-to-1 multiplexer: 7 inputs (a0..a2, b0..b2, sel), 3 outputs,
+    // 128 rows. The shared inverted-select line now fans out to three
+    // pick_a* gates instead of two — exercises wider single-source fan-out.
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/mux_3bit_2to1.circ",
+        "tests/fixtures/truth_table/mux_3bit_2to1.truth.golden",
+    );
+}
+
+test "truth_table_and_4bit" {
+    // 4-bit bitwise AND: 8 inputs, 4 outputs, 256 rows.
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/and_4bit.circ",
+        "tests/fixtures/truth_table/and_4bit.truth.golden",
+    );
+}
+
+test "truth_table_not_4bit" {
+    // 4-bit bitwise NOT: 4 inputs, 4 outputs, 16 rows.
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/not_4bit.circ",
+        "tests/fixtures/truth_table/not_4bit.truth.golden",
+    );
+}
+
+test "truth_table_mux_4bit_2to1" {
+    // 4-bit 2-to-1 multiplexer: 9 inputs (a0..a3, b0..b3, sel), 4 outputs,
+    // 512 rows. Largest table in the suite; doubles as a stress test for
+    // the row-enumeration loop and topology fan-out.
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/mux_4bit_2to1.circ",
+        "tests/fixtures/truth_table/mux_4bit_2to1.truth.golden",
+    );
+}
+
 // scanStrict is unit-tested directly because no parser-valid, validator-
 // accepting fixture currently produces .undef under the truth-table mode —
 // the validator rejects every shape that would reach an undefined output.

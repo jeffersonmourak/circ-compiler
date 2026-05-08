@@ -1,0 +1,10 @@
+// 4-bit bitwise NOT: (a3 a2 a1 a0) → (out3 out2 out1 out0) where out_i = !a_i.
+input a0, a1, a2, a3
+not bit0(in=a0)
+not bit1(in=a1)
+not bit2(in=a2)
+not bit3(in=a3)
+output out0(in=bit0.out)
+output out1(in=bit1.out)
+output out2(in=bit2.out)
+output out3(in=bit3.out)
