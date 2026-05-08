@@ -796,13 +796,9 @@ test "truth_table_primitive_wire" {
 }
 
 test "truth_table_primitive_led" {
-    // LED is a leaf in the simulation engine: lib/circuit.zig sets the LED's
-    // output_state directly and returns without enqueueing a downstream event.
-    // Per DOCS/simulation-engine.md "led → mirrors dominant('in'); does not
-    // enqueue further events". So in input → led → output_pin the output_pin
-    // never receives a propagation event and stays .undefined ('?'). This
-    // golden locks that semantic — if the LED is later promoted to a
-    // signal-passing primitive, this fixture will flag the change.
+    // LED mirrors its input on its `out` port and propagates downstream with
+    // the wire delay (per DOCS/simulation-engine.md). The fixture wires
+    // input → led → output, so the table is the identity function.
     try expectTruthTableGolden(
         "tests/fixtures/circuits/edge_single_component.circ",
         "tests/fixtures/truth_table/primitive_led.truth.golden",
