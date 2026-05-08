@@ -35,7 +35,7 @@ jobs:
       # whatever the runner image happens to ship with.
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "24"
 
       - name: Run all tests (includes every golden)
         run: zig build test --summary all
