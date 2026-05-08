@@ -96,9 +96,8 @@ const bytes = fs.readFileSync(process.argv[2]);
 const mod = await WebAssembly.compile(bytes);
 const { exports: w } = await WebAssembly.instantiate(mod, {
   env: {
-    print: () => {}, printFmt: () => {}, flushBuffer: () => {},
-    _log: () => {}, _log_flush: () => {}, _log_set_name: () => {},
-    debugEnabled: () => 0, onDebugLog: () => {},
+    debugEnabled: () => 0,
+    onDebugLog: () => {},
   },
 });
 
@@ -126,7 +125,7 @@ a=0 -> NOT a = 1
 a=1 -> NOT a = 0
 ```
 
-`0` means low, `1` means high, `2` means undefined. The full export list (`init`, `deinit`, `reset`, `run`, `stop`, `setPin`, `getOutputState`, `getStateSnapshot`, `getTopology`, `getPendingEvents`, `getFileInfo`, `freeBuffer`) is documented in `DOCS/wasm-api.md`. The two `env` callbacks (`debugEnabled` and `onDebugLog`) are required imports — supply the no-op stubs above unless you want debug logging.
+`0` means low, `1` means high, `2` means undefined. The full export list emitted by `circ-compile … -o out.wasm` today is exactly `topology_alloc`, `init`, `run`, `setPin`, `getOutputState` (plus `memory`); see [`DOCS/wasm-api.md`](wasm-api.md) for the full contract. The two `env` callbacks (`debugEnabled` and `onDebugLog`) are required imports — supply the no-op stubs above unless you want debug logging.
 
 ## 5. Use a built-in macro (`xor`)
 
@@ -158,7 +157,7 @@ for (let i = 0; i < 64; i++) {
 }
 ```
 
-For a structured map use `getFileInfo()` (returns a binary blob in linear memory; layout in `DOCS/wasm-api.md`).
+For a structured map, parse the `circ.topology.v0.full` custom section in JS — it carries per-file IDs, component aliases, and macro provenance. (A future runtime release may surface this through a `getFileInfo()` export, but it is not present in today's compiled artifacts.)
 
 ## 6. Compose with a sub-circuit import
 
@@ -188,13 +187,13 @@ Compile from the root:
 zig-out/bin/circ-compile examples/half_adder/root.circ -o examples/half_adder.wasm
 ```
 
-Sub-circuits are fully flattened by the serializer into a single ordered sequence of primitive components — no function calls, no hierarchy in the runtime. Loading from JS uses the same `topology_alloc` + `init()` pattern as step 4; discovering global IDs in deeper hierarchies is best done through `getFileInfo()`.
+Sub-circuits are fully flattened by the serializer into a single ordered sequence of primitive components — no function calls, no hierarchy in the runtime. Loading from JS uses the same `topology_alloc` + `init()` pattern as step 4; discovering global IDs in deeper hierarchies is currently easiest via `circ-compile --inspect`, which prints the resolved IR with each `Inputs (...)` / `Outputs (...)` block annotated with component IDs. (The `circ.topology.v0.full` custom section carries the same information for programmatic readers.)
 
 More worked project fixtures, including a full-adder built from two half-adders and a 4-bit AND/OR network, live under `tests/fixtures/projects/` and double as integration tests.
 
 ## Where to go next
 
 - `DOCS/circuit-format.md` — the complete `.circ` language reference (declarations, ports, anonymous components, built-ins).
-- `DOCS/wasm-api.md` — every export and import on the compiled artifact, including the `getFileInfo()` introspection blob layout.
+- `DOCS/wasm-api.md` — every export and import on the compiled artifact, plus the topology custom-section layout.
 - `DOCS/architecture.md` and `DOCS/decisions/` — design rationale, useful when contributing.
 - `tests/fixtures/circuits/` and `tests/fixtures/projects/` — copy-and-modify templates for common circuit patterns.

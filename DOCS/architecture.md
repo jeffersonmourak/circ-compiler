@@ -1,150 +1,133 @@
 # Architecture
 
-`circ-compiler` is a digital logic circuit simulator compiled to WebAssembly. The project is structured as three distinct layers that communicate across the Zig/JavaScript boundary.
+`circ-compiler` is a one-shot compiler: it takes a `.circ` source (plus any sibling files it imports) and emits a self-contained `.wasm` artifact. The shipping pipeline is pure Zig from front to back; there is no runtime SDK in this repo, no rendering layer, and no JavaScript code in the build.
 
-## Layer Overview
-
-```
-┌─────────────────────────────────────────────────────┐
-│                  Browser / Host                     │
-│  ┌──────────────┐    ┌───────────────────────────┐  │
-│  │  TypeScript  │    │   Rendering Engine        │  │
-│  │  SDK         │◄──►│   (Canvas 2D + Themes)    │  │
-│  │  src/index   │    │   example/theme.ts        │  │
-│  └──────┬───────┘    └───────────────────────────┘  │
-│         │ WASM boundary (imports / exports)         │
-│  ┌──────▼────────────────────────────────────────┐  │
-│  │              lib/wasm.zig                     │  │
-│  │         (WASM FFI / glue layer)               │  │
-│  └──────────────────┬────────────────────────────┘  │
-│                     │                               │
-│  ┌──────────────────▼────────────────────────────┐  │
-│  │           lib/circuit.zig                     │  │
-│  │      (simulation engine, pure Zig)            │  │
-│  └───────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────┘
-```
-
-## Layer 1 — Simulation Engine (`lib/circuit.zig`)
-
-The simulation engine has no knowledge of WASM, JavaScript, or rendering. It models a digital circuit as a directed graph of components and advances time using an event priority queue.
-
-### Component Model
-
-All gate types share a common `Component` wrapper that holds:
-
-- A unique integer ID
-- The gate kind (a tagged union of `input_pin_gate`, `not_gate`, `and_gate`, `led`, `wire`)
-- The current output state (`undefined | low | high`)
-- An output adjacency map — maps port names to lists of downstream components
-- An inputs map per gate — maps named ports to upstream components (stored inside the gate kind struct)
-
-### Event-Driven Propagation
-
-Simulation advances through discrete events rather than by re-evaluating the whole graph each tick.
+## End-to-end pipeline
 
 ```
+   .circ source(s)
+        │
+        ▼
+   ┌───────────────────────────────────────────────────────────┐
+   │  Front-end (lib/syntax/, lib/parser.{c,h}, lib/grammar/)  │
+   │  PEG parser (vendored C, generated from proto-circ.peg)   │
+   │  → Zig AST (lib/syntax/ast.zig, translate.zig)            │
+   └───────────────────────────────────────────────────────────┘
+        │
+        ▼
+   ┌───────────────────────────────────────────────────────────┐
+   │  Resolver (lib/resolver/)                                 │
+   │  scan_imports → import_cycle → resolve_bodies             │
+   │  Auto-imports virtual <builtin>/ macros for projects      │
+   │  → IR (lib/ir/types.zig)                                  │
+   └───────────────────────────────────────────────────────────┘
+        │
+        ▼
+   ┌───────────────────────────────────────────────────────────┐
+   │  Validator (lib/validator/)                               │
+   │  Stable diagnostic codes E001–E013, W001–W003             │
+   │  Hard errors block emission; --warnings-as-errors promotes│
+   └───────────────────────────────────────────────────────────┘
+        │
+        ▼
+   ┌───────────────────────────────────────────────────────────┐
+   │  Topology (lib/topology/)                                 │
+   │  serializer.zig       → circ.topology.v0.min (runtime)    │
+   │  full_serializer.zig  → circ.topology.v0.full (tooling)   │
+   └───────────────────────────────────────────────────────────┘
+        │
+        ▼
+   ┌───────────────────────────────────────────────────────────┐
+   │  Section writer (lib/topology/section_writer.zig)         │
+   │  Splices both topology sections into a vendored prebuilt  │
+   │  runtime WASM (zig-out/lib/circ-runtime.wasm at build     │
+   │  time, embedded into the CLI as runtime_embed).           │
+   └───────────────────────────────────────────────────────────┘
+        │
+        ▼
+   final .wasm  ← hands to host (Node, browser, etc.)
+```
+
+The CLI driver is `cmd/circ-compile/main.zig`. The compiler runs four mutually exclusive modes (`--inspect`, `--preview`, `--emit-zig`, default compile) — only the default mode produces a `.wasm`; see `cmd/circ-compile/main.zig`'s `run()` for the dispatch.
+
+## Layer 1 — Simulation engine (`lib/circuit.zig`)
+
+The engine is pure Zig and oblivious to WebAssembly, JSON, or topology. It models a circuit as a directed graph of `Component`s and advances time with a min-heap event queue.
+
+### Component kinds
+
+There are six kinds (`ComponentType` in `lib/circuit.zig`):
+
+| Kind             | Inputs                  | Output port | Notes                                                              |
+|------------------|-------------------------|-------------|---------------------------------------------------------------------|
+| `input_pin_gate` | `"in"` (sub-circuit only) | `"out"`     | Top-level input pins are driven by the host via `setPin`.          |
+| `not_gate`       | `"in"`                  | `"out"`     | Output is `flip(dominant("in"))`.                                  |
+| `and_gate`       | `"a"`, `"b"`            | `"out"`     | `low` if either input is `low`; `undefined` if either is undefined.|
+| `wire`           | `"in"`                  | `"out"`     | Relays the dominant defined input.                                 |
+| `output_pin`     | `"in"`                  | `"out"`     | Sub-circuit output: passes input through, exposed to the parent.   |
+| `led`            | `"in"`                  | `"out"`     | Visualisation primitive; tracks input state.                       |
+
+### Event-driven propagation
+
+```text
 propagateEvent(component, new_state)
-    → enqueue Event { timestamp = now + gate_delay, component, new_state }
+    enqueue Event { ts = current_time + delay, component, new_state }
 
 propagate()
-    while queue not empty:
+    while queue non-empty:
         event = pop_min(queue)
-        current_time = event.timestamp
+        current_time = event.ts
         component.output_state = event.new_state
         for each downstream of component:
             recalculateAndReschedule(downstream)
-
-recalculateAndReschedule(component)
-    new_out = evaluate(component.inputs)
-    if new_out != component.output_state:
-        enqueue Event { timestamp = current_time + delay(component) }
 ```
 
-Propagation delays are compile-time constants:
+Delays are compile-time constants (`PROPAGATION_DELAY = 5`, `WIRE_PROPAGATION_DELAY = 1`). Wire and `output_pin` use the wire delay; everything else uses the gate delay.
 
+### Memory
 
-| Component type | Delay (time units) |
-| -------------- | ------------------ |
-| Wire           | 1                  |
-| Logic gate     | 5                  |
+Allocations route through `memory.allocator` from `lib/memory.zig`. In the WASM target this is `std.heap.wasm_allocator`; on native (`zig build test`) it's a `GeneralPurposeAllocator`. The engine owns its components — `Circuit.deinit()` walks `nodes` and frees each.
 
+## Layer 2 — Prebuilt runtime template (`templates/`)
 
-### Gate Logic
+The runtime template is the WASM shell that ships embedded inside every compiled artifact. It lives in `templates/main.zig` and `templates/interpreter.zig`, and is built once (`zig build`) into `zig-out/lib/circ-runtime.wasm`. The CLI embeds that blob via `lib/runtime_embed` (a `@embedFile` of the prebuilt artifact) so users do not need a Zig toolchain at runtime.
 
+The template:
 
-| Gate        | Output rule                                         |
-| ----------- | --------------------------------------------------- |
-| `input_pin` | Driven externally; no recalculation                 |
-| `not_gate`  | `!input`                                            |
-| `and_gate`  | `a AND b`                                           |
-| `wire`      | Passes first defined input                          |
-| `led`       | Captures input state (terminal; does not propagate) |
+- Exports a fixed runtime API to JavaScript: `topology_alloc`, `init`, `run`, `setPin`, `getOutputState` (see [wasm-api.md](wasm-api.md) for full signatures).
+- Imports two log callbacks from the host (`debugEnabled`, `onDebugLog`) — that's it. There is no `onStateChange`; hosts poll `getOutputState` after `run()`.
+- Reads the per-circuit topology from the buffer the host loaded via `topology_alloc`, then calls `interpreter.initFromTopology` to materialise the circuit using the engine in `lib/circuit.zig`.
 
+`section_writer.combineTwo` (in `lib/topology/`) appends two custom sections — `circ.topology.v0.min` (runtime-readable) and `circ.topology.v0.full` (tooling-readable) — to the embedded runtime blob. No re-link, no `zig` subprocess on the user's machine.
 
-`calculateDominantState()` is a helper used by multi-input gates: returns `high` if any input is `high`, otherwise returns the first defined state among inputs.
+## Layer 3 — Compiler front-end and middle (`lib/syntax/`, `lib/resolver/`, `lib/ir/`, `lib/validator/`)
 
-## Layer 2 — WASM Glue (`lib/wasm.zig`)
+This is the heart of the compiler:
 
-This layer owns the WebAssembly boundary. It:
+- **`lib/grammar/proto-circ.peg`** — PEG grammar source (regenerate `lib/parser.c` / `lib/parser.h` with [langlang](https://github.com/clarete/langlang) when the grammar changes; the generated sources are vendored).
+- **`lib/syntax/`** — `CParser.zig` is the FFI wrapper, `translate.zig` lowers the parse tree to the Zig AST in `ast.zig`, `span.zig` carries source spans through the rest of the pipeline.
+- **`lib/resolver/`** — splits into `scan_imports` (auto-imports `<builtin>/` macros if the file participates in a project), `import_cycle` (rejects cyclic imports with `E010`), `file_loader`, `resolve_bodies` (whole-project resolution into per-module IRs), and `builtins` (the in-memory definitions of `or`, `nand`, `nor`, `xor`, `xnor`).
+- **`lib/ir/`** — `types.zig` defines `Module` / `Project` / `Component` / `Pin`. `resolver.zig` is the single-file path used by `--inspect`.
+- **`lib/validator/`** — `run.zig` for single-module validation, `run_project.zig` for whole-project. `codes.zig` is the registry of stable diagnostic codes; `diagnostics.zig` formats them.
 
-- Exports eight functions callable from JavaScript (see [wasm-api.md](wasm-api.md))
-- Imports three callback functions from the JavaScript host
-- Maintains a global `circuit` instance and a component hash map (`i32 → *Component`)
-- Translates between JavaScript integer IDs and Zig pointer-based references
-- Forwards simulation state changes to the JS host via `onStateChange()`
+## Layer 4 — Topology and emit (`lib/topology/`, `lib/emit/`)
 
-JavaScript imports the WASM module providing:
+- **`lib/topology/serializer.zig`** writes the compact `.min` blob: a flat ordered list of primitive components and their connections. Sub-circuits are fully flattened — there is no hierarchy at runtime.
+- **`lib/topology/full_serializer.zig`** writes the `.full` blob: includes per-file IDs, port names, component aliases, and macro provenance for tooling that needs human-readable structure.
+- **`lib/emit/`** is the experimental `--emit-zig` pipeline: it generates standalone Zig source that can be compiled to a `.wasm` with a richer (but unstable) export surface (`getStateSnapshot`, `getFileInfo`, `freeBuffer`, …). This path is not used by default compile.
 
+## Layer 5 — Preview (`lib/preview/`)
 
-| JS export                    | Purpose                                  |
-| ---------------------------- | ---------------------------------------- |
-| `onStateChange()`            | Called when any component output changes |
-| `debugEnabled()`             | Returns 1 to enable verbose logging      |
-| `onDebugLog(ptr, len, type)` | Receives a log message from Zig          |
+`circ-compile --preview` renders an ASCII schematic of the resolved circuit without producing any artifact. The pipeline reuses `full_serializer.buildFromModule|Project` to get the structured topology, runs `lib/preview/layout.zig` to place gates, then `lib/preview/render.zig` to draw wires (with detour routing for crossing/feedback). See [preview.md](preview.md) for the conventions and flags.
 
+## Build targets
 
-## Layer 3 — TypeScript SDK (`src/index.ts`) and Rendering (`example/`)
+`zig build` produces several independent binaries (driven by `build.zig`):
 
-The SDK wraps the raw WASM exports in an idiomatic TypeScript class. It:
+| Build step             | Output                              | Purpose                                                              |
+|------------------------|-------------------------------------|----------------------------------------------------------------------|
+| `circ-compile`         | `zig-out/bin/circ-compile`          | The `.circ` → `.wasm` CLI compiler.                                  |
+| (default `zig build`)  | `zig-out/lib/circ-runtime.wasm`     | The prebuilt runtime template embedded into compiled artifacts.       |
+| `zig build test`       | runs unit + integration tests       | Suite under `tests/`. Set `CIRC_SKIP_PERF=1` to skip the perf smoke.  |
 
-- Fetches and instantiates the WASM binary
-- Wires up the three callback imports
-- Exposes `CircRenderer` with a `circuit` sub-object for component operations
-- Provides `refreshState()` to snapshot all component states from WASM memory
-
-The rendering layer (`example/`) is a separate demo application. It uses a **theme** system where each component kind has a *skin* — a function that receives a canvas 2D context, component dimensions, and port signal values, and draws the component.
-
-## Compiler pipeline (`lib/syntax/` and downstream)
-
-The `.circ` compilation path is **live** and covered by `zig build test`. Parsed sources feed the IR and validator, not a direct bridge into `lib/circuit.zig` construction from the syntax layer:
-
-```
-.circ source
-    → vendored C parser (lib/parser.c / lib/parser.h; grammar lib/grammar/proto-circ.peg)
-    → lib/syntax/CParser.zig  (FFI)
-    → lib/syntax/translate.zig  (AST / parse tree handling)
-    → lib/ir/  (types, resolver)
-    → lib/validator/  (diagnostics, passes)
-    → lib/emit/  (Zig / WASM artifact shape)
-    → cmd/circ-compile  (CLI) and orchestrated builds for self-contained artifacts
-```
-
-`lib/syntax/` is fully connected through this pipeline.
-
-## Memory Management
-
-All heap allocation inside the WASM module uses a single arena allocator (`lib/memory.zig`). This keeps memory management simple: the arena grows monotonically and is freed in one call when `deinit()` is exported to JavaScript. Log messages use a separate short-lived arena so they can be freed individually via `freeLogMessage()`.
-
-## Build Targets
-
-The `build.zig` produces three independent targets:
-
-
-| Target              | Output                     | Purpose                    |
-| ------------------- | -------------------------- | -------------------------- |
-| `circ-renderer-lib` | `circ-renderer-lib.wasm`   | Browser simulation library |
-| `compiler`          | native binary              | Parse `.circ` files (WIP)  |
-| `logic-sim`         | native binary (`main.zig`) | CLI debug harness          |
-
-
+There is no longer a "TypeScript SDK" target, a Canvas-2D rendering layer, or a `compiler:run` step — those were prototypes that have been removed in favour of the CLI-only model.
