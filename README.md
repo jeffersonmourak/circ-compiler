@@ -72,6 +72,7 @@ Additional flags:
 - `--warnings-as-errors` (alias `-Werror`) — promote warnings to hard errors (suppresses emission).
 - `--expand-macros` — only valid with `--preview`; renders builtin macros (`xor`, `nand`, …) as their expanded primitive sub-circuits.
 - `--color=auto|always|never` — only valid with `--preview`; controls ANSI styling of the schematic. Default is `auto` (on when stdout is a TTY; the `NO_COLOR` env var also disables colour).
+- `--format=markdown|csv|json` — only valid with `--truth-table`; selects the output format. Default is `markdown`. CSV uses `0`/`1`/`?` cells; JSON encodes undefined cells as `null` so consumers can branch on type.
 
 Hard errors block emission — partial or "best-effort" artifacts are never produced. Diagnostics use stable codes (`E001`–`E013`, `W001`–`W003`) so downstream tooling can match on them.
 

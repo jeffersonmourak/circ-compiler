@@ -1094,6 +1094,32 @@ pub fn build(b: *std.Build) void {
     const run_truth_table_markdown_tests = b.addRunArtifact(truth_table_markdown_tests);
     test_step.dependOn(&run_truth_table_markdown_tests.step);
 
+    const truth_table_csv_mod = b.createModule(.{
+        .root_source_file = b.path("lib/truth_table/csv.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    truth_table_csv_mod.addImport("builder", truth_table_builder_mod);
+    circ_compile_mod.addImport("truth_table_csv", truth_table_csv_mod);
+    const truth_table_csv_tests = b.addTest(.{
+        .root_module = truth_table_csv_mod,
+    });
+    const run_truth_table_csv_tests = b.addRunArtifact(truth_table_csv_tests);
+    test_step.dependOn(&run_truth_table_csv_tests.step);
+
+    const truth_table_json_mod = b.createModule(.{
+        .root_source_file = b.path("lib/truth_table/json.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    truth_table_json_mod.addImport("builder", truth_table_builder_mod);
+    circ_compile_mod.addImport("truth_table_json", truth_table_json_mod);
+    const truth_table_json_tests = b.addTest(.{
+        .root_module = truth_table_json_mod,
+    });
+    const run_truth_table_json_tests = b.addRunArtifact(truth_table_json_tests);
+    test_step.dependOn(&run_truth_table_json_tests.step);
+
     const preview_layout_types_mod = b.createModule(.{
         .root_source_file = b.path("lib/preview/layout/types.zig"),
         .target = target,

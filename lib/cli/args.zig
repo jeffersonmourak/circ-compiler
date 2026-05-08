@@ -11,6 +11,12 @@ pub const Mode = enum {
 
 pub const ColorMode = render_color.ColorMode;
 
+pub const TruthTableFormat = enum {
+    markdown,
+    csv,
+    json,
+};
+
 pub const Args = struct {
     input_path: []const u8,
     mode: Mode,
@@ -18,6 +24,7 @@ pub const Args = struct {
     warnings_as_errors: bool = false,
     expand_macros: bool = false,
     color: ColorMode = .auto,
+    truth_table_format: TruthTableFormat = .markdown,
 };
 
 pub const ParseError = error{
@@ -91,6 +98,19 @@ pub fn parse(argv: []const []const u8) ParseError!Args {
             }
             continue;
         }
+        if (std.mem.startsWith(u8, token, "--format=")) {
+            const value = token["--format=".len..];
+            if (std.mem.eql(u8, value, "markdown")) {
+                args.truth_table_format = .markdown;
+            } else if (std.mem.eql(u8, value, "csv")) {
+                args.truth_table_format = .csv;
+            } else if (std.mem.eql(u8, value, "json")) {
+                args.truth_table_format = .json;
+            } else {
+                return error.InvalidFlagValue;
+            }
+            continue;
+        }
         if (std.mem.eql(u8, token, "-o")) {
             if (i + 1 >= argv.len) return error.InvalidFlagValue;
             i += 1;
@@ -111,6 +131,7 @@ pub fn parse(argv: []const []const u8) ParseError!Args {
     if (args.mode == .preview and args.output_path != null) return error.InvalidFlagValue;
     if (args.mode == .truth_table and args.output_path != null) return error.InvalidFlagValue;
     if (args.expand_macros and args.mode != .preview) return error.InvalidFlagValue;
+    if (args.truth_table_format != .markdown and args.mode != .truth_table) return error.InvalidFlagValue;
 
     return args;
 }
@@ -239,4 +260,31 @@ test "cli_args_truth_table_rejects_other_modes" {
     try std.testing.expectError(error.ConflictingModes, parse(&.{ "circ-compile", "in.circ", "--truth-table", "--preview" }));
     try std.testing.expectError(error.ConflictingModes, parse(&.{ "circ-compile", "in.circ", "--truth-table", "--inspect" }));
     try std.testing.expectError(error.ConflictingModes, parse(&.{ "circ-compile", "in.circ", "--truth-table", "--emit-zig" }));
+}
+
+test "cli_args_format_default_is_markdown" {
+    const parsed = try parse(&.{ "circ-compile", "in.circ", "--truth-table" });
+    try std.testing.expectEqual(TruthTableFormat.markdown, parsed.truth_table_format);
+}
+
+test "cli_args_parse_format_markdown_csv_json" {
+    const md = try parse(&.{ "circ-compile", "in.circ", "--truth-table", "--format=markdown" });
+    try std.testing.expectEqual(TruthTableFormat.markdown, md.truth_table_format);
+
+    const csv = try parse(&.{ "circ-compile", "in.circ", "--truth-table", "--format=csv" });
+    try std.testing.expectEqual(TruthTableFormat.csv, csv.truth_table_format);
+
+    const json = try parse(&.{ "circ-compile", "in.circ", "--truth-table", "--format=json" });
+    try std.testing.expectEqual(TruthTableFormat.json, json.truth_table_format);
+}
+
+test "cli_args_format_rejects_invalid_value" {
+    try std.testing.expectError(error.InvalidFlagValue, parse(&.{ "circ-compile", "in.circ", "--truth-table", "--format=yaml" }));
+}
+
+test "cli_args_format_rejects_outside_truth_table" {
+    // --format=csv outside truth-table mode is meaningless.
+    try std.testing.expectError(error.InvalidFlagValue, parse(&.{ "circ-compile", "in.circ", "--preview", "--format=csv" }));
+    try std.testing.expectError(error.InvalidFlagValue, parse(&.{ "circ-compile", "in.circ", "--inspect", "--format=json" }));
+    try std.testing.expectError(error.InvalidFlagValue, parse(&.{ "circ-compile", "in.circ", "-o", "out.wasm", "--format=csv" }));
 }

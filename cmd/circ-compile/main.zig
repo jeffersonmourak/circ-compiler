@@ -19,6 +19,8 @@ const layout_orchestrator = @import("layout_orchestrator");
 const preview_render = @import("preview_render");
 const truth_table_builder = @import("truth_table_builder");
 const truth_table_markdown = @import("truth_table_markdown");
+const truth_table_csv = @import("truth_table_csv");
+const truth_table_json = @import("truth_table_json");
 
 fn makePathAny(path: []const u8) !void {
     if (!std.fs.path.isAbsolute(path)) {
@@ -330,7 +332,11 @@ pub fn run(
             };
             defer table.deinit();
 
-            truth_table_markdown.render(stdout_writer, table) catch |err| {
+            (switch (args.truth_table_format) {
+                .markdown => truth_table_markdown.render(stdout_writer, table),
+                .csv => truth_table_csv.render(stdout_writer, table),
+                .json => truth_table_json.render(stdout_writer, table),
+            }) catch |err| {
                 try stderr_writer.print("render failed: {s}\n", .{@errorName(err)});
                 return 1;
             };
@@ -834,4 +840,65 @@ test "truth_table_builtin_xnor" {
         "tests/fixtures/circuits/builtin_xnor.circ",
         "tests/fixtures/truth_table/builtin_xnor.truth.golden",
     );
+}
+
+fn runTruthTableWithFormat(
+    allocator: std.mem.Allocator,
+    fixture_path: []const u8,
+    format_flag: []const u8,
+    stdout_buf: *std.ArrayList(u8),
+    stderr_buf: *std.ArrayList(u8),
+) !u8 {
+    const argv = [_][]const u8{ "circ-compile", fixture_path, "--truth-table", format_flag };
+    return run(allocator, &argv, stdout_buf.writer(allocator), stderr_buf.writer(allocator));
+}
+
+test "truth_table_xor_csv_fixture" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const exit_code = try runTruthTableWithFormat(allocator, "tests/fixtures/circuits/builtin_xor.circ", "--format=csv", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/truth_table/builtin_xor.csv.golden");
+}
+
+test "truth_table_xor_json_fixture" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const exit_code = try runTruthTableWithFormat(allocator, "tests/fixtures/circuits/builtin_xor.circ", "--format=json", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/truth_table/builtin_xor.json.golden");
+}
+
+test "truth_table_format_markdown_default_matches_explicit" {
+    // --format=markdown is the default; the two invocations must produce
+    // byte-identical output. This guards against drift if the default ever
+    // changes silently.
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var implicit_buf: std.ArrayList(u8) = .{};
+    defer implicit_buf.deinit(allocator);
+    var explicit_buf: std.ArrayList(u8) = .{};
+    defer explicit_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    _ = try runTruthTable(allocator, "tests/fixtures/circuits/builtin_xor.circ", &implicit_buf, &stderr_buf);
+    _ = try runTruthTableWithFormat(allocator, "tests/fixtures/circuits/builtin_xor.circ", "--format=markdown", &explicit_buf, &stderr_buf);
+    try std.testing.expectEqualStrings(implicit_buf.items, explicit_buf.items);
 }
