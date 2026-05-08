@@ -1,0 +1,28 @@
+// 4-bit 1-to-2 demultiplexer.
+input in0, in1, in2, in3, sel
+not sel_inv(in=sel)
+
+// Bit 0
+and a0(a=in0, b=sel_inv.out)
+and b0(a=in0, b=sel)
+
+// Bit 1
+and a1(a=in1, b=sel_inv.out)
+and b1(a=in1, b=sel)
+
+// Bit 2
+and a2(a=in2, b=sel_inv.out)
+and b2(a=in2, b=sel)
+
+// Bit 3
+and a3(a=in3, b=sel_inv.out)
+and b3(a=in3, b=sel)
+
+output out_a0(in=a0.out)
+output out_a1(in=a1.out)
+output out_a2(in=a2.out)
+output out_a3(in=a3.out)
+output out_b0(in=b0.out)
+output out_b1(in=b1.out)
+output out_b2(in=b2.out)
+output out_b3(in=b3.out)

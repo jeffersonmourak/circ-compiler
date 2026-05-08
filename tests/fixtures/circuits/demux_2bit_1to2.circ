@@ -1,0 +1,19 @@
+// 2-bit 1-to-2 demultiplexer: routes a 2-bit input (in1 in0) to one of two
+// 2-bit outputs based on sel. sel=0 → out_a = in, out_b = 00.
+//                          sel=1 → out_a = 00, out_b = in.
+// One single-bit demux per data bit, sharing the inverted-select line.
+input in0, in1, sel
+not sel_inv(in=sel)
+
+// Bit 0
+and a0(a=in0, b=sel_inv.out)
+and b0(a=in0, b=sel)
+
+// Bit 1
+and a1(a=in1, b=sel_inv.out)
+and b1(a=in1, b=sel)
+
+output out_a0(in=a0.out)
+output out_a1(in=a1.out)
+output out_b0(in=b0.out)
+output out_b1(in=b1.out)

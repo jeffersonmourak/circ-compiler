@@ -1,0 +1,6 @@
+// 2-bit bitwise OR: (a1 a0) OR (b1 b0) → (out1 out0).
+input a0, a1, b0, b1
+or bit0(a=a0, b=b0)
+or bit1(a=a1, b=b1)
+output out0(in=bit0.out)
+output out1(in=bit1.out)

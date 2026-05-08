@@ -1075,6 +1075,167 @@ test "truth_table_mux_4bit_2to1" {
     );
 }
 
+// Multi-bit macro coverage. Each macro (or, xor, nand, nor, xnor) is
+// expanded into primitives by the project pipeline; the parallel-bit
+// replication then exercises N copies of the macro's expansion within
+// the same flat topology. Locks both the macro expansion and the
+// origin-field filtering at width.
+
+test "truth_table_or_2bit" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/or_2bit.circ",
+        "tests/fixtures/truth_table/or_2bit.truth.golden",
+    );
+}
+
+test "truth_table_or_3bit" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/or_3bit.circ",
+        "tests/fixtures/truth_table/or_3bit.truth.golden",
+    );
+}
+
+test "truth_table_or_4bit" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/or_4bit.circ",
+        "tests/fixtures/truth_table/or_4bit.truth.golden",
+    );
+}
+
+test "truth_table_xor_2bit" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/xor_2bit.circ",
+        "tests/fixtures/truth_table/xor_2bit.truth.golden",
+    );
+}
+
+test "truth_table_xor_3bit" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/xor_3bit.circ",
+        "tests/fixtures/truth_table/xor_3bit.truth.golden",
+    );
+}
+
+test "truth_table_xor_4bit" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/xor_4bit.circ",
+        "tests/fixtures/truth_table/xor_4bit.truth.golden",
+    );
+}
+
+test "truth_table_nand_2bit" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/nand_2bit.circ",
+        "tests/fixtures/truth_table/nand_2bit.truth.golden",
+    );
+}
+
+test "truth_table_nand_3bit" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/nand_3bit.circ",
+        "tests/fixtures/truth_table/nand_3bit.truth.golden",
+    );
+}
+
+test "truth_table_nand_4bit" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/nand_4bit.circ",
+        "tests/fixtures/truth_table/nand_4bit.truth.golden",
+    );
+}
+
+test "truth_table_nor_2bit" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/nor_2bit.circ",
+        "tests/fixtures/truth_table/nor_2bit.truth.golden",
+    );
+}
+
+test "truth_table_nor_3bit" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/nor_3bit.circ",
+        "tests/fixtures/truth_table/nor_3bit.truth.golden",
+    );
+}
+
+test "truth_table_nor_4bit" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/nor_4bit.circ",
+        "tests/fixtures/truth_table/nor_4bit.truth.golden",
+    );
+}
+
+test "truth_table_xnor_2bit" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/xnor_2bit.circ",
+        "tests/fixtures/truth_table/xnor_2bit.truth.golden",
+    );
+}
+
+test "truth_table_xnor_3bit" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/xnor_3bit.circ",
+        "tests/fixtures/truth_table/xnor_3bit.truth.golden",
+    );
+}
+
+test "truth_table_xnor_4bit" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/xnor_4bit.circ",
+        "tests/fixtures/truth_table/xnor_4bit.truth.golden",
+    );
+}
+
+// Multi-bit demux coverage. Each fixture routes an N-bit data input to
+// one of two N-bit destinations via a single sel line. The unselected
+// destination's bits are all held at 0 — same wired-OR-friendly contract
+// as the single-bit demux_1to2.
+
+test "truth_table_demux_2bit_1to2" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/demux_2bit_1to2.circ",
+        "tests/fixtures/truth_table/demux_2bit_1to2.truth.golden",
+    );
+}
+
+test "truth_table_demux_3bit_1to2" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/demux_3bit_1to2.circ",
+        "tests/fixtures/truth_table/demux_3bit_1to2.truth.golden",
+    );
+}
+
+test "truth_table_demux_4bit_1to2" {
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/demux_4bit_1to2.circ",
+        "tests/fixtures/truth_table/demux_4bit_1to2.truth.golden",
+    );
+}
+
+// Wider arithmetic coverage. half_adder + full_adder + two_bit_adder
+// already cover 1-bit and 2-bit arithmetic; these extend the chain to
+// 3 and 4 bits. Each new bit slice is a full adder taking the previous
+// bit's carry-out as cin.
+
+test "truth_table_three_bit_adder" {
+    // 3-bit adder: 6 inputs, 4 outputs (s0, s1, s2, cout). 64 rows.
+    // Hand-verified: a=7 b=7 mask=63 → 14 = 0b1110 → s0=0 s1=1 s2=1 cout=1.
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/three_bit_adder.circ",
+        "tests/fixtures/truth_table/three_bit_adder.truth.golden",
+    );
+}
+
+test "truth_table_four_bit_adder" {
+    // 4-bit adder: 8 inputs, 5 outputs (s0..s3, cout). 256 rows.
+    // Hand-verified: a=8 b=8 mask=136 → 16 = 0b10000 → s0..s3 all 0, cout=1
+    // (largest single-bit overflow case in the table).
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/four_bit_adder.circ",
+        "tests/fixtures/truth_table/four_bit_adder.truth.golden",
+    );
+}
+
 // scanStrict is unit-tested directly because no parser-valid, validator-
 // accepting fixture currently produces .undef under the truth-table mode —
 // the validator rejects every shape that would reach an undefined output.
