@@ -1,0 +1,102 @@
+// 4-bit Nand2Tetris (Hack) ALU.
+//
+// Six control bits select among the 18 documented operations on two
+// 4-bit operands x = (x3 x2 x1 x0) and y = (y3 y2 y1 y0). The output
+// is 4 bits — the carry-out of the adder is intentionally dropped, so
+// arithmetic operations wrap modulo 16 (matching the spec's modular
+// semantics for a 16-bit ALU, just narrower).
+//
+// Pipeline (per the textbook diagram):
+//   1. pre-set x: if zx then x := 0;  if nx then x := !x
+//   2. pre-set y: if zy then y := 0;  if ny then y := !y
+//   3. compute:   if f  then out := x + y  else out := x & y
+//   4. post-set:  if no then out := !out
+//
+// Total inputs: 6 control + 4 x + 4 y = 14 → 16,384 rows in the table.
+
+input zx, nx, zy, ny, f, no, x0, x1, x2, x3, y0, y1, y2, y3
+
+// ----- pre-set x: 4 parallel bit slices, sharing zx_inv ---------------
+not zx_inv(in=zx)
+
+and xz0(a=zx_inv.out, b=x0)
+and xz1(a=zx_inv.out, b=x1)
+and xz2(a=zx_inv.out, b=x2)
+and xz3(a=zx_inv.out, b=x3)
+
+xor xn0(a=nx, b=xz0.out)
+xor xn1(a=nx, b=xz1.out)
+xor xn2(a=nx, b=xz2.out)
+xor xn3(a=nx, b=xz3.out)
+
+// ----- pre-set y: same shape ------------------------------------------
+not zy_inv(in=zy)
+
+and yz0(a=zy_inv.out, b=y0)
+and yz1(a=zy_inv.out, b=y1)
+and yz2(a=zy_inv.out, b=y2)
+and yz3(a=zy_inv.out, b=y3)
+
+xor yn0(a=ny, b=yz0.out)
+xor yn1(a=ny, b=yz1.out)
+xor yn2(a=ny, b=yz2.out)
+xor yn3(a=ny, b=yz3.out)
+
+// ----- compute ADD: 4-bit ripple-carry, drop final carry-out ----------
+// Bit 0 (half adder)
+xor add0_sum(a=xn0.out, b=yn0.out)
+and add0_cy(a=xn0.out, b=yn0.out)
+
+// Bit 1 (full adder, cin = add0_cy.out)
+xor add1_x1(a=xn1.out, b=yn1.out)
+xor add1_sum(a=add1_x1.out, b=add0_cy.out)
+and add1_a1(a=xn1.out, b=yn1.out)
+and add1_a2(a=add1_x1.out, b=add0_cy.out)
+or add1_cy(a=add1_a1.out, b=add1_a2.out)
+
+// Bit 2 (full adder, cin = add1_cy.out)
+xor add2_x1(a=xn2.out, b=yn2.out)
+xor add2_sum(a=add2_x1.out, b=add1_cy.out)
+and add2_a1(a=xn2.out, b=yn2.out)
+and add2_a2(a=add2_x1.out, b=add1_cy.out)
+or add2_cy(a=add2_a1.out, b=add2_a2.out)
+
+// Bit 3 (sum only — final carry-out is dropped per ALU spec)
+xor add3_x1(a=xn3.out, b=yn3.out)
+xor add3_sum(a=add3_x1.out, b=add2_cy.out)
+
+// ----- compute AND: bitwise -------------------------------------------
+and and0(a=xn0.out, b=yn0.out)
+and and1(a=xn1.out, b=yn1.out)
+and and2(a=xn2.out, b=yn2.out)
+and and3(a=xn3.out, b=yn3.out)
+
+// ----- mux per bit: f ? add_sum : and_out ----------------------------
+not f_inv(in=f)
+
+and m0_a(a=f, b=add0_sum.out)
+and m0_b(a=f_inv.out, b=and0.out)
+or m0(a=m0_a.out, b=m0_b.out)
+
+and m1_a(a=f, b=add1_sum.out)
+and m1_b(a=f_inv.out, b=and1.out)
+or m1(a=m1_a.out, b=m1_b.out)
+
+and m2_a(a=f, b=add2_sum.out)
+and m2_b(a=f_inv.out, b=and2.out)
+or m2(a=m2_a.out, b=m2_b.out)
+
+and m3_a(a=f, b=add3_sum.out)
+and m3_b(a=f_inv.out, b=and3.out)
+or m3(a=m3_a.out, b=m3_b.out)
+
+// ----- post-set: per bit, no XOR pre-no_i ----------------------------
+xor final0(a=no, b=m0.out)
+xor final1(a=no, b=m1.out)
+xor final2(a=no, b=m2.out)
+xor final3(a=no, b=m3.out)
+
+output out0(in=final0.out)
+output out1(in=final1.out)
+output out2(in=final2.out)
+output out3(in=final3.out)

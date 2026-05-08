@@ -1236,6 +1236,33 @@ test "truth_table_four_bit_adder" {
     );
 }
 
+test "truth_table_alu_4bit" {
+    // 4-bit Nand2Tetris (Hack) ALU. 14 inputs (6 control + 4 x + 4 y) →
+    // 4 outputs. 16,384 rows — the largest golden in the suite.
+    //
+    // The fixture implements the textbook ALU: pre-set x/y, compute
+    // (add or and), post-set inversion. For 4-bit operands every
+    // documented operation is structurally distinct (-x ≠ x, etc.).
+    //
+    // Hand-verified against the textbook control table for all 18
+    // documented operations at x=y=0 plus non-zero (x=5, y=3) cases:
+    //   out=0    mask=21    → (0,0,0,0)
+    //   out=1    mask=63    → (1,0,0,0)
+    //   out=-1   mask=23    → (1,1,1,1)
+    //   out=x+y  x=5,y=3    → 8 = (0,0,0,1)
+    //   out=x|y  x=5,y=3    → 7 = (1,1,1,0)
+    //   out=x+1  x=15       → 0 = (0,0,0,0)  (4-bit wrap)
+    //
+    // This fixture's earlier iteration surfaced a same-timestamp
+    // event-ordering bug in propagate(); the fix in 7d0ccd9 (two-phase
+    // batched propagation) makes deep-fanout circuits like this one
+    // settle correctly.
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/alu_4bit.circ",
+        "tests/fixtures/truth_table/alu_4bit.truth.golden",
+    );
+}
+
 // scanStrict is unit-tested directly because no parser-valid, validator-
 // accepting fixture currently produces .undef under the truth-table mode —
 // the validator rejects every shape that would reach an undefined output.
