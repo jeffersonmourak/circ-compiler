@@ -902,3 +902,36 @@ test "truth_table_format_markdown_default_matches_explicit" {
     _ = try runTruthTableWithFormat(allocator, "tests/fixtures/circuits/builtin_xor.circ", "--format=markdown", &explicit_buf, &stderr_buf);
     try std.testing.expectEqualStrings(implicit_buf.items, explicit_buf.items);
 }
+
+// Boolean arithmetic coverage. Each circuit's truth table was hand-verified
+// against the algebraic specification before being locked in as a golden.
+
+test "truth_table_half_adder" {
+    // Half adder: (a, b) → (sum, cout). sum = a XOR b; cout = a AND b.
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/half_adder.circ",
+        "tests/fixtures/truth_table/half_adder.truth.golden",
+    );
+}
+
+test "truth_table_full_adder" {
+    // Full adder: (a, b, cin) → (sum, cout). sum = a XOR b XOR cin;
+    // cout = (a AND b) OR ((a XOR b) AND cin). Eight rows enumerating
+    // every binary combination of three inputs.
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/full_adder_from_builtins.circ",
+        "tests/fixtures/truth_table/full_adder.truth.golden",
+    );
+}
+
+test "truth_table_two_bit_adder" {
+    // 2-bit ripple-carry adder: (a1 a0) + (b1 b0) → (cout s1 s0). Sixteen
+    // rows. The bit order in input_bits matches declaration order:
+    // bit0=a0, bit1=a1, bit2=b0, bit3=b1. The golden was hand-verified
+    // against integer addition for every row (e.g. input_bits=0b1111 →
+    // a=3, b=3, sum=6 → s0=0, s1=1, cout=1).
+    try expectTruthTableGolden(
+        "tests/fixtures/circuits/two_bit_adder.circ",
+        "tests/fixtures/truth_table/two_bit_adder.truth.golden",
+    );
+}

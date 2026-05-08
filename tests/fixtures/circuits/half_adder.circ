@@ -1,0 +1,8 @@
+// Half adder: a + b → (sum, cout)
+// sum  = a XOR b
+// cout = a AND b
+input a, b
+xor s(a=a, b=b)
+and c(a=a, b=b)
+output sum(in=s.out)
+output cout(in=c.out)
