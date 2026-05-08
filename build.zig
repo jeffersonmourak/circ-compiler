@@ -47,6 +47,10 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("tests/helpers/golden_test.zig"),
             .target = target,
             .optimize = optimize,
+            // golden_test.zig uses @cImport to call setenv/unsetenv. macOS
+            // SDK ships libc headers by default; Linux runners need an
+            // explicit link_libc flag for Zig to find <stdlib.h>.
+            .link_libc = true,
         }),
     });
     const run_golden_tests = b.addRunArtifact(golden_tests);
@@ -1382,7 +1386,11 @@ pub fn build(b: *std.Build) void {
         .root_module = cli_e2e_tests_mod,
     });
     const run_cli_e2e_tests = b.addRunArtifact(cli_e2e_tests);
-    run_cli_e2e_tests.step.dependOn(&circ_compile_exe.step);
+    // The test spawns the *installed* circ-compile binary via
+    // b.getInstallPath(.bin, "circ-compile"). Depending on circ_compile_exe.step
+    // alone only builds it; we also need the install step to run so the
+    // binary actually lands at the path the test queries.
+    run_cli_e2e_tests.step.dependOn(b.getInstallStep());
     test_step.dependOn(&run_cli_e2e_tests.step);
 
     const topology_interpreter_tests_mod = b.createModule(.{
