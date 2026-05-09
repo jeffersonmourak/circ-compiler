@@ -14,7 +14,9 @@ const {
   description = 'A small language for building and simulating logic circuits, made for people learning how computers work.',
 } = Astro.props;
 
-const base = import.meta.env.BASE_URL;
+// Normalize to always end in `/` so `${base}foo` builds a clean path.
+// configure-pages@v5 emits BASE_PATH without a trailing slash.
+const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
 ---
 <!doctype html>
 <html lang="en">
