@@ -1,0 +1,125 @@
+---
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import Base from '../layouts/Base.astro';
+import { url, GITHUB_PUBLIC } from '../utils/url.ts';
+
+// Single source of truth: the VERSION file at the repo root, also read
+// by tools/build-dist.sh so the archive filenames and the URLs on this
+// page can never drift apart.
+const here = path.dirname(fileURLToPath(import.meta.url));
+const version = fs.readFileSync(path.resolve(here, '../../../VERSION'), 'utf8').trim();
+
+const platforms = [
+  {
+    os: 'Linux',
+    arch: 'x86_64',
+    label: 'linux-x86_64',
+    ext: 'tar.gz',
+    install: (pkg: string) => [
+      `tar -xzf ${pkg}.tar.gz`,
+      `cd ${pkg}`,
+      './circ-compile --help',
+    ],
+    note: 'Statically linked against musl — should run on any modern Linux distro without extra dependencies.',
+  },
+  {
+    os: 'macOS',
+    arch: 'aarch64 (Apple Silicon)',
+    label: 'macos-aarch64',
+    ext: 'tar.gz',
+    install: (pkg: string) => [
+      `tar -xzf ${pkg}.tar.gz`,
+      `cd ${pkg}`,
+      'xattr -d com.apple.quarantine circ-compile',
+      './circ-compile --help',
+    ],
+    note: 'Apple Silicon only (M1/M2/M3+). The xattr step removes the Gatekeeper quarantine flag the browser sets on downloaded executables. Intel Mac users should build from source.',
+  },
+  {
+    os: 'Windows',
+    arch: 'x86_64',
+    label: 'windows-x86_64',
+    ext: 'zip',
+    install: (pkg: string) => [
+      `tar -xf ${pkg}.zip`,
+      `cd ${pkg}`,
+      'circ-compile.exe --help',
+    ],
+    note: 'Built with the GNU toolchain — no MSVC redistributable required. Tested on Windows 10+.',
+  },
+];
+
+const downloads = platforms.map((p) => {
+  const pkg = `circ-compile-${version}-${p.label}`;
+  return {
+    os: p.os,
+    arch: p.arch,
+    file: `${pkg}.${p.ext}`,
+    install: p.install(pkg),
+    note: p.note,
+  };
+});
+---
+<Base
+  title="Download — circ"
+  description="Pre-built circ-compile binaries for Linux, macOS, and Windows. The compiler is in alpha; errors are expected."
+>
+  <h1>Download</h1>
+
+  <p class="download-version">Latest build: <code>{version}</code></p>
+
+  <aside class="alpha-warning" role="note">
+    <p class="alpha-tag"><strong>Alpha software.</strong></p>
+    <p>
+      <code>circ-compile</code> is under active development. Expect rough edges,
+      cryptic error messages, and breaking changes between builds. Don't use it
+      for anything you care about preserving. Reports of what doesn't work are
+      welcome — but for now, please assume nothing here is stable.
+    </p>
+  </aside>
+
+  <p class="download-intro">
+    Pre-built binaries for the three major desktop platforms. Each archive
+    bundles the <code>circ-compile</code> CLI together with the project's
+    <code>LICENSE</code> and <code>README</code>. Prefer to build it yourself?
+    See the <a href={url('/reference/getting-started')}>getting-started guide</a>.
+  </p>
+
+  <div class="download-grid">
+    {downloads.map((d) => (
+      <article class="download-card">
+        <header class="download-head">
+          <h2>{d.os}</h2>
+          <span class="arch">{d.arch}</span>
+        </header>
+        <a class="download-button" href={url(`/downloads/${d.file}`)} download>
+          <span class="filename">{d.file}</span>
+          <span class="hint">↓ Download</span>
+        </a>
+        <p class="platform-note">{d.note}</p>
+        <pre class="install-snippet"><code>{d.install.join('\n')}</code></pre>
+      </article>
+    ))}
+  </div>
+
+  {GITHUB_PUBLIC && (
+    <section class="download-source">
+      <h2>Build from source</h2>
+      <p>
+        For Intel Macs, ARM Linux, ARM Windows, or any platform not listed above,
+        build directly with <a href="https://ziglang.org/" rel="noreferrer noopener">Zig 0.15.x</a>:
+      </p>
+      <pre class="install-snippet"><code>{`git clone <repo>
+cd circ-compiler
+zig build circ-compile -Doptimize=ReleaseFast
+./zig-out/bin/circ-compile --help`}</code></pre>
+      <p>
+        The full walkthrough — including writing your first <code>.circ</code> file
+        and driving the compiled WASM from Node — lives in
+        <a href={url('/reference/getting-started')}>Getting Started</a>.
+      </p>
+    </section>
+  )}
+</Base>
