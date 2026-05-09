@@ -430,6 +430,13 @@ hr {
   max-width: var(--measure);
   overflow-x: auto;
   white-space: pre;
+  color: var(--fg);
+  text-decoration: none;
+  transition: border-color 0.15s, color 0.15s;
+}
+a.install-line:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .landing-prose section { margin: 0 0 1.75rem; }

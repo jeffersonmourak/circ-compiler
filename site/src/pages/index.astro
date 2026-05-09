@@ -2,6 +2,7 @@
 import Base from '../layouts/Base.astro';
 import CodePreview from '../components/CodePreview.astro';
 import LiveCanvas from '../components/LiveCanvas.astro';
+import { url } from '../utils/url.ts';
 
 const heroSource = `// half_adder.circ
 import xor "<builtin>/xor.circ"
@@ -40,7 +41,7 @@ const heroPreview = `╭───╮     ╭───╮         ╭────
     <LiveCanvas wasm="hero-half-adder.wasm" />
   </section>
 
-  <pre class="install-line"><code># install instructions coming — for now, build from source</code></pre>
+  <a class="install-line" href={url('/download')}>↓ Download circ-compile for Linux, macOS, or Windows</a>
 
   <div class="landing-prose">
     <section>
