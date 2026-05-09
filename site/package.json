@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "astro": "^5.0.0",
-    "circ-renderer": "file:../../circ-renderer"
+    "circ-renderer": "github:jeffersonmourak/circ-renderer"
   },
   "devDependencies": {
     "typescript": "^5.5.0"

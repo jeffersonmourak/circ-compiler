@@ -12,6 +12,15 @@ permissions:
   pages: write
   id-token: write
 
+# Opt every JS-based action in this workflow into Node.js 24. GitHub is
+# deprecating Node.js 20 (actions like actions/configure-pages@v5 still
+# declare Node 20 in their action.yml). The runner emits a warning per
+# affected action until it runs on Node 24. Setting this env globally
+# silences those warnings; it'll become the default by June 2026.
+# https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 # Queue overlapping runs so concurrent deploys don't clobber each other.
 # `cancel-in-progress: false` mirrors GitHub's recommended Pages pattern —
 # in-flight deploys finish before the next one starts.
