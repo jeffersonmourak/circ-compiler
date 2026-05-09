@@ -266,6 +266,9 @@ hr {
    toggle out of it and surface it next to the footer links instead. */
 .site-footer .theme-toggle { display: none; }
 @media (max-width: 600px) {
+  .site-nav {
+    flex-direction: column;
+  }
   .site-nav .link-soon {
     /* flex-direction: column; */
     display: none;
