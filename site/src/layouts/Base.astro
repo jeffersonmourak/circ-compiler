@@ -1,0 +1,46 @@
+---
+import Nav from '../components/Nav.astro';
+import Footer from '../components/Footer.astro';
+import '../styles/global.css';
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+
+const {
+  title = 'circ — a small language for digital circuits',
+  description = 'A small language for building and simulating logic circuits, made for people learning how computers work.',
+} = Astro.props;
+
+const base = import.meta.env.BASE_URL;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="icon" type="image/svg+xml" href={`${base}favicon.svg`} />
+    <meta name="color-scheme" content="light dark" />
+    <script is:inline>
+      // Pre-paint theme initialization to avoid a light/dark flash. Reads
+      // localStorage first, then falls back to the OS preference.
+      try {
+        const stored = localStorage.getItem('theme');
+        const preferred = stored || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        document.documentElement.dataset.theme = preferred;
+      } catch (_) {
+        document.documentElement.dataset.theme = 'light';
+      }
+    </script>
+  </head>
+  <body>
+    <Nav />
+    <main>
+      <slot />
+    </main>
+    <Footer />
+  </body>
+</html>

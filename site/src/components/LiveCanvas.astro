@@ -1,0 +1,137 @@
+---
+import { url } from '../utils/url.ts';
+
+interface Props {
+  /** Path under public/wasm/ (e.g. "half_adder.wasm"). */
+  wasm: string;
+  /** Pixels per layout cell. Default keeps small circuits readable on mobile. */
+  cell?: number;
+  padding?: number;
+}
+
+const { wasm, cell = 14, padding = 16 } = Astro.props;
+const wasmHref = url(`/wasm/${wasm}`);
+---
+<div
+  class="lc"
+  data-circ-wasm={wasmHref}
+  data-circ-cell={cell.toString()}
+  data-circ-padding={padding.toString()}
+>
+  <div class="lc-header">
+    <span class="lc-label">live simulation</span>
+    <span class="lc-hint">click input pins to toggle</span>
+  </div>
+  <button class="lc-launch" type="button">▶ Run interactively</button>
+  <div class="lc-mount" hidden></div>
+  <div class="lc-error" hidden></div>
+</div>
+
+<script>
+  // One hoisted, deduped script handles every <LiveCanvas> on the page. The
+  // renderer + WASM are dynamically imported on first click so a reader who
+  // never opens any simulation pays zero bytes for them on initial load.
+
+  type CircView = {
+    runtime: { destroy(): void };
+    canvas: HTMLCanvasElement;
+    destroy(): void;
+  };
+
+  let rendererPromise: Promise<typeof import('circ-renderer')> | null = null;
+  let themesPromise: Promise<typeof import('../utils/circ-theme.mjs')> | null = null;
+  const loadRenderer = () =>
+    (rendererPromise ??= import('circ-renderer'));
+  const loadThemes = () =>
+    (themesPromise ??= import('../utils/circ-theme.mjs'));
+
+  // Track active views per container so theme toggles can rebuild them.
+  const active = new WeakMap<HTMLElement, { view: CircView; opts: { url: string; cell: number; padding: number } }>();
+
+  async function mount(container: HTMLElement) {
+    const wasmUrl = container.dataset.circWasm!;
+    const cell = parseInt(container.dataset.circCell ?? '14', 10);
+    const padding = parseInt(container.dataset.circPadding ?? '16', 10);
+
+    const launch = container.querySelector<HTMLButtonElement>('.lc-launch');
+    const mountEl = container.querySelector<HTMLElement>('.lc-mount');
+    const errorEl = container.querySelector<HTMLElement>('.lc-error');
+    if (!launch || !mountEl || !errorEl) return;
+
+    launch.disabled = true;
+    launch.textContent = 'Loading…';
+    errorEl.hidden = true;
+
+    try {
+      const [{ renderCircuit }, { pickTheme }] = await Promise.all([
+        loadRenderer(),
+        loadThemes(),
+      ]);
+      const view = (await renderCircuit({
+        url: wasmUrl,
+        cell,
+        padding,
+        interactive: true,
+        theme: pickTheme() as any,
+      })) as unknown as CircView;
+      mountEl.innerHTML = '';
+      mountEl.appendChild(view.canvas);
+      mountEl.hidden = false;
+      launch.hidden = true;
+      active.set(container, { view, opts: { url: wasmUrl, cell, padding } });
+    } catch (err) {
+      console.error('LiveCanvas: failed to load', wasmUrl, err);
+      errorEl.textContent =
+        'Could not load the live simulation. Check that the WASM file is present at ' +
+        wasmUrl +
+        '.';
+      errorEl.hidden = false;
+      launch.disabled = false;
+      launch.textContent = '▶ Run interactively';
+    }
+  }
+
+  function init() {
+    document.querySelectorAll<HTMLElement>('.lc').forEach((container) => {
+      const launch = container.querySelector<HTMLButtonElement>('.lc-launch');
+      launch?.addEventListener('click', () => mount(container));
+    });
+
+    // When the user toggles light/dark, rebuild any already-mounted canvases
+    // with the matching theme. We can't re-theme in-place — circ-renderer's
+    // theme is captured at construction — so destroy + remount.
+    const observer = new MutationObserver(async () => {
+      const [{ renderCircuit }, { pickTheme }] = await Promise.all([
+        loadRenderer(),
+        loadThemes(),
+      ]);
+      document.querySelectorAll<HTMLElement>('.lc').forEach(async (container) => {
+        const cur = active.get(container);
+        if (!cur) return;
+        const mountEl = container.querySelector<HTMLElement>('.lc-mount');
+        if (!mountEl) return;
+        cur.view.destroy();
+        const view = (await renderCircuit({
+          url: cur.opts.url,
+          cell: cur.opts.cell,
+          padding: cur.opts.padding,
+          interactive: true,
+          theme: pickTheme() as any,
+        })) as unknown as CircView;
+        mountEl.innerHTML = '';
+        mountEl.appendChild(view.canvas);
+        active.set(container, { view, opts: cur.opts });
+      });
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+</script>

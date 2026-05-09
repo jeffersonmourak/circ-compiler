@@ -1,0 +1,22 @@
+---
+import ThemeToggle from './ThemeToggle.astro';
+import { url, GITHUB_REPO, GITHUB_PUBLIC } from '../utils/url.ts';
+---
+<footer class="site-footer">
+  <div class="site-footer-row">
+    <div class="links">
+      <a href={url('/tour')}>Tour</a>
+      <a href={url('/reference')}>Reference</a>
+      <a href={url('/examples')}>Examples</a>
+      {GITHUB_PUBLIC
+        ? <a href={GITHUB_REPO} rel="noreferrer noopener">GitHub</a>
+        : <span class="link-soon" title="Repo goes public once circ-compiler is ready to share">GitHub <small>(soon)</small></span>}
+    </div>
+    <ThemeToggle />
+  </div>
+  <p class="muted">circ is open source under the GNU GPL v3.</p>
+  <p class="signature muted">
+    Made with <span class="heart" aria-hidden="true">♥︎</span><span class="visually-hidden">love</span>
+    by <a href="https://github.com/jeffersonmourak" rel="noreferrer noopener">@jeffersonmourak</a>
+  </p>
+</footer>
