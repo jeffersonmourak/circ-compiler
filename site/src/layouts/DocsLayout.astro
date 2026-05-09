@@ -1,0 +1,42 @@
+---
+import Base from './Base.astro';
+
+interface Heading {
+  depth: number;
+  slug: string;
+  text: string;
+}
+
+interface Props {
+  frontmatter: { title: string; description?: string };
+  headings: Heading[];
+}
+
+const { frontmatter, headings } = Astro.props;
+const toc = headings.filter((h) => h.depth >= 2 && h.depth <= 3);
+---
+<Base title={`${frontmatter.title} — circ`} description={frontmatter.description}>
+  <article class="docs">
+    <header class="docs-header">
+      <h1>{frontmatter.title}</h1>
+      {frontmatter.description && <p class="docs-lede">{frontmatter.description}</p>}
+    </header>
+    <div class="docs-grid">
+      <aside class="docs-toc" aria-label="On this page">
+        <nav>
+          <p class="toc-label">On this page</p>
+          <ol>
+            {toc.map((h) => (
+              <li class={`toc-h${h.depth}`}>
+                <a href={`#${h.slug}`}>{h.text}</a>
+              </li>
+            ))}
+          </ol>
+        </nav>
+      </aside>
+      <div class="docs-prose">
+        <slot />
+      </div>
+    </div>
+  </article>
+</Base>

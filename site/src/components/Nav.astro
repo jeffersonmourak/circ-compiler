@@ -1,0 +1,28 @@
+---
+import ThemeToggle from './ThemeToggle.astro';
+import { url, GITHUB_REPO, GITHUB_PUBLIC } from '../utils/url.ts';
+
+const links = [
+  { href: url('/tour'), label: 'Tour' },
+  { href: url('/reference'), label: 'Reference' },
+  { href: url('/examples'), label: 'Examples' },
+];
+---
+<header class="site-nav">
+  <a href={url('/')} class="brand">
+    <span class="brand-mark">circ</span>
+  </a>
+  <nav aria-label="Primary">
+    <ul>
+      {links.map((l) => (
+        <li><a href={l.href}>{l.label}</a></li>
+      ))}
+      <li>
+        {GITHUB_PUBLIC
+          ? <a href={GITHUB_REPO} rel="noreferrer noopener">GitHub</a>
+          : <span class="link-soon" title="Repo goes public once circ-compiler is ready to share">GitHub <small>(soon)</small></span>}
+      </li>
+    </ul>
+  </nav>
+  <ThemeToggle />
+</header>

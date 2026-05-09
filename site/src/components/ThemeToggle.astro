@@ -1,0 +1,17 @@
+<button type="button" class="theme-toggle" aria-label="Toggle dark mode">
+  <span class="theme-icon" aria-hidden="true">◐</span>
+</button>
+<script>
+  // Two instances of <ThemeToggle /> can live on the page at once (one in
+  // the nav for desktop, one in the footer for mobile — CSS shows whichever
+  // matches the viewport). Astro hoists this script once, so we attach the
+  // click handler to every .theme-toggle button rather than picking by id.
+  document.querySelectorAll<HTMLButtonElement>('.theme-toggle').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const cur = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+      const next = cur === 'dark' ? 'light' : 'dark';
+      document.documentElement.dataset.theme = next;
+      try { localStorage.setItem('theme', next); } catch (_) {}
+    });
+  });
+</script>

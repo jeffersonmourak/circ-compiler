@@ -1,0 +1,58 @@
+---
+import { Code } from 'astro:components';
+import { circLang } from '../utils/circ-lang.mjs';
+
+interface Props {
+  title?: string;
+  source: string;
+  preview: string;
+  /**
+   * Either a bundled Shiki language id, or omit to use the circ grammar.
+   */
+  lang?: string;
+  caption?: string;
+  /**
+   * When true, the preview is illustrative rather than actual `--preview`
+   * output. Renders a small "approx." tag in the pane label.
+   */
+  approximate?: boolean;
+}
+
+const {
+  title,
+  source,
+  preview,
+  lang,
+  caption,
+  approximate = false,
+} = Astro.props;
+
+// `<Code>` only resolves bundled language ids when a string is passed; for
+// our custom grammar, hand the registration object directly. See the comment
+// in src/utils/circ-lang.mjs for why this is required.
+const codeLang = lang ?? circLang;
+
+// `<Code>` reads its own `theme`/`themes` props rather than the global
+// markdown.shikiConfig, so we pass the dual-theme config explicitly. With
+// defaultColor:false Shiki emits both --shiki-light and --shiki-dark CSS
+// variables on every span; the [data-theme] selector in global.css picks
+// which one to apply at runtime.
+const themes = { light: 'github-light', dark: 'github-dark' };
+---
+<figure class="cp">
+  {title && <figcaption class="cp-title">{title}</figcaption>}
+  <div class="cp-panes">
+    <div class="cp-pane cp-source">
+      <div class="cp-pane-label">source</div>
+      <Code code={source.trim()} lang={codeLang as any} themes={themes} defaultColor={false} />
+    </div>
+    <div class="cp-pane cp-preview">
+      <div class="cp-pane-label">
+        circ-compile --preview
+        {approximate && <span class="cp-approx" title="Illustrative — not byte-for-byte CLI output">approx.</span>}
+      </div>
+      <pre><code>{preview.replace(/^\n+|\n+$/g, '')}</code></pre>
+    </div>
+  </div>
+  {caption && <p class="cp-caption">{caption}</p>}
+</figure>

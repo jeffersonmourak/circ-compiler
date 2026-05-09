@@ -1,0 +1,19 @@
+{
+  "name": "circ-site",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run sync && astro dev",
+    "build": "bun run sync && astro build",
+    "preview": "astro preview",
+    "sync": "bun run scripts/sync-reference.ts"
+  },
+  "dependencies": {
+    "astro": "^5.0.0",
+    "circ-renderer": "file:../../circ-renderer"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
+}
