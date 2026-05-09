@@ -1,4 +1,8 @@
-# Getting started with `circ-compile`
+---
+layout: ../../layouts/DocsLayout.astro
+title: "Getting Started"
+description: "Install the compiler, write your first circuit, and drive it from Node."
+---
 
 This walkthrough takes you from a fresh checkout to a working compiled circuit you can drive from Node. Each step has expected output so you can verify you are on track.
 
@@ -76,7 +80,7 @@ Expected:
                     ╰─────╯
 ```
 
-The not-gate's output fans out to both the LED and the `out` pin — `●` marks the branch point, and the two `▶` arrowheads show where each branch terminates. See [`preview.md`](preview.md) for `--expand-macros`, `--color`, and the rendering conventions.
+The not-gate's output fans out to both the LED and the `out` pin — `●` marks the branch point, and the two `▶` arrowheads show where each branch terminates. See [`preview.md`](/reference/preview) for `--expand-macros`, `--color`, and the rendering conventions.
 
 Or enumerate the circuit's behaviour against every input combination as a Markdown truth table:
 
@@ -144,7 +148,7 @@ a=0 -> NOT a = 1
 a=1 -> NOT a = 0
 ```
 
-`0` means low, `1` means high, `2` means undefined. The full export list emitted by `circ-compile … -o out.wasm` today is exactly `topology_alloc`, `init`, `run`, `setPin`, `getOutputState` (plus `memory`); see [`DOCS/wasm-api.md`](wasm-api.md) for the full contract. The two `env` callbacks (`debugEnabled` and `onDebugLog`) are required imports — supply the no-op stubs above unless you want debug logging.
+`0` means low, `1` means high, `2` means undefined. The full export list emitted by `circ-compile … -o out.wasm` today is exactly `topology_alloc`, `init`, `run`, `setPin`, `getOutputState` (plus `memory`); see [`DOCS/wasm-api.md`](/reference/wasm-api) for the full contract. The two `env` callbacks (`debugEnabled` and `onDebugLog`) are required imports — supply the no-op stubs above unless you want debug logging.
 
 ## 5. Use a built-in macro (`xor`)
 

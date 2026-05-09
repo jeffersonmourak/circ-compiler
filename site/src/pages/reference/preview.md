@@ -1,4 +1,8 @@
-# Preview: ASCII circuit schematics
+---
+layout: ../../layouts/DocsLayout.astro
+title: "ASCII Preview"
+description: "Render circuits as deterministic ASCII schematics with --preview."
+---
 
 `circ-compile <foo.circ> --preview` renders a digital circuit as a styled ASCII schematic to stdout. The output is deterministic — the same `.circ` source produces byte-identical output on every invocation — and includes the wires, gate glyphs, fan-out taps, and jump-arc crossings that make the diagram readable in a terminal.
 
