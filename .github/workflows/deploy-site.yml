@@ -60,6 +60,8 @@ jobs:
       - name: Build site
         env:
           BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          PUBLIC_POSTHOG_KEY: ${{ secrets.PUBLIC_POSTHOG_KEY }}
+          PUBLIC_POSTHOG_HOST: ${{ vars.PUBLIC_POSTHOG_HOST }}
         run: bun run build
         working-directory: ./site
 

@@ -1,6 +1,7 @@
 ---
 import Nav from '../components/Nav.astro';
 import Footer from '../components/Footer.astro';
+import PostHog from '../components/PostHog.astro';
 import '../styles/global.css';
 
 interface Props {
@@ -24,6 +25,7 @@ const base = import.meta.env.BASE_URL;
     <meta name="description" content={description} />
     <link rel="icon" type="image/svg+xml" href={`${base}favicon.svg`} />
     <meta name="color-scheme" content="light dark" />
+    <PostHog />
     <script is:inline>
       // Pre-paint theme initialization to avoid a light/dark flash. Reads
       // localStorage first, then falls back to the OS preference.
