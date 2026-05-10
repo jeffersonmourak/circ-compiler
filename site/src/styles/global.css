@@ -1,19 +1,53 @@
-/* ---------- design tokens ---------- */
-:root {
-  --bg: #fdfdfb;
-  --fg: #1a1816;
-  --muted: #6b665f;
-  --border: #e6e2d9;
-  --accent: #b85c1c;
-  --accent-soft: #d97a3a;
-  --code-bg: #f5f1e8;
-  --pane-bg: #fafaf6;
-  --pane-label-bg: #efeadf;
+/* ---------- typefaces ---------- */
+/* Self-hosted from public/fonts/ so we work under any base-path deploy
+   (the relative `../fonts/...` resolves against the bundled CSS in
+   `_astro/`, which sits one level below the site root). Both faces are
+   licensed SIL OFL 1.1 — see public/fonts/*-LICENSE.txt. font-display:
+   swap paints prose immediately in the system fallback and swaps in the
+   webfont once it arrives, so we never block first paint on the network. */
+@font-face {
+  font-family: 'Ronzino';
+  src: url('../fonts/Ronzino-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Necto Mono';
+  src: url('../fonts/NectoMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
 
-  --font-prose: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Monaco,
-    Consolas, "Liberation Mono", "Courier New", monospace;
+/* ---------- design tokens ---------- */
+/* Palette mirrors the blog (jeffersonmourak.github.io static/css/terminal.css):
+   light is #f8f4ff / #443856 / #6e49ab, dark is #090311 / #c0abda / #b097d1.
+   Supporting tokens (muted, border, pane-bg, code-bg, pane-label-bg,
+   accent-soft) are derived from the same purple family by shifting
+   lightness only — hue stays put so the chrome reads as one brand. */
+:root {
+  --bg: #f8f4ff;
+  --fg: #443856;
+  --muted: #8a7e9a;
+  --border: #e6dff5;
+  --accent: #6e49ab;
+  --accent-soft: #8a6dc4;
+  --code-bg: #e8def0;
+  --pane-bg: #f4eefb;
+  --pane-label-bg: #ebe4f5;
+
+  --font-prose: 'Ronzino', ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: 'Necto Mono', ui-monospace, SFMono-Regular, "JetBrains Mono",
+    Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  /* Strict system-mono stack used only where character-grid alignment is
+     load-bearing (CodePreview's --preview pane renders box-drawing glyphs:
+     ╭─╮│╰─╯├┤▶○ etc.). Necto Mono is a stylized mono whose box-drawing
+     coverage / advance-widths don't reliably grid, so we explicitly opt out
+     of it for those diagrams. */
+  --font-mono-strict: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo,
+    Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 
   --measure: 36rem;
   --line: 1.65;
@@ -22,15 +56,15 @@
 }
 
 [data-theme="dark"] {
-  --bg: #15140f;
-  --fg: #e8e4d8;
-  --muted: #908a7c;
-  --border: #2a2822;
-  --accent: #d97a3a;
-  --accent-soft: #e89860;
-  --code-bg: #1d1b15;
-  --pane-bg: #1a1813;
-  --pane-label-bg: #211e17;
+  --bg: #090311;
+  --fg: #c0abda;
+  --muted: #7d6e94;
+  --border: #1a1228;
+  --accent: #b097d1;
+  --accent-soft: #c8b3e0;
+  --code-bg: #1f1438;
+  --pane-bg: #0c0517;
+  --pane-label-bg: #13091f;
 
   color-scheme: dark;
 }
@@ -225,6 +259,11 @@ hr {
   margin: 0;
 }
 
+/* Colophon (typeface credit) sits in the same small-text tier as the
+   signature so the bottom of the footer reads as a coherent byline cluster
+   rather than three competing-size paragraphs. */
+.colophon { font-size: 0.85rem; margin-top: 0.25rem; }
+
 /* Signature line + beating-heart animation. The lub-dub keyframes squeeze two
    beats into the first third of the cycle, then rest — closer to a real
    heartbeat than a single throb. `transform-origin: center` keeps the scaling
@@ -330,7 +369,12 @@ hr {
   font-size: 0.88rem;
   line-height: 1.55;
 }
-/* ASCII previews need wider line-height for diagrams to read clearly */
+/* ASCII previews need wider line-height for diagrams to read clearly, and a
+   strict system mono so box-drawing glyphs stay on the character grid. */
+.cp-preview pre,
+.cp-preview pre code {
+  font-family: var(--font-mono-strict);
+}
 .cp-preview pre { line-height: 1; white-space: pre; }
 .cp-caption {
   color: var(--muted);
@@ -660,68 +704,34 @@ a.install-line:hover {
 
 .download-intro { max-width: var(--measure); }
 
-.download-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 1.25rem;
+/* Five-column download manifest. `display: block; overflow-x: auto` lets
+   the table scroll horizontally on narrow viewports instead of squeezing
+   columns into illegibility — the file-name column in particular is
+   long-mono and refuses to wrap gracefully. Header cells get the same
+   pane-bg as docs tables so the surface reads as one family. */
+.download-table {
+  border-collapse: collapse;
   margin: 2rem 0 3rem;
+  font-size: 0.92rem;
+  display: block;
+  overflow-x: auto;
 }
-.download-card {
+.download-table th,
+.download-table td {
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 1.25rem;
+  padding: 0.55rem 0.85rem;
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.download-table th {
   background: var(--pane-bg);
-  display: flex;
-  flex-direction: column;
+  font-weight: 600;
 }
-.download-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
+.download-table td code {
+  font-size: 0.85em;
 }
-.download-head h2 {
-  font-size: 1.25rem;
-  margin: 0;
-}
-.download-head .arch {
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  color: var(--muted);
-}
-.download-button {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  padding: 0.75rem 1rem;
-  background: var(--accent);
-  color: var(--bg);
-  border-radius: 6px;
-  text-decoration: none;
-  font-weight: 500;
-  margin-bottom: 0.75rem;
-  transition: background 0.15s;
-}
-.download-button:hover {
-  background: var(--accent-soft);
-  text-decoration: none;
-}
-.download-button .filename {
-  font-family: var(--font-mono);
-  font-size: 0.85rem;
-  word-break: break-all;
-}
-.download-button .hint {
-  font-size: 0.8rem;
-  opacity: 0.85;
-}
-.platform-note {
-  font-size: 0.9rem;
-  color: var(--muted);
-  margin: 0 0 0.75rem;
-  max-width: none;
-}
+
 .install-snippet {
   background: var(--code-bg);
   border: 1px solid var(--border);

@@ -1,5 +1,6 @@
 import { defineConfig } from 'astro/config';
 import { circLang } from './src/utils/circ-lang.mjs';
+import { shikiThemes } from './src/utils/shiki-themes.mjs';
 
 const base = process.env.BASE_PATH ?? '/';
 const site = process.env.SITE_URL;
@@ -11,7 +12,7 @@ export default defineConfig({
   trailingSlash: 'ignore',
   markdown: {
     shikiConfig: {
-      themes: { light: 'github-light', dark: 'github-dark' },
+      themes: shikiThemes,
       defaultColor: false,
       langs: [circLang],
       wrap: false,

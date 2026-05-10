@@ -17,50 +17,30 @@ const platforms = [
     arch: 'x86_64',
     label: 'linux-x86_64',
     ext: 'tar.gz',
-    install: (pkg: string) => [
-      `tar -xzf ${pkg}.tar.gz`,
-      `cd ${pkg}`,
-      './circ-compile --help',
-    ],
-    note: 'Statically linked against musl — should run on any modern Linux distro without extra dependencies.',
+    minOs: 'Kernel 3.2+',
   },
   {
     os: 'macOS',
     arch: 'aarch64 (Apple Silicon)',
     label: 'macos-aarch64',
     ext: 'tar.gz',
-    install: (pkg: string) => [
-      `tar -xzf ${pkg}.tar.gz`,
-      `cd ${pkg}`,
-      'xattr -d com.apple.quarantine circ-compile',
-      './circ-compile --help',
-    ],
-    note: 'Apple Silicon only (M1/M2/M3+). The xattr step removes the Gatekeeper quarantine flag the browser sets on downloaded executables. Intel Mac users should build from source.',
+    minOs: '11 (Big Sur)',
   },
   {
     os: 'Windows',
     arch: 'x86_64',
     label: 'windows-x86_64',
     ext: 'zip',
-    install: (pkg: string) => [
-      `tar -xf ${pkg}.zip`,
-      `cd ${pkg}`,
-      'circ-compile.exe --help',
-    ],
-    note: 'Built with the GNU toolchain — no MSVC redistributable required. Tested on Windows 10+.',
+    minOs: '10',
   },
 ];
 
-const downloads = platforms.map((p) => {
-  const pkg = `circ-compile-${version}-${p.label}`;
-  return {
-    os: p.os,
-    arch: p.arch,
-    file: `${pkg}.${p.ext}`,
-    install: p.install(pkg),
-    note: p.note,
-  };
-});
+const downloads = platforms.map((p) => ({
+  os: p.os,
+  arch: p.arch,
+  file: `circ-compile-${version}-${p.label}.${p.ext}`,
+  minOs: p.minOs,
+}));
 ---
 <Base
   title="Download — circ"
@@ -81,28 +61,32 @@ const downloads = platforms.map((p) => {
   </aside>
 
   <p class="download-intro">
-    Pre-built binaries for the three major desktop platforms. Each archive
-    bundles the <code>circ-compile</code> CLI together with the project's
-    <code>LICENSE</code> and <code>README</code>. Prefer to build it yourself?
-    See the <a href={url('/reference/getting-started')}>getting-started guide</a>.
+    Pre-built binaries for the three major desktop platforms. Prefer to build
+    from source? See the <a href={url('/reference/getting-started')}>getting-started guide</a>.
   </p>
 
-  <div class="download-grid">
-    {downloads.map((d) => (
-      <article class="download-card">
-        <header class="download-head">
-          <h2>{d.os}</h2>
-          <span class="arch">{d.arch}</span>
-        </header>
-        <a class="download-button" href={url(`/downloads/${d.file}`)} download>
-          <span class="filename">{d.file}</span>
-          <span class="hint">↓ Download</span>
-        </a>
-        <p class="platform-note">{d.note}</p>
-        <pre class="install-snippet"><code>{d.install.join('\n')}</code></pre>
-      </article>
-    ))}
-  </div>
+  <table class="download-table">
+    <thead>
+      <tr>
+        <th>OS</th>
+        <th>Architecture</th>
+        <th>File name</th>
+        <th>Min OS version</th>
+        <th>Download</th>
+      </tr>
+    </thead>
+    <tbody>
+      {downloads.map((d) => (
+        <tr>
+          <td>{d.os}</td>
+          <td>{d.arch}</td>
+          <td><code>{d.file}</code></td>
+          <td>{d.minOs}</td>
+          <td><a href={url(`/downloads/${d.file}`)} download>↓ Download</a></td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
 
   {GITHUB_PUBLIC && (
     <section class="download-source">

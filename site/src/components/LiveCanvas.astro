@@ -63,10 +63,11 @@ const wasmHref = url(`/wasm/${wasm}`);
     errorEl.hidden = true;
 
     try {
-      const [{ renderCircuit }, { pickTheme }] = await Promise.all([
+      const [{ renderCircuit }, themeMod] = await Promise.all([
         loadRenderer(),
         loadThemes(),
       ]);
+      const { pickTheme, onAssetsReady } = themeMod;
       const view = (await renderCircuit({
         url: wasmUrl,
         cell,
@@ -79,6 +80,15 @@ const wasmHref = url(`/wasm/${wasm}`);
       mountEl.hidden = false;
       launch.hidden = true;
       active.set(container, { view, opts: { url: wasmUrl, cell, padding } });
+
+      // First mount also registers the sprite-ready hook. The PNG gate
+      // sprites are decoded asynchronously by circ-theme; canvases that
+      // mounted before they finished show vector fallback. Once sprites
+      // resolve, rebuild every active canvas so the dark theme picks them
+      // up. Light theme has useSprites:false, so its rebuild is a visual
+      // no-op (vectors → vectors), but keeping the logic uniform avoids
+      // needing to inspect the active theme here.
+      onAssetsReady(() => { rebuildAll().catch(() => {}); });
     } catch (err) {
       console.error('LiveCanvas: failed to load', wasmUrl, err);
       errorEl.textContent =
@@ -91,6 +101,34 @@ const wasmHref = url(`/wasm/${wasm}`);
     }
   }
 
+  // Tear down and re-mount every active canvas with the current theme.
+  // Used by both the data-theme MutationObserver and the sprite-ready
+  // hook, since circ-renderer captures the theme at construction time
+  // and there's no in-place re-theme API.
+  async function rebuildAll() {
+    const [{ renderCircuit }, { pickTheme }] = await Promise.all([
+      loadRenderer(),
+      loadThemes(),
+    ]);
+    document.querySelectorAll<HTMLElement>('.lc').forEach(async (container) => {
+      const cur = active.get(container);
+      if (!cur) return;
+      const mountEl = container.querySelector<HTMLElement>('.lc-mount');
+      if (!mountEl) return;
+      cur.view.destroy();
+      const view = (await renderCircuit({
+        url: cur.opts.url,
+        cell: cur.opts.cell,
+        padding: cur.opts.padding,
+        interactive: true,
+        theme: pickTheme() as any,
+      })) as unknown as CircView;
+      mountEl.innerHTML = '';
+      mountEl.appendChild(view.canvas);
+      active.set(container, { view, opts: cur.opts });
+    });
+  }
+
   function init() {
     document.querySelectorAll<HTMLElement>('.lc').forEach((container) => {
       const launch = container.querySelector<HTMLButtonElement>('.lc-launch');
@@ -98,31 +136,8 @@ const wasmHref = url(`/wasm/${wasm}`);
     });
 
     // When the user toggles light/dark, rebuild any already-mounted canvases
-    // with the matching theme. We can't re-theme in-place — circ-renderer's
-    // theme is captured at construction — so destroy + remount.
-    const observer = new MutationObserver(async () => {
-      const [{ renderCircuit }, { pickTheme }] = await Promise.all([
-        loadRenderer(),
-        loadThemes(),
-      ]);
-      document.querySelectorAll<HTMLElement>('.lc').forEach(async (container) => {
-        const cur = active.get(container);
-        if (!cur) return;
-        const mountEl = container.querySelector<HTMLElement>('.lc-mount');
-        if (!mountEl) return;
-        cur.view.destroy();
-        const view = (await renderCircuit({
-          url: cur.opts.url,
-          cell: cur.opts.cell,
-          padding: cur.opts.padding,
-          interactive: true,
-          theme: pickTheme() as any,
-        })) as unknown as CircView;
-        mountEl.innerHTML = '';
-        mountEl.appendChild(view.canvas);
-        active.set(container, { view, opts: cur.opts });
-      });
-    });
+    // with the matching theme.
+    const observer = new MutationObserver(() => { rebuildAll().catch(() => {}); });
     observer.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ['data-theme'],
