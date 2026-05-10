@@ -579,6 +579,21 @@ a.install-line:hover {
   margin-bottom: 1.5rem;
 }
 .docs-header h1 { margin: 1rem 0 0.5rem; }
+/* Breadcrumb sits above the H1 on /reference/* child pages. The adjacent
+   sibling rule tightens the gap to the title — without it, the H1's
+   1rem top margin would leave too much air between the back-link and
+   the page title. */
+.docs-breadcrumb {
+  font-size: 0.9rem;
+  margin: 0.5rem 0 0;
+}
+.docs-breadcrumb a {
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.docs-breadcrumb a:hover { color: var(--accent); }
+.docs-breadcrumb + h1 { margin-top: 0.25rem; }
 .docs-lede {
   color: var(--muted);
   max-width: var(--measure);
@@ -625,13 +640,25 @@ a.install-line:hover {
   padding-left: 1rem;
   font-size: 0.85rem;
 }
+/* The negative left margin + matching padding lets the .toc-active
+   border-left sit OUTSIDE the natural text column, so the indicator
+   appears as a side rule rather than indenting the active item. The
+   transition smooths color/border changes as the reader scrolls. */
 .docs-toc a {
   color: var(--muted);
   text-decoration: none;
   display: block;
-  padding: 0.15rem 0;
+  padding: 0.15rem 0 0.15rem 0.5rem;
+  margin-left: -0.5rem;
+  border-left: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
 }
 .docs-toc a:hover { color: var(--accent); }
+.docs-toc a.toc-active {
+  color: var(--accent);
+  font-weight: 600;
+  border-left-color: var(--accent);
+}
 
 .docs-prose { max-width: 50rem; min-width: 0; }
 .docs-prose h2 {

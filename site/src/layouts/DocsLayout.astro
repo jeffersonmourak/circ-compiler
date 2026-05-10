@@ -1,5 +1,6 @@
 ---
 import Base from './Base.astro';
+import { url } from '../utils/url.ts';
 
 interface Heading {
   depth: number;
@@ -14,10 +15,21 @@ interface Props {
 
 const { frontmatter, headings } = Astro.props;
 const toc = headings.filter((h) => h.depth >= 2 && h.depth <= 3);
+
+// Show a "← Reference" breadcrumb on every page UNDER /reference/ (not on
+// the index itself). End-anchored regex matches both root and base-path
+// deploys, e.g. /reference/getting-started/ and
+// /circ-compiler/reference/getting-started/.
+const isReferenceChild = /\/reference\/[^/]+\/?$/.test(Astro.url.pathname);
 ---
 <Base title={`${frontmatter.title} — circ`} description={frontmatter.description}>
   <article class="docs">
     <header class="docs-header">
+      {isReferenceChild && (
+        <nav class="docs-breadcrumb" aria-label="Breadcrumb">
+          <a href={url('/reference')}>← Reference</a>
+        </nav>
+      )}
       <h1>{frontmatter.title}</h1>
       {frontmatter.description && <p class="docs-lede">{frontmatter.description}</p>}
     </header>
@@ -40,3 +52,112 @@ const toc = headings.filter((h) => h.depth >= 2 && h.depth <= 3);
     </div>
   </article>
 </Base>
+
+<script>
+  // TOC scroll-spy: highlights the anchor in the right-rail TOC that
+  // matches the section the reader is currently inside. The "active"
+  // heading is whichever h2/h3 is in the top third of the viewport, or
+  // — if no heading is in that band right now — the most recently passed
+  // one. That keeps the highlight stable while reading paragraph content
+  // between headings, instead of flickering or dropping out.
+  function initTocScrollSpy() {
+    const headings = Array.from(
+      document.querySelectorAll<HTMLElement>('.docs-prose h2[id], .docs-prose h3[id]'),
+    );
+    if (headings.length === 0) return;
+
+    const links = new Map<string, HTMLAnchorElement>();
+    document.querySelectorAll<HTMLAnchorElement>('.docs-toc a[href^="#"]').forEach((a) => {
+      const id = a.getAttribute('href')?.slice(1);
+      if (id) links.set(id, a);
+    });
+    if (links.size === 0) return;
+
+    const order = headings.map((h) => h.id);
+    const visible = new Set<string>();
+    let lastPassed: string | null = null;
+    let active: string | null = null;
+
+    // Only auto-scroll the TOC when it owns its own scrollable container.
+    // Below the 900px breakpoint the TOC flows inline with the page, so
+    // calling scrollIntoView there would scroll the WINDOW and yank the
+    // reader's position. scrollHeight > clientHeight is true only when
+    // the sticky desktop layout has overflowed.
+    function keepLinkVisible(link: HTMLAnchorElement) {
+      const nav = link.closest('nav');
+      if (!nav || nav.scrollHeight <= nav.clientHeight) return;
+      const linkRect = link.getBoundingClientRect();
+      const navRect = nav.getBoundingClientRect();
+      if (linkRect.top < navRect.top + 8) {
+        nav.scrollTo({
+          top: nav.scrollTop + linkRect.top - navRect.top - 8,
+          behavior: 'smooth',
+        });
+      } else if (linkRect.bottom > navRect.bottom - 8) {
+        nav.scrollTo({
+          top: nav.scrollTop + linkRect.bottom - navRect.bottom + 8,
+          behavior: 'smooth',
+        });
+      }
+    }
+
+    function setActive(id: string | null) {
+      if (id === active) return;
+      if (active) links.get(active)?.classList.remove('toc-active');
+      if (id) {
+        const link = links.get(id);
+        if (link) {
+          link.classList.add('toc-active');
+          keepLinkVisible(link);
+        }
+      }
+      active = id;
+    }
+
+    function update() {
+      let next: string | null = null;
+      for (const id of order) {
+        if (visible.has(id)) {
+          next = id;
+          break;
+        }
+      }
+      if (!next) next = lastPassed;
+      if (!next) next = order[0] ?? null;
+      setActive(next);
+    }
+
+    // rootMargin pushes the bottom of the observer's viewport up by 66%,
+    // making the effective active zone the top ~34% of the screen. A
+    // heading is "in active zone" while its top is within that band.
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const id = entry.target.id;
+          if (entry.isIntersecting) {
+            visible.add(id);
+          } else {
+            visible.delete(id);
+            // Going up off the top of the active zone counts as "passed".
+            // Going off the bottom (entry.boundingClientRect.top > 0)
+            // means we never reached it yet, so leave lastPassed alone.
+            if (entry.boundingClientRect.top < 0) {
+              lastPassed = id;
+            }
+          }
+        }
+        update();
+      },
+      { rootMargin: '0px 0px -66% 0px', threshold: 0 },
+    );
+
+    for (const h of headings) observer.observe(h);
+    update();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initTocScrollSpy);
+  } else {
+    initTocScrollSpy();
+  }
+</script>
