@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Base from '../layouts/Base.astro';
-import { url, GITHUB_PUBLIC } from '../utils/url.ts';
+import { url, GITHUB_PUBLIC, GITHUB_REPO } from '../utils/url.ts';
 
 // Single source of truth: the VERSION file at the repo root, also read
 // by tools/build-dist.sh so the archive filenames and the URLs on this
@@ -95,8 +95,8 @@ const downloads = platforms.map((p) => ({
         For Intel Macs, ARM Linux, ARM Windows, or any platform not listed above,
         build directly with <a href="https://ziglang.org/" rel="noreferrer noopener">Zig 0.15.x</a>:
       </p>
-      <pre class="install-snippet"><code>{`git clone <repo>
-cd circ-compiler
+      <pre class="install-snippet"><code>{`git clone ${GITHUB_REPO}
+cd ${GITHUB_REPO.split('/').pop()}
 zig build circ-compile -Doptimize=ReleaseFast
 ./zig-out/bin/circ-compile --help`}</code></pre>
       <p>

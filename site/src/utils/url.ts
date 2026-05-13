@@ -15,4 +15,4 @@ export const RENDERER_REPO = 'https://github.com/jeffersonmourak/circ-renderer';
 // nav + footer render a muted "GitHub (soon)" tag instead of a live link,
 // and per-example "Source: …" lines are suppressed (the file paths they
 // point at aren't reachable yet).
-export const GITHUB_PUBLIC = false;
+export const GITHUB_PUBLIC = true;
