@@ -196,6 +196,43 @@ hr {
   color: var(--accent);
 }
 
+/* Hamburger toggle. Hidden on desktop — only surfaces below the mobile
+   breakpoint where the link row no longer fits inline. */
+.nav-toggle {
+  display: none;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 4px;
+  margin-left: auto;
+}
+.nav-toggle:hover { border-color: var(--accent); }
+.nav-toggle-bar {
+  display: block;
+  width: 1.05rem;
+  height: 2px;
+  background: var(--fg);
+  border-radius: 1px;
+  transition: transform 150ms ease, opacity 150ms ease;
+}
+.nav-toggle:hover .nav-toggle-bar { background: var(--accent); }
+.nav-toggle[aria-expanded="true"] .nav-toggle-bar:nth-child(1) {
+  transform: translateY(6px) rotate(45deg);
+}
+.nav-toggle[aria-expanded="true"] .nav-toggle-bar:nth-child(2) {
+  opacity: 0;
+}
+.nav-toggle[aria-expanded="true"] .nav-toggle-bar:nth-child(3) {
+  transform: translateY(-6px) rotate(-45deg);
+}
+
 /* Used in nav + footer when GITHUB_PUBLIC is false — looks like a nav item
    but with no link affordance, so the slot doesn't visually disappear. */
 .link-soon {
@@ -305,12 +342,22 @@ hr {
    toggle out of it and surface it next to the footer links instead. */
 .site-footer .theme-toggle { display: none; }
 @media (max-width: 600px) {
-  .site-nav {
+  .site-nav { flex-wrap: wrap; }
+  .nav-toggle { display: flex; }
+  /* Nav row collapses to a hidden full-width block under the brand+toggle
+     row, and is revealed by [data-open] which the toggle script sets. */
+  .site-nav nav {
+    flex: 1 0 100%;
+    display: none;
+  }
+  .site-nav nav[data-open] { display: block; }
+  .site-nav nav ul {
     flex-direction: column;
+    gap: 0.75rem;
+    padding-top: 0.5rem;
   }
   .site-nav .link-soon {
-    /* flex-direction: column; */
-    display: none;
+    display: inline-block;
   }
   .site-nav .theme-toggle { display: none; }
   .site-footer .theme-toggle { display: grid; }
@@ -451,6 +498,31 @@ hr {
 .lc-launch[hidden],
 .lc-mount[hidden],
 .lc-error[hidden] { display: none; }
+
+/* Below the mobile breakpoint, the desktop max-width:100% rule downscales
+   the canvas bitmap to fit the viewport, which makes gates and labels look
+   blurry. Let the canvas render at its native size and use the existing
+   overflow-x:auto on .lc-mount to pan instead.
+
+   We also have to drop the flex centering: with display:flex +
+   justify-content:center, a flex child wider than its container gets
+   centered with overflow on *both* sides — but scrollLeft can't go
+   negative, so the left half (input pins, in our case) becomes
+   permanently unreachable. Block layout + margin-inline:auto on the
+   canvas centers it when there's room and collapses to a left-aligned
+   start when the canvas is wider than the mount, keeping every pixel
+   scrollable. */
+@media (max-width: 600px) {
+  .lc-mount {
+    display: block;
+    -webkit-overflow-scrolling: touch;
+  }
+  .lc-mount canvas {
+    max-width: none;
+    height: auto;
+    margin-inline: auto;
+  }
+}
 
 /* ---------- landing ---------- */
 .landing-tagline {

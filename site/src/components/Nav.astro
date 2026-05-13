@@ -13,7 +13,18 @@ const links = [
   <a href={url('/')} class="brand">
     <span class="brand-mark">circ</span>
   </a>
-  <nav aria-label="Primary">
+  <button
+    class="nav-toggle"
+    type="button"
+    aria-expanded="false"
+    aria-controls="primary-nav"
+    aria-label="Toggle menu"
+  >
+    <span class="nav-toggle-bar"></span>
+    <span class="nav-toggle-bar"></span>
+    <span class="nav-toggle-bar"></span>
+  </button>
+  <nav id="primary-nav" aria-label="Primary">
     <ul>
       {links.map((l) => (
         <li><a href={l.href}>{l.label}</a></li>
@@ -27,3 +38,20 @@ const links = [
   </nav>
   <ThemeToggle />
 </header>
+
+<script>
+  const toggle = document.querySelector<HTMLButtonElement>('.nav-toggle');
+  const nav = document.getElementById('primary-nav');
+  if (toggle && nav) {
+    const setOpen = (open: boolean) => {
+      toggle.setAttribute('aria-expanded', String(open));
+      nav.toggleAttribute('data-open', open);
+    };
+    toggle.addEventListener('click', () => {
+      setOpen(toggle.getAttribute('aria-expanded') !== 'true');
+    });
+    nav.querySelectorAll('a').forEach((a) =>
+      a.addEventListener('click', () => setOpen(false))
+    );
+  }
+</script>
