@@ -82,7 +82,17 @@ const downloads = platforms.map((p) => ({
           <td>{d.arch}</td>
           <td><code>{d.file}</code></td>
           <td>{d.minOs}</td>
-          <td><a href={url(`/downloads/${d.file}`)} download>↓ Download</a></td>
+          <td>
+            <a
+              href={url(`/downloads/${d.file}`)}
+              download
+              data-cli-download
+              data-os={d.os}
+              data-arch={d.arch}
+              data-file={d.file}
+              data-version={version}
+            >↓ Download</a>
+          </td>
         </tr>
       ))}
     </tbody>
@@ -106,4 +116,21 @@ zig build circ-compile -Doptimize=ReleaseFast
       </p>
     </section>
   )}
+
+  <script is:inline>
+    document.addEventListener('click', (event) => {
+      const link = event.target instanceof Element
+        ? event.target.closest('a[data-cli-download]')
+        : null;
+      if (!link) return;
+      if (typeof window.posthog === 'undefined') return;
+      window.posthog.capture('cli_download', {
+        os: link.dataset.os,
+        arch: link.dataset.arch,
+        file: link.dataset.file,
+        version: link.dataset.version,
+        href: link.getAttribute('href'),
+      });
+    });
+  </script>
 </Base>
