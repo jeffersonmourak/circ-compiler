@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
+import { execSync } from 'node:child_process';
 import { docs, DOCS_DIR, PUBLIC_DIR, SITE_URL, type Doc } from './lib/site-config.ts';
 import { tour } from '../src/content/tour.ts';
 import { examples } from '../src/content/examples.ts';
@@ -264,8 +265,98 @@ function emitDownloadTwin(): void {
   writeTwin('download.md', lines.join('\n'), 'src/pages/download.astro (hand-mirrored)');
 }
 
+function gitSha(): string {
+  try {
+    return execSync('git rev-parse HEAD', { cwd: REPO_ROOT, encoding: 'utf8' }).trim();
+  } catch {
+    return 'unknown';
+  }
+}
+
+function emitLlmsTxt(): void {
+  const lines = [
+    '# circ',
+    '',
+    '> A small declarative language for digital logic circuits. Programs are flat lists of declarations: name an input pin, instantiate a gate, wire its ports to signals from other components. The compiler (`circ-compile`) produces a self-contained WebAssembly module simulating the circuit, plus optional ASCII schematics and truth tables.',
+    '',
+    'Important notes:',
+    '',
+    '- `circ` is a v0 — single-bit signals only, no clocked registers, no multi-bit buses.',
+    '- Primitives are `and`, `not`, `led`, and `wire`; macros for `or`, `nand`, `nor`, `xor`, and `xnor` expand to those primitives at compile time.',
+    '- Sub-circuits live in their own `.circ` files and are pulled in with `import`.',
+    '',
+    '## Docs',
+    '',
+    `- [Landing page](${SITE_URL}/index.md): What \`circ\` is, what it isn't, where it runs.`,
+    `- [Tour](${SITE_URL}/tour.md): Seven progressive examples from a single NOT gate to a full-adder built from two half-adders.`,
+    `- [Language reference](${SITE_URL}/reference.md): Every keyword, every diagnostic code, the rules the validator enforces.`,
+    ...docs
+      .filter((d) => d.dst !== 'reference.md')
+      .map((d) => `- [${d.title}](${SITE_URL}/${d.dst}): ${d.description}`),
+    `- [Download](${SITE_URL}/download.md): Pre-built \`circ-compile\` binaries for Linux, macOS, and Windows.`,
+    '',
+    '## Examples',
+    '',
+    `- [Examples gallery](${SITE_URL}/examples.md): Curated \`.circ\` programs with their \`--preview\` output.`,
+    '',
+    '## Optional',
+    '',
+    `- [Architecture](${GITHUB_REPO}/blob/main/DOCS/architecture.md): Compiler pipeline and layering, useful when contributing.`,
+    `- [Design decisions](${GITHUB_REPO}/blob/main/DOCS/decisions/index.md): Rationale for the major language and runtime choices.`,
+    `- [Source repository](${GITHUB_REPO}): Issues, pull requests, and the canonical \`DOCS/\` directory.`,
+    '',
+  ];
+
+  writeTwin('llms.txt', lines.join('\n'), 'llmstxt.org index (generated)');
+}
+
+function stripDiscoveryBanner(body: string): string {
+  // The per-page discovery banner is helpful when each twin is fetched
+  // individually, but in a bundled `llms-full.txt` it repeats and wastes
+  // tokens. Drop it (the leading `> **Documentation index** ...` block + the
+  // blank lines that follow).
+  return body.replace(/^> \*\*Documentation index\*\*[\s\S]*?\n\n\n/, '');
+}
+
+function emitLlmsFullTxt(): void {
+  const sections: Array<{ path: string; label: string }> = [
+    { path: 'index.md', label: 'Landing page' },
+    { path: 'tour.md', label: 'Tour' },
+    { path: 'reference.md', label: 'Language reference' },
+    { path: 'reference/getting-started.md', label: 'Getting started' },
+    { path: 'reference/circuit-format.md', label: 'Circuit file format' },
+    { path: 'reference/wasm-api.md', label: 'WASM runtime API' },
+    { path: 'reference/preview.md', label: 'ASCII preview' },
+    { path: 'examples.md', label: 'Examples gallery' },
+    { path: 'download.md', label: 'Download' },
+  ];
+
+  const out: string[] = [
+    '# circ — full documentation bundle',
+    '',
+    `> Concatenation of every public \`.md\` twin on ${SITE_URL}.`,
+    `> Built from commit \`${gitSha()}\` by \`scripts/build-llm-mirror.ts\`.`,
+    `> Canonical source: ${GITHUB_REPO}.`,
+    '',
+  ];
+
+  for (const s of sections) {
+    const body = readFileSync(resolve(PUBLIC_DIR, s.path), 'utf8');
+    out.push('---');
+    out.push('');
+    out.push(`<!-- source: ${SITE_URL}/${s.path} (${s.label}) -->`);
+    out.push('');
+    out.push(stripDiscoveryBanner(body).trimEnd());
+    out.push('');
+  }
+
+  writeTwin('llms-full.txt', out.join('\n'), 'full bundle (generated)');
+}
+
 for (const d of docs) emitDocTwin(d);
 emitTourTwin();
 emitExamplesTwin();
 emitLandingTwin();
 emitDownloadTwin();
+emitLlmsTxt();
+emitLlmsFullTxt();
