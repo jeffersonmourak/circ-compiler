@@ -5,6 +5,10 @@ import { docs, DOCS_DIR, PUBLIC_DIR, SITE_URL, type Doc } from './lib/site-confi
 import { tour } from '../src/content/tour.ts';
 import { examples } from '../src/content/examples.ts';
 
+const REPO_ROOT = resolve(PUBLIC_DIR, '..', '..');
+const GITHUB_REPO = process.env.GITHUB_REPO ?? 'https://github.com/jeffersonmourak/circ-compiler';
+const GITHUB_PUBLIC = (process.env.GITHUB_PUBLIC ?? 'true').toLowerCase() !== 'false';
+
 // Cross-doc links are rewritten to absolute `.md` URLs so an LLM that fetches
 // a single twin can walk the rest of the docs without guessing URLs.
 const mdLinkMap = new Map<string, string>();
@@ -115,6 +119,153 @@ function emitExamplesTwin(): void {
   writeTwin('examples.md', `${intro}\n\n\n${body}\n`, 'src/content/examples.ts');
 }
 
+// Source of truth for the hero snippet on the landing page lives in
+// `src/pages/index.astro`. Mirror it here so the markdown twin shows the same
+// circuit. If you change one, change the other — there's no shared source
+// today (the JSX page interleaves prose with `<LiveCanvas>`, which doesn't
+// translate to markdown).
+const HERO_SOURCE = `// half_adder.circ
+import xor "<builtin>/xor.circ"
+input a, b
+xor s(a=a, b=b)
+and c(a=a, b=b)
+output sum(in=s.out)
+output carry(in=c.out)
+`;
+
+const HERO_PREVIEW = `╭───╮     ╭───╮         ╭───────╮
+│ a ├○─●─▶┤   │ ╭──────▶┤ carry │
+╰───╯  │  │AND├○╯       ╰───────╯
+      ╭┼─▶┤   │
+      ││  ╰───╯
+      ││
+╭───╮ ││  ╭───────╮     ╭─────╮
+│ b ├○●╰─▶┤       │ ╭──▶┤ sum │
+╰───╯ │   │[xor:s]├○╯   ╰─────╯
+      ╰──▶┤       │
+          ╰───────╯`;
+
+function emitLandingTwin(): void {
+  const lines = [
+    header(
+      'circ',
+      'A small language for building and simulating logic circuits, made for people learning how computers work.',
+    ).trimEnd(),
+    '',
+    '## Hero example: half-adder',
+    '',
+    'Two inputs, an XOR macro for the sum, an AND for the carry.',
+    '',
+    '### Source',
+    '',
+    '```circ',
+    HERO_SOURCE.trimEnd(),
+    '```',
+    '',
+    '### `circ-compile --preview`',
+    '',
+    '```',
+    HERO_PREVIEW,
+    '```',
+    '',
+    `Download \`circ-compile\` for Linux, macOS, or Windows: ${SITE_URL}/download.md`,
+    '',
+    '## What it is',
+    '',
+    '`circ` is a declarative language. Programs are flat lists of declarations: name an input pin, instantiate a gate, wire its ports to signals from other components. The primitives are `and`, `not`, `led`, and `wire`; macros for `or`, `nand`, `nor`, `xor`, and `xnor` expand to those primitives at compile time. Larger circuits live in their own `.circ` file and get pulled in with `import`.',
+    '',
+    "## What it isn't",
+    '',
+    '`circ` is a v0. There are no multi-bit buses, no clocked registers, no analog signals, no tri-state lines. A `wire` is a single-bit pass-through, not a let-binding for a vector. The language deliberately stops at the same boundary as the early Nand2Tetris hardware chapters.',
+    '',
+    '## Where it runs',
+    '',
+    '`circ-compile` produces a self-contained WebAssembly module: drive its input pins from JavaScript, read its outputs back, run it from Node or a browser. There is also a `--preview` flag that prints an ASCII schematic to your terminal — handy for sanity-checking the wiring before you simulate.',
+    '',
+    "If you've enjoyed Nand2Tetris or building NANDs from scratch in Petzold's *Code*, this is a language for doing more of that.",
+    '',
+  ];
+
+  writeTwin('index.md', lines.join('\n'), 'src/pages/index.astro (hand-mirrored)');
+}
+
+type Platform = {
+  os: string;
+  arch: string;
+  label: string;
+  ext: 'tar.gz' | 'zip';
+  minOs: string;
+};
+
+// Mirror of `src/pages/download.astro`. Same source of truth caveat as the
+// landing page applies.
+const PLATFORMS: Platform[] = [
+  { os: 'Linux', arch: 'x86_64', label: 'linux-x86_64', ext: 'tar.gz', minOs: 'Kernel 3.2+' },
+  { os: 'macOS', arch: 'aarch64 (Apple Silicon)', label: 'macos-aarch64', ext: 'tar.gz', minOs: '11 (Big Sur)' },
+  { os: 'Windows', arch: 'x86_64', label: 'windows-x86_64', ext: 'zip', minOs: '10' },
+];
+
+function readVersion(): string {
+  return readFileSync(resolve(REPO_ROOT, 'VERSION'), 'utf8').trim();
+}
+
+function emitDownloadTwin(): void {
+  const version = readVersion();
+  const repoName = GITHUB_REPO.split('/').pop() ?? 'circ-compiler';
+
+  const tableHeader = '| OS | Architecture | File | Min OS |';
+  const tableSep = '| --- | --- | --- | --- |';
+  const tableRows = PLATFORMS.map((p) => {
+    const file = `circ-compile-${version}-${p.label}.${p.ext}`;
+    const downloadUrl = `${SITE_URL}/downloads/${file}`;
+    return `| ${p.os} | ${p.arch} | [\`${file}\`](${downloadUrl}) | ${p.minOs} |`;
+  });
+
+  const lines = [
+    header(
+      'Download',
+      'Pre-built `circ-compile` binaries for Linux, macOS, and Windows. Alpha software — expect breaking changes between builds.',
+    ).trimEnd(),
+    '',
+    `Latest build: \`${version}\`.`,
+    '',
+    '## Alpha warning',
+    '',
+    "`circ-compile` is under active development. Expect rough edges, cryptic error messages, and breaking changes between builds. Don't use it for anything you care about preserving. Reports of what doesn't work are welcome — but for now, assume nothing here is stable.",
+    '',
+    '## Pre-built binaries',
+    '',
+    `Prefer to build from source? See [getting started](${SITE_URL}/reference/getting-started.md).`,
+    '',
+    tableHeader,
+    tableSep,
+    ...tableRows,
+    '',
+  ];
+
+  if (GITHUB_PUBLIC) {
+    lines.push(
+      '## Build from source',
+      '',
+      'For Intel Macs, ARM Linux, ARM Windows, or any platform not listed above, build directly with [Zig 0.15.x](https://ziglang.org/):',
+      '',
+      '```sh',
+      `git clone ${GITHUB_REPO}`,
+      `cd ${repoName}`,
+      'zig build circ-compile -Doptimize=ReleaseFast',
+      './zig-out/bin/circ-compile --help',
+      '```',
+      '',
+      `The full walkthrough — including writing your first \`.circ\` file and driving the compiled WASM from Node — lives in [getting started](${SITE_URL}/reference/getting-started.md).`,
+      '',
+    );
+  }
+
+  writeTwin('download.md', lines.join('\n'), 'src/pages/download.astro (hand-mirrored)');
+}
+
 for (const d of docs) emitDocTwin(d);
 emitTourTwin();
 emitExamplesTwin();
+emitLandingTwin();
+emitDownloadTwin();
