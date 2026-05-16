@@ -1,50 +1,9 @@
 #!/usr/bin/env bun
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { docs, BASE_PATH, DOCS_DIR, PAGES_DIR, type Doc } from './lib/site-config.ts';
 
-const here = dirname(fileURLToPath(import.meta.url));
-const SRC_DIR = resolve(here, '..', '..', 'DOCS');
-const PAGES_DIR = resolve(here, '..', 'src', 'pages');
-
-// Mirror astro.config.mjs so cross-doc links land on the right path in
-// both dev (BASE_PATH unset → '/') and CI builds (BASE_PATH=/circ-compiler).
-const base = (process.env.BASE_PATH ?? '/').replace(/\/?$/, '/');
-
-type Doc = { src: string; dst: string; title: string; description: string };
-
-const docs: Doc[] = [
-  {
-    src: 'language.md',
-    dst: 'reference.md',
-    title: 'Language Reference',
-    description: 'The full reference for the circ digital-logic language.',
-  },
-  {
-    src: 'getting-started.md',
-    dst: 'reference/getting-started.md',
-    title: 'Getting Started',
-    description: 'Install the compiler, write your first circuit, and drive it from Node.',
-  },
-  {
-    src: 'circuit-format.md',
-    dst: 'reference/circuit-format.md',
-    title: 'Circuit File Format',
-    description: 'The .circ language: declarations, ports, components, and built-ins.',
-  },
-  {
-    src: 'wasm-api.md',
-    dst: 'reference/wasm-api.md',
-    title: 'WASM Runtime API',
-    description: 'The export and import contract for every compiled .wasm artifact.',
-  },
-  {
-    src: 'preview.md',
-    dst: 'reference/preview.md',
-    title: 'ASCII Preview',
-    description: 'Render circuits as deterministic ASCII schematics with --preview.',
-  },
-];
+const base = BASE_PATH;
 
 // Filename → site URL, used to rewrite intra-doc markdown links so they
 // keep working after the move into pages/.
@@ -55,7 +14,7 @@ for (const d of docs) {
 }
 
 function syncDoc(d: Doc) {
-  const srcPath = resolve(SRC_DIR, d.src);
+  const srcPath = resolve(DOCS_DIR, d.src);
   const dstPath = resolve(PAGES_DIR, d.dst);
   let body = readFileSync(srcPath, 'utf8');
 

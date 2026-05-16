@@ -4,10 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun run sync && astro dev",
-    "build": "bun run sync && astro build",
+    "dev": "bun run sync && bun run llm-mirror && astro dev",
+    "build": "bun run sync && bun run llm-mirror && astro build",
     "preview": "astro preview",
-    "sync": "bun run scripts/sync-reference.ts"
+    "sync": "bun run scripts/sync-reference.ts",
+    "llm-mirror": "bun run scripts/build-llm-mirror.ts"
   },
   "dependencies": {
     "astro": "^5.0.0",
