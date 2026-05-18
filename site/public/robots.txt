@@ -1,0 +1,15 @@
+# Allow every crawler to index the human site. The markdown twins emitted by
+# `scripts/build-llm-mirror.ts` (e.g. /reference/getting-started.md) and the
+# llms.txt indexes live at the site root and are crawlable without an explicit
+# Allow rule — they're listed below for clarity and future-proofing.
+
+User-agent: *
+Allow: /
+Allow: /llms.txt
+Allow: /llms-full.txt
+Allow: /*.md$
+
+# https://contentsignal.org/ — explicit consent for inference-time use of the
+# markdown twins and llms* indexes. Drop or narrow these tokens if the project
+# decides to gate AI consumption later.
+Content-Signal: ai-train=yes, search=yes, ai-input=yes

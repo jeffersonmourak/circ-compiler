@@ -4,19 +4,43 @@ import Footer from '../components/Footer.astro';
 import PostHog from '../components/PostHog.astro';
 import '../styles/global.css';
 
-interface Props {
+type Props = {
   title?: string;
   description?: string;
-}
+  /**
+   * Override the auto-detected `.md` twin URL. Pass `null` to suppress the
+   * `<link rel="alternate">` advertisement entirely.
+   */
+  mdTwin?: string | null;
+};
 
 const {
   title = 'circ — a small language for digital circuits',
   description = 'A small language for building and simulating logic circuits, made for people learning how computers work.',
+  mdTwin,
 } = Astro.props;
+
+const stripTrailingSlash = (s: string): string => s.replace(/\/$/, '');
 
 // Normalize to always end in `/` so `${base}foo` builds a clean path.
 // configure-pages@v5 emits BASE_PATH without a trailing slash.
 const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
+
+// Map the current page path to its `.md` twin. The landing page hits
+// `index.md`; everywhere else we just append `.md`.
+function defaultTwin(pathname: string, basePath: string): string {
+  const normBase = stripTrailingSlash(basePath);
+  const trimmed = stripTrailingSlash(pathname);
+  if (trimmed === normBase || trimmed === '') {
+    return `${normBase}/index.md`;
+  }
+  return `${trimmed}.md`;
+}
+
+const twin: string | null = mdTwin === undefined
+  ? defaultTwin(Astro.url.pathname, base)
+  : mdTwin;
+const isLanding = twin === `${stripTrailingSlash(base)}/index.md`;
 ---
 <!doctype html>
 <html lang="en">
@@ -27,6 +51,13 @@ const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
     <meta name="description" content={description} />
     <link rel="icon" type="image/svg+xml" href={`${base}favicon.svg`} />
     <meta name="color-scheme" content="light dark" />
+    {twin && <link rel="alternate" type="text/markdown" href={twin} />}
+    {isLanding && (
+      <>
+        <link rel="llms-txt" href={`${base}llms.txt`} />
+        <link rel="llms-full-txt" href={`${base}llms-full.txt`} />
+      </>
+    )}
     <PostHog />
     <script is:inline>
       // Pre-paint theme initialization to avoid a light/dark flash. Reads
