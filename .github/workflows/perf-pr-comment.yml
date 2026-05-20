@@ -1,0 +1,148 @@
+# Posts engine-bench deltas as a PR comment when a pull request carries the
+# `perf` label. The PR's working tree is replayed against the base branch's
+# `engine.bench.golden`. The bench's `--output=json` flag emits a structured
+# diff document to stdout, which `tools/bench/format-delta-comment.py` then
+# renders as a markdown table for the comment body.
+#
+# The comment is tagged with a hidden marker so subsequent pushes update the
+# same comment instead of stacking new ones. Wall-clock (`drv_ms`) is not
+# included because it's host-dependent and not asserted in the golden (see
+# DOCS/benchmark.md for the broader bench design).
+name: Perf bench comment
+
+on:
+  pull_request:
+    types: [labeled, synchronize, opened, reopened]
+
+env:
+  ZIG_VERSION: "0.15.1"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+# Cancel in-flight runs when a new push lands on the same PR. The bench takes
+# a couple of minutes on CI, and rapid iteration during review would otherwise
+# queue up duplicate jobs and racing comment updates.
+concurrency:
+  group: perf-bench-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  bench-delta:
+    # Skip cheaply when the PR isn't a perf change. Re-triggers automatically
+    # the moment the label is applied (the `labeled` event above), so the
+    # author doesn't have to push again to get the comment.
+    if: contains(github.event.pull_request.labels.*.name, 'perf')
+    name: Comment engine-bench delta
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # Need base-branch history available so `git show origin/<base>:...`
+          # can pull its golden file without a separate fetch dance.
+          fetch-depth: 0
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+
+      - name: Resolve base ref
+        id: base
+        run: |
+          echo "ref=${{ github.event.pull_request.base.ref }}" >> "$GITHUB_OUTPUT"
+
+      - name: Snapshot base branch's engine.bench.golden
+        run: |
+          # checkout@v5 with fetch-depth: 0 already includes the base ref, but
+          # be defensive in case CI's defaults change.
+          git fetch --no-tags origin "${{ steps.base.outputs.ref }}" || true
+          git show "origin/${{ steps.base.outputs.ref }}:tests/fixtures/bench/engine.bench.golden" > /tmp/base.golden
+          wc -l /tmp/base.golden
+
+      - name: Run bench against the base golden
+        id: bench
+        # `--output=json` writes the structured diff document to stdout while
+        # the human-readable progress lines stay on stderr. We redirect them
+        # to separate files so the table-builder script only sees JSON. The
+        # bench returns non-zero on counter mismatch; we tolerate that here
+        # because the JSON path is the source of truth, not the exit code.
+        run: |
+          set +e
+          cp /tmp/base.golden tests/fixtures/bench/engine.bench.golden
+          zig build bench -- --output=json 1>/tmp/bench.json 2>/tmp/bench-stderr.txt
+          status=$?
+          set -e
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          echo "--- captured JSON (head) ---"
+          head -c 500 /tmp/bench.json || true
+          echo ""
+          echo "--- captured stderr (tail) ---"
+          tail -50 /tmp/bench-stderr.txt || true
+
+      - name: Render markdown table
+        run: |
+          python3 tools/bench/format-delta-comment.py \
+            < /tmp/bench.json \
+            > /tmp/bench-table.md
+          echo "--- rendered markdown ---"
+          cat /tmp/bench-table.md
+
+      - name: Post or update PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- perf-bench-comment -->';
+            const baseRef = '${{ steps.base.outputs.ref }}';
+            const status = '${{ steps.bench.outputs.status }}';
+            const table = fs.readFileSync('/tmp/bench-table.md', 'utf8').trim();
+            const runUrl = `${context.payload.repository.html_url}/actions/runs/${context.runId}`;
+
+            // The script's output already covers all three outcomes
+            // (match / mismatch / bench-failed-to-produce-JSON) with its
+            // own one-liner messaging; we just wrap with a heading and a
+            // footer. If the table looks like a "could not parse" /
+            // "no JSON" diagnostic, surface the run URL so the author can
+            // pivot to the actual error.
+            const isDiagnostic = table.startsWith('_(');
+            const footer = isDiagnostic
+              ? `_See the [workflow run logs](${runUrl}) for the actual error._`
+              : `_Produced by \`zig build bench -- --output=json\` against \`${baseRef}\`'s \`engine.bench.golden\`, rendered by \`tools/bench/format-delta-comment.py\`. Wall-clock (\`drv_ms\`) is host-dependent and not asserted, so it isn't shown; see [\`DOCS/benchmark.md\`](DOCS/benchmark.md) for the bench's measurement model._`;
+
+            const body = [
+              marker,
+              `## Engine bench: deltas vs \`${baseRef}\``,
+              '',
+              table,
+              '',
+              footer,
+            ].join('\n');
+
+            // Look for a prior comment from this workflow and update in place
+            // so the PR conversation doesn't accumulate one comment per push.
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+              core.info(`Updated comment #${existing.id}`);
+            } else {
+              const { data: created } = await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+              core.info(`Created comment #${created.id}`);
+            }
