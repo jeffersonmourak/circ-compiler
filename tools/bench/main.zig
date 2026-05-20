@@ -103,6 +103,13 @@ const fixtures = [_]Fixture{
 
 const GOLDEN_PATH = "tests/fixtures/bench/engine.bench.golden";
 
+/// Append-only history of the corpus, opt-in via `RECORD_MILESTONE="<label>"`.
+/// First-run bootstraps the BASE section by retrieving the golden at git HEAD,
+/// so the recorded BASE always reflects an honest "before" state (not the
+/// current working tree's numbers). Subsequent runs parse this file, append a
+/// new milestone summary row, and append a per-fixture detail block.
+const HIST_PATH = "tests/fixtures/bench/engine.bench.golden.hist.md";
+
 const TimeUnit = enum {
     s,
     ms,
@@ -319,6 +326,547 @@ fn hashTopology(topology: anytype) u32 {
 fn updateMode() bool {
     const env = std.posix.getenv("UPDATE_GOLDENS") orelse return false;
     return std.mem.eql(u8, env, "1");
+}
+
+/// Reads `RECORD_MILESTONE`. Empty / unset → null (feature off). Otherwise the
+/// value is the milestone label, used as both the human-readable description
+/// in the .hist file and the spinner-style identifier in the run report.
+fn recordMilestoneLabel() ?[]const u8 {
+    const env = std.posix.getenv("RECORD_MILESTONE") orelse return null;
+    if (env.len == 0) return null;
+    return env;
+}
+
+/// Today's date as YYYY-MM-DD using std.time's epoch helpers. Local timezone
+/// is ignored on purpose: the bench is host-portable and we'd rather have a
+/// consistent UTC anchor than the host's clock-on-the-wall value.
+fn currentDateStr(allocator: std.mem.Allocator) ![]u8 {
+    const ts = std.time.timestamp();
+    if (ts < 0) return error.NegativeTimestamp;
+    const es: std.time.epoch.EpochSeconds = .{ .secs = @intCast(ts) };
+    const ed = es.getEpochDay();
+    const yd = ed.calculateYearDay();
+    const md = yd.calculateMonthDay();
+    return std.fmt.allocPrint(allocator, "{d:0>4}-{d:0>2}-{d:0>2}", .{
+        yd.year,
+        @intFromEnum(md.month),
+        md.day_index + 1,
+    });
+}
+
+/// Short git SHA of HEAD. Returns "?" (rather than failing the bench) when git
+/// is missing or the working tree isn't a repo; the milestone log still gets
+/// written, just without an attribution column the reader could click into.
+fn gitShortSha(allocator: std.mem.Allocator) ![]u8 {
+    const result = std.process.Child.run(.{
+        .allocator = allocator,
+        .argv = &.{ "git", "rev-parse", "--short", "HEAD" },
+        .cwd = ".",
+        .max_output_bytes = 256,
+    }) catch return try allocator.dupe(u8, "?");
+    defer allocator.free(result.stdout);
+    defer allocator.free(result.stderr);
+    if (result.term != .Exited or result.term.Exited != 0) {
+        return try allocator.dupe(u8, "?");
+    }
+    const trimmed = std.mem.trim(u8, result.stdout, " \r\n\t");
+    if (trimmed.len == 0) return try allocator.dupe(u8, "?");
+    return try allocator.dupe(u8, trimmed);
+}
+
+/// Retrieves the golden table that lives at HEAD's `engine.bench.golden`. Used
+/// only at bootstrap time to seed `.hist`'s BASE section, so the BASE
+/// numbers reflect a pre-change snapshot regardless of the current working
+/// tree's golden. Caller owns the returned bytes.
+fn gitShowBaseGolden(allocator: std.mem.Allocator) ![]u8 {
+    const result = try std.process.Child.run(.{
+        .allocator = allocator,
+        .argv = &.{ "git", "show", "HEAD:" ++ GOLDEN_PATH },
+        .cwd = ".",
+        .max_output_bytes = 1024 * 1024,
+    });
+    defer allocator.free(result.stderr);
+    if (result.term != .Exited or result.term.Exited != 0) {
+        allocator.free(result.stdout);
+        return error.GitShowFailed;
+    }
+    return result.stdout;
+}
+
+/// One row in the milestone summary table: corpus-level totals captured at
+/// record-time. Holds every deterministic counter the engine bench tracks,
+/// plus drv_ns for wall-clock visibility. `drive_ns` is optional because the
+/// golden never stored wall-clock; rows reconstructed from BASE leave it
+/// null and any "Δ drv vs base" cells render as `?`.
+///
+/// Aggregation rule: every counter is summed across the 53 fixtures EXCEPT
+/// `peak_queue`, which takes the max — depth is per-iteration, not additive,
+/// and the rollup code (see family rollups around line 750) uses the same
+/// convention for the same reason.
+const MilestoneRecord = struct {
+    number: u32,
+    date: []const u8,
+    commit: []const u8,
+    label: []const u8,
+    events_popped: u64,
+    events_committed: u64,
+    recalcs: u64,
+    /// Max across fixtures (depth is per-iteration, not additive).
+    peak_queue: u64,
+    final_time: u64,
+    allocs: u64,
+    bytes: u64,
+    /// Nanoseconds spent across all fixture drive loops. Null for any
+    /// milestone where wall-clock wasn't available (e.g., BASE itself).
+    drive_ns: ?u64,
+};
+
+/// Parses the cached `.hist` file just enough to compute deltas for the
+/// next milestone: extracts the verbatim BASE section text (preserved on
+/// re-write), the BASE totals (for "Δ vs base" math), prior milestone
+/// summary rows (for the running table and "Δ vs prev"), and prior per-
+/// milestone detail blocks (preserved verbatim — re-rendering them
+/// would require per-fixture data we don't store at this granularity).
+const ParsedHist = struct {
+    base_section: []const u8,
+    base_date: []const u8,
+    base_commit: []const u8,
+    base_totals: MilestoneRecord,
+    milestones: []MilestoneRecord,
+    detail_blocks: []const u8,
+};
+
+/// Compute corpus totals from a slice of golden-format rows. Used both to
+/// derive BASE totals at bootstrap and to derive the current-run totals when
+/// writing a new milestone. `peak_queue` uses max, everything else sums.
+fn totalsFromParsedRows(rows: []const ParsedRow) MilestoneRecord {
+    var ep: u64 = 0;
+    var ec: u64 = 0;
+    var rc: u64 = 0;
+    var pq: u64 = 0;
+    var ft: u64 = 0;
+    var al: u64 = 0;
+    var by: u64 = 0;
+    for (rows) |r| {
+        ep += r.events_popped;
+        ec += r.events_committed;
+        rc += r.recalcs;
+        if (r.peak_queue > pq) pq = r.peak_queue;
+        ft += r.final_time;
+        al += r.allocs;
+        by += r.bytes;
+    }
+    return .{
+        .number = 0,
+        .date = "",
+        .commit = "",
+        .label = "baseline",
+        .events_popped = ep,
+        .events_committed = ec,
+        .recalcs = rc,
+        .peak_queue = pq,
+        .final_time = ft,
+        .allocs = al,
+        .bytes = by,
+        .drive_ns = null,
+    };
+}
+
+/// Extract the leading integer from a combined cell like
+/// `9515490 (+0.0% / ?)`. Returns an error if the cell doesn't start with a
+/// digit (caller skips the row, on the same "tolerate malformed rows"
+/// principle as parseGoldenRows).
+fn absFromCombinedCellU64(cell: []const u8) !u64 {
+    var end: usize = 0;
+    while (end < cell.len and std.ascii.isDigit(cell[end])) end += 1;
+    if (end == 0) return error.NoLeadingNumber;
+    return std.fmt.parseInt(u64, cell[0..end], 10);
+}
+
+/// Same idea but for the drv_ms cell, which holds a floating-point number
+/// (e.g. `1846.158`) or the literal `?` for milestones that weren't taken
+/// with wall-clock visibility. Returns null on `?` or unparseable input,
+/// matching the writer's "render `?` when drv_ns is null" convention.
+fn absFromCombinedCellDrv(cell: []const u8) ?u64 {
+    if (cell.len == 0 or cell[0] == '?') return null;
+    var end: usize = 0;
+    while (end < cell.len and (std.ascii.isDigit(cell[end]) or cell[end] == '.')) end += 1;
+    if (end == 0) return null;
+    const ms = std.fmt.parseFloat(f64, cell[0..end]) catch return null;
+    return @intFromFloat(ms * @as(f64, std.time.ns_per_ms));
+}
+
+/// Best-effort parser for `.hist`. Locates the BASE section (verbatim text
+/// from "## BASE" up to "## Milestone Summary"), parses the milestone summary
+/// table for absolutes, and preserves the per-milestone detail blocks as a
+/// single opaque trailing slice. Anything malformed is reported via an error
+/// so the writer can refuse to clobber a broken file.
+fn parseHist(allocator: std.mem.Allocator, content: []const u8) !ParsedHist {
+    const base_header = std.mem.indexOf(u8, content, "## BASE") orelse return error.MissingBaseSection;
+    const summary_header = std.mem.indexOf(u8, content[base_header..], "## Milestone Summary") orelse return error.MissingSummarySection;
+    const summary_abs = base_header + summary_header;
+
+    const base_section = content[base_header..summary_abs];
+
+    // Pull date and commit out of the "## BASE  (recorded YYYY-MM-DD, commit XXXXXXX)" line.
+    var base_date: []const u8 = "?";
+    var base_commit: []const u8 = "?";
+    if (std.mem.indexOf(u8, base_section, "(recorded ")) |open_idx| {
+        const rest = base_section[open_idx + "(recorded ".len ..];
+        if (std.mem.indexOfScalar(u8, rest, ',')) |comma| {
+            base_date = std.mem.trim(u8, rest[0..comma], " \r\n\t");
+            const after_comma = rest[comma + 1 ..];
+            if (std.mem.indexOf(u8, after_comma, "commit ")) |commit_idx| {
+                const after_commit = after_comma[commit_idx + "commit ".len ..];
+                if (std.mem.indexOfScalar(u8, after_commit, ')')) |close_idx| {
+                    base_commit = std.mem.trim(u8, after_commit[0..close_idx], " \r\n\t");
+                }
+            }
+        }
+    }
+
+    // Parse the BASE table rows so we can derive corpus totals for delta math.
+    const base_rows = try parseGoldenRows(allocator, base_section);
+    defer allocator.free(base_rows);
+    var base_totals = totalsFromParsedRows(base_rows);
+    base_totals.date = base_date;
+    base_totals.commit = base_commit;
+
+    // Find the end of the summary section. The summary stops at the first
+    // "## Milestone " (detail block) heading, or EOF.
+    const detail_start_rel = std.mem.indexOf(u8, content[summary_abs..], "\n## Milestone ");
+    const summary_end = if (detail_start_rel) |off| summary_abs + off + 1 else content.len;
+    const summary_section = content[summary_abs..summary_end];
+    const detail_blocks: []const u8 = if (summary_end < content.len) content[summary_end..] else "";
+
+    var milestones: std.ArrayList(MilestoneRecord) = .{};
+    errdefer milestones.deinit(allocator);
+
+    var line_it = std.mem.splitScalar(u8, summary_section, '\n');
+    var seen_separator: bool = false;
+    while (line_it.next()) |raw_line| {
+        const line = std.mem.trim(u8, raw_line, " \r");
+        if (line.len == 0 or line[0] != '|') continue;
+        // Two header lines: the column titles and the dashed separator.
+        if (!seen_separator) {
+            if (std.mem.indexOfScalar(u8, line, '-') != null and
+                std.mem.indexOfAny(u8, line, "0123456789") == null)
+            {
+                seen_separator = true;
+            }
+            continue;
+        }
+
+        var cells: [16][]const u8 = undefined;
+        var n: usize = 0;
+        var col_it = std.mem.splitScalar(u8, line, '|');
+        while (col_it.next()) |raw| {
+            if (n >= cells.len) break;
+            cells[n] = std.mem.trim(u8, raw, " ");
+            n += 1;
+        }
+        // 4 metadata cells + 8 combined-value cells + leading/trailing
+        // splitScalar empties = at least 14 cells expected. Anything less
+        // means a row we don't recognize (header / separator / decoration).
+        if (n < 14) continue;
+
+        const num = std.fmt.parseInt(u32, cells[1], 10) catch continue;
+        const date_owned = try allocator.dupe(u8, cells[2]);
+        const commit_owned = try allocator.dupe(u8, cells[3]);
+        const label_owned = try allocator.dupe(u8, cells[4]);
+        const ev = absFromCombinedCellU64(cells[5]) catch continue;
+        const ec = absFromCombinedCellU64(cells[6]) catch continue;
+        const rc = absFromCombinedCellU64(cells[7]) catch continue;
+        const pq = absFromCombinedCellU64(cells[8]) catch continue;
+        const ft = absFromCombinedCellU64(cells[9]) catch continue;
+        const allocs = absFromCombinedCellU64(cells[10]) catch continue;
+        const bytes_val = absFromCombinedCellU64(cells[11]) catch continue;
+        const drv_ns: ?u64 = absFromCombinedCellDrv(cells[12]);
+
+        try milestones.append(allocator, .{
+            .number = num,
+            .date = date_owned,
+            .commit = commit_owned,
+            .label = label_owned,
+            .events_popped = ev,
+            .events_committed = ec,
+            .recalcs = rc,
+            .peak_queue = pq,
+            .final_time = ft,
+            .allocs = allocs,
+            .bytes = bytes_val,
+            .drive_ns = drv_ns,
+        });
+    }
+
+    return .{
+        .base_section = base_section,
+        .base_date = base_date,
+        .base_commit = base_commit,
+        .base_totals = base_totals,
+        .milestones = try milestones.toOwnedSlice(allocator),
+        .detail_blocks = detail_blocks,
+    };
+}
+
+/// Render an absolute → absolute percentage delta as either "+X.X%" / "-X.X%"
+/// or the sentinel "?" when the reference side is unknown (used for BASE drv,
+/// which the golden never asserted).
+fn formatPctDelta(buf: []u8, ref: ?u64, cur: u64) ![]const u8 {
+    const r = ref orelse return std.fmt.bufPrint(buf, "?", .{});
+    if (r == 0) return std.fmt.bufPrint(buf, "n/a", .{});
+    const diff: f64 = @as(f64, @floatFromInt(cur)) - @as(f64, @floatFromInt(r));
+    const pct: f64 = 100.0 * diff / @as(f64, @floatFromInt(r));
+    const sign: u8 = if (pct >= 0) '+' else '-';
+    const abs_pct = if (pct >= 0) pct else -pct;
+    return std.fmt.bufPrint(buf, "{c}{d:.1}%", .{ sign, abs_pct });
+}
+
+/// Render one metric cell for the summary table: `<value> (Δb%/Δp%)`. Width
+/// covers the entire combined cell, not just the leading number, so the
+/// delta tail aligns across rows. Pass `is_drv=true` to render the value as
+/// floating-point milliseconds; otherwise it's an integer.
+fn writeCombinedSummaryCell(
+    out: *std.ArrayList(u8),
+    allocator: std.mem.Allocator,
+    base_ref: ?u64,
+    prev_ref: ?u64,
+    cur: ?u64,
+    width: usize,
+    is_drv: bool,
+) !void {
+    var cell_buf: [96]u8 = undefined;
+    var base_buf: [24]u8 = undefined;
+    var prev_buf: [24]u8 = undefined;
+    var cell_s: []const u8 = "?";
+    if (cur) |c| {
+        const base_s = try formatPctDelta(&base_buf, base_ref, c);
+        const prev_s = try formatPctDelta(&prev_buf, prev_ref, c);
+        if (is_drv) {
+            const ms_f = @as(f64, @floatFromInt(c)) / std.time.ns_per_ms;
+            cell_s = try std.fmt.bufPrint(&cell_buf, "{d:.3} ({s}/{s})", .{ ms_f, base_s, prev_s });
+        } else {
+            cell_s = try std.fmt.bufPrint(&cell_buf, "{d} ({s}/{s})", .{ c, base_s, prev_s });
+        }
+    }
+    try out.append(allocator, ' ');
+    // Right-align numeric cells: pad spaces before the value.
+    if (cell_s.len < width) try out.appendNTimes(allocator, ' ', width - cell_s.len);
+    try out.appendSlice(allocator, cell_s);
+    try out.appendSlice(allocator, " |");
+}
+
+const MilestoneSummaryColumns = struct {
+    const num: usize = 3;
+    const date: usize = 10;
+    const commit: usize = 7;
+    const label: usize = 32;
+    /// Combined-cell widths. Set to comfortably fit `<largest-value> (<largest-delta>)`
+    /// for that metric on the current corpus. Wider than strictly necessary
+    /// so future regressions don't push cells past their column boundary.
+    const ev_cell: usize = 26;
+    const ec_cell: usize = 26;
+    const rc_cell: usize = 26;
+    const pq_cell: usize = 22;
+    const ft_cell: usize = 26;
+    const allocs_cell: usize = 26;
+    const bytes_cell: usize = 28;
+    const drv_cell: usize = 26;
+};
+
+fn writeMilestoneSummaryHeader(out: *std.ArrayList(u8), allocator: std.mem.Allocator) !void {
+    const M = MilestoneSummaryColumns;
+    const headers = [_]struct { text: []const u8, width: usize }{
+        .{ .text = "#", .width = M.num },
+        .{ .text = "date", .width = M.date },
+        .{ .text = "commit", .width = M.commit },
+        .{ .text = "label", .width = M.label },
+        .{ .text = "events_popped (Δb/Δp)", .width = M.ev_cell },
+        .{ .text = "events_committed (Δb/Δp)", .width = M.ec_cell },
+        .{ .text = "recalcs (Δb/Δp)", .width = M.rc_cell },
+        .{ .text = "peak_queue (Δb/Δp)", .width = M.pq_cell },
+        .{ .text = "final_time (Δb/Δp)", .width = M.ft_cell },
+        .{ .text = "allocs (Δb/Δp)", .width = M.allocs_cell },
+        .{ .text = "bytes (Δb/Δp)", .width = M.bytes_cell },
+        .{ .text = "drv_ms (Δb/Δp)", .width = M.drv_cell },
+    };
+    try out.append(allocator, '|');
+    for (headers) |h| {
+        try out.append(allocator, ' ');
+        try out.appendSlice(allocator, h.text);
+        // Account for the Greek delta being 2 bytes in UTF-8 while occupying 1 column.
+        const visible_len = visibleLen(h.text);
+        if (visible_len < h.width) try out.appendNTimes(allocator, ' ', h.width - visible_len);
+        try out.appendSlice(allocator, " |");
+    }
+    try out.append(allocator, '\n');
+    try out.append(allocator, '|');
+    for (headers) |h| {
+        try out.append(allocator, '-');
+        try out.appendNTimes(allocator, '-', h.width);
+        try out.appendSlice(allocator, "-|");
+    }
+    try out.append(allocator, '\n');
+}
+
+/// Visible column width of a header label, treating the literal Δ (`U+0394`,
+/// 2 bytes in UTF-8) as 1 column. Keeps the dashed separator line aligned
+/// with the header line in monospace.
+fn visibleLen(s: []const u8) usize {
+    var count: usize = 0;
+    var i: usize = 0;
+    while (i < s.len) {
+        const b = s[i];
+        if (b < 0x80) {
+            count += 1;
+            i += 1;
+        } else if ((b & 0xE0) == 0xC0) {
+            count += 1;
+            i += 2;
+        } else if ((b & 0xF0) == 0xE0) {
+            count += 1;
+            i += 3;
+        } else {
+            count += 1;
+            i += 4;
+        }
+    }
+    return count;
+}
+
+fn writeMilestoneRow(
+    out: *std.ArrayList(u8),
+    allocator: std.mem.Allocator,
+    m: MilestoneRecord,
+    base: MilestoneRecord,
+    prev: ?MilestoneRecord,
+) !void {
+    const M = MilestoneSummaryColumns;
+    var buf: [64]u8 = undefined;
+
+    try out.append(allocator, '|');
+
+    const s = try std.fmt.bufPrint(&buf, "{d}", .{m.number});
+    try writeCell(out, allocator, s, .{ .header = "#", .width = M.num, .numeric = true });
+
+    try writeCell(out, allocator, m.date, .{ .header = "date", .width = M.date, .numeric = false });
+    try writeCell(out, allocator, m.commit, .{ .header = "commit", .width = M.commit, .numeric = false });
+    try writeCell(out, allocator, m.label, .{ .header = "label", .width = M.label, .numeric = false });
+
+    // Each metric cell carries `<value> (Δ vs base / Δ vs prev)`. When prev
+    // is null (first milestone), the prev half renders as "?". When the
+    // metric is drv_ms and the run never recorded it, the whole cell is "?".
+    try writeCombinedSummaryCell(out, allocator, base.events_popped, if (prev) |p| p.events_popped else null, m.events_popped, M.ev_cell, false);
+    try writeCombinedSummaryCell(out, allocator, base.events_committed, if (prev) |p| p.events_committed else null, m.events_committed, M.ec_cell, false);
+    try writeCombinedSummaryCell(out, allocator, base.recalcs, if (prev) |p| p.recalcs else null, m.recalcs, M.rc_cell, false);
+    try writeCombinedSummaryCell(out, allocator, base.peak_queue, if (prev) |p| p.peak_queue else null, m.peak_queue, M.pq_cell, false);
+    try writeCombinedSummaryCell(out, allocator, base.final_time, if (prev) |p| p.final_time else null, m.final_time, M.ft_cell, false);
+    try writeCombinedSummaryCell(out, allocator, base.allocs, if (prev) |p| p.allocs else null, m.allocs, M.allocs_cell, false);
+    try writeCombinedSummaryCell(out, allocator, base.bytes, if (prev) |p| p.bytes else null, m.bytes, M.bytes_cell, false);
+    try writeCombinedSummaryCell(out, allocator, base.drive_ns, if (prev) |p| p.drive_ns else null, m.drive_ns, M.drv_cell, true);
+
+    try out.append(allocator, '\n');
+}
+
+/// Write per-fixture detail rows for one milestone, joined against BASE for
+/// the "Δ vs base" parenthetical. `current_rows` must be in fixture-manifest
+/// (alphabetical) order; BASE rows are looked up by fixture name. Each metric
+/// cell carries `<value> (Δ%)`; the prev-side delta isn't shown per-fixture
+/// because we don't persist per-fixture data for prior milestones — the
+/// summary table is where vs-prev lives.
+fn writeDetailBlock(
+    out: *std.ArrayList(u8),
+    allocator: std.mem.Allocator,
+    base_rows: []const ParsedRow,
+    current_rows: []const Row,
+) !void {
+    var base_by_name = std.StringHashMap(ParsedRow).init(allocator);
+    defer base_by_name.deinit();
+    try base_by_name.ensureTotalCapacity(@intCast(base_rows.len));
+    for (base_rows) |br| base_by_name.putAssumeCapacity(br.name, br);
+
+    const fixture_w: usize = 24;
+    const ev_w: usize = 18;
+    const ec_w: usize = 18;
+    const rc_w: usize = 18;
+    const pq_w: usize = 12;
+    const ft_w: usize = 20;
+    const allocs_w: usize = 18;
+    const bytes_w: usize = 20;
+
+    // Header
+    try out.append(allocator, '|');
+    const headers = [_]struct { text: []const u8, width: usize }{
+        .{ .text = "circuit", .width = fixture_w },
+        .{ .text = "events_popped (Δ%)", .width = ev_w },
+        .{ .text = "events_committed (Δ%)", .width = ec_w },
+        .{ .text = "recalcs (Δ%)", .width = rc_w },
+        .{ .text = "peak_queue (Δ%)", .width = pq_w },
+        .{ .text = "final_time (Δ%)", .width = ft_w },
+        .{ .text = "allocs (Δ%)", .width = allocs_w },
+        .{ .text = "bytes (Δ%)", .width = bytes_w },
+    };
+    for (headers) |h| {
+        try out.append(allocator, ' ');
+        try out.appendSlice(allocator, h.text);
+        const visible = visibleLen(h.text);
+        if (visible < h.width) try out.appendNTimes(allocator, ' ', h.width - visible);
+        try out.appendSlice(allocator, " |");
+    }
+    try out.append(allocator, '\n');
+    try out.append(allocator, '|');
+    for (headers) |h| {
+        try out.append(allocator, '-');
+        try out.appendNTimes(allocator, '-', h.width);
+        try out.appendSlice(allocator, "-|");
+    }
+    try out.append(allocator, '\n');
+
+    var pct_buf: [24]u8 = undefined;
+    var cell_buf: [64]u8 = undefined;
+    for (current_rows) |row| {
+        try out.append(allocator, '|');
+        try writeCell(out, allocator, row.name, .{ .header = "circuit", .width = fixture_w, .numeric = false });
+
+        const base_opt = base_by_name.get(row.name);
+
+        const ev_base: ?u64 = if (base_opt) |b| b.events_popped else null;
+        const ev_pct = try formatPctDelta(&pct_buf, ev_base, row.metrics.events_popped);
+        var s = try std.fmt.bufPrint(&cell_buf, "{d} ({s})", .{ row.metrics.events_popped, ev_pct });
+        try writeCell(out, allocator, s, .{ .header = "ev", .width = ev_w, .numeric = true });
+
+        const ec_base: ?u64 = if (base_opt) |b| b.events_committed else null;
+        const ec_pct = try formatPctDelta(&pct_buf, ec_base, row.metrics.events_committed);
+        s = try std.fmt.bufPrint(&cell_buf, "{d} ({s})", .{ row.metrics.events_committed, ec_pct });
+        try writeCell(out, allocator, s, .{ .header = "ec", .width = ec_w, .numeric = true });
+
+        const rc_base: ?u64 = if (base_opt) |b| b.recalcs else null;
+        const rc_pct = try formatPctDelta(&pct_buf, rc_base, row.metrics.recalcs);
+        s = try std.fmt.bufPrint(&cell_buf, "{d} ({s})", .{ row.metrics.recalcs, rc_pct });
+        try writeCell(out, allocator, s, .{ .header = "rc", .width = rc_w, .numeric = true });
+
+        const pq_base: ?u64 = if (base_opt) |b| b.peak_queue else null;
+        const pq_pct = try formatPctDelta(&pct_buf, pq_base, row.metrics.peak_queue);
+        s = try std.fmt.bufPrint(&cell_buf, "{d} ({s})", .{ row.metrics.peak_queue, pq_pct });
+        try writeCell(out, allocator, s, .{ .header = "pq", .width = pq_w, .numeric = true });
+
+        const ft_base: ?u64 = if (base_opt) |b| b.final_time else null;
+        const ft_pct = try formatPctDelta(&pct_buf, ft_base, row.metrics.final_time);
+        s = try std.fmt.bufPrint(&cell_buf, "{d} ({s})", .{ row.metrics.final_time, ft_pct });
+        try writeCell(out, allocator, s, .{ .header = "ft", .width = ft_w, .numeric = true });
+
+        const allocs_base: ?u64 = if (base_opt) |b| b.allocs else null;
+        const a_pct = try formatPctDelta(&pct_buf, allocs_base, row.alloc_metrics.allocs);
+        s = try std.fmt.bufPrint(&cell_buf, "{d} ({s})", .{ row.alloc_metrics.allocs, a_pct });
+        try writeCell(out, allocator, s, .{ .header = "allocs", .width = allocs_w, .numeric = true });
+
+        const bytes_base: ?u64 = if (base_opt) |b| b.bytes else null;
+        const b_pct = try formatPctDelta(&pct_buf, bytes_base, row.alloc_metrics.bytes);
+        s = try std.fmt.bufPrint(&cell_buf, "{d} ({s})", .{ row.alloc_metrics.bytes, b_pct });
+        try writeCell(out, allocator, s, .{ .header = "bytes", .width = bytes_w, .numeric = true });
+
+        try out.append(allocator, '\n');
+    }
 }
 
 fn writeHeader(out: *std.ArrayList(u8), allocator: std.mem.Allocator) !void {
@@ -628,6 +1176,174 @@ fn runFixture(
     };
 }
 
+/// Snapshot the corpus into the `.hist` log when `RECORD_MILESTONE` is set.
+/// Idempotent across the updateMode / verify / mismatch paths: each codepath
+/// in `main()` can call this safely; nothing happens when the env var is
+/// unset. On first invocation it bootstraps the BASE section by retrieving
+/// `engine.bench.golden` at git HEAD, so the BASE always reflects an honest
+/// pre-change snapshot regardless of which run actually creates the file.
+fn recordMilestoneIfRequested(
+    allocator: std.mem.Allocator,
+    stderr: anytype,
+    sorted_rows: []const SortedRow,
+    total_drive_ns: u64,
+) !void {
+    const label = recordMilestoneLabel() orelse return;
+
+    // Reorder the per-fixture rows into alphabetical (fixture-manifest)
+    // order. The stderr report may have shuffled them under --sort; the
+    // .hist detail block always renders alphabetically so diffs stay stable.
+    var actual_by_name = std.StringHashMap(Row).init(allocator);
+    defer actual_by_name.deinit();
+    try actual_by_name.ensureTotalCapacity(@intCast(sorted_rows.len));
+    for (sorted_rows) |entry| try actual_by_name.put(entry.row.name, entry.row);
+
+    var current_rows = try allocator.alloc(Row, fixtures.len);
+    defer allocator.free(current_rows);
+    for (fixtures, 0..) |fixture, i| {
+        current_rows[i] = actual_by_name.get(fixture.name) orelse return error.FixtureMissing;
+    }
+
+    const today = try currentDateStr(allocator);
+    defer allocator.free(today);
+    const sha = try gitShortSha(allocator);
+    defer allocator.free(sha);
+
+    var current_totals: MilestoneRecord = .{
+        .number = 0,
+        .date = today,
+        .commit = sha,
+        .label = label,
+        .events_popped = 0,
+        .events_committed = 0,
+        .recalcs = 0,
+        .peak_queue = 0,
+        .final_time = 0,
+        .allocs = 0,
+        .bytes = 0,
+        .drive_ns = total_drive_ns,
+    };
+    // peak_queue is max-aggregated (see MilestoneRecord doc-comment for why).
+    for (current_rows) |r| {
+        current_totals.events_popped += r.metrics.events_popped;
+        current_totals.events_committed += r.metrics.events_committed;
+        current_totals.recalcs += r.metrics.recalcs;
+        if (r.metrics.peak_queue > current_totals.peak_queue) {
+            current_totals.peak_queue = r.metrics.peak_queue;
+        }
+        current_totals.final_time += r.metrics.final_time;
+        current_totals.allocs += r.alloc_metrics.allocs;
+        current_totals.bytes += r.alloc_metrics.bytes;
+    }
+
+    // Read existing .hist or bootstrap.
+    const hist_content = std.fs.cwd().readFileAlloc(allocator, HIST_PATH, 8 * 1024 * 1024) catch |err| switch (err) {
+        error.FileNotFound => null,
+        else => return err,
+    };
+    defer if (hist_content) |c| allocator.free(c);
+
+    var parsed_opt: ?ParsedHist = null;
+    defer if (parsed_opt) |p| {
+        for (p.milestones) |m| {
+            allocator.free(m.date);
+            allocator.free(m.commit);
+            allocator.free(m.label);
+        }
+        allocator.free(p.milestones);
+    };
+
+    var bootstrap_base_section: ?[]u8 = null;
+    defer if (bootstrap_base_section) |b| allocator.free(b);
+
+    if (hist_content) |existing| {
+        parsed_opt = try parseHist(allocator, existing);
+    } else {
+        const base_golden = gitShowBaseGolden(allocator) catch |err| {
+            try stderr.print(
+                "bench: RECORD_MILESTONE bootstrap requires git access (couldn't read HEAD:{s}): {s}\n",
+                .{ GOLDEN_PATH, @errorName(err) },
+            );
+            return err;
+        };
+        defer allocator.free(base_golden);
+        bootstrap_base_section = try std.fmt.allocPrint(
+            allocator,
+            "## BASE  (recorded {s}, commit {s})\n\n{s}\n",
+            .{ today, sha, std.mem.trimRight(u8, base_golden, " \r\n\t") },
+        );
+    }
+
+    const base_section_text: []const u8 = if (parsed_opt) |p| p.base_section else bootstrap_base_section.?;
+
+    const base_rows = try parseGoldenRows(allocator, base_section_text);
+    defer allocator.free(base_rows);
+
+    var base_totals = totalsFromParsedRows(base_rows);
+    base_totals.date = if (parsed_opt) |p| p.base_date else today;
+    base_totals.commit = if (parsed_opt) |p| p.base_commit else sha;
+
+    const existing_milestones: []const MilestoneRecord = if (parsed_opt) |p| p.milestones else &.{};
+    const detail_blocks: []const u8 = if (parsed_opt) |p| std.mem.trim(u8, p.detail_blocks, " \r\n") else "";
+
+    var max_n: u32 = 0;
+    for (existing_milestones) |m| {
+        if (m.number > max_n) max_n = m.number;
+    }
+    current_totals.number = max_n + 1;
+    const prev_milestone: ?MilestoneRecord = if (existing_milestones.len > 0) existing_milestones[existing_milestones.len - 1] else null;
+
+    var out: std.ArrayList(u8) = .{};
+    defer out.deinit(allocator);
+
+    const preamble =
+        "# Engine Benchmark History\n" ++
+        "#\n" ++
+        "# Records the historical evolution of the engine benchmark corpus.\n" ++
+        "# BASE is frozen; the milestone log grows over time. Regenerate by\n" ++
+        "# running `RECORD_MILESTONE=\"<label>\" zig build bench`.\n" ++
+        "#\n" ++
+        "# The `Milestone Summary` table is the structured source of truth;\n" ++
+        "# per-milestone detail blocks below capture per-fixture deltas vs\n" ++
+        "# BASE at recording time and are preserved verbatim on re-write.\n\n";
+    try out.appendSlice(allocator, preamble);
+
+    try out.appendSlice(allocator, std.mem.trimRight(u8, base_section_text, "\n"));
+    try out.appendSlice(allocator, "\n\n");
+
+    try out.appendSlice(allocator, "## Milestone Summary\n\n");
+    try writeMilestoneSummaryHeader(&out, allocator);
+    for (existing_milestones, 0..) |m, idx| {
+        const prev_for_m: ?MilestoneRecord = if (idx == 0) null else existing_milestones[idx - 1];
+        try writeMilestoneRow(&out, allocator, m, base_totals, prev_for_m);
+    }
+    try writeMilestoneRow(&out, allocator, current_totals, base_totals, prev_milestone);
+
+    if (detail_blocks.len > 0) {
+        try out.appendSlice(allocator, "\n");
+        try out.appendSlice(allocator, detail_blocks);
+        try out.appendSlice(allocator, "\n");
+    }
+
+    try out.appendSlice(allocator, "\n");
+    const heading = try std.fmt.allocPrint(
+        allocator,
+        "## Milestone {d}: {s}  ({s}, {s})\n\nPer-fixture (vs BASE):\n\n",
+        .{ current_totals.number, current_totals.label, current_totals.date, current_totals.commit },
+    );
+    defer allocator.free(heading);
+    try out.appendSlice(allocator, heading);
+    try writeDetailBlock(&out, allocator, base_rows, current_rows);
+
+    if (std.fs.path.dirname(HIST_PATH)) |parent| try std.fs.cwd().makePath(parent);
+    try std.fs.cwd().writeFile(.{ .sub_path = HIST_PATH, .data = out.items });
+
+    try stderr.print(
+        "bench: recorded milestone {d} \"{s}\" to {s}\n",
+        .{ current_totals.number, current_totals.label, HIST_PATH },
+    );
+}
+
 pub fn main() !void {
     var gpa: std.heap.GeneralPurposeAllocator(.{}) = .{};
     defer _ = gpa.deinit();
@@ -910,6 +1626,7 @@ pub fn main() !void {
         if (std.fs.path.dirname(GOLDEN_PATH)) |parent| try std.fs.cwd().makePath(parent);
         try std.fs.cwd().writeFile(.{ .sub_path = GOLDEN_PATH, .data = output.items });
         try stderr.print("bench: wrote {s}\n", .{GOLDEN_PATH});
+        try recordMilestoneIfRequested(allocator, stderr, sorted_rows.items, total_drive_ns);
         return;
     }
 
@@ -1000,4 +1717,5 @@ pub fn main() !void {
     }
 
     try stderr.writeAll("bench: golden matches\n");
+    try recordMilestoneIfRequested(allocator, stderr, sorted_rows.items, total_drive_ns);
 }

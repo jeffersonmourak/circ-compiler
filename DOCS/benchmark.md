@@ -18,7 +18,7 @@ The bench walks 53 fixtures from the truth-table corpus. Coverage spans the full
 | Adders                   | `half_adder`, `full_adder`, `two/three/four/five/six/eight_bit_adder` | 4 – 65536        |
 | ALU                      | `alu_4bit` (14 inputs)                                             | 16384               |
 
-Total: 98,400 input vectors driven through the engine in a single bench run; ~9.5M events popped, ~210k allocator calls totaling ~28 MB. The 5/6-bit family extensions added earlier characterize pop-efficiency scaling; the wider adders (`five_bit_adder`, `six_bit_adder`, `eight_bit_adder`) characterize cascading-carry depth — with the 8-bit adder pushing 65k vectors and 4.8M events, it overtakes `alu_4bit` as the heaviest fixture by both vector count and event volume.
+Total: 98,400 input vectors driven through the engine in a single bench run; ~9.5M events popped, ~8.2k allocator calls totaling ~985 KB. The 5/6-bit family extensions added earlier characterize pop-efficiency scaling; the wider adders (`five_bit_adder`, `six_bit_adder`, `eight_bit_adder`) characterize cascading-carry depth, and the 8-bit adder pushing 65k vectors and 4.8M events overtakes `alu_4bit` as the heaviest fixture by both vector count and event volume. The corpus totals above reflect the current engine state; the per-milestone evolution lives in `tests/fixtures/bench/engine.bench.golden.hist` (see [Historical evolution](#historical-evolution) below).
 
 The fixture-to-circuit mapping is hand-maintained at `tools/bench/main.zig:36`. Most fixtures are 1:1 with their `.circ` source; a handful (`full_adder` → `full_adder_from_builtins.circ`, `primitive_and` → `and_gate.circ`, etc.) follow the same historical aliases used by the truth-table golden tests.
 
@@ -57,7 +57,7 @@ The bench reads the *cumulative* `Circuit.metrics` once per fixture, after every
 Wall-clock is sampled in two nested windows. The outer one wraps `runFixture` (parse → resolve → validate → topology build → drive all vectors) and gives the total. The inner one, plumbed through `Table.drive_ns` from `lib/truth_table/builder.zig`, brackets only the `2^N` input-vector replay — so engine throughput can be separated from the one-shot pipeline overhead that dominates tiny fixtures. Neither timing is written to the golden:
 
 ```
-bench: alu_4bit                  16384 vecs   2235.547 ms (drv 2203.712)   134503.9 ns/vec   531.4 ns/event   95.2% pop   306.1 t/vec
+bench: alu_4bit                  16384 vecs    767.661 ms (drv  743.929)    45405.8 ns/vec   179.4 ns/event   95.2% pop   306.1 t/vec
 ```
 
 Reading left to right: total wall-clock, drive-only wall-clock in parens (the `drv` value), then engine-only throughput. The `ns/vec` and `ns/event` numbers are computed from drive time, not total — so a tiny fixture's per-vector cost reflects its actual engine pace rather than ~1 ms of unavoidable parser overhead. The last two columns are derived counters; see [Derived stderr columns](#derived-stderr-columns) below.
@@ -77,12 +77,12 @@ zig build bench -- --human ms
 ```
 
 ```
-[bench] alu_4bit          16.38k vecs    1793.852 ms (drv   1769.494 ms)      9.26 vec/ms     2.34k events/ms   34.73k allocs     4.62M bytes   95.2% pop  306.1 t/vec
-[bench] and_4bit             256 vecs       2.434 ms (drv      0.924 ms)    277.06 vec/ms     2.74k events/ms      576 allocs    78.78k bytes   39.2% pop   45.6 t/vec
-[bench] chain                  2 vecs       1.046 ms (drv      0.005 ms)    400.00 vec/ms     2.00k events/ms       26 allocs     5.29k bytes  100.0% pop   21.0 t/vec
-[bench] four_bit_adder       256 vecs      10.395 ms (drv      5.874 ms)     43.58 vec/ms     2.50k events/ms    1.27k allocs   228.46k bytes   89.5% pop  141.6 t/vec
-[bench] nand_4bit            256 vecs       3.216 ms (drv      1.476 ms)    173.44 vec/ms     2.38k events/ms      653 allocs    95.62k bytes   56.3% pop   60.3 t/vec
-[bench] ---  53 fixtures   98.40k vectors (98400)   9.52M events (9515490)   210.08k allocs (210078)   28.04M bytes (28043712)   3921.909 ms total (3787.580 ms drv, 96.6% engine)
+[bench] alu_4bit          16.38k vecs     774.167 ms (drv    749.961 ms)     21.85 vec/ms     5.53k events/ms    1.20k allocs   148.33k bytes   95.2% pop  306.1 t/vec
+[bench] and_4bit             256 vecs       2.194 ms (drv      0.633 ms)    404.42 vec/ms     3.99k events/ms       43 allocs     4.93k bytes   39.2% pop   45.6 t/vec
+[bench] chain                  2 vecs       1.018 ms (drv      0.005 ms)    400.00 vec/ms     2.00k events/ms       16 allocs     1.91k bytes  100.0% pop   21.0 t/vec
+[bench] four_bit_adder       256 vecs       7.482 ms (drv      2.572 ms)     99.53 vec/ms     5.71k events/ms      460 allocs    55.97k bytes   89.5% pop  141.6 t/vec
+[bench] nand_4bit            256 vecs       2.272 ms (drv      0.825 ms)    310.30 vec/ms     4.26k events/ms       88 allocs    10.24k bytes   56.3% pop   60.3 t/vec
+[bench] ---  53 fixtures   98.40k vectors (98400)   9.52M events (9515490)   8.20k allocs (8198)   985.30k bytes (985296)   1925.329 ms total (1793.471 ms drv, 93.2% engine)
 ```
 
 The per-fixture rows drop the `(raw)` parenthetical that the totals line carries — on aggregate counts the exact value is useful, on individual rows it just bloats every column. The totals keep it.
@@ -90,16 +90,16 @@ The per-fixture rows drop the `(raw)` parenthetical that the totals line carries
 Same data with `--human s`:
 
 ```
-[bench] alu_4bit          16.38k vecs        1.741 s (drv       1.716 s)      9.55k vec/s      2.42M events/s   34.73k allocs     4.62M bytes   95.2% pop  306.1 t/vec
-[bench] chain                  2 vecs       0.0011 s (drv      0.0000 s)    400.00k vec/s      2.00M events/s       26 allocs     5.29k bytes  100.0% pop   21.0 t/vec
-[bench] ---  53 fixtures   98.40k vectors (98400)   9.52M events (9515490)   210.08k allocs (210078)   28.04M bytes (28043712)   3.949 s total (3.814 s drv, 96.6% engine)
+[bench] alu_4bit          16.38k vecs       0.7832 s (drv      0.7589 s)     21.59k vec/s      5.46M events/s    1.20k allocs   148.33k bytes   95.2% pop  306.1 t/vec
+[bench] chain                  2 vecs       0.0010 s (drv      0.0000 s)    400.00k vec/s      2.00M events/s       16 allocs     1.91k bytes  100.0% pop   21.0 t/vec
+[bench] ---  53 fixtures   98.40k vectors (98400)   9.52M events (9515490)   8.20k allocs (8198)   985.30k bytes (985296)   1.953 s total (1.824 s drv, 93.4% engine)
 ```
 
 And `--human` (default, ns) keeps full precision at the cost of wide numbers and scientific notation for the throughput:
 
 ```
-[bench] alu_4bit          16.38k vecs  1736209000 ns (drv 1711517000 ns)   9.57e-6 vec/ns   2.42e-3 events/ns   34.73k allocs     4.62M bytes   95.2% pop  306.1 t/vec
-[bench] ---  53 fixtures   98.40k vectors (98400)   9.52M events (9515490)   210.08k allocs (210078)   28.04M bytes (28043712)   3894131000 ns total (3759333000 ns drv, 96.5% engine)
+[bench] alu_4bit          16.38k vecs   771265000 ns (drv  747166000 ns)   2.19e-5 vec/ns   5.55e-3 events/ns    1.20k allocs   148.33k bytes   95.2% pop  306.1 t/vec
+[bench] ---  53 fixtures   98.40k vectors (98400)   9.52M events (9515490)   8.20k allocs (8198)   985.30k bytes (985296)   1906047000 ns total (1776783000 ns drv, 93.2% engine)
 ```
 
 Throughput k/M scaling kicks in inside the chosen unit — `1.81M events/s` and `1.31k events/ms` are the same engine; only the denomination is different. The flag only affects the stderr report; the golden comparison and the golden file itself are untouched.
@@ -127,15 +127,15 @@ zig build bench -- --sort events              # default formatting, sorted by ev
 Example output (`--human ms --sort time`, top 6):
 
 ```
-[bench] eight_bit_adder   65.54k vecs    1870.383 ms (drv   1856.763 ms)     35.30 vec/ms     2.60k events/ms  132.70k allocs    17.13M bytes   81.0% pop  195.2 t/vec
-[bench] alu_4bit          16.38k vecs    1736.092 ms (drv   1711.533 ms)      9.57 vec/ms     2.42k events/ms   34.73k allocs     4.62M bytes   95.2% pop  306.1 t/vec
-[bench] six_bit_adder      4.10k vecs     114.448 ms (drv    106.504 ms)     38.46 vec/ms     2.60k events/ms    9.38k allocs     1.31M bytes   85.2% pop  171.6 t/vec
-[bench] five_bit_adder     1.02k vecs      32.000 ms (drv     25.376 ms)     40.35 vec/ms     2.55k events/ms    3.02k allocs   471.06k bytes   87.3% pop  157.8 t/vec
-[bench] and_6bit           4.10k vecs      22.026 ms (drv     19.602 ms)    208.96 vec/ms     2.92k events/ms    8.29k allocs     1.07M bytes   28.4% pop   65.9 t/vec
-[bench] mux_5bit_2to1      2.05k vecs      16.947 ms (drv     12.598 ms)    162.57 vec/ms     2.93k events/ms    4.39k allocs   586.61k bytes   50.0% pop   81.0 t/vec
+[bench] eight_bit_adder   65.54k vecs     964.761 ms (drv    951.601 ms)     68.87 vec/ms     5.07k events/ms      985 allocs   118.66k bytes   81.0% pop  195.2 t/vec
+[bench] alu_4bit          16.38k vecs     773.186 ms (drv    748.277 ms)     21.90 vec/ms     5.54k events/ms    1.20k allocs   148.33k bytes   95.2% pop  306.1 t/vec
+[bench] six_bit_adder      4.10k vecs      59.090 ms (drv     51.538 ms)     79.48 vec/ms     5.36k events/ms      723 allocs    88.64k bytes   85.2% pop  171.6 t/vec
+[bench] five_bit_adder     1.02k vecs      17.990 ms (drv     11.819 ms)     86.64 vec/ms     5.48k events/ms      591 allocs    70.98k bytes   87.3% pop  157.8 t/vec
+[bench] and_6bit           4.10k vecs      17.601 ms (drv     15.229 ms)    268.96 vec/ms     3.76k events/ms       64 allocs     7.49k bytes   28.4% pop   65.9 t/vec
+[bench] mux_5bit_2to1      2.05k vecs      11.965 ms (drv      7.834 ms)    261.42 vec/ms     4.71k events/ms      185 allocs    21.94k bytes   50.0% pop   81.0 t/vec
 ```
 
-The new `allocs` and `bytes` columns are the same delta values that get written to the golden's two rightmost columns — only the formatting differs (k/M scaling, optional raw value in parens). For the stress fixtures introduced for the family-scaling story, watch the trend: `and_5bit`'s 2.13k allocs and `and_6bit`'s 8.29k allocs continue the steep climb that the corpus shows for the AND family (allocs scale with fanout-driven heap pressure, not just vector count). The wider adders tell a different story: events and time scale steeply (eight_bit_adder hits 4.8M events and 1.87s drive), but `peak_queue` caps at 7 across every adder from 4-bit to 8-bit. That's not a sampling artifact — it's the truth-table builder calling `propagateEvent` once per input pin, so peak depth is bounded by per-input fanout rather than total bit width.
+The `allocs` and `bytes` columns are the same delta values that get written to the golden's two rightmost columns; only the formatting differs (k/M scaling, optional raw value in parens). For the stress fixtures introduced for the family-scaling story, `and_5bit`'s 54 allocs and `and_6bit`'s 64 allocs grow linearly with fan-out width (about 10 allocs per additional input bit, since each new connection appends to a single `ArrayList` that doubles its capacity at growth boundaries). Pre-refactor, those same fixtures scaled super-linearly (2.13k and 8.29k allocs respectively) because each port was a separate `StringHashMap` bucket. The wider adders tell a different story: events and time scale steeply (`eight_bit_adder` hits 4.8M events), but `peak_queue` caps at 7 across every adder from 4-bit to 8-bit. That's not a sampling artifact; it's the truth-table builder calling `propagateEvent` once per input pin, so peak depth is bounded by per-input fanout rather than total bit width.
 
 ### Family rollup
 
@@ -147,20 +147,20 @@ zig build bench -- --rollup --human ms       # rollup is independent of --human;
 ```
 
 ```
-bench rollup: adder         8 fix   71.00k vecs     5.18M events    7 peak  147.73k allocs    19.41M bytes   81.3% pop    1997.85 ms drv
-bench rollup: alu           1 fix   16.38k vecs     4.15M events   21 peak   34.73k allocs     4.62M bytes   95.2% pop    1763.44 ms drv
-bench rollup: and           6 fix    5.46k vecs    72.56k events    1 peak   11.26k allocs     1.47M bytes   29.7% pop      25.62 ms drv
-bench rollup: builtin       5 fix       20 vecs       254 events    2 peak      385 allocs    79.12k bytes   96.1% pop       0.11 ms drv
-bench rollup: chain         1 fix        2 vecs        10 events    1 peak       26 allocs     5.29k bytes  100.0% pop       0.01 ms drv
-bench rollup: demux         4 fix       60 vecs       492 events    2 peak      384 allocs    71.25k bytes   70.7% pop       0.27 ms drv
-bench rollup: mux           5 fix    2.73k vecs    47.30k events    2 peak    6.36k allocs   888.46k bytes   51.9% pop      16.06 ms drv
-bench rollup: nand          3 fix      336 vecs     4.39k events    2 peak      989 allocs   153.66k bytes   58.4% pop       1.58 ms drv
-bench rollup: nor           3 fix      336 vecs     6.64k events    2 peak    1.25k allocs   211.50k bytes   72.4% pop       2.31 ms drv
-bench rollup: not           3 fix       28 vecs       196 events    1 peak      164 allocs    30.62k bytes   76.5% pop       0.08 ms drv
-bench rollup: or            3 fix      336 vecs     5.26k events    2 peak    1.08k allocs   173.14k bytes   65.2% pop       1.84 ms drv
-bench rollup: primitive     4 fix       10 vecs        30 events    1 peak       72 allocs    13.86k bytes   93.3% pop       0.02 ms drv
-bench rollup: xnor          3 fix      336 vecs    11.11k events    2 peak    1.66k allocs   299.34k bytes   83.5% pop       3.93 ms drv
-bench rollup: xor           4 fix    1.36k vecs    39.81k events    2 peak    3.99k allocs   620.35k bytes   74.8% pop      14.24 ms drv
+bench rollup: adder         8 fix   71.00k vecs     5.18M events    7 peak    3.49k allocs   421.16k bytes   81.3% pop     994.43 ms drv
+bench rollup: alu           1 fix   16.38k vecs     4.15M events   21 peak    1.20k allocs   148.33k bytes   95.2% pop     756.20 ms drv
+bench rollup: and           6 fix    5.46k vecs    72.56k events    1 peak      230 allocs    26.85k bytes   29.7% pop      18.79 ms drv
+bench rollup: builtin       5 fix       20 vecs       254 events    2 peak      222 allocs    26.16k bytes   96.1% pop       0.06 ms drv
+bench rollup: chain         1 fix        2 vecs        10 events    1 peak       16 allocs     1.91k bytes  100.0% pop       0.00 ms drv
+bench rollup: demux         4 fix       60 vecs       492 events    2 peak      174 allocs    20.59k bytes   70.7% pop       0.16 ms drv
+bench rollup: mux           5 fix    2.73k vecs    47.30k events    2 peak      571 allocs    67.54k bytes   51.9% pop      10.14 ms drv
+bench rollup: nand          3 fix      336 vecs     4.39k events    2 peak      200 allocs    23.30k bytes   58.4% pop       0.96 ms drv
+bench rollup: nor           3 fix      336 vecs     6.64k events    2 peak      356 allocs    42.26k bytes   72.4% pop       1.30 ms drv
+bench rollup: not           3 fix       28 vecs       196 events    1 peak       72 allocs     8.33k bytes   76.5% pop       0.06 ms drv
+bench rollup: or            3 fix      336 vecs     5.26k events    2 peak      255 allocs    29.81k bytes   65.2% pop       1.10 ms drv
+bench rollup: primitive     4 fix       10 vecs        30 events    1 peak       43 allocs     5.24k bytes   93.3% pop       0.01 ms drv
+bench rollup: xnor          3 fix      336 vecs    11.11k events    2 peak      601 allocs    71.77k bytes   83.5% pop       1.95 ms drv
+bench rollup: xor           4 fix    1.36k vecs    39.81k events    2 peak      776 allocs    92.06k bytes   74.8% pop       7.64 ms drv
 ```
 
 Rollup columns are always sums except `peak` which is the family max (depth is per-iteration, not additive) and `pop` which is computed from total committed / total popped. The family rows make some patterns immediately obvious that get lost across 53 fixtures: the `and` family's 29.7% pop efficiency is the worst in the corpus (60.3% of pops wasted), `alu` reaches the only peak_queue above 7, and `adder` accounts for ~half the corpus's events and allocator pressure thanks to `eight_bit_adder`.
@@ -192,10 +192,10 @@ The `topology` hash is the diff renderer's "what changed" signal. If the hash ho
 Take a row from `tests/fixtures/bench/engine.bench.golden`:
 
 ```
-| xor_4bit                 |     256 |         76 |          7136 |             5598 |    5602 |          2 |      24830 |     874 |    143040 | 91b4cc3d |
+| xor_4bit                 |     256 |         76 |          7136 |             5598 |    5602 |          2 |      24830 |     221 |     25984 | 6cc538e8 |
 ```
 
-That means: an XOR over 4-bit operands exhaustively driven across all 256 input combinations against a 76-component graph (XOR macro expansion: 4 XOR cells × ~19 primitives each, minus shared inputs). The engine popped 7,136 events from its heap, of which 5,598 actually changed state (the other ~1,500 were dedup'd no-ops); it ran 5,602 downstream gate evaluations; the heap never held more than 2 events at once; the final propagation settled at logical time 24,830; the run made 874 allocator calls totaling 143,040 bytes (≈164 bytes per alloc — mostly small `Component` and `ArrayList` headers); and the topology hash `91b4cc3d` identifies this exact shape of components and wires.
+That means: an XOR over 4-bit operands exhaustively driven across all 256 input combinations against a 76-component graph (XOR macro expansion: 4 XOR cells × ~19 primitives each, minus shared inputs). The engine popped 7,136 events from its heap, of which 5,598 actually changed state (the other ~1,500 were dedup'd no-ops); it ran 5,602 downstream gate evaluations; the heap never held more than 2 events at once; the final propagation settled at logical time 24,830; the run made 221 allocator calls totaling 25,984 bytes (≈118 bytes per alloc, mostly `Component` structs plus a handful of `ArrayList` growth slabs); and the topology hash `6cc538e8` identifies this exact shape of components and wires.
 
 The split between `events_popped` and `events_committed` is the diagnostic-grade column. It's not exposed in any other test path, and it catches algorithmic regressions where the scheduler enqueues redundant events that are correctly dedup'd downstream — the circuit gives the right answer, function tests pass, but the heap work has silently doubled.
 
@@ -285,6 +285,11 @@ zig build bench -- --sort events
 # Regenerate the golden after an intentional engine change. The diff
 # in the resulting fixture file is the audit trail.
 UPDATE_GOLDENS=1 zig build bench
+
+# Record this run as a milestone in the historical log (see "Historical
+# evolution" below for the file format). Independent of UPDATE_GOLDENS;
+# can be combined with it or run after a clean compare.
+RECORD_MILESTONE="<label>" zig build bench
 ```
 
 The `bench` step is not wired into `zig build test`. It is opt-in and does not affect the default test suite. A typical workflow:
@@ -318,6 +323,39 @@ bench: 1 changed, 0 added, 0 removed
 
 That annotation tells the reviewer to expect counter drift downstream — the fixture or the topology builder moved, not the engine. Counter changes without an accompanying hash change are the inverse: the engine drifted while the test input stayed put. Walked in fixture-manifest (alphabetical) order regardless of `--sort`, so diffs are stable. If the parser itself fails on a malformed golden, the runner falls back to the original side-by-side dump (`--- expected --- / --- actual ---`) so a structurally broken golden is still debuggable.
 
+## Historical evolution
+
+The bench can optionally append a corpus-level milestone to `tests/fixtures/bench/engine.bench.golden.hist`. Setting `RECORD_MILESTONE="<label>"` switches the feature on; the label becomes the human-readable description for the milestone row. The file is an append-only audit trail and complements (rather than replaces) the engine golden: the golden is the regression gate, the `.hist` is the story of how the corpus got to where it is.
+
+```sh
+RECORD_MILESTONE="scheduler dedup" zig build bench
+```
+
+On first invocation against a working tree without a `.hist` file, the bench bootstraps the BASE section by retrieving the golden at git HEAD (via `git show HEAD:tests/fixtures/bench/engine.bench.golden`). The BASE snapshot therefore reflects an honest pre-change state regardless of which run actually creates the file. After that, each run parses the existing `.hist`, derives "Δ vs base" and "Δ vs prev" for the current totals, and appends a new milestone summary row plus a per-fixture detail block.
+
+The summary table holds these columns per milestone:
+
+| Column            | Aggregation        | What a non-zero delta means                                                |
+| ----------------- | ------------------ | -------------------------------------------------------------------------- |
+| `events_popped`   | sum across fixtures| Heap throughput shifted (a scheduler change either drained more or fewer events). |
+| `events_committed`| sum                | Pop-efficiency shifted, even if `events_popped` didn't.                    |
+| `recalcs`         | sum                | Downstream-walk count moved (graph traversal cost).                        |
+| `peak_queue`      | max                | Worst-case heap depth moved (not additive: depth is per-iteration).        |
+| `final_time`      | sum                | Engine timing model drifted (settling time in delay-units).                |
+| `allocs`          | sum                | Allocator pressure (`memory.allocator` calls) shifted.                     |
+| `bytes`           | sum                | Total bytes requested shifted.                                             |
+| `drv_ms`          | sum                | Wall-clock for the inner replay loop. Not asserted; `?` when the reference side never recorded drv. |
+
+Each cell renders as `<value> (Δ% vs base / Δ% vs prev)`. The first recorded milestone has no "prev", so the right half of every cell shows `?`. The BASE row's `drv_ms` is also `?` because the engine golden has never stored wall-clock, so the bootstrap can't recover it; once a milestone with drv is recorded, subsequent "Δ vs prev" comparisons compute against that.
+
+Below the summary, each milestone gets a `## Milestone N: <label>` block with per-fixture deltas vs BASE for the seven deterministic counters. Detail blocks are append-only decoration preserved verbatim on re-write; the summary table is the structured source of truth that the parser reads to compute the next "Δ vs prev".
+
+The `.hist` file is checked in alongside the golden so the history travels with the codebase. A typical workflow when shipping an engine perf change:
+
+1. Run `UPDATE_GOLDENS=1 zig build bench` to regenerate `engine.bench.golden` with the new asserted counters.
+2. Run `RECORD_MILESTONE="<description>" zig build bench` to append the milestone to `.hist`.
+3. Both files land in the same commit; reviewers read the golden diff for the algorithmic change and the `.hist` diff for the deltas.
+
 ## Files
 
 | Path                                            | Role                                                                       |
@@ -325,6 +363,7 @@ That annotation tells the reviewer to expect counter drift downstream — the fi
 | `lib/circuit.zig`                               | Engine + `Metrics` struct + counter bumps                                  |
 | `lib/truth_table/builder.zig`                   | Drives the engine over `2^N` vectors; surfaces `circuit.metrics` and `drive_ns` on `Table` |
 | `lib/memory.zig`                                | Global allocator + counting wrapper (`Counter`) gated by `COLLECT_METRICS` |
-| `tools/bench/main.zig`                          | Bench runner: walks the corpus, prints wall-clock and derived columns, writes/compares golden, renders structured diff on mismatch |
+| `tools/bench/main.zig`                          | Bench runner: walks the corpus, prints wall-clock and derived columns, writes/compares golden, renders structured diff on mismatch, records milestones to `.hist` |
 | `tests/fixtures/bench/engine.bench.golden`      | The committed golden: 53 rows, one per fixture                             |
+| `tests/fixtures/bench/engine.bench.golden.hist` | Append-only historical milestone log: BASE snapshot + per-milestone deltas |
 | `build.zig`                                     | Parallel modules + `zig build bench` step                                  |
