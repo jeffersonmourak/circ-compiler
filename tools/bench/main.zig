@@ -136,6 +136,22 @@ const ReportMode = union(enum) {
     human: TimeUnit,
 };
 
+/// Channel selector for the structured diff document. Default `text` keeps
+/// the existing stderr report verbatim (no extra output). `json` additionally
+/// writes a machine-readable diff to stdout, intended for CI consumers
+/// (`.github/workflows/perf-pr-comment.yml` pipes it through
+/// `tools/bench/format-delta-comment.sh` to produce the PR comment table).
+const OutputFormat = enum {
+    text,
+    json,
+
+    fn parse(s: []const u8) ?OutputFormat {
+        if (std.mem.eql(u8, s, "text")) return .text;
+        if (std.mem.eql(u8, s, "json")) return .json;
+        return null;
+    }
+};
+
 /// Column to sort the per-fixture stderr report by. Sorting only affects the
 /// stderr output; the golden file is always written in fixture-manifest
 /// (alphabetical) order so diffs stay reviewable.
@@ -1109,6 +1125,111 @@ fn printRowDiff(
     }
 }
 
+/// Emit a structured JSON diff to `out`. Schema:
+///
+///   {
+///     "status": "mismatch" | "match",
+///     "summary": { "changed": N, "added": N, "removed": N },
+///     "fixtures": [
+///       {
+///         "name": "<fixture>",
+///         "topology_changed": bool,
+///         "changes": [
+///           { "counter": "<name>", "from": N, "to": N, "delta": N, "pct_change": F }, ...
+///         ]
+///       }, ...
+///     ]
+///   }
+///
+/// Only fixtures with at least one counter (or topology-hash) change appear
+/// in the array. Added/removed fixtures are reflected in `summary` counts
+/// but not the array (they have no symmetric before/after to tabulate, and
+/// the corpus manifest is stable enough that they're rare in practice).
+/// Fixture names in the manifest are ASCII identifiers, so no JSON string
+/// escaping is needed; if that ever changes, swap the raw `{s}` print for
+/// a proper escaper.
+fn emitJsonDiff(
+    out: anytype,
+    fixtures_list: []const Fixture,
+    expected_by_name: *std.StringHashMap(ParsedRow),
+    actual_by_name: *std.StringHashMap(Row),
+    changed: usize,
+    added: usize,
+    removed: usize,
+) !void {
+    const status_str: []const u8 = if (changed > 0 or added > 0 or removed > 0) "mismatch" else "match";
+    try out.print(
+        "{{\"status\":\"{s}\",\"summary\":{{\"changed\":{d},\"added\":{d},\"removed\":{d}}},\"fixtures\":[",
+        .{ status_str, changed, added, removed },
+    );
+
+    var emitted_any: bool = false;
+    for (fixtures_list) |fixture| {
+        const actual_opt = actual_by_name.get(fixture.name);
+        const exp_opt = expected_by_name.get(fixture.name);
+        // Added/removed fixtures contribute only to summary counts; their
+        // per-counter shape isn't comparable so we skip the array entry.
+        if (actual_opt == null or exp_opt == null) continue;
+        const actual = actual_opt.?;
+        const exp = exp_opt.?;
+
+        const topology_changed = exp.topology_hash != actual.topology_hash;
+        const checks = [_]struct { label: []const u8, old: u64, new: u64 }{
+            .{ .label = "vectors", .old = exp.vectors, .new = actual.vectors },
+            .{ .label = "components", .old = exp.components, .new = actual.components },
+            .{ .label = "events_popped", .old = exp.events_popped, .new = actual.metrics.events_popped },
+            .{ .label = "events_committed", .old = exp.events_committed, .new = actual.metrics.events_committed },
+            .{ .label = "recalcs", .old = exp.recalcs, .new = actual.metrics.recalcs },
+            .{ .label = "peak_queue", .old = exp.peak_queue, .new = actual.metrics.peak_queue },
+            .{ .label = "final_time", .old = exp.final_time, .new = actual.metrics.final_time },
+            .{ .label = "allocs", .old = exp.allocs, .new = actual.alloc_metrics.allocs },
+            .{ .label = "bytes", .old = exp.bytes, .new = actual.alloc_metrics.bytes },
+        };
+
+        var any_counter_changed: bool = false;
+        for (checks) |c| {
+            if (c.old != c.new) {
+                any_counter_changed = true;
+                break;
+            }
+        }
+        if (!topology_changed and !any_counter_changed) continue;
+
+        if (emitted_any) try out.writeAll(",");
+        emitted_any = true;
+
+        try out.print(
+            "{{\"name\":\"{s}\",\"topology_changed\":{s},\"changes\":[",
+            .{ fixture.name, if (topology_changed) "true" else "false" },
+        );
+
+        var first_change: bool = true;
+        for (checks) |c| {
+            if (c.old == c.new) continue;
+            if (!first_change) try out.writeAll(",");
+            first_change = false;
+            // Signed delta + percentage. The bench's u64 counters can only
+            // go up to ~2^63 in practice on this corpus (events_popped tops
+            // out around 4.8M for eight_bit_adder), so i128 arithmetic for
+            // the signed delta is overkill defensiveness rather than a
+            // genuine concern.
+            const delta_i: i128 = @as(i128, @intCast(c.new)) - @as(i128, @intCast(c.old));
+            const pct: f64 = if (c.old != 0)
+                100.0 * @as(f64, @floatFromInt(delta_i)) / @as(f64, @floatFromInt(c.old))
+            else
+                0.0;
+            try out.print(
+                "{{\"counter\":\"{s}\",\"from\":{d},\"to\":{d},\"delta\":{d},\"pct_change\":{d:.4}}}",
+                .{ c.label, c.old, c.new, delta_i, pct },
+            );
+        }
+
+        try out.writeAll("]}");
+    }
+
+    try out.writeAll("]}\n");
+}
+
 fn runFixture(
     allocator: std.mem.Allocator,
     fixture: Fixture,
@@ -1354,6 +1475,11 @@ pub fn main() !void {
     const stderr = &stderr_state.interface;
     defer stderr.flush() catch {};
 
+    var stdout_buf: [4096]u8 = undefined;
+    var stdout_state = std.fs.File.stdout().writer(&stdout_buf);
+    const stdout = &stdout_state.interface;
+    defer stdout.flush() catch {};
+
     if (!engine.COLLECT_METRICS) {
         try stderr.writeAll("bench: build_options.collect_metrics is false, refusing to run\n");
         return error.MetricsDisabled;
@@ -1364,6 +1490,12 @@ pub fn main() !void {
     var mode: ReportMode = .default;
     var sort_key: ?SortKey = null;
     var rollup: bool = false;
+    // Output channel selector. Default text mode keeps the existing
+    // human-readable stderr report exactly as it was. JSON mode additionally
+    // emits a structured diff document to stdout (mismatch and match paths
+    // both produce a document; updateMode does not). Stderr is unaffected so
+    // local-dev readability survives.
+    var output_format: OutputFormat = .text;
     var i: usize = 1;
     while (i < argv.len) : (i += 1) {
         const arg = argv[i];
@@ -1382,7 +1514,7 @@ pub fn main() !void {
         } else if (std.mem.eql(u8, arg, "--sort")) {
             if (i + 1 >= argv.len) {
                 try stderr.writeAll("bench: --sort requires a column name\n");
-                try stderr.writeAll("usage: bench [--human [s|ms|ns]] [--sort inputs|comps|events|time] [--rollup]\n");
+                try stderr.writeAll("usage: bench [--human [s|ms|ns]] [--sort inputs|comps|events|time] [--rollup] [--output=text|json]\n");
                 return error.MissingArg;
             }
             sort_key = SortKey.parse(argv[i + 1]) orelse {
@@ -1393,9 +1525,30 @@ pub fn main() !void {
             i += 1;
         } else if (std.mem.eql(u8, arg, "--rollup")) {
             rollup = true;
+        } else if (std.mem.startsWith(u8, arg, "--output=")) {
+            // Equals form, e.g. --output=json. Matches the user-facing
+            // convention used by the perf-pr-comment workflow.
+            const value = arg["--output=".len..];
+            output_format = OutputFormat.parse(value) orelse {
+                try stderr.print("bench: invalid --output value: {s}\n", .{value});
+                try stderr.writeAll("valid outputs: text, json\n");
+                return error.InvalidArg;
+            };
+        } else if (std.mem.eql(u8, arg, "--output")) {
+            // Two-token form for parity with --human/--sort.
+            if (i + 1 >= argv.len) {
+                try stderr.writeAll("bench: --output requires a format (text|json)\n");
+                return error.MissingArg;
+            }
+            output_format = OutputFormat.parse(argv[i + 1]) orelse {
+                try stderr.print("bench: invalid --output value: {s}\n", .{argv[i + 1]});
+                try stderr.writeAll("valid outputs: text, json\n");
+                return error.InvalidArg;
+            };
+            i += 1;
         } else {
             try stderr.print("bench: unknown flag: {s}\n", .{arg});
-            try stderr.writeAll("usage: bench [--human [s|ms|ns]] [--sort inputs|comps|events|time] [--rollup]\n");
+            try stderr.writeAll("usage: bench [--human [s|ms|ns]] [--sort inputs|comps|events|time] [--rollup] [--output=text|json]\n");
             return error.UnknownFlag;
         }
     }
@@ -1713,9 +1866,19 @@ pub fn main() !void {
                 try stderr.print("  + {s} (new fixture, no golden row)\n", .{fixture.name});
             }
         }
+
+        if (output_format == .json) {
+            try emitJsonDiff(stdout, &fixtures, &expected_by_name, &actual_by_name, changed, added, removed);
+        }
         return error.GoldenMismatch;
     }
 
     try stderr.writeAll("bench: golden matches\n");
+    if (output_format == .json) {
+        // Match path: empty fixtures array + zero counts. Keeps consumers
+        // (the workflow's table-builder script) able to read a document on
+        // every successful run instead of branching on file presence.
+        try stdout.writeAll("{\"status\":\"match\",\"summary\":{\"changed\":0,\"added\":0,\"removed\":0},\"fixtures\":[]}\n");
+    }
     try recordMilestoneIfRequested(allocator, stderr, sorted_rows.items, total_drive_ns);
 }
