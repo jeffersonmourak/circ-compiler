@@ -137,6 +137,36 @@ Example output (`--human ms --sort time`, top 6):
 
 The new `allocs` and `bytes` columns are the same delta values that get written to the golden's two rightmost columns — only the formatting differs (k/M scaling, optional raw value in parens). For the stress fixtures introduced for the family-scaling story, watch the trend: `and_5bit`'s 2.13k allocs and `and_6bit`'s 8.29k allocs continue the steep climb that the corpus shows for the AND family (allocs scale with fanout-driven heap pressure, not just vector count). The wider adders tell a different story: events and time scale steeply (eight_bit_adder hits 4.8M events and 1.87s drive), but `peak_queue` caps at 7 across every adder from 4-bit to 8-bit. That's not a sampling artifact — it's the truth-table builder calling `propagateEvent` once per input pin, so peak depth is bounded by per-input fanout rather than total bit width.
 
+### Family rollup
+
+Pass `--rollup` to collapse the 53 per-fixture rows into ~14 per-family lines. Useful for a smell-check: scan whether one family's pop_eff or allocator pressure has shifted, instead of eyeballing every row. The family is inferred from the fixture name — suffix-match on `_adder` groups half/full/N-bit adders together, otherwise the prefix before the first underscore (so `and_4bit` → `and`, `primitive_led` → `primitive`).
+
+```sh
+zig build bench -- --rollup
+zig build bench -- --rollup --human ms       # rollup is independent of --human; same format either way
+```
+
+```
+bench rollup: adder         8 fix   71.00k vecs     5.18M events    7 peak  147.73k allocs    19.41M bytes   81.3% pop    1997.85 ms drv
+bench rollup: alu           1 fix   16.38k vecs     4.15M events   21 peak   34.73k allocs     4.62M bytes   95.2% pop    1763.44 ms drv
+bench rollup: and           6 fix    5.46k vecs    72.56k events    1 peak   11.26k allocs     1.47M bytes   29.7% pop      25.62 ms drv
+bench rollup: builtin       5 fix       20 vecs       254 events    2 peak      385 allocs    79.12k bytes   96.1% pop       0.11 ms drv
+bench rollup: chain         1 fix        2 vecs        10 events    1 peak       26 allocs     5.29k bytes  100.0% pop       0.01 ms drv
+bench rollup: demux         4 fix       60 vecs       492 events    2 peak      384 allocs    71.25k bytes   70.7% pop       0.27 ms drv
+bench rollup: mux           5 fix    2.73k vecs    47.30k events    2 peak    6.36k allocs   888.46k bytes   51.9% pop      16.06 ms drv
+bench rollup: nand          3 fix      336 vecs     4.39k events    2 peak      989 allocs   153.66k bytes   58.4% pop       1.58 ms drv
+bench rollup: nor           3 fix      336 vecs     6.64k events    2 peak    1.25k allocs   211.50k bytes   72.4% pop       2.31 ms drv
+bench rollup: not           3 fix       28 vecs       196 events    1 peak      164 allocs    30.62k bytes   76.5% pop       0.08 ms drv
+bench rollup: or            3 fix      336 vecs     5.26k events    2 peak    1.08k allocs   173.14k bytes   65.2% pop       1.84 ms drv
+bench rollup: primitive     4 fix       10 vecs        30 events    1 peak       72 allocs    13.86k bytes   93.3% pop       0.02 ms drv
+bench rollup: xnor          3 fix      336 vecs    11.11k events    2 peak    1.66k allocs   299.34k bytes   83.5% pop       3.93 ms drv
+bench rollup: xor           4 fix    1.36k vecs    39.81k events    2 peak    3.99k allocs   620.35k bytes   74.8% pop      14.24 ms drv
+```
+
+Rollup columns are always sums except `peak` which is the family max (depth is per-iteration, not additive) and `pop` which is computed from total committed / total popped. The family rows make some patterns immediately obvious that get lost across 53 fixtures: the `and` family's 29.7% pop efficiency is the worst in the corpus (60.3% of pops wasted), `alu` reaches the only peak_queue above 7, and `adder` accounts for ~half the corpus's events and allocator pressure thanks to `eight_bit_adder`.
+
+Rollup ignores `--sort` because the family-grouped output is always alphabetical for stable diffs.
+
 ## What it measures
 
 Seven deterministic counters split across two structures. Five live on `engine.Circuit.metrics` and characterize the scheduler; two come from `lib/memory.zig`'s counting allocator and characterize heap pressure. All are `u64`.
@@ -151,19 +181,21 @@ Seven deterministic counters split across two structures. Five live on `engine.C
 | `allocs`           | `memory.snapshotAllocMetrics()` delta around fixture | Number of `alloc()` calls hitting the engine's global allocator. Catches "events stayed flat but heap allocations exploded." |
 | `bytes`            | `memory.snapshotAllocMetrics()` delta around fixture | Total bytes requested across those `alloc()` calls.                                   |
 
-Two columns in the golden are not metrics but corpus shape: `vectors` (= `2^N` inputs = `table.rows.len`) and `components` (= `topology.components.len`, total graph size including expanded sub-circuit primitives).
+Three columns in the golden are not metrics but corpus shape: `vectors` (= `2^N` inputs = `table.rows.len`), `components` (= `topology.components.len`, total graph size including expanded sub-circuit primitives), and `topology` (a CRC32 hex digest over the topology's deterministic shape — component id/kind/name/origin and connection from/to/port).
 
 The two allocator counters come from a wrapping `Counter` in `lib/memory.zig` that intercepts the same global allocator the engine uses (`memory.allocator`). The wrapper is selected only when `build_options.collect_metrics=true`; production builds get the raw arena, byte-identical to before. `resize`, `remap`, and `free` pass through without counting because the arena treats `free` as a no-op anyway, and `std.ArrayList` growth ultimately calls `alloc()` for fresh buffers — so `alloc()` alone is a faithful proxy for engine heap pressure.
+
+The `topology` hash is the diff renderer's "what changed" signal. If the hash holds steady but counters move, the engine drifted. If the hash moves, the fixture or the topology builder drifted — and the diff block prefixes the fixture with `(topology changed)` so a reviewer doesn't have to puzzle out which class of change it is.
 
 ### How to read a row
 
 Take a row from `tests/fixtures/bench/engine.bench.golden`:
 
 ```
-| xor_4bit                 |     256 |         76 |          7136 |             5598 |    5602 |          2 |      24830 |     874 |    143040 |
+| xor_4bit                 |     256 |         76 |          7136 |             5598 |    5602 |          2 |      24830 |     874 |    143040 | 91b4cc3d |
 ```
 
-That means: an XOR over 4-bit operands exhaustively driven across all 256 input combinations against a 76-component graph (XOR macro expansion: 4 XOR cells × ~19 primitives each, minus shared inputs). The engine popped 7,136 events from its heap, of which 5,598 actually changed state (the other ~1,500 were dedup'd no-ops); it ran 5,602 downstream gate evaluations; the heap never held more than 2 events at once; the final propagation settled at logical time 24,830; and the run made 874 allocator calls totaling 143,040 bytes (≈164 bytes per alloc — mostly small `Component` and `ArrayList` headers).
+That means: an XOR over 4-bit operands exhaustively driven across all 256 input combinations against a 76-component graph (XOR macro expansion: 4 XOR cells × ~19 primitives each, minus shared inputs). The engine popped 7,136 events from its heap, of which 5,598 actually changed state (the other ~1,500 were dedup'd no-ops); it ran 5,602 downstream gate evaluations; the heap never held more than 2 events at once; the final propagation settled at logical time 24,830; the run made 874 allocator calls totaling 143,040 bytes (≈164 bytes per alloc — mostly small `Component` and `ArrayList` headers); and the topology hash `91b4cc3d` identifies this exact shape of components and wires.
 
 The split between `events_popped` and `events_committed` is the diagnostic-grade column. It's not exposed in any other test path, and it catches algorithmic regressions where the scheduler enqueues redundant events that are correctly dedup'd downstream — the circuit gives the right answer, function tests pass, but the heap work has silently doubled.
 
@@ -275,7 +307,16 @@ bench: 2 changed, 0 added, 0 removed
     events_popped             8000 →       7136   -864 (-10.80%)
 ```
 
-Walked in fixture-manifest (alphabetical) order regardless of `--sort`, so diffs are stable. If the parser itself fails on a malformed golden, the runner falls back to the original side-by-side dump (`--- expected --- / --- actual ---`) so a structurally broken golden is still debuggable.
+When the topology hash itself moved, the fixture block is tagged `(topology changed)` and the hash diff leads:
+
+```
+bench: golden mismatch
+bench: 1 changed, 0 added, 0 removed
+  alu_4bit  (topology changed)
+    topology_hash       deadbeef → 2028acf9
+```
+
+That annotation tells the reviewer to expect counter drift downstream — the fixture or the topology builder moved, not the engine. Counter changes without an accompanying hash change are the inverse: the engine drifted while the test input stayed put. Walked in fixture-manifest (alphabetical) order regardless of `--sort`, so diffs are stable. If the parser itself fails on a malformed golden, the runner falls back to the original side-by-side dump (`--- expected --- / --- actual ---`) so a structurally broken golden is still debuggable.
 
 ## Files
 

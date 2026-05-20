@@ -249,6 +249,12 @@ const Row = struct {
     /// heap pressure alone. Asserted in the golden because the count and
     /// byte values are deterministic for a given algorithm + input set.
     alloc_metrics: engine.memory.AllocMetrics,
+    /// CRC32 over the deterministic shape of the topology: each component's
+    /// id/kind/name/origin chain, and each connection's from/to/port. Lets
+    /// the diff renderer distinguish "engine changed" (hash same, counters
+    /// move) from "fixture changed" (hash moves, counters follow). Written
+    /// as 8 hex chars in the golden.
+    topology_hash: u32,
 };
 
 const Column = struct {
@@ -269,7 +275,46 @@ const columns = [_]Column{
     .{ .header = "final_time", .width = 10, .numeric = true },
     .{ .header = "allocs", .width = 7, .numeric = true },
     .{ .header = "bytes", .width = 9, .numeric = true },
+    .{ .header = "topology", .width = 8, .numeric = false },
 };
+
+/// CRC32 over the topology's deterministic shape: components in order, then
+/// connections in order. Catches "fixture changed" vs "engine changed" — if
+/// the hash stays put but counters move, the engine drifted; if the hash
+/// moves, the test input changed (or the topology builder changed).
+fn hashTopology(topology: anytype) u32 {
+    const Crc32 = std.hash.Crc32;
+    var hasher = Crc32.init();
+
+    const ccount: u32 = @intCast(topology.components.len);
+    hasher.update(std.mem.asBytes(&ccount));
+    for (topology.components) |comp| {
+        hasher.update(std.mem.asBytes(&comp.id));
+        const kind_byte: u8 = @intFromEnum(comp.kind);
+        hasher.update(&[_]u8{kind_byte});
+        hasher.update(comp.name);
+        hasher.update("\x00");
+        const olen: u32 = @intCast(comp.origin.len);
+        hasher.update(std.mem.asBytes(&olen));
+        for (comp.origin) |frame| {
+            hasher.update(frame.alias);
+            hasher.update("\x00");
+            hasher.update(frame.subcircuit);
+            hasher.update("\x00");
+            hasher.update(std.mem.asBytes(&frame.target_file));
+        }
+    }
+
+    const conncount: u32 = @intCast(topology.connections.len);
+    hasher.update(std.mem.asBytes(&conncount));
+    for (topology.connections) |conn| {
+        hasher.update(std.mem.asBytes(&conn.from_id));
+        hasher.update(std.mem.asBytes(&conn.to_id));
+        hasher.update(&[_]u8{conn.port});
+    }
+
+    return hasher.final();
+}
 
 fn updateMode() bool {
     const env = std.posix.getenv("UPDATE_GOLDENS") orelse return false;
@@ -347,8 +392,37 @@ fn writeRow(out: *std.ArrayList(u8), allocator: std.mem.Allocator, row: Row) !vo
     s = try std.fmt.bufPrint(&buf, "{d}", .{row.alloc_metrics.bytes});
     try writeCell(out, allocator, s, columns[9]);
 
+    // Hash rendered as 8 hex chars (lowercase). Fixed width keeps the column
+    // alignment stable across runs even when leading nibbles happen to be zero.
+    s = try std.fmt.bufPrint(&buf, "{x:0>8}", .{row.topology_hash});
+    try writeCell(out, allocator, s, columns[10]);
+
     try out.append(allocator, '\n');
 }
+
+/// Group a fixture name by family for the rollup view. Suffix-match on
+/// "_adder" lumps half/full/N_bit adders together; otherwise the family is
+/// the substring before the first underscore (so "and_4bit" → "and",
+/// "primitive_led" → "primitive"). Names without underscores are their own
+/// family ("chain", "alu_4bit" → "alu" via the first-underscore rule).
+fn familyOf(name: []const u8) []const u8 {
+    if (std.mem.endsWith(u8, name, "_adder")) return "adder";
+    if (std.mem.indexOfScalar(u8, name, '_')) |idx| return name[0..idx];
+    return name;
+}
+
+const RollupRow = struct {
+    family: []const u8,
+    fixtures: u32 = 0,
+    vectors: u64 = 0,
+    events_popped: u64 = 0,
+    events_committed: u64 = 0,
+    /// Max across the family — depth is per-iteration, not additive.
+    peak_queue: u64 = 0,
+    allocs: u64 = 0,
+    bytes: u64 = 0,
+    drive_ns: u64 = 0,
+};
 
 /// Parsed-back view of a single golden row. Lives just long enough to feed
 /// the mismatch diff renderer; the names are slices into the on-disk file
@@ -364,6 +438,7 @@ const ParsedRow = struct {
     final_time: u64,
     allocs: u64,
     bytes: u64,
+    topology_hash: u32,
 };
 
 /// Parse a golden file back into ParsedRow records keyed by fixture name.
@@ -396,7 +471,7 @@ fn parseGoldenRows(
             cells[n] = std.mem.trim(u8, raw, " ");
             n += 1;
         }
-        if (n < 11) continue;
+        if (n < 12) continue;
 
         try rows.append(allocator, .{
             .name = cells[1],
@@ -409,6 +484,7 @@ fn parseGoldenRows(
             .final_time = std.fmt.parseInt(u64, cells[8], 10) catch continue,
             .allocs = std.fmt.parseInt(u64, cells[9], 10) catch continue,
             .bytes = std.fmt.parseInt(u64, cells[10], 10) catch continue,
+            .topology_hash = std.fmt.parseInt(u32, cells[11], 16) catch continue,
         });
     }
     return try rows.toOwnedSlice(allocator);
@@ -430,7 +506,10 @@ fn formatDelta(buf: []u8, old: u64, new: u64) ![]const u8 {
 }
 
 /// Emit a per-column delta block for one fixture. Skips columns that didn't
-/// change so the report stays focused.
+/// change so the report stays focused. The topology hash is rendered as a
+/// special leading line tagged "(topology changed)" so it's obvious that any
+/// counter shifts that follow are likely fixture/builder drift, not engine
+/// drift. When the hash is unchanged, only the counter rows show.
 fn printRowDiff(
     stderr: anytype,
     name: []const u8,
@@ -449,16 +528,28 @@ fn printRowDiff(
         .{ .label = "bytes", .old = old.bytes, .new = new.alloc_metrics.bytes },
     };
 
-    var any: bool = false;
-    for (checks) |c| {
-        if (c.old != c.new) {
-            any = true;
-            break;
+    const hash_changed = old.topology_hash != new.topology_hash;
+    var any: bool = hash_changed;
+    if (!any) {
+        for (checks) |c| {
+            if (c.old != c.new) {
+                any = true;
+                break;
+            }
         }
     }
     if (!any) return;
 
-    try stderr.print("  {s}\n", .{name});
+    if (hash_changed) {
+        try stderr.print("  {s}  (topology changed)\n", .{name});
+        try stderr.print(
+            "    {s: <18}  {x:0>8} → {x:0>8}\n",
+            .{ "topology_hash", old.topology_hash, new.topology_hash },
+        );
+    } else {
+        try stderr.print("  {s}\n", .{name});
+    }
+
     var buf: [80]u8 = undefined;
     for (checks) |c| {
         if (c.old == c.new) continue;
@@ -515,6 +606,7 @@ fn runFixture(
     defer topology.deinit(allocator);
 
     const component_count = topology.components.len;
+    const topology_hash = hashTopology(topology);
 
     var table = try truth_table_builder.build(allocator, topology, .{});
     defer table.deinit();
@@ -532,6 +624,7 @@ fn runFixture(
         .metrics = table.metrics,
         .drive_ns = table.drive_ns,
         .alloc_metrics = alloc_delta,
+        .topology_hash = topology_hash,
     };
 }
 
@@ -554,6 +647,7 @@ pub fn main() !void {
     defer std.process.argsFree(allocator, argv);
     var mode: ReportMode = .default;
     var sort_key: ?SortKey = null;
+    var rollup: bool = false;
     var i: usize = 1;
     while (i < argv.len) : (i += 1) {
         const arg = argv[i];
@@ -572,7 +666,7 @@ pub fn main() !void {
         } else if (std.mem.eql(u8, arg, "--sort")) {
             if (i + 1 >= argv.len) {
                 try stderr.writeAll("bench: --sort requires a column name\n");
-                try stderr.writeAll("usage: bench [--human [s|ms|ns]] [--sort inputs|comps|events|time]\n");
+                try stderr.writeAll("usage: bench [--human [s|ms|ns]] [--sort inputs|comps|events|time] [--rollup]\n");
                 return error.MissingArg;
             }
             sort_key = SortKey.parse(argv[i + 1]) orelse {
@@ -581,9 +675,11 @@ pub fn main() !void {
                 return error.InvalidArg;
             };
             i += 1;
+        } else if (std.mem.eql(u8, arg, "--rollup")) {
+            rollup = true;
         } else {
             try stderr.print("bench: unknown flag: {s}\n", .{arg});
-            try stderr.writeAll("usage: bench [--human [s|ms|ns]] [--sort inputs|comps|events|time]\n");
+            try stderr.writeAll("usage: bench [--human [s|ms|ns]] [--sort inputs|comps|events|time] [--rollup]\n");
             return error.UnknownFlag;
         }
     }
@@ -632,7 +728,63 @@ pub fn main() !void {
         std.mem.sort(SortedRow, sorted_rows.items, key, sortDesc);
     }
 
-    for (sorted_rows.items) |entry| {
+    if (rollup) {
+        // Group rows by family (suffix-match for adders; otherwise prefix
+        // before the first underscore). Aggregate counts; track max for
+        // peak_queue since it's per-iteration, not per-fixture.
+        var by_family = std.StringHashMap(RollupRow).init(allocator);
+        defer by_family.deinit();
+        for (sorted_rows.items) |entry| {
+            const fam = familyOf(entry.row.name);
+            const gop = try by_family.getOrPut(fam);
+            if (!gop.found_existing) {
+                gop.value_ptr.* = .{ .family = fam };
+            }
+            gop.value_ptr.fixtures += 1;
+            gop.value_ptr.vectors += entry.row.vectors;
+            gop.value_ptr.events_popped += entry.row.metrics.events_popped;
+            gop.value_ptr.events_committed += entry.row.metrics.events_committed;
+            if (entry.row.metrics.peak_queue > gop.value_ptr.peak_queue) {
+                gop.value_ptr.peak_queue = entry.row.metrics.peak_queue;
+            }
+            gop.value_ptr.allocs += entry.row.alloc_metrics.allocs;
+            gop.value_ptr.bytes += entry.row.alloc_metrics.bytes;
+            gop.value_ptr.drive_ns += entry.row.drive_ns;
+        }
+
+        // Stable alphabetical order — rollup output should diff cleanly
+        // regardless of --sort.
+        var rollup_rows: std.ArrayList(RollupRow) = .{};
+        defer rollup_rows.deinit(allocator);
+        var it = by_family.iterator();
+        while (it.next()) |kv| try rollup_rows.append(allocator, kv.value_ptr.*);
+        std.mem.sort(RollupRow, rollup_rows.items, {}, struct {
+            fn lessThan(_: void, lhs: RollupRow, rhs: RollupRow) bool {
+                return std.mem.lessThan(u8, lhs.family, rhs.family);
+            }
+        }.lessThan);
+
+        for (rollup_rows.items) |r| {
+            var vec_buf: [64]u8 = undefined;
+            var ev_buf: [64]u8 = undefined;
+            var alloc_buf: [64]u8 = undefined;
+            var bytes_buf: [64]u8 = undefined;
+            const vec_s = try formatCount(&vec_buf, r.vectors, "vecs", false);
+            const ev_s = try formatCount(&ev_buf, r.events_popped, "events", false);
+            const alloc_s = try formatCount(&alloc_buf, r.allocs, "allocs", false);
+            const bytes_s = try formatCount(&bytes_buf, r.bytes, "bytes", false);
+            const pop_eff_pct = if (r.events_popped > 0)
+                100.0 * @as(f64, @floatFromInt(r.events_committed)) /
+                    @as(f64, @floatFromInt(r.events_popped))
+            else
+                0.0;
+            const drive_ms = @as(f64, @floatFromInt(r.drive_ns)) / std.time.ns_per_ms;
+            try stderr.print(
+                "bench rollup: {s: <10}  {d: >3} fix  {s: >12}  {s: >15}  {d: >3} peak  {s: >14}  {s: >14}  {d: >5.1}% pop  {d: >9.2} ms drv\n",
+                .{ r.family, r.fixtures, vec_s, ev_s, r.peak_queue, alloc_s, bytes_s, pop_eff_pct, drive_ms },
+            );
+        }
+    } else for (sorted_rows.items) |entry| {
         const row = entry.row;
         const elapsed_ns = entry.elapsed_ns;
         const elapsed_ns_f = @as(f64, @floatFromInt(elapsed_ns));
@@ -825,7 +977,8 @@ pub fn main() !void {
                 exp.peak_queue != actual.metrics.peak_queue or
                 exp.final_time != actual.metrics.final_time or
                 exp.allocs != actual.alloc_metrics.allocs or
-                exp.bytes != actual.alloc_metrics.bytes)
+                exp.bytes != actual.alloc_metrics.bytes or
+                exp.topology_hash != actual.topology_hash)
             {
                 changed += 1;
             }
