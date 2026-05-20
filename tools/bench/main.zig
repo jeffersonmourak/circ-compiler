@@ -50,6 +50,8 @@ const fixtures = [_]Fixture{
     .{ .name = "and_2bit", .circ = "tests/fixtures/circuits/and_2bit.circ" },
     .{ .name = "and_3bit", .circ = "tests/fixtures/circuits/and_3bit.circ" },
     .{ .name = "and_4bit", .circ = "tests/fixtures/circuits/and_4bit.circ" },
+    .{ .name = "and_5bit", .circ = "tests/fixtures/circuits/and_5bit.circ" },
+    .{ .name = "and_6bit", .circ = "tests/fixtures/circuits/and_6bit.circ" },
     .{ .name = "and_two_inputs", .circ = "tests/fixtures/circuits/and_two_inputs.circ" },
     .{ .name = "builtin_nand", .circ = "tests/fixtures/circuits/builtin_nand.circ" },
     .{ .name = "builtin_nor", .circ = "tests/fixtures/circuits/builtin_nor.circ" },
@@ -61,6 +63,8 @@ const fixtures = [_]Fixture{
     .{ .name = "demux_2bit_1to2", .circ = "tests/fixtures/circuits/demux_2bit_1to2.circ" },
     .{ .name = "demux_3bit_1to2", .circ = "tests/fixtures/circuits/demux_3bit_1to2.circ" },
     .{ .name = "demux_4bit_1to2", .circ = "tests/fixtures/circuits/demux_4bit_1to2.circ" },
+    .{ .name = "eight_bit_adder", .circ = "tests/fixtures/circuits/eight_bit_adder.circ" },
+    .{ .name = "five_bit_adder", .circ = "tests/fixtures/circuits/five_bit_adder.circ" },
     .{ .name = "four_bit_adder", .circ = "tests/fixtures/circuits/four_bit_adder.circ" },
     .{ .name = "full_adder", .circ = "tests/fixtures/circuits/full_adder_from_builtins.circ" },
     .{ .name = "half_adder", .circ = "tests/fixtures/circuits/half_adder.circ" },
@@ -68,6 +72,7 @@ const fixtures = [_]Fixture{
     .{ .name = "mux_2to1", .circ = "tests/fixtures/circuits/mux_2to1.circ" },
     .{ .name = "mux_3bit_2to1", .circ = "tests/fixtures/circuits/mux_3bit_2to1.circ" },
     .{ .name = "mux_4bit_2to1", .circ = "tests/fixtures/circuits/mux_4bit_2to1.circ" },
+    .{ .name = "mux_5bit_2to1", .circ = "tests/fixtures/circuits/mux_5bit_2to1.circ" },
     .{ .name = "nand_2bit", .circ = "tests/fixtures/circuits/nand_2bit.circ" },
     .{ .name = "nand_3bit", .circ = "tests/fixtures/circuits/nand_3bit.circ" },
     .{ .name = "nand_4bit", .circ = "tests/fixtures/circuits/nand_4bit.circ" },
@@ -84,6 +89,7 @@ const fixtures = [_]Fixture{
     .{ .name = "primitive_led", .circ = "tests/fixtures/circuits/edge_single_component.circ" },
     .{ .name = "primitive_not", .circ = "tests/fixtures/circuits/single_gate.circ" },
     .{ .name = "primitive_wire", .circ = "tests/fixtures/circuits/wire_passthrough.circ" },
+    .{ .name = "six_bit_adder", .circ = "tests/fixtures/circuits/six_bit_adder.circ" },
     .{ .name = "three_bit_adder", .circ = "tests/fixtures/circuits/three_bit_adder.circ" },
     .{ .name = "two_bit_adder", .circ = "tests/fixtures/circuits/two_bit_adder.circ" },
     .{ .name = "xnor_2bit", .circ = "tests/fixtures/circuits/xnor_2bit.circ" },
@@ -92,6 +98,7 @@ const fixtures = [_]Fixture{
     .{ .name = "xor_2bit", .circ = "tests/fixtures/circuits/xor_2bit.circ" },
     .{ .name = "xor_3bit", .circ = "tests/fixtures/circuits/xor_3bit.circ" },
     .{ .name = "xor_4bit", .circ = "tests/fixtures/circuits/xor_4bit.circ" },
+    .{ .name = "xor_5bit", .circ = "tests/fixtures/circuits/xor_5bit.circ" },
 };
 
 const GOLDEN_PATH = "tests/fixtures/bench/engine.bench.golden";
@@ -159,18 +166,24 @@ fn sortDesc(key: SortKey, lhs: SortedRow, rhs: SortedRow) bool {
 }
 
 /// Format a labeled count with a thousands/millions suffix when worth it.
-/// 0..999 → "4 vecs"; 1_000..999_999 → "16.38k vecs (16384)"; 1_000_000+ →
-/// "1.85M events (1850000)". The label is inlined between the humanized
-/// magnitude and the raw value.
+/// With `with_raw=true`: 0..999 → "4 vecs"; 1_000..999_999 → "16.38k vecs
+/// (16384)"; 1_000_000+ → "1.85M events (1850000)". Used on totals lines
+/// where exact aggregate counts matter.
+/// With `with_raw=false`: drops the `(N)` raw value, so the same numbers
+/// render as "4 vecs", "16.38k vecs", "1.85M events". Used on per-fixture
+/// rows where the parens just bloat the column width without helping
+/// readability.
 /// Returns a slice into `buf`. Pass a buf of at least 64 bytes.
-fn formatCount(buf: []u8, n: u64, label: []const u8) ![]const u8 {
+fn formatCount(buf: []u8, n: u64, label: []const u8, with_raw: bool) ![]const u8 {
     if (n < 1000) return std.fmt.bufPrint(buf, "{d} {s}", .{ n, label });
     if (n < 1_000_000) {
         const k = @as(f64, @floatFromInt(n)) / 1000.0;
-        return std.fmt.bufPrint(buf, "{d:.2}k {s} ({d})", .{ k, label, n });
+        if (with_raw) return std.fmt.bufPrint(buf, "{d:.2}k {s} ({d})", .{ k, label, n });
+        return std.fmt.bufPrint(buf, "{d:.2}k {s}", .{ k, label });
     }
     const m = @as(f64, @floatFromInt(n)) / 1_000_000.0;
-    return std.fmt.bufPrint(buf, "{d:.2}M {s} ({d})", .{ m, label, n });
+    if (with_raw) return std.fmt.bufPrint(buf, "{d:.2}M {s} ({d})", .{ m, label, n });
+    return std.fmt.bufPrint(buf, "{d:.2}M {s}", .{ m, label });
 }
 
 /// Format an elapsed-nanosecond duration in the user-chosen unit. The
@@ -229,6 +242,13 @@ const Row = struct {
     /// throughput" from "parser+setup cost", which previously dominated
     /// vec/ms numbers on small fixtures.
     drive_ns: u64,
+    /// Allocation counters scoped to this fixture: snapshot delta of the
+    /// engine's global counting-allocator around `runFixture`. The bench's
+    /// own per-fixture arena (used for parse, IR, topology) is a separate
+    /// allocator and doesn't show up here — these counters reflect engine
+    /// heap pressure alone. Asserted in the golden because the count and
+    /// byte values are deterministic for a given algorithm + input set.
+    alloc_metrics: engine.memory.AllocMetrics,
 };
 
 const Column = struct {
@@ -247,6 +267,8 @@ const columns = [_]Column{
     .{ .header = "recalcs", .width = 7, .numeric = true },
     .{ .header = "peak_queue", .width = 10, .numeric = true },
     .{ .header = "final_time", .width = 10, .numeric = true },
+    .{ .header = "allocs", .width = 7, .numeric = true },
+    .{ .header = "bytes", .width = 9, .numeric = true },
 };
 
 fn updateMode() bool {
@@ -319,6 +341,12 @@ fn writeRow(out: *std.ArrayList(u8), allocator: std.mem.Allocator, row: Row) !vo
     s = try std.fmt.bufPrint(&buf, "{d}", .{row.metrics.final_time});
     try writeCell(out, allocator, s, columns[7]);
 
+    s = try std.fmt.bufPrint(&buf, "{d}", .{row.alloc_metrics.allocs});
+    try writeCell(out, allocator, s, columns[8]);
+
+    s = try std.fmt.bufPrint(&buf, "{d}", .{row.alloc_metrics.bytes});
+    try writeCell(out, allocator, s, columns[9]);
+
     try out.append(allocator, '\n');
 }
 
@@ -334,6 +362,8 @@ const ParsedRow = struct {
     recalcs: u64,
     peak_queue: u64,
     final_time: u64,
+    allocs: u64,
+    bytes: u64,
 };
 
 /// Parse a golden file back into ParsedRow records keyed by fixture name.
@@ -366,7 +396,7 @@ fn parseGoldenRows(
             cells[n] = std.mem.trim(u8, raw, " ");
             n += 1;
         }
-        if (n < 9) continue;
+        if (n < 11) continue;
 
         try rows.append(allocator, .{
             .name = cells[1],
@@ -377,6 +407,8 @@ fn parseGoldenRows(
             .recalcs = std.fmt.parseInt(u64, cells[6], 10) catch continue,
             .peak_queue = std.fmt.parseInt(u64, cells[7], 10) catch continue,
             .final_time = std.fmt.parseInt(u64, cells[8], 10) catch continue,
+            .allocs = std.fmt.parseInt(u64, cells[9], 10) catch continue,
+            .bytes = std.fmt.parseInt(u64, cells[10], 10) catch continue,
         });
     }
     return try rows.toOwnedSlice(allocator);
@@ -413,6 +445,8 @@ fn printRowDiff(
         .{ .label = "recalcs", .old = old.recalcs, .new = new.metrics.recalcs },
         .{ .label = "peak_queue", .old = old.peak_queue, .new = new.metrics.peak_queue },
         .{ .label = "final_time", .old = old.final_time, .new = new.metrics.final_time },
+        .{ .label = "allocs", .old = old.allocs, .new = new.alloc_metrics.allocs },
+        .{ .label = "bytes", .old = old.bytes, .new = new.alloc_metrics.bytes },
     };
 
     var any: bool = false;
@@ -440,6 +474,12 @@ fn runFixture(
     allocator: std.mem.Allocator,
     fixture: Fixture,
 ) !Row {
+    // Snapshot the engine's global counting-allocator before the fixture runs.
+    // We compute the per-fixture delta at the end of the function so the
+    // golden row only reflects this fixture's heap pressure, not the
+    // cumulative across all fixtures run so far.
+    const alloc_before = engine.memory.snapshotAllocMetrics();
+
     const scan_result = try scan_imports.scanProjectImports(allocator, fixture.circ);
     if (scan_result.diagnostics.items.len > 0) {
         for (scan_result.diagnostics.items) |d| {
@@ -479,12 +519,19 @@ fn runFixture(
     var table = try truth_table_builder.build(allocator, topology, .{});
     defer table.deinit();
 
+    const alloc_after = engine.memory.snapshotAllocMetrics();
+    const alloc_delta: engine.memory.AllocMetrics = .{
+        .allocs = alloc_after.allocs - alloc_before.allocs,
+        .bytes = alloc_after.bytes - alloc_before.bytes,
+    };
+
     return .{
         .name = fixture.name,
         .vectors = table.rows.len,
         .components = component_count,
         .metrics = table.metrics,
         .drive_ns = table.drive_ns,
+        .alloc_metrics = alloc_delta,
     };
 }
 
@@ -550,6 +597,8 @@ pub fn main() !void {
     var total_drive_ns: u64 = 0;
     var total_events: u64 = 0;
     var total_vectors: u64 = 0;
+    var total_allocs: u64 = 0;
+    var total_bytes: u64 = 0;
 
     // Collect all rows first so we can optionally sort the stderr report
     // without disturbing golden order. Golden output is appended inside the
@@ -572,6 +621,8 @@ pub fn main() !void {
         total_drive_ns += row.drive_ns;
         total_events += row.metrics.events_popped;
         total_vectors += row.vectors;
+        total_allocs += row.alloc_metrics.allocs;
+        total_bytes += row.alloc_metrics.bytes;
 
         try writeRow(&output, allocator, row);
         sorted_rows.appendAssumeCapacity(.{ .row = row, .elapsed_ns = elapsed_ns });
@@ -633,18 +684,32 @@ pub fn main() !void {
                 var drive_buf: [48]u8 = undefined;
                 var vec_rate_buf: [48]u8 = undefined;
                 var event_rate_buf: [48]u8 = undefined;
+                var allocs_buf: [64]u8 = undefined;
+                var bytes_buf: [64]u8 = undefined;
                 var pop_buf: [16]u8 = undefined;
                 var ticks_buf: [24]u8 = undefined;
-                const count_s = try formatCount(&count_buf, row.vectors, "vecs");
+                // with_raw=false on per-fixture rows — the parenthetical raw
+                // value bloats each cell width without adding signal. Totals
+                // line still uses with_raw=true because aggregates benefit
+                // from exact counts.
+                const count_s = try formatCount(&count_buf, row.vectors, "vecs", false);
                 const time_s = try formatTimeIn(&time_buf, elapsed_ns, unit);
                 const drive_s_str = try formatTimeIn(&drive_buf, row.drive_ns, unit);
                 const vec_rate_s = try formatRateIn(&vec_rate_buf, vecs_per_sec, "vec", unit);
                 const event_rate_s = try formatRateIn(&event_rate_buf, events_per_sec, "events", unit);
+                const allocs_s = try formatCount(&allocs_buf, row.alloc_metrics.allocs, "allocs", false);
+                const bytes_s = try formatCount(&bytes_buf, row.alloc_metrics.bytes, "bytes", false);
                 const pop_s = try std.fmt.bufPrint(&pop_buf, "{d:.1}% pop", .{pop_eff_pct});
                 const ticks_s = try std.fmt.bufPrint(&ticks_buf, "{d:.1} t/vec", .{ticks_per_vec});
+                // Widths chosen to fit the widest realistic content per
+                // column across all three time units: "1907214000 ns" = 13
+                // for time/drv; "2.44e-3 events/ns" = 17 for event_rate;
+                // "586.61k bytes" = 13 (a 3-digit thousands value) for bytes.
+                // Two-space separators give just enough visual breathing room
+                // without padding cells out.
                 try stderr.print(
-                    "[bench] {s: <24} {s: <24}   {s: >14} (drv {s: <14})   {s: >18}   {s: >22}   {s: >12}   {s: >12}\n",
-                    .{ row.name, count_s, time_s, drive_s_str, vec_rate_s, event_rate_s, pop_s, ticks_s },
+                    "[bench] {s: <16}  {s: >11}  {s: >13} (drv {s: >13})  {s: >15}  {s: >18}  {s: >14}  {s: >14}  {s: >10}  {s: >11}\n",
+                    .{ row.name, count_s, time_s, drive_s_str, vec_rate_s, event_rate_s, allocs_s, bytes_s, pop_s, ticks_s },
                 );
             },
         }
@@ -660,17 +725,21 @@ pub fn main() !void {
             else
                 0.0;
             try stderr.print(
-                "bench: ---  {d} fixtures  {d} vectors  {d} events  {d:.3} ms total  ({d:.3} ms drv, {d:.1}% engine)\n",
-                .{ fixtures.len, total_vectors, total_events, total_ms, drive_ms, drive_pct },
+                "bench: ---  {d} fixtures  {d} vectors  {d} events  {d} allocs  {d} bytes  {d:.3} ms total  ({d:.3} ms drv, {d:.1}% engine)\n",
+                .{ fixtures.len, total_vectors, total_events, total_allocs, total_bytes, total_ms, drive_ms, drive_pct },
             );
         },
         .human => |unit| {
             var vec_buf: [64]u8 = undefined;
             var ev_buf: [64]u8 = undefined;
+            var alloc_buf: [64]u8 = undefined;
+            var bytes_buf: [64]u8 = undefined;
             var time_buf: [48]u8 = undefined;
             var drive_buf: [48]u8 = undefined;
-            const vec_s = try formatCount(&vec_buf, total_vectors, "vectors");
-            const ev_s = try formatCount(&ev_buf, total_events, "events");
+            const vec_s = try formatCount(&vec_buf, total_vectors, "vectors", true);
+            const ev_s = try formatCount(&ev_buf, total_events, "events", true);
+            const alloc_s = try formatCount(&alloc_buf, total_allocs, "allocs", true);
+            const bytes_s = try formatCount(&bytes_buf, total_bytes, "bytes", true);
             const time_s = try formatTimeIn(&time_buf, total_wall_ns, unit);
             const drive_s = try formatTimeIn(&drive_buf, total_drive_ns, unit);
             const drive_pct: f64 = if (total_wall_ns > 0)
@@ -679,8 +748,8 @@ pub fn main() !void {
             else
                 0.0;
             try stderr.print(
-                "[bench] ---  {d} fixtures   {s}   {s}   {s} total ({s} drv, {d:.1}% engine)\n",
-                .{ fixtures.len, vec_s, ev_s, time_s, drive_s, drive_pct },
+                "[bench] ---  {d} fixtures   {s}   {s}   {s}   {s}   {s} total ({s} drv, {d:.1}% engine)\n",
+                .{ fixtures.len, vec_s, ev_s, alloc_s, bytes_s, time_s, drive_s, drive_pct },
             );
         },
     }
@@ -754,7 +823,9 @@ pub fn main() !void {
                 exp.events_committed != actual.metrics.events_committed or
                 exp.recalcs != actual.metrics.recalcs or
                 exp.peak_queue != actual.metrics.peak_queue or
-                exp.final_time != actual.metrics.final_time)
+                exp.final_time != actual.metrics.final_time or
+                exp.allocs != actual.alloc_metrics.allocs or
+                exp.bytes != actual.alloc_metrics.bytes)
             {
                 changed += 1;
             }

@@ -1,5 +1,5 @@
 const std = @import("std");
-const memory = @import("memory.zig");
+pub const memory = @import("memory.zig");
 const transport = @import("transport.zig");
 
 const log = @import("log.zig");
@@ -491,9 +491,12 @@ pub const Circuit = struct {
             }
             changed_at_step.clearRetainingCapacity();
 
-            // Sample queue depth after Phase 2: any downstream events
-            // scheduled by recalcs at this step are now in the heap, so this
-            // captures the realistic peak per timestep.
+            // Sample queue depth after Phase 2. This IS the iteration's true
+            // peak: Phase 1 only pops (queue monotonically shrinks), Phase 2
+            // only adds (queue monotonically grows), so end-of-Phase-2 is
+            // always the per-iteration maximum. Also equals the next
+            // iteration's start-of-iteration depth (nothing happens between
+            // iterations), so a second sample there would be redundant.
             if (COLLECT_METRICS) {
                 const depth: u64 = @intCast(self.event_queue.heap.items.len);
                 if (depth > self.metrics.peak_queue) self.metrics.peak_queue = depth;

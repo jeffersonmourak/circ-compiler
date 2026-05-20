@@ -1,0 +1,13 @@
+// 5-bit bitwise AND: (a4..a0) AND (b4..b0) → (out4..out0).
+// Extends the and_*bit family one step beyond and_4bit for pop_eff scaling data.
+input a0, a1, a2, a3, a4, b0, b1, b2, b3, b4
+and bit0(a=a0, b=b0)
+and bit1(a=a1, b=b1)
+and bit2(a=a2, b=b2)
+and bit3(a=a3, b=b3)
+and bit4(a=a4, b=b4)
+output out0(in=bit0.out)
+output out1(in=bit1.out)
+output out2(in=bit2.out)
+output out3(in=bit3.out)
+output out4(in=bit4.out)

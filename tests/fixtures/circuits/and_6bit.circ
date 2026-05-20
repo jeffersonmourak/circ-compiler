@@ -1,0 +1,16 @@
+// 6-bit bitwise AND: (a5..a0) AND (b5..b0) → (out5..out0).
+// 12 inputs = 4096 vectors. Extends pop_eff scaling beyond and_5bit; also
+// stresses peak_queue further by widening the parallel-fanout topology.
+input a0, a1, a2, a3, a4, a5, b0, b1, b2, b3, b4, b5
+and bit0(a=a0, b=b0)
+and bit1(a=a1, b=b1)
+and bit2(a=a2, b=b2)
+and bit3(a=a3, b=b3)
+and bit4(a=a4, b=b4)
+and bit5(a=a5, b=b5)
+output out0(in=bit0.out)
+output out1(in=bit1.out)
+output out2(in=bit2.out)
+output out3(in=bit3.out)
+output out4(in=bit4.out)
+output out5(in=bit5.out)

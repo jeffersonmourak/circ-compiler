@@ -684,21 +684,32 @@ pub fn build(b: *std.Build) void {
     // build_options with collect_metrics=false for non-bench circuit consumers.
     // The bench step creates its own options with collect_metrics=true and a
     // parallel circuit module that imports them — see `zig build bench` below.
+    //
+    // The options step is materialized into a Module exactly once. Both
+    // circuit_mod_for_wasm and memory_mod_for_wasm import that same module
+    // by name. Calling `addOptions("build_options", step)` twice with the
+    // same step would create two distinct anonymous build_options modules
+    // pointing at the same file, which Zig rejects with
+    // "file exists in modules 'build_options' and 'build_options0'".
     const circuit_options_default = b.addOptions();
     circuit_options_default.addOption(bool, "collect_metrics", false);
+    const circuit_options_default_mod = circuit_options_default.createModule();
 
     const circuit_mod_for_wasm = b.createModule(.{
         .root_source_file = b.path("lib/circuit.zig"),
         .target = wasm_target,
         .optimize = optimize,
     });
-    circuit_mod_for_wasm.addOptions("build_options", circuit_options_default);
-    
+    circuit_mod_for_wasm.addImport("build_options", circuit_options_default_mod);
+
     const memory_mod_for_wasm = b.createModule(.{
         .root_source_file = b.path("lib/memory.zig"),
         .target = wasm_target,
         .optimize = optimize,
     });
+    // memory.zig now imports build_options for the COLLECT_METRICS gate. The
+    // WASM runtime keeps it off (zero overhead), same as every non-bench path.
+    memory_mod_for_wasm.addImport("build_options", circuit_options_default_mod);
     
     const transport_mod_for_wasm = b.createModule(.{
         .root_source_file = b.path("lib/transport.zig"),

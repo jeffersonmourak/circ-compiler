@@ -1,0 +1,37 @@
+// 5-bit 2-to-1 multiplexer: selects between two 5-bit operands on `sel`.
+// sel=0 → out = (a4..a0);  sel=1 → out = (b4..b0).
+// Shares one inverted-select line across 5 single-bit mux cells; that shared
+// fanout from sel_inv is what makes the mux family pop_eff drop with width.
+input a0, a1, a2, a3, a4, b0, b1, b2, b3, b4, sel
+not sel_inv(in=sel)
+
+// Bit 0
+and pick_a0(a=sel_inv.out, b=a0)
+and pick_b0(a=sel, b=b0)
+or merge0(a=pick_a0.out, b=pick_b0.out)
+
+// Bit 1
+and pick_a1(a=sel_inv.out, b=a1)
+and pick_b1(a=sel, b=b1)
+or merge1(a=pick_a1.out, b=pick_b1.out)
+
+// Bit 2
+and pick_a2(a=sel_inv.out, b=a2)
+and pick_b2(a=sel, b=b2)
+or merge2(a=pick_a2.out, b=pick_b2.out)
+
+// Bit 3
+and pick_a3(a=sel_inv.out, b=a3)
+and pick_b3(a=sel, b=b3)
+or merge3(a=pick_a3.out, b=pick_b3.out)
+
+// Bit 4
+and pick_a4(a=sel_inv.out, b=a4)
+and pick_b4(a=sel, b=b4)
+or merge4(a=pick_a4.out, b=pick_b4.out)
+
+output out0(in=merge0.out)
+output out1(in=merge1.out)
+output out2(in=merge2.out)
+output out3(in=merge3.out)
+output out4(in=merge4.out)

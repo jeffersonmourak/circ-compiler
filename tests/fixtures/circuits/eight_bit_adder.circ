@@ -1,0 +1,69 @@
+// 8-bit ripple-carry adder: (a7..a0) + (b7..b0) → (cout s7..s0).
+// Bit 0 is a half adder; bits 1-7 are full adders chained via the previous
+// bit's carry-out. 16 inputs = 65536 vectors — this hits the truth-table
+// builder's max_inputs=16 cap exactly. Drives the longest carry chain in
+// the corpus; expected to push peak_queue further than any other adder.
+input a0, a1, a2, a3, a4, a5, a6, a7, b0, b1, b2, b3, b4, b5, b6, b7
+
+// Bit 0 (half adder)
+xor s0_xor(a=a0, b=b0)
+and s0_carry(a=a0, b=b0)
+
+// Bit 1 (full adder, cin = s0_carry.out)
+xor s1_x1(a=a1, b=b1)
+xor s1_x2(a=s1_x1.out, b=s0_carry.out)
+and s1_a1(a=a1, b=b1)
+and s1_a2(a=s1_x1.out, b=s0_carry.out)
+or s1_or(a=s1_a1.out, b=s1_a2.out)
+
+// Bit 2 (full adder, cin = s1_or.out)
+xor s2_x1(a=a2, b=b2)
+xor s2_x2(a=s2_x1.out, b=s1_or.out)
+and s2_a1(a=a2, b=b2)
+and s2_a2(a=s2_x1.out, b=s1_or.out)
+or s2_or(a=s2_a1.out, b=s2_a2.out)
+
+// Bit 3 (full adder, cin = s2_or.out)
+xor s3_x1(a=a3, b=b3)
+xor s3_x2(a=s3_x1.out, b=s2_or.out)
+and s3_a1(a=a3, b=b3)
+and s3_a2(a=s3_x1.out, b=s2_or.out)
+or s3_or(a=s3_a1.out, b=s3_a2.out)
+
+// Bit 4 (full adder, cin = s3_or.out)
+xor s4_x1(a=a4, b=b4)
+xor s4_x2(a=s4_x1.out, b=s3_or.out)
+and s4_a1(a=a4, b=b4)
+and s4_a2(a=s4_x1.out, b=s3_or.out)
+or s4_or(a=s4_a1.out, b=s4_a2.out)
+
+// Bit 5 (full adder, cin = s4_or.out)
+xor s5_x1(a=a5, b=b5)
+xor s5_x2(a=s5_x1.out, b=s4_or.out)
+and s5_a1(a=a5, b=b5)
+and s5_a2(a=s5_x1.out, b=s4_or.out)
+or s5_or(a=s5_a1.out, b=s5_a2.out)
+
+// Bit 6 (full adder, cin = s5_or.out)
+xor s6_x1(a=a6, b=b6)
+xor s6_x2(a=s6_x1.out, b=s5_or.out)
+and s6_a1(a=a6, b=b6)
+and s6_a2(a=s6_x1.out, b=s5_or.out)
+or s6_or(a=s6_a1.out, b=s6_a2.out)
+
+// Bit 7 (full adder, cin = s6_or.out)
+xor s7_x1(a=a7, b=b7)
+xor s7_x2(a=s7_x1.out, b=s6_or.out)
+and s7_a1(a=a7, b=b7)
+and s7_a2(a=s7_x1.out, b=s6_or.out)
+or s7_or(a=s7_a1.out, b=s7_a2.out)
+
+output s0(in=s0_xor.out)
+output s1(in=s1_x2.out)
+output s2(in=s2_x2.out)
+output s3(in=s3_x2.out)
+output s4(in=s4_x2.out)
+output s5(in=s5_x2.out)
+output s6(in=s6_x2.out)
+output s7(in=s7_x2.out)
+output cout(in=s7_or.out)

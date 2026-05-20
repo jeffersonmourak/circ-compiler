@@ -1,0 +1,13 @@
+// 5-bit bitwise XOR. Extends the xor_*bit family (the slowest-falling pop_eff
+// trend in the corpus) one step beyond xor_4bit.
+input a0, a1, a2, a3, a4, b0, b1, b2, b3, b4
+xor bit0(a=a0, b=b0)
+xor bit1(a=a1, b=b1)
+xor bit2(a=a2, b=b2)
+xor bit3(a=a3, b=b3)
+xor bit4(a=a4, b=b4)
+output out0(in=bit0.out)
+output out1(in=bit1.out)
+output out2(in=bit2.out)
+output out3(in=bit3.out)
+output out4(in=bit4.out)

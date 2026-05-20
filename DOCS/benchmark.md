@@ -6,19 +6,19 @@ The benchmark exists to answer one question: *does the simulation engine still d
 
 ## What it runs
 
-The bench walks 46 fixtures from the truth-table corpus: every circuit that has a matching `*.truth.golden` under `tests/fixtures/truth_table/`. Coverage spans the full size range:
+The bench walks 53 fixtures from the truth-table corpus. Coverage spans the full size range:
 
 | Tier                     | Fixtures (examples)                                                | Vectors per circuit |
 | ------------------------ | ------------------------------------------------------------------ | ------------------- |
 | Single primitive         | `primitive_not`, `primitive_wire`, `primitive_led`                 | 2                   |
 | Single gate              | `primitive_and`, `and_two_inputs`                                  | 4                   |
 | Builtin macros           | `builtin_xor`, `builtin_nand`, `builtin_xnor`                      | 4                   |
-| 2/3/4-bit fan-outs       | `and_2bit`, `or_3bit`, `xor_4bit`                                  | 16 / 64 / 256       |
-| Combinational structures | `mux_2to1` ... `mux_4bit_2to1`, `demux_1to2` ... `demux_4bit_1to2` | 4 – 512             |
-| Adders                   | `half_adder`, `full_adder`, `two/three/four_bit_adder`             | 4 – 256             |
-| Largest                  | `alu_4bit` (14 inputs)                                             | 16384               |
+| 2 – 6-bit fan-outs       | `and_2bit` … `and_6bit`, `or_3bit`, `xor_4bit`, `xor_5bit`         | 16 – 4096           |
+| Combinational structures | `mux_2to1` … `mux_5bit_2to1`, `demux_1to2` … `demux_4bit_1to2`     | 4 – 2048            |
+| Adders                   | `half_adder`, `full_adder`, `two/three/four/five/six/eight_bit_adder` | 4 – 65536        |
+| ALU                      | `alu_4bit` (14 inputs)                                             | 16384               |
 
-Total: 19,552 input vectors driven through the engine in a single bench run; ~4.2M events committed.
+Total: 98,400 input vectors driven through the engine in a single bench run; ~9.5M events popped, ~210k allocator calls totaling ~28 MB. The 5/6-bit family extensions added earlier characterize pop-efficiency scaling; the wider adders (`five_bit_adder`, `six_bit_adder`, `eight_bit_adder`) characterize cascading-carry depth — with the 8-bit adder pushing 65k vectors and 4.8M events, it overtakes `alu_4bit` as the heaviest fixture by both vector count and event volume.
 
 The fixture-to-circuit mapping is hand-maintained at `tools/bench/main.zig:36`. Most fixtures are 1:1 with their `.circ` source; a handful (`full_adder` → `full_adder_from_builtins.circ`, `primitive_and` → `and_gate.circ`, etc.) follow the same historical aliases used by the truth-table golden tests.
 
@@ -77,27 +77,29 @@ zig build bench -- --human ms
 ```
 
 ```
-[bench] alu_4bit                 16.38k vecs (16384)           2364.292 ms (drv 2331.841 ms   )          7.03 vec/ms          1.78k events/ms      95.2% pop    306.1 t/vec
-[bench] and_4bit                 256 vecs                         3.254 ms (drv 1.249 ms      )        204.96 vec/ms          2.02k events/ms      39.2% pop     45.6 t/vec
-[bench] chain                    2 vecs                           1.387 ms (drv 0.006 ms      )        333.33 vec/ms          1.67k events/ms     100.0% pop     21.0 t/vec
-[bench] four_bit_adder           256 vecs                        13.461 ms (drv 7.417 ms      )         34.52 vec/ms          1.98k events/ms      89.5% pop    141.6 t/vec
-[bench] xor_4bit                 256 vecs                         5.828 ms (drv 3.327 ms      )         76.95 vec/ms          2.14k events/ms      78.4% pop     97.0 t/vec
-[bench] ---  46 fixtures   19.55k vectors (19552)   4.22M events (4216701)   2493.171 ms total (2365.480 ms drv, 94.9% engine)
+[bench] alu_4bit          16.38k vecs    1793.852 ms (drv   1769.494 ms)      9.26 vec/ms     2.34k events/ms   34.73k allocs     4.62M bytes   95.2% pop  306.1 t/vec
+[bench] and_4bit             256 vecs       2.434 ms (drv      0.924 ms)    277.06 vec/ms     2.74k events/ms      576 allocs    78.78k bytes   39.2% pop   45.6 t/vec
+[bench] chain                  2 vecs       1.046 ms (drv      0.005 ms)    400.00 vec/ms     2.00k events/ms       26 allocs     5.29k bytes  100.0% pop   21.0 t/vec
+[bench] four_bit_adder       256 vecs      10.395 ms (drv      5.874 ms)     43.58 vec/ms     2.50k events/ms    1.27k allocs   228.46k bytes   89.5% pop  141.6 t/vec
+[bench] nand_4bit            256 vecs       3.216 ms (drv      1.476 ms)    173.44 vec/ms     2.38k events/ms      653 allocs    95.62k bytes   56.3% pop   60.3 t/vec
+[bench] ---  53 fixtures   98.40k vectors (98400)   9.52M events (9515490)   210.08k allocs (210078)   28.04M bytes (28043712)   3921.909 ms total (3787.580 ms drv, 96.6% engine)
 ```
+
+The per-fixture rows drop the `(raw)` parenthetical that the totals line carries — on aggregate counts the exact value is useful, on individual rows it just bloats every column. The totals keep it.
 
 Same data with `--human s`:
 
 ```
-[bench] alu_4bit                 16.38k vecs (16384)               2.320 s (drv 2.287 s       )          7.16k vec/s           1.81M events/s      95.2% pop    306.1 t/vec
-[bench] chain                    2 vecs                           0.0017 s (drv 0.0000 s      )        250.00k vec/s           1.25M events/s     100.0% pop     21.0 t/vec
-[bench] ---  46 fixtures   19.55k vectors (19552)   4.22M events (4216701)   2.497 s total (2.349 s drv, 94.1% engine)
+[bench] alu_4bit          16.38k vecs        1.741 s (drv       1.716 s)      9.55k vec/s      2.42M events/s   34.73k allocs     4.62M bytes   95.2% pop  306.1 t/vec
+[bench] chain                  2 vecs       0.0011 s (drv      0.0000 s)    400.00k vec/s      2.00M events/s       26 allocs     5.29k bytes  100.0% pop   21.0 t/vec
+[bench] ---  53 fixtures   98.40k vectors (98400)   9.52M events (9515490)   210.08k allocs (210078)   28.04M bytes (28043712)   3.949 s total (3.814 s drv, 96.6% engine)
 ```
 
 And `--human` (default, ns) keeps full precision at the cost of wide numbers and scientific notation for the throughput:
 
 ```
-[bench] alu_4bit                 16.38k vecs (16384)        2297377000 ns (drv 2264500000 ns )       7.13e-6 vec/ns       1.81e-3 events/ns      95.2% pop    306.1 t/vec
-[bench] ---  46 fixtures   19.55k vectors (19552)   4.22M events (4216701)   2392374000 ns total (2264500000 ns drv, 94.7% engine)
+[bench] alu_4bit          16.38k vecs  1736209000 ns (drv 1711517000 ns)   9.57e-6 vec/ns   2.42e-3 events/ns   34.73k allocs     4.62M bytes   95.2% pop  306.1 t/vec
+[bench] ---  53 fixtures   98.40k vectors (98400)   9.52M events (9515490)   210.08k allocs (210078)   28.04M bytes (28043712)   3894131000 ns total (3759333000 ns drv, 96.5% engine)
 ```
 
 Throughput k/M scaling kicks in inside the chosen unit — `1.81M events/s` and `1.31k events/ms` are the same engine; only the denomination is different. The flag only affects the stderr report; the golden comparison and the golden file itself are untouched.
@@ -125,37 +127,43 @@ zig build bench -- --sort events              # default formatting, sorted by ev
 Example output (`--human ms --sort time`, top 6):
 
 ```
-[bench] alu_4bit                 16.38k vecs (16384)           2237.021 ms (drv 2205.216 ms   )          7.43 vec/ms          1.88k events/ms      95.2% pop    306.1 t/vec
-[bench] four_bit_adder           256 vecs                        13.607 ms (drv 7.430 ms      )         34.45 vec/ms          1.98k events/ms      89.5% pop    141.6 t/vec
-[bench] mux_4bit_2to1            512 vecs                         8.111 ms (drv 3.732 ms      )        137.19 vec/ms          2.20k events/ms      56.2% pop     71.0 t/vec
-[bench] three_bit_adder          64 vecs                          6.407 ms (drv 1.609 ms      )         39.78 vec/ms          1.95k events/ms      91.8% pop    121.8 t/vec
-[bench] xnor_4bit                256 vecs                         6.248 ms (drv 4.010 ms      )         63.84 vec/ms          2.16k events/ms      82.2% pop    116.8 t/vec
-[bench] xor_4bit                 256 vecs                         5.484 ms (drv 3.374 ms      )         75.87 vec/ms          2.11k events/ms      78.4% pop     97.0 t/vec
+[bench] eight_bit_adder   65.54k vecs    1870.383 ms (drv   1856.763 ms)     35.30 vec/ms     2.60k events/ms  132.70k allocs    17.13M bytes   81.0% pop  195.2 t/vec
+[bench] alu_4bit          16.38k vecs    1736.092 ms (drv   1711.533 ms)      9.57 vec/ms     2.42k events/ms   34.73k allocs     4.62M bytes   95.2% pop  306.1 t/vec
+[bench] six_bit_adder      4.10k vecs     114.448 ms (drv    106.504 ms)     38.46 vec/ms     2.60k events/ms    9.38k allocs     1.31M bytes   85.2% pop  171.6 t/vec
+[bench] five_bit_adder     1.02k vecs      32.000 ms (drv     25.376 ms)     40.35 vec/ms     2.55k events/ms    3.02k allocs   471.06k bytes   87.3% pop  157.8 t/vec
+[bench] and_6bit           4.10k vecs      22.026 ms (drv     19.602 ms)    208.96 vec/ms     2.92k events/ms    8.29k allocs     1.07M bytes   28.4% pop   65.9 t/vec
+[bench] mux_5bit_2to1      2.05k vecs      16.947 ms (drv     12.598 ms)    162.57 vec/ms     2.93k events/ms    4.39k allocs   586.61k bytes   50.0% pop   81.0 t/vec
 ```
+
+The new `allocs` and `bytes` columns are the same delta values that get written to the golden's two rightmost columns — only the formatting differs (k/M scaling, optional raw value in parens). For the stress fixtures introduced for the family-scaling story, watch the trend: `and_5bit`'s 2.13k allocs and `and_6bit`'s 8.29k allocs continue the steep climb that the corpus shows for the AND family (allocs scale with fanout-driven heap pressure, not just vector count). The wider adders tell a different story: events and time scale steeply (eight_bit_adder hits 4.8M events and 1.87s drive), but `peak_queue` caps at 7 across every adder from 4-bit to 8-bit. That's not a sampling artifact — it's the truth-table builder calling `propagateEvent` once per input pin, so peak depth is bounded by per-input fanout rather than total bit width.
 
 ## What it measures
 
-Five deterministic counters live on `engine.Circuit.metrics`. Each catches a different class of regression. All are `u64`.
+Seven deterministic counters split across two structures. Five live on `engine.Circuit.metrics` and characterize the scheduler; two come from `lib/memory.zig`'s counting allocator and characterize heap pressure. All are `u64`.
 
-| Counter            | Bumped where                          | Catches                                                                                  |
-| ------------------ | ------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `events_popped`    | `propagate()` drain, post-pop         | Raw heap throughput. Grows if the scheduler enqueues more events.                        |
-| `events_committed` | After the no-op `state == event` skip | "Real" state changes. Diverges from `events_popped` when duplicate events stack up.      |
-| `recalcs`          | Per call to `recalculateAndReschedule`| Downstream gate evaluations. Walks of the forward-edge graph.                            |
-| `peak_queue`       | Sampled after each Phase-2 fanout     | Worst-case heap depth seen during simulation.                                            |
-| `final_time`       | End of `propagate()`                  | Settling time in delay-units (`current_time` after the queue drained).                   |
+| Counter            | Source                                            | Catches                                                                                  |
+| ------------------ | ------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `events_popped`    | `Circuit.metrics`, `propagate()` drain, post-pop  | Raw heap throughput. Grows if the scheduler enqueues more events.                        |
+| `events_committed` | `Circuit.metrics`, after the no-op `state == event` skip | "Real" state changes. Diverges from `events_popped` when duplicate events stack up. |
+| `recalcs`          | `Circuit.metrics`, per call to `recalculateAndReschedule` | Downstream gate evaluations. Walks of the forward-edge graph.                    |
+| `peak_queue`       | `Circuit.metrics`, sampled after each Phase-2 fanout | Worst-case heap depth seen during simulation.                                         |
+| `final_time`       | `Circuit.metrics`, end of `propagate()`           | Settling time in delay-units (`current_time` after the queue drained).                   |
+| `allocs`           | `memory.snapshotAllocMetrics()` delta around fixture | Number of `alloc()` calls hitting the engine's global allocator. Catches "events stayed flat but heap allocations exploded." |
+| `bytes`            | `memory.snapshotAllocMetrics()` delta around fixture | Total bytes requested across those `alloc()` calls.                                   |
 
 Two columns in the golden are not metrics but corpus shape: `vectors` (= `2^N` inputs = `table.rows.len`) and `components` (= `topology.components.len`, total graph size including expanded sub-circuit primitives).
+
+The two allocator counters come from a wrapping `Counter` in `lib/memory.zig` that intercepts the same global allocator the engine uses (`memory.allocator`). The wrapper is selected only when `build_options.collect_metrics=true`; production builds get the raw arena, byte-identical to before. `resize`, `remap`, and `free` pass through without counting because the arena treats `free` as a no-op anyway, and `std.ArrayList` growth ultimately calls `alloc()` for fresh buffers — so `alloc()` alone is a faithful proxy for engine heap pressure.
 
 ### How to read a row
 
 Take a row from `tests/fixtures/bench/engine.bench.golden`:
 
 ```
-| xor_4bit                 |     256 |         76 |          7136 |             5598 |    5602 |          2 |      24830 |
+| xor_4bit                 |     256 |         76 |          7136 |             5598 |    5602 |          2 |      24830 |     874 |    143040 |
 ```
 
-That means: an XOR over 4-bit operands exhaustively driven across all 256 input combinations against a 76-component graph (XOR macro expansion: 4 XOR cells × ~19 primitives each, minus shared inputs). The engine popped 7,136 events from its heap, of which 5,598 actually changed state (the other ~1,500 were dedup'd no-ops); it ran 5,602 downstream gate evaluations; the heap never held more than 2 events at once; and the final propagation settled at logical time 24,830.
+That means: an XOR over 4-bit operands exhaustively driven across all 256 input combinations against a 76-component graph (XOR macro expansion: 4 XOR cells × ~19 primitives each, minus shared inputs). The engine popped 7,136 events from its heap, of which 5,598 actually changed state (the other ~1,500 were dedup'd no-ops); it ran 5,602 downstream gate evaluations; the heap never held more than 2 events at once; the final propagation settled at logical time 24,830; and the run made 874 allocator calls totaling 143,040 bytes (≈164 bytes per alloc — mostly small `Component` and `ArrayList` headers).
 
 The split between `events_popped` and `events_committed` is the diagnostic-grade column. It's not exposed in any other test path, and it catches algorithmic regressions where the scheduler enqueues redundant events that are correctly dedup'd downstream — the circuit gives the right answer, function tests pass, but the heap work has silently doubled.
 
@@ -169,7 +177,7 @@ These three columns appear in the stderr report only; they are deliberately *not
 | `% pop`  | `events_committed / events_popped`     | Pop efficiency. 100% = every event changed state; lower = scheduler is wasting heap work. |
 | `t/vec`  | `final_time / vectors`                 | Logical settling time per input vector. Drift = engine timing model changed.         |
 
-The `% pop` column is where the buried lede surfaces. From the corpus right now, `and_4bit` runs at 39.2% pop efficiency — 60.8% of its heap pops are dedup'd no-ops. That number was always available in the golden (raw counters), but you had to do the subtraction in your head to see it.
+The `% pop` column is where the buried lede surfaces. From the corpus right now, the `and_*bit` family heads downhill steadily: 61% → 48% → 39% → 33% → 28% from `and_2bit` through `and_6bit`. By the 6-bit point, 71.6% of heap pops are dedup'd no-ops. The slope is decelerating (smaller drops as width grows), which tells you the AND family is heading toward an asymptote rather than blowing up — useful framing that pure counter-watching wouldn't surface.
 
 The `drv` column reframes the small-fixture rates. `chain` (2 vectors) reports total wall-clock around 1.4 ms; its `drv` is ~6 μs. The 1.4 ms is dominated by the per-fixture parser+validator+topology pipeline that runs once and is the same regardless of how many vectors you replay. Reporting throughput against total wall-clock was systematically wrong by ~250× for fixtures like this; throughput against `drv` is honest.
 
@@ -177,9 +185,8 @@ The `drv` column reframes the small-fixture rates. `chain` (2 vectors) reports t
 
 By design, the bench skips several signals:
 
-- **Allocation count / bytes**. Adding this would require wrapping `memory.allocator`. Easy follow-up, omitted in v1.
 - **`createComponent` / `connect` cost in isolation**. `drive_ns` covers only the `2^N` replay loop, so the inner stderr throughput excludes engine construction. But construction itself isn't separately itemized — it's lumped into `(total - drive)` along with parse, validate, and topology build. Splitting further would only matter if construction ever dominated, which it currently doesn't (look at `alu_4bit`: drive_ns is ~98% of total).
-- **WASM runtime cost**. Counters live on the native `Circuit`. The shipped `.wasm` runtime is built with `collect_metrics=false` and carries zero metrics overhead.
+- **WASM runtime cost**. Counters live on the native `Circuit` and the native `memory` module. The shipped `.wasm` runtime is built with `collect_metrics=false` and carries zero metrics overhead — both the engine counter bumps and the allocator wrapper are dead code stripped.
 - **Compile-time perf**. That has its own gate at `tests/cli/integration_test.zig:260` (the 30-second budget on `stress_grid_10x10` compile).
 
 ## Where the counters live
@@ -205,6 +212,8 @@ pub const Circuit = struct {
 ```
 
 Counter bumps inside `propagate()` are wrapped in `if (COLLECT_METRICS) ...`. When the constant is false, the field is `void` (zero bytes) and every bump compiles away. The shipped `.wasm` runtime, `zig build test`, and `circ-compile` itself all use `collect_metrics=false`; the bench step is the only consumer that sets it to true.
+
+The same flag drives the counting allocator wrapper in `lib/memory.zig`. With `collect_metrics=true`, `memory.allocator` resolves to a `Counter` that intercepts `alloc()`, increments `allocs` and `bytes`, and forwards to the inner arena. With `collect_metrics=false`, `memory.allocator` is the raw arena directly — the wrapper sits unused (≈32 bytes of static storage, no per-allocation overhead). `memory.snapshotAllocMetrics()` returns the cumulative counters; the bench snapshots before and after each `runFixture` and stores the delta on the row.
 
 `build.zig` creates *two* circuit modules pointing at the same source file:
 
@@ -274,6 +283,7 @@ Walked in fixture-manifest (alphabetical) order regardless of `--sort`, so diffs
 | ----------------------------------------------- | -------------------------------------------------------------------------- |
 | `lib/circuit.zig`                               | Engine + `Metrics` struct + counter bumps                                  |
 | `lib/truth_table/builder.zig`                   | Drives the engine over `2^N` vectors; surfaces `circuit.metrics` and `drive_ns` on `Table` |
+| `lib/memory.zig`                                | Global allocator + counting wrapper (`Counter`) gated by `COLLECT_METRICS` |
 | `tools/bench/main.zig`                          | Bench runner: walks the corpus, prints wall-clock and derived columns, writes/compares golden, renders structured diff on mismatch |
-| `tests/fixtures/bench/engine.bench.golden`      | The committed golden: 46 rows, one per fixture                             |
+| `tests/fixtures/bench/engine.bench.golden`      | The committed golden: 53 rows, one per fixture                             |
 | `build.zig`                                     | Parallel modules + `zig build bench` step                                  |
