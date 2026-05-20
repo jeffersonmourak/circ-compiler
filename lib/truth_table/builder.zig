@@ -35,6 +35,11 @@ pub const Table = struct {
     arena: std.heap.ArenaAllocator,
     header: Header,
     rows: []const Row,
+    /// Engine-level counters captured from the underlying Circuit just
+    /// before it was deinit'd. Populated only when the linked engine module
+    /// has `COLLECT_METRICS=true` (i.e. inside `zig build bench`); zero
+    /// elsewhere. Consumers that don't care about benchmarking can ignore.
+    metrics: engine.Metrics = .{},
 
     pub fn deinit(self: *Table) void {
         self.arena.deinit();
@@ -152,10 +157,13 @@ pub fn build(
         rows[mask] = .{ .input_bits = mask, .outputs = row_outputs };
     }
 
+    const metrics_snapshot: engine.Metrics = if (engine.COLLECT_METRICS) circuit.metrics else .{};
+
     return .{
         .arena = arena,
         .header = .{ .inputs = inputs, .outputs = outputs },
         .rows = rows,
+        .metrics = metrics_snapshot,
     };
 }
 

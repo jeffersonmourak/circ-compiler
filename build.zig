@@ -681,11 +681,18 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     }));
     
+    // build_options with collect_metrics=false for non-bench circuit consumers.
+    // The bench step creates its own options with collect_metrics=true and a
+    // parallel circuit module that imports them — see `zig build bench` below.
+    const circuit_options_default = b.addOptions();
+    circuit_options_default.addOption(bool, "collect_metrics", false);
+
     const circuit_mod_for_wasm = b.createModule(.{
         .root_source_file = b.path("lib/circuit.zig"),
         .target = wasm_target,
         .optimize = optimize,
     });
+    circuit_mod_for_wasm.addOptions("build_options", circuit_options_default);
     
     const memory_mod_for_wasm = b.createModule(.{
         .root_source_file = b.path("lib/memory.zig"),
@@ -764,6 +771,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    circuit_mod.addOptions("build_options", circuit_options_default);
 
     const topology_protocol_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/e2e/topology_protocol_test.zig"),
@@ -1405,6 +1413,68 @@ pub fn build(b: *std.Build) void {
     });
     const run_topology_interpreter_tests = b.addRunArtifact(topology_interpreter_tests);
     test_step.dependOn(&run_topology_interpreter_tests.step);
+
+    // ---- Engine benchmark step ----
+    // The bench step compiles a *parallel* circuit module with
+    // collect_metrics=true so the engine's Circuit struct gains a `metrics`
+    // field and counter bumps. Everything else (parser, resolver, validators,
+    // full topology serializer) is reused unchanged — they don't transitively
+    // import the engine, so they don't care which circuit module is wired.
+    // Only the truth-table builder, which actually instantiates a Circuit,
+    // needs a bench-mode copy.
+    const circuit_options_bench = b.addOptions();
+    circuit_options_bench.addOption(bool, "collect_metrics", true);
+
+    const bench_circuit_mod = b.createModule(.{
+        .root_source_file = b.path("lib/circuit.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    bench_circuit_mod.addOptions("build_options", circuit_options_bench);
+
+    const bench_truth_table_builder_mod = b.createModule(.{
+        .root_source_file = b.path("lib/truth_table/builder.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    bench_truth_table_builder_mod.addImport("circuit", bench_circuit_mod);
+    bench_truth_table_builder_mod.addImport("full_format", topology_full_format_mod);
+
+    const bench_mod = b.createModule(.{
+        .root_source_file = b.path("tools/bench/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    bench_mod.addImport("translate", translate_mod);
+    bench_mod.addImport("resolver", resolver_mod);
+    bench_mod.addImport("scan_imports", resolver_scan_imports_mod);
+    bench_mod.addImport("import_cycle", resolver_import_cycle_mod);
+    bench_mod.addImport("resolve_bodies", resolver_resolve_bodies_mod);
+    bench_mod.addImport("validator_run_project", validator_run_project_mod);
+    bench_mod.addImport("ir_types", ir_types_mod);
+    bench_mod.addImport("full_serializer", topology_full_serializer_mod);
+    bench_mod.addImport("truth_table_builder", bench_truth_table_builder_mod);
+    bench_mod.addImport("circuit", bench_circuit_mod);
+
+    const bench_exe = b.addExecutable(.{
+        .name = "engine-bench",
+        .root_module = bench_mod,
+    });
+    bench_exe.addIncludePath(b.path("."));
+    bench_exe.addIncludePath(b.path("./lib"));
+    bench_exe.linkLibrary(parser_lib);
+    bench_exe.linkLibC();
+
+    const run_bench = b.addRunArtifact(bench_exe);
+    // The Run step inherits the parent's environment by default (env_map
+    // null → process.getEnvMap), so UPDATE_GOLDENS=1 zig build bench
+    // already propagates without explicit forwarding.
+    //
+    // Forward everything after `--` on the build command line so callers can
+    // pass runtime flags (e.g. `zig build bench -- --human`).
+    if (b.args) |args| run_bench.addArgs(args);
+    const bench_step = b.step("bench", "Run engine benchmark over truth-table fixtures");
+    bench_step.dependOn(&run_bench.step);
 
     const e2e_linux_docker_step = b.step(
         "e2e-linux-docker",

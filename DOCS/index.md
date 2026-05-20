@@ -24,6 +24,7 @@ output out(in=inv.out)
 | [wasm-api.md](wasm-api.md)                   | Runtime API exposed by the compiled `.wasm`: imports, exports, sections |
 | [circuit-format.md](circuit-format.md)       | `.circ` DSL syntax, grammar, file examples                              |
 | [preview.md](preview.md)                     | `circ-compile --preview`: ASCII circuit schematic rendering             |
+| [benchmark.md](benchmark.md)                 | `zig build bench`: engine regression gate, counters, golden workflow    |
 | [decisions/](decisions/index.md)             | Architectural decisions for the `.circ` compiler                        |
 | [archive/](archive/index.md)                 | Archived implementation plans                                           |
 | [prompts/ARCHIVE.md](prompts/ARCHIVE.md)     | How to archive a finished plan into `DOCS/archive/`                     |
