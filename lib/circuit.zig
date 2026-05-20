@@ -1,8 +1,24 @@
 const std = @import("std");
-const memory = @import("memory.zig");
+pub const memory = @import("memory.zig");
 const transport = @import("transport.zig");
 
 const log = @import("log.zig");
+
+/// Compile-time switch to include benchmark counters on `Circuit`. The
+/// `build_options` module is supplied by `build.zig` per consumer: native and
+/// WASM builds wire it to `false`; the `zig build bench` runner wires it to
+/// `true`. When false, `Circuit.metrics` is `void` and every counter bump is
+/// dead code stripped — production and test builds are byte-identical to a
+/// metrics-free engine.
+pub const COLLECT_METRICS: bool = @import("build_options").collect_metrics;
+
+pub const Metrics = struct {
+    events_popped: u64 = 0,
+    events_committed: u64 = 0,
+    recalcs: u64 = 0,
+    peak_queue: u64 = 0,
+    final_time: u64 = 0,
+};
 
 const PROPAGATION_DELAY: Timestamp = 5;
 const WIRE_PROPAGATION_DELAY: Timestamp = 1;
@@ -324,12 +340,19 @@ pub const Circuit = struct {
     next_id: u32 = 0,
     current_time: Timestamp = 0,
     listener: ?*const fn (component: *Component, new_state: State) void = null,
+    /// Benchmark counters. Present only when `COLLECT_METRICS` is true so
+    /// shipping builds carry zero bytes and zero instructions for the
+    /// metrics path. The conditional type is `void` (zero-sized) otherwise,
+    /// so `circuit.metrics.foo` outside an `if (COLLECT_METRICS)` block is
+    /// a compile error — the compiler enforces the gating for us.
+    metrics: if (COLLECT_METRICS) Metrics else void = if (COLLECT_METRICS) Metrics{} else {},
 
     pub fn init() !Circuit {
         return .{
             .nodes = try std.ArrayList(*Component).initCapacity(memory.allocator, 0),
             .event_queue = EventQueue.init(),
             .listener = null,
+            .metrics = if (COLLECT_METRICS) Metrics{} else {},
         };
     }
 
@@ -440,9 +463,11 @@ pub const Circuit = struct {
             while (self.event_queue.peek()) |next_event| {
                 if (next_event.timestamp != step_time) break;
                 const event = self.event_queue.pop().?;
+                if (COLLECT_METRICS) self.metrics.events_popped += 1;
                 const component = event.component;
 
                 if (component.output_state == event.new_state) continue;
+                if (COLLECT_METRICS) self.metrics.events_committed += 1;
 
                 log.info("[Time: {d}] Updating component id={d} to {s}", .{ self.current_time, component.id, @tagName(event.new_state) });
                 component.output_state = event.new_state;
@@ -457,6 +482,7 @@ pub const Circuit = struct {
                 while (outputsIterator.next()) |output_list| {
                     for (output_list.items) |output| {
                         log.info("  -> Notifying downstream component id={d}", .{output.id});
+                        if (COLLECT_METRICS) self.metrics.recalcs += 1;
                         try recalculateAndReschedule(output, &self.event_queue, self.current_time);
 
                         self.notifyStateChange(output, output.output_state);
@@ -464,7 +490,20 @@ pub const Circuit = struct {
                 }
             }
             changed_at_step.clearRetainingCapacity();
+
+            // Sample queue depth after Phase 2. This IS the iteration's true
+            // peak: Phase 1 only pops (queue monotonically shrinks), Phase 2
+            // only adds (queue monotonically grows), so end-of-Phase-2 is
+            // always the per-iteration maximum. Also equals the next
+            // iteration's start-of-iteration depth (nothing happens between
+            // iterations), so a second sample there would be redundant.
+            if (COLLECT_METRICS) {
+                const depth: u64 = @intCast(self.event_queue.heap.items.len);
+                if (depth > self.metrics.peak_queue) self.metrics.peak_queue = depth;
+            }
         }
+
+        if (COLLECT_METRICS) self.metrics.final_time = self.current_time;
     }
 
     pub fn propagateEvent(self: *Circuit, component: *Component, new_state: State) !void {

@@ -35,6 +35,16 @@ pub const Table = struct {
     arena: std.heap.ArenaAllocator,
     header: Header,
     rows: []const Row,
+    /// Engine-level counters captured from the underlying Circuit just
+    /// before it was deinit'd. Populated only when the linked engine module
+    /// has `COLLECT_METRICS=true` (i.e. inside `zig build bench`); zero
+    /// elsewhere. Consumers that don't care about benchmarking can ignore.
+    metrics: engine.Metrics = .{},
+    /// Wall-clock nanoseconds spent in the `2^N` vector drive loop only,
+    /// excluding circuit construction and connection wiring. Lets the bench
+    /// separate engine throughput from one-shot setup cost. Always populated
+    /// (the timestamp call is cheap); consumers can ignore.
+    drive_ns: u64 = 0,
 
     pub fn deinit(self: *Table) void {
         self.arena.deinit();
@@ -135,6 +145,7 @@ pub fn build(
     const row_count: usize = if (input_count == 0) 1 else (@as(usize, 1) << @intCast(input_count));
     var rows = try arena_alloc.alloc(Row, row_count);
 
+    const drive_start = std.time.nanoTimestamp();
     var mask: u64 = 0;
     while (mask < row_count) : (mask += 1) {
         for (inputs, 0..) |pin, idx| {
@@ -151,11 +162,16 @@ pub fn build(
         }
         rows[mask] = .{ .input_bits = mask, .outputs = row_outputs };
     }
+    const drive_ns: u64 = @intCast(std.time.nanoTimestamp() - drive_start);
+
+    const metrics_snapshot: engine.Metrics = if (engine.COLLECT_METRICS) circuit.metrics else .{};
 
     return .{
         .arena = arena,
         .header = .{ .inputs = inputs, .outputs = outputs },
         .rows = rows,
+        .metrics = metrics_snapshot,
+        .drive_ns = drive_ns,
     };
 }
 

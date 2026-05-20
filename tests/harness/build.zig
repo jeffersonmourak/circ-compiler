@@ -13,6 +13,13 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // circuit.zig (copied into this workspace by wasm_run.zig) imports a
+    // `build_options` module to read its COLLECT_METRICS toggle. The harness
+    // never benchmarks, so we always wire false here.
+    const circuit_options = b.addOptions();
+    circuit_options.addOption(bool, "collect_metrics", false);
+    module.addOptions("build_options", circuit_options);
+
     const artifact = b.addExecutable(.{
         .name = "compiled",
         .root_module = module,
