@@ -18,7 +18,7 @@ The bench walks 53 fixtures from the truth-table corpus. Coverage spans the full
 | Adders                   | `half_adder`, `full_adder`, `two/three/four/five/six/eight_bit_adder` | 4 – 65536        |
 | ALU                      | `alu_4bit` (14 inputs)                                             | 16384               |
 
-Total: 98,400 input vectors driven through the engine in a single bench run; ~9.5M events popped, ~8.2k allocator calls totaling ~985 KB. The 5/6-bit family extensions added earlier characterize pop-efficiency scaling; the wider adders (`five_bit_adder`, `six_bit_adder`, `eight_bit_adder`) characterize cascading-carry depth, and the 8-bit adder pushing 65k vectors and 4.8M events overtakes `alu_4bit` as the heaviest fixture by both vector count and event volume. The corpus totals above reflect the current engine state; the per-milestone evolution lives in `tests/fixtures/bench/engine.bench.golden.hist` (see [Historical evolution](#historical-evolution) below).
+Total: 98,400 input vectors driven through the engine in a single bench run; ~9.5M events popped, ~8.2k allocator calls totaling ~985 KB. The 5/6-bit family extensions added earlier characterize pop-efficiency scaling; the wider adders (`five_bit_adder`, `six_bit_adder`, `eight_bit_adder`) characterize cascading-carry depth, and the 8-bit adder pushing 65k vectors and 4.8M events overtakes `alu_4bit` as the heaviest fixture by both vector count and event volume. The corpus totals above reflect the current engine state; the per-milestone evolution lives in `tests/fixtures/bench/engine.bench.golden.hist.md` (see [Historical evolution](#historical-evolution) below).
 
 The fixture-to-circuit mapping is hand-maintained at `tools/bench/main.zig:36`. Most fixtures are 1:1 with their `.circ` source; a handful (`full_adder` → `full_adder_from_builtins.circ`, `primitive_and` → `and_gate.circ`, etc.) follow the same historical aliases used by the truth-table golden tests.
 
@@ -325,7 +325,7 @@ That annotation tells the reviewer to expect counter drift downstream — the fi
 
 ## Historical evolution
 
-The bench can optionally append a corpus-level milestone to `tests/fixtures/bench/engine.bench.golden.hist`. Setting `RECORD_MILESTONE="<label>"` switches the feature on; the label becomes the human-readable description for the milestone row. The file is an append-only audit trail and complements (rather than replaces) the engine golden: the golden is the regression gate, the `.hist` is the story of how the corpus got to where it is.
+The bench can optionally append a corpus-level milestone to `tests/fixtures/bench/engine.bench.golden.hist.md`. Setting `RECORD_MILESTONE="<label>"` switches the feature on; the label becomes the human-readable description for the milestone row. The file is an append-only audit trail and complements (rather than replaces) the engine golden: the golden is the regression gate, the `.hist` is the story of how the corpus got to where it is.
 
 ```sh
 RECORD_MILESTONE="scheduler dedup" zig build bench
@@ -365,5 +365,5 @@ The `.hist` file is checked in alongside the golden so the history travels with 
 | `lib/memory.zig`                                | Global allocator + counting wrapper (`Counter`) gated by `COLLECT_METRICS` |
 | `tools/bench/main.zig`                          | Bench runner: walks the corpus, prints wall-clock and derived columns, writes/compares golden, renders structured diff on mismatch, records milestones to `.hist` |
 | `tests/fixtures/bench/engine.bench.golden`      | The committed golden: 53 rows, one per fixture                             |
-| `tests/fixtures/bench/engine.bench.golden.hist` | Append-only historical milestone log: BASE snapshot + per-milestone deltas |
+| `tests/fixtures/bench/engine.bench.golden.hist.md` | Append-only historical milestone log: BASE snapshot + per-milestone deltas |
 | `build.zig`                                     | Parallel modules + `zig build bench` step                                  |
