@@ -54,11 +54,13 @@ read table.metrics, table.rows.len, topology.components.len
 
 The bench reads the *cumulative* `Circuit.metrics` once per fixture, after every input vector has been simulated. Metrics never reset between vectors — they accumulate over the circuit's whole lifetime — so a single read at the end gives the totals.
 
-Wall-clock is sampled with `std.time.nanoTimestamp` around `runFixture` (parse, resolve, validate, build topology, drive all vectors). The bench prints per-fixture wall-clock to stderr but does not write it to the golden:
+Wall-clock is sampled in two nested windows. The outer one wraps `runFixture` (parse → resolve → validate → topology build → drive all vectors) and gives the total. The inner one, plumbed through `Table.drive_ns` from `lib/truth_table/builder.zig`, brackets only the `2^N` input-vector replay — so engine throughput can be separated from the one-shot pipeline overhead that dominates tiny fixtures. Neither timing is written to the golden:
 
 ```
-bench: alu_4bit                  16384 vecs   1752.696 ms    106976.1 ns/vec   422.7 ns/event
+bench: alu_4bit                  16384 vecs   2235.547 ms (drv 2203.712)   134503.9 ns/vec   531.4 ns/event   95.2% pop   306.1 t/vec
 ```
+
+Reading left to right: total wall-clock, drive-only wall-clock in parens (the `drv` value), then engine-only throughput. The `ns/vec` and `ns/event` numbers are computed from drive time, not total — so a tiny fixture's per-vector cost reflects its actual engine pace rather than ~1 ms of unavoidable parser overhead. The last two columns are derived counters; see [Derived stderr columns](#derived-stderr-columns) below.
 
 Pass `--human` (after a `--` separator, since Zig's build driver consumes its own args first) to switch the output to a humanized form: counts get k/M suffixes plus the raw value in parens, throughput flips to `items/<time>` (so the engine's pace reads as "vectors per unit of wall-clock" instead of "wall-clock per vector"), and every column uses **one fixed time unit** so values line up vertically and are easy to scan.
 
@@ -67,7 +69,7 @@ You pick the unit:
 | Invocation             | Time / throughput unit             | When to use                                                          |
 | ---------------------- | ---------------------------------- | -------------------------------------------------------------------- |
 | `--human` (no arg)     | `ns` (default)                     | Mirrors the existing `ns/vec` / `ns/event` precision but inverted    |
-| `--human ms`           | `ms`                               | Best general-purpose; most fixtures land in 1–100 vec/ms range       |
+| `--human ms`           | `ms`                               | Best general-purpose; fixtures land in the 7 – 350 vec/ms range      |
 | `--human s`            | `s`                                | High-level summary; throughput shows in k/s or M/s                   |
 
 ```sh
@@ -75,29 +77,32 @@ zig build bench -- --human ms
 ```
 
 ```
-[bench] alu_4bit                 16.38k vecs (16384)             2297.377 ms          7.31 vec/ms          1.81k events/ms
-[bench] chain                    2 vecs                             1.376 ms          1.45 vec/ms            7.27 events/ms
-[bench] four_bit_adder           256 vecs                          13.684 ms         18.71 vec/ms          1.07k events/ms
-[bench] xor_4bit                 256 vecs                           5.433 ms         47.12 vec/ms          1.31k events/ms
-[bench] ---  46 fixtures   19.55k vectors (19552)   4.22M events (4216701)   2378.035 ms total
+[bench] alu_4bit                 16.38k vecs (16384)           2364.292 ms (drv 2331.841 ms   )          7.03 vec/ms          1.78k events/ms      95.2% pop    306.1 t/vec
+[bench] and_4bit                 256 vecs                         3.254 ms (drv 1.249 ms      )        204.96 vec/ms          2.02k events/ms      39.2% pop     45.6 t/vec
+[bench] chain                    2 vecs                           1.387 ms (drv 0.006 ms      )        333.33 vec/ms          1.67k events/ms     100.0% pop     21.0 t/vec
+[bench] four_bit_adder           256 vecs                        13.461 ms (drv 7.417 ms      )         34.52 vec/ms          1.98k events/ms      89.5% pop    141.6 t/vec
+[bench] xor_4bit                 256 vecs                         5.828 ms (drv 3.327 ms      )         76.95 vec/ms          2.14k events/ms      78.4% pop     97.0 t/vec
+[bench] ---  46 fixtures   19.55k vectors (19552)   4.22M events (4216701)   2493.171 ms total (2365.480 ms drv, 94.9% engine)
 ```
 
 Same data with `--human s`:
 
 ```
-[bench] alu_4bit                 16.38k vecs (16384)             2.297 s         7.13k vec/s          1.81M events/s
-[bench] chain                    2 vecs                          0.0014 s         1.45k vec/s           7.27k events/s
-[bench] ---  46 fixtures   19.55k vectors (19552)   4.22M events (4216701)   2.367 s total
+[bench] alu_4bit                 16.38k vecs (16384)               2.320 s (drv 2.287 s       )          7.16k vec/s           1.81M events/s      95.2% pop    306.1 t/vec
+[bench] chain                    2 vecs                           0.0017 s (drv 0.0000 s      )        250.00k vec/s           1.25M events/s     100.0% pop     21.0 t/vec
+[bench] ---  46 fixtures   19.55k vectors (19552)   4.22M events (4216701)   2.497 s total (2.349 s drv, 94.1% engine)
 ```
 
 And `--human` (default, ns) keeps full precision at the cost of wide numbers and scientific notation for the throughput:
 
 ```
-[bench] alu_4bit                 16.38k vecs (16384)             2297377000 ns       7.13e-6 vec/ns       1.81e-3 events/ns
-[bench] ---  46 fixtures   19.55k vectors (19552)   4.22M events (4216701)   2392374000 ns total
+[bench] alu_4bit                 16.38k vecs (16384)        2297377000 ns (drv 2264500000 ns )       7.13e-6 vec/ns       1.81e-3 events/ns      95.2% pop    306.1 t/vec
+[bench] ---  46 fixtures   19.55k vectors (19552)   4.22M events (4216701)   2392374000 ns total (2264500000 ns drv, 94.7% engine)
 ```
 
 Throughput k/M scaling kicks in inside the chosen unit — `1.81M events/s` and `1.31k events/ms` are the same engine; only the denomination is different. The flag only affects the stderr report; the golden comparison and the golden file itself are untouched.
+
+Throughput in every mode is computed from `drive_ns` (the inner replay loop only), not from total wall-clock. This matters for small fixtures: `chain` reads as `333 vec/ms` because its 2 vectors take ~6 μs in the engine, even though the surrounding parser+validator+topology pipeline pushes total wall-clock to 1.4 ms. Reading total-based vec/ms would suggest the engine handles `1.4 vec/ms`, which is wrong; the engine is doing ~250× that and the rest is one-shot overhead.
 
 ### Sorting the report
 
@@ -117,14 +122,15 @@ zig build bench -- --human ms --sort time     # heaviest fixtures first, in ms
 zig build bench -- --sort events              # default formatting, sorted by event count
 ```
 
-Example output (`--human ms --sort time`, top 5):
+Example output (`--human ms --sort time`, top 6):
 
 ```
-[bench] alu_4bit                 16.38k vecs (16384)           2317.862 ms          7.07 vec/ms          1.79k events/ms
-[bench] four_bit_adder           256 vecs                        13.775 ms         18.58 vec/ms          1.07k events/ms
-[bench] mux_4bit_2to1            512 vecs                         7.748 ms         66.08 vec/ms          1.06k events/ms
-[bench] xnor_4bit                256 vecs                         6.312 ms         40.56 vec/ms          1.37k events/ms
-[bench] three_bit_adder          64 vecs                          5.894 ms         10.86 vec/ms         531.90 events/ms
+[bench] alu_4bit                 16.38k vecs (16384)           2237.021 ms (drv 2205.216 ms   )          7.43 vec/ms          1.88k events/ms      95.2% pop    306.1 t/vec
+[bench] four_bit_adder           256 vecs                        13.607 ms (drv 7.430 ms      )         34.45 vec/ms          1.98k events/ms      89.5% pop    141.6 t/vec
+[bench] mux_4bit_2to1            512 vecs                         8.111 ms (drv 3.732 ms      )        137.19 vec/ms          2.20k events/ms      56.2% pop     71.0 t/vec
+[bench] three_bit_adder          64 vecs                          6.407 ms (drv 1.609 ms      )         39.78 vec/ms          1.95k events/ms      91.8% pop    121.8 t/vec
+[bench] xnor_4bit                256 vecs                         6.248 ms (drv 4.010 ms      )         63.84 vec/ms          2.16k events/ms      82.2% pop    116.8 t/vec
+[bench] xor_4bit                 256 vecs                         5.484 ms (drv 3.374 ms      )         75.87 vec/ms          2.11k events/ms      78.4% pop     97.0 t/vec
 ```
 
 ## What it measures
@@ -153,12 +159,26 @@ That means: an XOR over 4-bit operands exhaustively driven across all 256 input 
 
 The split between `events_popped` and `events_committed` is the diagnostic-grade column. It's not exposed in any other test path, and it catches algorithmic regressions where the scheduler enqueues redundant events that are correctly dedup'd downstream — the circuit gives the right answer, function tests pass, but the heap work has silently doubled.
 
+### Derived stderr columns
+
+These three columns appear in the stderr report only; they are deliberately *not* written to the golden because they are derivable from the seven columns above (or from `drive_ns`, which is itself wall-clock and host-dependent). The point of surfacing them is at-a-glance readability during a bench run — the underlying values are still the regression gate.
+
+| Column   | Formula                                | What it tells you                                                                    |
+| -------- | -------------------------------------- | ------------------------------------------------------------------------------------ |
+| `drv`    | `Table.drive_ns` from the inner loop   | Drive-only wall-clock. Excludes parse, validate, topology build, engine construction. |
+| `% pop`  | `events_committed / events_popped`     | Pop efficiency. 100% = every event changed state; lower = scheduler is wasting heap work. |
+| `t/vec`  | `final_time / vectors`                 | Logical settling time per input vector. Drift = engine timing model changed.         |
+
+The `% pop` column is where the buried lede surfaces. From the corpus right now, `and_4bit` runs at 39.2% pop efficiency — 60.8% of its heap pops are dedup'd no-ops. That number was always available in the golden (raw counters), but you had to do the subtraction in your head to see it.
+
+The `drv` column reframes the small-fixture rates. `chain` (2 vectors) reports total wall-clock around 1.4 ms; its `drv` is ~6 μs. The 1.4 ms is dominated by the per-fixture parser+validator+topology pipeline that runs once and is the same regardless of how many vectors you replay. Reporting throughput against total wall-clock was systematically wrong by ~250× for fixtures like this; throughput against `drv` is honest.
+
 ### What it does *not* measure
 
 By design, the bench skips several signals:
 
 - **Allocation count / bytes**. Adding this would require wrapping `memory.allocator`. Easy follow-up, omitted in v1.
-- **Setup vs. steady-state split**. The truth-table builder constructs the circuit once and reuses it across all `2^N` vectors, so construction is amortized. Splitting it would only be interesting if `createComponent` or `connect` cost ever dominated.
+- **`createComponent` / `connect` cost in isolation**. `drive_ns` covers only the `2^N` replay loop, so the inner stderr throughput excludes engine construction. But construction itself isn't separately itemized — it's lumped into `(total - drive)` along with parse, validate, and topology build. Splitting further would only matter if construction ever dominated, which it currently doesn't (look at `alu_4bit`: drive_ns is ~98% of total).
 - **WASM runtime cost**. Counters live on the native `Circuit`. The shipped `.wasm` runtime is built with `collect_metrics=false` and carries zero metrics overhead.
 - **Compile-time perf**. That has its own gate at `tests/cli/integration_test.zig:260` (the 30-second budget on `stress_grid_10x10` compile).
 
@@ -230,15 +250,30 @@ The `bench` step is not wired into `zig build test`. It is opt-in and does not a
 
 1. Make a change to `lib/circuit.zig` (or anything that affects simulation behaviour).
 2. Run `zig build test` to confirm correctness.
-3. Run `zig build bench` to confirm no algorithmic regression. If it fails, the diff in stderr shows expected vs. actual columns side by side.
+3. Run `zig build bench` to confirm no algorithmic regression. If it fails, the runner prints a structured per-fixture, per-column delta (see below) instead of dumping the full table.
 4. If the regression is intentional (e.g. you rewrote the event scheduler), run `UPDATE_GOLDENS=1 zig build bench` and review the resulting fixture diff in your PR.
+
+### Mismatch output
+
+When any counter shifts, the bench parses the on-disk golden back into rows, joins it against the in-memory run by fixture name, and emits one block per changed fixture listing only the columns that moved:
+
+```
+bench: golden mismatch
+bench: 2 changed, 0 added, 0 removed
+  alu_4bit
+    final_time             5015100 →    5015134   +34 (+0.00%)
+  xor_4bit
+    events_popped             8000 →       7136   -864 (-10.80%)
+```
+
+Walked in fixture-manifest (alphabetical) order regardless of `--sort`, so diffs are stable. If the parser itself fails on a malformed golden, the runner falls back to the original side-by-side dump (`--- expected --- / --- actual ---`) so a structurally broken golden is still debuggable.
 
 ## Files
 
 | Path                                            | Role                                                                       |
 | ----------------------------------------------- | -------------------------------------------------------------------------- |
 | `lib/circuit.zig`                               | Engine + `Metrics` struct + counter bumps                                  |
-| `lib/truth_table/builder.zig`                   | Drives the engine over `2^N` vectors; surfaces `circuit.metrics` on `Table`|
-| `tools/bench/main.zig`                          | Bench runner: walks the corpus, prints wall-clock, writes/compares golden  |
+| `lib/truth_table/builder.zig`                   | Drives the engine over `2^N` vectors; surfaces `circuit.metrics` and `drive_ns` on `Table` |
+| `tools/bench/main.zig`                          | Bench runner: walks the corpus, prints wall-clock and derived columns, writes/compares golden, renders structured diff on mismatch |
 | `tests/fixtures/bench/engine.bench.golden`      | The committed golden: 46 rows, one per fixture                             |
 | `build.zig`                                     | Parallel modules + `zig build bench` step                                  |

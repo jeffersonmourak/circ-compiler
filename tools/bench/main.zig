@@ -223,6 +223,12 @@ const Row = struct {
     vectors: u64,
     components: u64,
     metrics: engine.Metrics,
+    /// Nanoseconds spent in the inner drive loop only (excludes parse,
+    /// validate, topology build, and engine construction). Sourced from
+    /// `Table.drive_ns`. Lets the stderr report separate "engine vector
+    /// throughput" from "parser+setup cost", which previously dominated
+    /// vec/ms numbers on small fixtures.
+    drive_ns: u64,
 };
 
 const Column = struct {
@@ -316,6 +322,120 @@ fn writeRow(out: *std.ArrayList(u8), allocator: std.mem.Allocator, row: Row) !vo
     try out.append(allocator, '\n');
 }
 
+/// Parsed-back view of a single golden row. Lives just long enough to feed
+/// the mismatch diff renderer; the names are slices into the on-disk file
+/// buffer so the parsed slice cannot outlive that buffer.
+const ParsedRow = struct {
+    name: []const u8,
+    vectors: u64,
+    components: u64,
+    events_popped: u64,
+    events_committed: u64,
+    recalcs: u64,
+    peak_queue: u64,
+    final_time: u64,
+};
+
+/// Parse a golden file back into ParsedRow records keyed by fixture name.
+/// Tolerant of empty / malformed lines (skips them) but returns an error if
+/// the allocator itself fails. Header rows (the first two lines) are skipped
+/// by index rather than content match because the format is stable across
+/// runs and a fancier parser would just create new failure modes.
+fn parseGoldenRows(
+    allocator: std.mem.Allocator,
+    golden: []const u8,
+) ![]ParsedRow {
+    var rows: std.ArrayList(ParsedRow) = .{};
+    errdefer rows.deinit(allocator);
+
+    var line_it = std.mem.splitScalar(u8, golden, '\n');
+    var line_idx: usize = 0;
+    while (line_it.next()) |line| : (line_idx += 1) {
+        if (line_idx < 2) continue;
+        if (line.len == 0) continue;
+        if (line[0] != '|') continue;
+
+        // Eight content cells live between nine pipes. splitScalar yields the
+        // empties before the leading '|' and after the trailing '|' too, so
+        // we just read by index.
+        var cells: [12][]const u8 = undefined;
+        var n: usize = 0;
+        var col_it = std.mem.splitScalar(u8, line, '|');
+        while (col_it.next()) |raw| {
+            if (n >= cells.len) break;
+            cells[n] = std.mem.trim(u8, raw, " ");
+            n += 1;
+        }
+        if (n < 9) continue;
+
+        try rows.append(allocator, .{
+            .name = cells[1],
+            .vectors = std.fmt.parseInt(u64, cells[2], 10) catch continue,
+            .components = std.fmt.parseInt(u64, cells[3], 10) catch continue,
+            .events_popped = std.fmt.parseInt(u64, cells[4], 10) catch continue,
+            .events_committed = std.fmt.parseInt(u64, cells[5], 10) catch continue,
+            .recalcs = std.fmt.parseInt(u64, cells[6], 10) catch continue,
+            .peak_queue = std.fmt.parseInt(u64, cells[7], 10) catch continue,
+            .final_time = std.fmt.parseInt(u64, cells[8], 10) catch continue,
+        });
+    }
+    return try rows.toOwnedSlice(allocator);
+}
+
+/// Render a signed delta with both absolute and percentage change. Returns
+/// an empty string when old == new so the caller can skip the row. The sign
+/// character is rendered manually because Zig 0.15's format syntax doesn't
+/// accept a `+` flag inside `{d:...}`.
+fn formatDelta(buf: []u8, old: u64, new: u64) ![]const u8 {
+    if (new == old) return "";
+    const sign: u8 = if (new > old) '+' else '-';
+    const delta = if (new > old) new - old else old - new;
+    if (old == 0) {
+        return std.fmt.bufPrint(buf, "{c}{d} (n/a%)", .{ sign, delta });
+    }
+    const pct: f64 = 100.0 * @as(f64, @floatFromInt(delta)) / @as(f64, @floatFromInt(old));
+    return std.fmt.bufPrint(buf, "{c}{d} ({c}{d:.2}%)", .{ sign, delta, sign, pct });
+}
+
+/// Emit a per-column delta block for one fixture. Skips columns that didn't
+/// change so the report stays focused.
+fn printRowDiff(
+    stderr: anytype,
+    name: []const u8,
+    old: ParsedRow,
+    new: Row,
+) !void {
+    const checks = [_]struct { label: []const u8, old: u64, new: u64 }{
+        .{ .label = "vectors", .old = old.vectors, .new = new.vectors },
+        .{ .label = "components", .old = old.components, .new = new.components },
+        .{ .label = "events_popped", .old = old.events_popped, .new = new.metrics.events_popped },
+        .{ .label = "events_committed", .old = old.events_committed, .new = new.metrics.events_committed },
+        .{ .label = "recalcs", .old = old.recalcs, .new = new.metrics.recalcs },
+        .{ .label = "peak_queue", .old = old.peak_queue, .new = new.metrics.peak_queue },
+        .{ .label = "final_time", .old = old.final_time, .new = new.metrics.final_time },
+    };
+
+    var any: bool = false;
+    for (checks) |c| {
+        if (c.old != c.new) {
+            any = true;
+            break;
+        }
+    }
+    if (!any) return;
+
+    try stderr.print("  {s}\n", .{name});
+    var buf: [80]u8 = undefined;
+    for (checks) |c| {
+        if (c.old == c.new) continue;
+        const delta_s = try formatDelta(&buf, c.old, c.new);
+        try stderr.print(
+            "    {s: <18}  {d: >10} → {d: >10}   {s}\n",
+            .{ c.label, c.old, c.new, delta_s },
+        );
+    }
+}
+
 fn runFixture(
     allocator: std.mem.Allocator,
     fixture: Fixture,
@@ -364,6 +484,7 @@ fn runFixture(
         .vectors = table.rows.len,
         .components = component_count,
         .metrics = table.metrics,
+        .drive_ns = table.drive_ns,
     };
 }
 
@@ -426,6 +547,7 @@ pub fn main() !void {
     try writeHeader(&output, allocator);
 
     var total_wall_ns: u64 = 0;
+    var total_drive_ns: u64 = 0;
     var total_events: u64 = 0;
     var total_vectors: u64 = 0;
 
@@ -447,6 +569,7 @@ pub fn main() !void {
         };
         const elapsed_ns: u64 = @intCast(std.time.nanoTimestamp() - start);
         total_wall_ns += elapsed_ns;
+        total_drive_ns += row.drive_ns;
         total_events += row.metrics.events_popped;
         total_vectors += row.vectors;
 
@@ -462,44 +585,66 @@ pub fn main() !void {
         const row = entry.row;
         const elapsed_ns = entry.elapsed_ns;
         const elapsed_ns_f = @as(f64, @floatFromInt(elapsed_ns));
-        const elapsed_s = elapsed_ns_f / std.time.ns_per_s;
-        const vecs_per_sec = if (elapsed_s > 0)
-            @as(f64, @floatFromInt(row.vectors)) / elapsed_s
+        const drive_ns_f = @as(f64, @floatFromInt(row.drive_ns));
+        // Throughput is computed from drive_ns, not elapsed_ns, so the per-
+        // fixture rates reflect engine work alone. The parser, validator and
+        // topology builder run once per fixture and used to make small
+        // circuits look ~1000x slower than they actually are.
+        const drive_s = drive_ns_f / std.time.ns_per_s;
+        const vecs_per_sec = if (drive_s > 0)
+            @as(f64, @floatFromInt(row.vectors)) / drive_s
         else
             0.0;
-        const events_per_sec = if (elapsed_s > 0)
-            @as(f64, @floatFromInt(row.metrics.events_popped)) / elapsed_s
+        const events_per_sec = if (drive_s > 0)
+            @as(f64, @floatFromInt(row.metrics.events_popped)) / drive_s
+        else
+            0.0;
+        const pop_eff_pct = if (row.metrics.events_popped > 0)
+            100.0 * @as(f64, @floatFromInt(row.metrics.events_committed)) /
+                @as(f64, @floatFromInt(row.metrics.events_popped))
+        else
+            0.0;
+        const ticks_per_vec = if (row.vectors > 0)
+            @as(f64, @floatFromInt(row.metrics.final_time)) /
+                @as(f64, @floatFromInt(row.vectors))
         else
             0.0;
 
         switch (mode) {
             .default => {
                 const elapsed_ms = elapsed_ns_f / std.time.ns_per_ms;
+                const drive_ms = drive_ns_f / std.time.ns_per_ms;
                 const ns_per_vec = if (row.vectors > 0)
-                    elapsed_ns_f / @as(f64, @floatFromInt(row.vectors))
+                    drive_ns_f / @as(f64, @floatFromInt(row.vectors))
                 else
                     0.0;
                 const ns_per_event = if (row.metrics.events_popped > 0)
-                    elapsed_ns_f / @as(f64, @floatFromInt(row.metrics.events_popped))
+                    drive_ns_f / @as(f64, @floatFromInt(row.metrics.events_popped))
                 else
                     0.0;
                 try stderr.print(
-                    "bench: {s: <24} {d: >6} vecs  {d: >9.3} ms  {d: >10.1} ns/vec  {d: >6.1} ns/event\n",
-                    .{ row.name, row.vectors, elapsed_ms, ns_per_vec, ns_per_event },
+                    "bench: {s: <24} {d: >6} vecs  {d: >9.3} ms (drv {d: >8.3})  {d: >9.1} ns/vec  {d: >6.1} ns/event  {d: >5.1}% pop  {d: >6.1} t/vec\n",
+                    .{ row.name, row.vectors, elapsed_ms, drive_ms, ns_per_vec, ns_per_event, pop_eff_pct, ticks_per_vec },
                 );
             },
             .human => |unit| {
                 var count_buf: [64]u8 = undefined;
                 var time_buf: [48]u8 = undefined;
+                var drive_buf: [48]u8 = undefined;
                 var vec_rate_buf: [48]u8 = undefined;
                 var event_rate_buf: [48]u8 = undefined;
+                var pop_buf: [16]u8 = undefined;
+                var ticks_buf: [24]u8 = undefined;
                 const count_s = try formatCount(&count_buf, row.vectors, "vecs");
                 const time_s = try formatTimeIn(&time_buf, elapsed_ns, unit);
+                const drive_s_str = try formatTimeIn(&drive_buf, row.drive_ns, unit);
                 const vec_rate_s = try formatRateIn(&vec_rate_buf, vecs_per_sec, "vec", unit);
                 const event_rate_s = try formatRateIn(&event_rate_buf, events_per_sec, "events", unit);
+                const pop_s = try std.fmt.bufPrint(&pop_buf, "{d:.1}% pop", .{pop_eff_pct});
+                const ticks_s = try std.fmt.bufPrint(&ticks_buf, "{d:.1} t/vec", .{ticks_per_vec});
                 try stderr.print(
-                    "[bench] {s: <24} {s: <24}   {s: >14}   {s: >18}   {s: >22}\n",
-                    .{ row.name, count_s, time_s, vec_rate_s, event_rate_s },
+                    "[bench] {s: <24} {s: <24}   {s: >14} (drv {s: <14})   {s: >18}   {s: >22}   {s: >12}   {s: >12}\n",
+                    .{ row.name, count_s, time_s, drive_s_str, vec_rate_s, event_rate_s, pop_s, ticks_s },
                 );
             },
         }
@@ -508,21 +653,34 @@ pub fn main() !void {
     switch (mode) {
         .default => {
             const total_ms = @as(f64, @floatFromInt(total_wall_ns)) / std.time.ns_per_ms;
+            const drive_ms = @as(f64, @floatFromInt(total_drive_ns)) / std.time.ns_per_ms;
+            const drive_pct: f64 = if (total_wall_ns > 0)
+                100.0 * @as(f64, @floatFromInt(total_drive_ns)) /
+                    @as(f64, @floatFromInt(total_wall_ns))
+            else
+                0.0;
             try stderr.print(
-                "bench: ---  {d} fixtures  {d} vectors  {d} events  {d:.3} ms total\n",
-                .{ fixtures.len, total_vectors, total_events, total_ms },
+                "bench: ---  {d} fixtures  {d} vectors  {d} events  {d:.3} ms total  ({d:.3} ms drv, {d:.1}% engine)\n",
+                .{ fixtures.len, total_vectors, total_events, total_ms, drive_ms, drive_pct },
             );
         },
         .human => |unit| {
             var vec_buf: [64]u8 = undefined;
             var ev_buf: [64]u8 = undefined;
             var time_buf: [48]u8 = undefined;
+            var drive_buf: [48]u8 = undefined;
             const vec_s = try formatCount(&vec_buf, total_vectors, "vectors");
             const ev_s = try formatCount(&ev_buf, total_events, "events");
             const time_s = try formatTimeIn(&time_buf, total_wall_ns, unit);
+            const drive_s = try formatTimeIn(&drive_buf, total_drive_ns, unit);
+            const drive_pct: f64 = if (total_wall_ns > 0)
+                100.0 * @as(f64, @floatFromInt(total_drive_ns)) /
+                    @as(f64, @floatFromInt(total_wall_ns))
+            else
+                0.0;
             try stderr.print(
-                "[bench] ---  {d} fixtures   {s}   {s}   {s} total\n",
-                .{ fixtures.len, vec_s, ev_s, time_s },
+                "[bench] ---  {d} fixtures   {s}   {s}   {s} total ({s} drv, {d:.1}% engine)\n",
+                .{ fixtures.len, vec_s, ev_s, time_s, drive_s, drive_pct },
             );
         },
     }
@@ -548,10 +706,72 @@ pub fn main() !void {
 
     if (!std.mem.eql(u8, expected, output.items)) {
         try stderr.writeAll("bench: golden mismatch\n");
-        try stderr.writeAll("--- expected ---\n");
-        try stderr.writeAll(expected);
-        try stderr.writeAll("--- actual ---\n");
-        try stderr.writeAll(output.items);
+
+        const expected_rows = parseGoldenRows(allocator, expected) catch |err| {
+            // Parser failure shouldn't swallow the regression signal — fall
+            // back to the original side-by-side dump so a malformed golden is
+            // still debuggable.
+            try stderr.print(
+                "bench: (failed to parse expected for structured diff: {s}; showing raw dump)\n",
+                .{@errorName(err)},
+            );
+            try stderr.writeAll("--- expected ---\n");
+            try stderr.writeAll(expected);
+            try stderr.writeAll("--- actual ---\n");
+            try stderr.writeAll(output.items);
+            return error.GoldenMismatch;
+        };
+        defer allocator.free(expected_rows);
+
+        var expected_by_name = std.StringHashMap(ParsedRow).init(allocator);
+        defer expected_by_name.deinit();
+        try expected_by_name.ensureTotalCapacity(@intCast(expected_rows.len));
+        for (expected_rows) |er| try expected_by_name.put(er.name, er);
+
+        var actual_by_name = std.StringHashMap(Row).init(allocator);
+        defer actual_by_name.deinit();
+        try actual_by_name.ensureTotalCapacity(@intCast(sorted_rows.items.len));
+        for (sorted_rows.items) |entry| try actual_by_name.put(entry.row.name, entry.row);
+
+        // Count first so the header reads "N fixture(s) changed" before the
+        // per-row dump. Walk the fixture manifest (alphabetical) so the diff
+        // order is stable regardless of any --sort the user passed in.
+        var changed: usize = 0;
+        var added: usize = 0;
+        var removed: usize = 0;
+        for (fixtures) |fixture| {
+            const actual = actual_by_name.get(fixture.name) orelse {
+                removed += 1;
+                continue;
+            };
+            const exp = expected_by_name.get(fixture.name) orelse {
+                added += 1;
+                continue;
+            };
+            if (exp.vectors != actual.vectors or
+                exp.components != actual.components or
+                exp.events_popped != actual.metrics.events_popped or
+                exp.events_committed != actual.metrics.events_committed or
+                exp.recalcs != actual.metrics.recalcs or
+                exp.peak_queue != actual.metrics.peak_queue or
+                exp.final_time != actual.metrics.final_time)
+            {
+                changed += 1;
+            }
+        }
+        try stderr.print(
+            "bench: {d} changed, {d} added, {d} removed\n",
+            .{ changed, added, removed },
+        );
+
+        for (fixtures) |fixture| {
+            const actual = actual_by_name.get(fixture.name) orelse continue;
+            if (expected_by_name.get(fixture.name)) |exp| {
+                try printRowDiff(stderr, fixture.name, exp, actual);
+            } else {
+                try stderr.print("  + {s} (new fixture, no golden row)\n", .{fixture.name});
+            }
+        }
         return error.GoldenMismatch;
     }
 
