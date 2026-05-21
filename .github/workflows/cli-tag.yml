@@ -45,9 +45,127 @@ jobs:
           name: circ-compile-${{ github.ref_name }}-${{ matrix.artifact_suffix }}
           path: ${{ matrix.binary }}
 
+  bench-delta:
+    # Produces an engine-bench delta table comparing this tag's working tree
+    # against the most recent v* tag that carries
+    # tests/fixtures/bench/engine.bench.golden. The release job downloads the
+    # resulting artifact and splices the table into the draft release body.
+    # Runs in parallel with `build`; the release job depends on both.
+    name: Engine bench delta
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0   # need tag history to walk for a usable baseline
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+
+      - name: Resolve previous v* tag carrying a bench golden
+        id: baseline
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # Walk v* tags newest → oldest (version-sort), skip the current tag,
+          # accept the first whose tree contains engine.bench.golden. The
+          # golden was added after v0.0.1, so older tags must be tolerated as
+          # "no usable baseline" rather than treated as errors.
+          PREV=""
+          while IFS= read -r cand; do
+            [[ -n "$cand" && "$cand" != "$TAG" ]] || continue
+            if git cat-file -e "${cand}:tests/fixtures/bench/engine.bench.golden" 2>/dev/null; then
+              PREV="$cand"
+              break
+            fi
+          done < <(git tag --list 'v*' --sort=-v:refname)
+          echo "prev_tag=${PREV}" >> "$GITHUB_OUTPUT"
+          if [[ -z "$PREV" ]]; then
+            echo "No previous v* tag carries tests/fixtures/bench/engine.bench.golden — bench section will be omitted from the release body."
+          else
+            echo "Baseline: ${PREV}'s engine.bench.golden."
+          fi
+
+      - name: Snapshot previous tag's bench golden
+        if: steps.baseline.outputs.prev_tag != ''
+        env:
+          PREV_TAG: ${{ steps.baseline.outputs.prev_tag }}
+        run: |
+          set -euo pipefail
+          git show "${PREV_TAG}:tests/fixtures/bench/engine.bench.golden" > /tmp/base.golden
+          wc -l /tmp/base.golden
+
+      - name: Run bench against the previous tag's golden
+        if: steps.baseline.outputs.prev_tag != ''
+        # Non-zero exit from `zig build bench` means counter mismatch — that's
+        # exactly the case where the JSON path describes a delta. The JSON
+        # is the source of truth here, not the exit code (mirrors the pattern
+        # in perf-pr-comment.yml).
+        run: |
+          set +e
+          cp /tmp/base.golden tests/fixtures/bench/engine.bench.golden
+          zig build bench -- --output=json 1>/tmp/bench.json 2>/tmp/bench-stderr.txt
+          status=$?
+          set -e
+          echo "bench exit status: $status"
+          echo "--- captured JSON (head) ---"
+          head -c 500 /tmp/bench.json || true
+          echo ""
+          echo "--- captured stderr (tail) ---"
+          tail -50 /tmp/bench-stderr.txt || true
+
+      - name: Render markdown table
+        if: steps.baseline.outputs.prev_tag != ''
+        env:
+          PREV_TAG: ${{ steps.baseline.outputs.prev_tag }}
+        # --baseline parameterizes the script's match-case message so it names
+        # the actual previous tag rather than the PR-flavored "the base branch".
+        # The sed pass is a defensive belt-and-suspenders sweep: if a future
+        # script change introduces a new "the base branch" mention in some
+        # other render path, this normalizes it without waiting for the
+        # script-side fix. Under normal operation today the sed substitutes
+        # nothing (the --baseline flag already covered the only occurrence).
+        run: |
+          set -euo pipefail
+          python3 tools/bench/format-delta-comment.py \
+            --baseline="\`${PREV_TAG}\`" \
+            < /tmp/bench.json \
+            > /tmp/bench-delta.md
+          sed -i "s/the base branch/\`${PREV_TAG}\`/g" /tmp/bench-delta.md
+          echo "--- rendered markdown ---"
+          cat /tmp/bench-delta.md
+
+      - name: Stage artifact payload
+        env:
+          PREV_TAG: ${{ steps.baseline.outputs.prev_tag }}
+        # The release job uses a single predictable signal — bench-baseline.txt
+        # is empty when there's no baseline, otherwise it carries the previous
+        # tag name. We always emit both files so the download step downstream
+        # never has to guard against missing entries.
+        run: |
+          set -euo pipefail
+          mkdir -p artifact
+          printf '%s' "${PREV_TAG}" > artifact/bench-baseline.txt
+          if [[ -f /tmp/bench-delta.md ]]; then
+            cp /tmp/bench-delta.md artifact/bench-delta.md
+          else
+            : > artifact/bench-delta.md
+          fi
+
+      - name: Upload bench delta artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: bench-delta-${{ github.ref_name }}
+          path: artifact/
+
   release:
     name: Draft GitHub release
-    needs: build
+    needs: [build, bench-delta]
+    # Run as long as `build` succeeded — a failing bench-delta job shouldn't
+    # block the release; the bench section just gets omitted from the body.
+    if: always() && needs.build.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -61,6 +179,16 @@ jobs:
           path: assets
           pattern: circ-compile-${{ github.ref_name }}-*
           merge-multiple: false
+
+      - name: Download bench delta artifact
+        # Soft dependency: if bench-delta failed, just proceed without the
+        # bench section in the release body. The release should not block on
+        # benchmark instability.
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: bench-delta-${{ github.ref_name }}
+          path: bench
 
       - name: Create draft release and upload binaries
         env:
@@ -76,14 +204,32 @@ jobs:
             exit 1
           fi
 
+          # Build the release body: stable prelude + an optional bench-delta
+          # section. The bench section is included only when the bench-delta
+          # job resolved a baseline AND produced a non-empty rendered table.
+          BASELINE=""
+          if [[ -f bench/bench-baseline.txt ]]; then
+            BASELINE="$(tr -d '[:space:]' < bench/bench-baseline.txt)"
+          fi
+          body_file="$(mktemp)"
+          {
+            printf 'Draft release for **%s**. Attached: Linux (x86_64), macOS (aarch64), Windows (x86_64) CLI builds (cross-compiled from Linux).\n' "$TAG"
+            if [[ -n "$BASELINE" && -s bench/bench-delta.md ]]; then
+              printf '\n## Engine bench: deltas vs `%s`\n\n' "$BASELINE"
+              cat bench/bench-delta.md
+              printf '\n_Produced by `zig build bench -- --output=json` against `%s`'\''s `engine.bench.golden`, rendered by `tools/bench/format-delta-comment.py`. Wall-clock (`drv_ms`) is host-dependent and not asserted; see [`DOCS/benchmark.md`](DOCS/benchmark.md)._\n' "$BASELINE"
+            fi
+          } > "$body_file"
+
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists; uploading or replacing assets only."
           else
             gh release create "$TAG" \
               --draft \
               --title "Release ${TAG}" \
-              --notes "Draft release for **${TAG}**. Attached: Linux (x86_64), macOS (aarch64), Windows (x86_64) CLI builds (cross-compiled from Linux)."
+              --notes-file "$body_file"
           fi
+          rm -f "$body_file"
 
           for dir in "${dirs[@]}"; do
             [[ -d "$dir" ]] || continue

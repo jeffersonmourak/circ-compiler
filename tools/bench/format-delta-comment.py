@@ -30,6 +30,7 @@ Schema expected on stdin (see `emitJsonDiff` in tools/bench/main.zig):
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from typing import Any
@@ -70,14 +71,21 @@ def _row(fixture: dict[str, Any], change: dict[str, Any]) -> str:
     return f"| {_name_cell(fixture)} | `{counter}` | {before} | {after} | {delta} | {pct} |"
 
 
-def render(doc: dict[str, Any]) -> str:
-    """Build the markdown comment body from the bench's JSON document."""
+def render(doc: dict[str, Any], baseline: str = "the base branch") -> str:
+    """Build the markdown comment body from the bench's JSON document.
+
+    `baseline` is the human-readable phrase the match-case message uses
+    ("vs <baseline>'s golden."). The PR workflow leaves it at the default
+    so its existing comment text is unchanged; the tag workflow passes the
+    previous version tag (e.g. "`v0.0.1`") so the no-changes message names
+    the actual baseline instead of the generic "the base branch".
+    """
     status = doc.get("status", "match")
     summary = doc.get("summary", {})
     fixtures = doc.get("fixtures", [])
 
     if status == "match":
-        return "No asserted-counter changes vs the base branch's golden.\n"
+        return f"No asserted-counter changes vs {baseline}'s golden.\n"
 
     changed = summary.get("changed", 0)
     added = summary.get("added", 0)
@@ -133,6 +141,21 @@ def render(doc: dict[str, Any]) -> str:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Render `zig build bench -- --output=json` output as a markdown table.",
+    )
+    parser.add_argument(
+        "--baseline",
+        default="the base branch",
+        help=(
+            "Human-readable label for the comparison baseline, used in the "
+            "match-case message (\"vs <baseline>'s golden.\"). Defaults to "
+            "\"the base branch\" so the PR-comment workflow needs no change; "
+            "the tag-release workflow passes the previous version tag."
+        ),
+    )
+    args = parser.parse_args()
+
     raw = sys.stdin.read()
     if not raw.strip():
         print("_(bench produced no JSON output; see workflow logs for the actual error.)_")
@@ -142,7 +165,7 @@ def main() -> int:
     except json.JSONDecodeError as e:
         print(f"_(could not parse bench JSON: {e}; see workflow logs.)_")
         return 0
-    sys.stdout.write(render(doc))
+    sys.stdout.write(render(doc, baseline=args.baseline))
     return 0
 
 
