@@ -26,6 +26,20 @@ pub fn build(b: *std.Build) void {
 
     parser_gen.dependOn(&generate_parser_cmd.step);
 
+    const parser_archive = b.step("parser:archive", "Build CGo c-archive (lib/parser/parser.a) from Go shim");
+
+    const build_archive_cmd = b.addSystemCommand(&.{
+        "go",
+        "build",
+        "-buildmode=c-archive",
+        "-o",
+        "parser.a",
+        "./shim",
+    });
+    build_archive_cmd.setCwd(b.path("lib/parser"));
+
+    parser_archive.dependOn(&build_archive_cmd.step);
+
     const parser_lib = b.addLibrary(.{
         .linkage = .static,
         .name = "parser",
