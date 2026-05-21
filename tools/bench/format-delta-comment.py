@@ -46,6 +46,30 @@ def fmt_pct(p: float) -> str:
     return f"{sign}{abs(p):.1f}%"
 
 
+TOP_MOVERS_N = 5
+TOP_MOVERS_THRESHOLD = 7  # Skip the section when the full table is already short.
+
+
+def _name_cell(fixture: dict[str, Any]) -> str:
+    """Fixture name cell, with the topology-changed marker folded in.
+
+    Carved out so the top-movers and full-table renderers share the same
+    "where do we put the marker" decision and stay in sync if it changes.
+    """
+    name = fixture.get("name", "?")
+    return f"{name} *(topology changed)*" if fixture.get("topology_changed", False) else name
+
+
+def _row(fixture: dict[str, Any], change: dict[str, Any]) -> str:
+    """Render a single per-counter row of the markdown table."""
+    counter = change.get("counter", "?")
+    before = fmt_int(change.get("from", 0))
+    after = fmt_int(change.get("to", 0))
+    delta = fmt_int(change.get("delta", 0))
+    pct = fmt_pct(float(change.get("pct_change", 0.0)))
+    return f"| {_name_cell(fixture)} | `{counter}` | {before} | {after} | {delta} | {pct} |"
+
+
 def render(doc: dict[str, Any]) -> str:
     """Build the markdown comment body from the bench's JSON document."""
     status = doc.get("status", "match")
@@ -68,27 +92,41 @@ def render(doc: dict[str, Any]) -> str:
     lines.append(", ".join(parts))
     lines.append("")
 
+    # Flatten (fixture, change) tuples for the by-impact view. Sort by
+    # absolute percentage change so the biggest movers float to the top
+    # regardless of sign, since a +96% regression deserves the same eyeballs as
+    # a -96% improvement.
+    all_changes: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    for fixture in fixtures:
+        for change in fixture.get("changes", []):
+            all_changes.append((fixture, change))
+    all_changes.sort(
+        key=lambda fc: abs(float(fc[1].get("pct_change", 0.0))),
+        reverse=True,
+    )
+
+    # Only render the top-movers section when the full table is large enough
+    # that scanning for the headlines isn't trivial. Below the threshold the
+    # full table IS the at-a-glance view; the extra heading would just be
+    # noise that pushes everything down.
+    if len(all_changes) > TOP_MOVERS_THRESHOLD:
+        lines.append(f"### Top movers (by |Δ%|)")
+        lines.append("")
+        lines.append("| Fixture | Counter | Before | After | Δ | Δ % |")
+        lines.append("|---|---|---:|---:|---:|---:|")
+        for fixture, change in all_changes[:TOP_MOVERS_N]:
+            lines.append(_row(fixture, change))
+        lines.append("")
+        lines.append("### All changes")
+        lines.append("")
+
+    # Full per-fixture table in manifest order (matches the engine golden's
+    # row order, so a reviewer can cross-reference the diff if they want).
     lines.append("| Fixture | Counter | Before | After | Δ | Δ % |")
     lines.append("|---|---|---:|---:|---:|---:|")
-
     for fixture in fixtures:
-        name = fixture.get("name", "?")
-        topology_changed = fixture.get("topology_changed", False)
-        # Hash the topology-change marker into the name cell rather than
-        # carving out a separate row, so the table stays one-row-per-counter.
-        # Repeated across each row of the fixture is intentional: it keeps
-        # every row self-describing if a reviewer scans by counter instead
-        # of by fixture.
-        name_cell = f"{name} *(topology changed)*" if topology_changed else name
         for change in fixture.get("changes", []):
-            counter = change.get("counter", "?")
-            before = fmt_int(change.get("from", 0))
-            after = fmt_int(change.get("to", 0))
-            delta = fmt_int(change.get("delta", 0))
-            pct = fmt_pct(float(change.get("pct_change", 0.0)))
-            lines.append(
-                f"| {name_cell} | `{counter}` | {before} | {after} | {delta} | {pct} |"
-            )
+            lines.append(_row(fixture, change))
 
     lines.append("")
     return "\n".join(lines)
