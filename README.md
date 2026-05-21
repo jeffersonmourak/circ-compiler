@@ -12,7 +12,7 @@ not inv(in=a)
 output out(in=inv.out)
 ```
 
-`circ-compile inverter.circ -o inverter.wasm` produces a `.wasm` whose exported `setPin` / `run` / `getOutputState` functions simulate that exact circuit. Multi-file projects work the same way — the root file imports siblings and the compiler emits one `buildXxx` function per source file:
+`circ-compile inverter.circ -o inverter.wasm` produces a `.wasm` whose exported `setPin` / `run` / `getOutputState` functions simulate that exact circuit. Multi-file projects work the same way — the root file imports siblings and the compiler flattens every sub-circuit into a single ordered topology before serializing it into the `.wasm`:
 
 ```text
 // half_adder.circ

@@ -32,16 +32,19 @@ pub const ComponentType = enum {
 };
 
 const Kind = union(ComponentType) {
-    input_pin_gate: struct { inputs: PortMap },
-    not_gate:       struct { inputs: PortMap },
-    led:            struct { inputs: PortMap, state: State },
-    and_gate:       struct { inputs: PortMap },
-    wire:           struct { inputs: PortMap },
-    output_pin:     struct { inputs: PortMap },
+    input_pin_gate: struct { inputs: std.ArrayList(*Component) = .{} },
+    not_gate:       struct { inputs: std.ArrayList(*Component) = .{} },
+    led:            struct { inputs: std.ArrayList(*Component) = .{} },
+    and_gate:       struct {
+        inputs_a: std.ArrayList(*Component) = .{},
+        inputs_b: std.ArrayList(*Component) = .{},
+    },
+    wire:           struct { inputs: std.ArrayList(*Component) = .{} },
+    output_pin:     struct { inputs: std.ArrayList(*Component) = .{} },
 };
 ```
 
-`PortMap` is `std.StringHashMap(std.ArrayList(*Component))`: backward edges, keyed by named input port. `output_pin` is the sub-circuit/root output primitive — it appears in the IR for every `output …` declaration and acts as a wire-with-a-name.
+Backward edges are flat `std.ArrayList(*Component)` lists. `and_gate` is the only kind with two distinct input ports — it splits into `inputs_a` and `inputs_b`, selected positionally by the `"a"` / `"b"` port name in `connect`. Every other kind has a single `inputs` list keyed by `"in"`. `output_pin` is the sub-circuit/root output primitive — it appears in the IR for every `output …` declaration and acts as a wire-with-a-name.
 
 The integer encoding used by the topology format (`lib/topology/`) and `Component.Kind` constructor is:
 
@@ -77,7 +80,7 @@ pub const Component = struct {
     id: u32,
     kind: Kind,
     output_state: State = .undefined,
-    outputs: PortMap,                // forward edges, keyed by output port name
+    outputs: std.ArrayList(*Component) = .{},  // forward edges — every kind has exactly one output port (`"out"`).
 
     pub fn init(id: u32, kind: Kind) !*Component;
     pub fn deinit(self: *Component) void;
@@ -113,7 +116,7 @@ pub const Circuit = struct {
 };
 ```
 
-`listener` is an optional callback fired by `notifyStateChange` whenever a component's `output_state` changes during propagation. The compiled WASM runtime does **not** install one — hosts poll `getOutputState` instead. The callback is intended for native test harnesses and tooling.
+`listener` is an optional callback fired by `notifyStateChange` once per Phase-2 visit of a downstream component during propagation, regardless of whether the visit actually flipped the component's `output_state`. The compiled WASM runtime does **not** install one — hosts poll `getOutputState` instead. The callback is intended for native test harnesses and tooling.
 
 ## API
 
@@ -150,7 +153,7 @@ Idiomatic call form:
 try circuit.connect(producer.port("out"), consumer.port("in"));
 ```
 
-`connect` updates **both** directions: `from.outputs[from_port]` gains `to`, and the appropriate per-kind input map on `to` gains `from`. This lets propagation walk forward edges to find downstream components, while gate evaluation walks backward edges to read driving signals.
+`connect` updates **both** directions: `to` is appended to `from.outputs`, and the appropriate per-kind input list on `to` (selected by the destination port name — `"in"` for most kinds, `"a"` / `"b"` for `and_gate`) gains `from`. This lets propagation walk forward edges to find downstream components, while gate evaluation walks backward edges to read driving signals.
 
 ### Signal injection
 
@@ -164,17 +167,20 @@ pub fn propagateEvent(
 
 Enqueues an event for `component` at `current_time + PROPAGATION_DELAY`, then immediately calls `propagate()` itself (it does not just enqueue). Used by the runtime's `setPin` glue.
 
+**No-op short-circuit.** When `component.output_state == new_state` the call skips both the enqueue and the propagate pass, only advancing `current_time` by `PROPAGATION_DELAY`. The timing model and `final_time` counter still match what a full enqueue-and-drain would have produced. This matters in practice because the truth-table corpus driver writes every input pin on every vector — without the short-circuit, fixtures like `and_6bit` spend the majority of pops on events that wouldn't have changed state.
+
 ### Simulation step
 
 ```zig
 pub fn propagate(self: *Circuit) !void;
 ```
 
-Drains the event queue. For each event:
+Drains the event queue in **two-phase batches per timestamp**. For each distinct timestamp `T` in ascending order:
 
-1. Updates `current_time` to the event's timestamp.
-2. Sets `component.output_state = event.new_state` (skipping no-op events).
-3. Walks `component.outputs` and calls the internal `recalculateAndReschedule` on each downstream component, then `notifyStateChange` to drive the optional listener.
+1. **Phase 1 (commit):** advance `current_time = T`, pop every queued event at timestamp `T`, set `component.output_state = event.new_state` for each (skipping no-op events whose new state already matches), and remember the components that actually changed in a scratch list.
+2. **Phase 2 (notify):** walk every changed component's `outputs` list and call the internal `recalculateAndReschedule` on each downstream component, then fire `notifyStateChange` for the optional listener.
+
+The batching is load-bearing: a downstream gate with multiple upstream events at the same `T` would otherwise read partially-updated upstream state in step 2, compute a transient value, and let the next event's dedup check (`if (component.output_state == event.new_state) continue`) silently drop the corrective re-enqueue, leaving the gate stuck on the wrong final value. The bug manifests in deep-fanout circuits where one control bit drives many parallel gates whose outputs feed a serial carry chain (e.g. a 4-bit ALU with shared `nx`/`ny` normalization).
 
 Stops when the queue is empty.
 

@@ -48,7 +48,7 @@
    final .wasm  ← hands to host (Node, browser, etc.)
 ```
 
-The CLI driver is `cmd/circ-compile/main.zig`. The compiler runs four mutually exclusive modes (`--inspect`, `--preview`, `--emit-zig`, default compile) — only the default mode produces a `.wasm`; see `cmd/circ-compile/main.zig`'s `run()` for the dispatch.
+The CLI driver is `cmd/circ-compile/main.zig`. The compiler runs five mutually exclusive modes (`--inspect`, `--preview`, `--emit-zig`, `--truth-table`, default compile) — only the default mode produces a `.wasm`; see `cmd/circ-compile/main.zig`'s `run()` for the dispatch.
 
 ## Layer 1 — Simulation engine (`lib/circuit.zig`)
 
@@ -71,18 +71,33 @@ There are six kinds (`ComponentType` in `lib/circuit.zig`):
 
 ```text
 propagateEvent(component, new_state)
-    enqueue Event { ts = current_time + delay, component, new_state }
+    if component.output_state == new_state:
+        current_time += PROPAGATION_DELAY        # no-op short-circuit
+        return
+    enqueue Event { ts = current_time + PROPAGATION_DELAY, component, new_state }
+    propagate()
 
 propagate()
     while queue non-empty:
-        event = pop_min(queue)
-        current_time = event.ts
-        component.output_state = event.new_state
-        for each downstream of component:
-            recalculateAndReschedule(downstream)
+        T = peek.timestamp
+        current_time = T
+        # Phase 1 — drain every event at timestamp T, commit state, collect changed.
+        changed = []
+        while peek.timestamp == T:
+            event = pop_min(queue)
+            if event.component.output_state == event.new_state: continue
+            event.component.output_state = event.new_state
+            changed.append(event.component)
+        # Phase 2 — walk outputs of changed components; recalc + notify.
+        for c in changed:
+            for downstream in c.outputs:
+                recalculateAndReschedule(downstream)
+                notifyStateChange(downstream)
 ```
 
-Delays are compile-time constants (`PROPAGATION_DELAY = 5`, `WIRE_PROPAGATION_DELAY = 1`). Wire and `output_pin` use the wire delay; everything else uses the gate delay.
+The per-timestamp batching matters: without it, a downstream gate with multiple upstream events at the same `T` could read partial state, dedup the corrective re-enqueue, and get stuck on the wrong final value. See `simulation-engine.md` for the full rationale.
+
+Delays are compile-time constants (`PROPAGATION_DELAY = 5`, `WIRE_PROPAGATION_DELAY = 1`). `wire`, `output_pin`, and `led` use the wire delay; everything else uses the gate delay.
 
 ### Memory
 

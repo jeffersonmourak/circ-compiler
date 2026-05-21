@@ -42,12 +42,15 @@ Declares one or more named input pins for the circuit. Input pins are driven ext
 
 `<type>` is the gate kind. Recognised types:
 
-| Type    | Ports    | Description           |
-|---------|----------|-----------------------|
-| `and`   | `a`, `b` | AND gate              |
-| `not`   | `in`     | NOT gate (inverter)   |
-| `led`   | `in`     | Output indicator      |
-| `wire`  | `in`     | Pass-through          |
+| Type     | Ports    | Description                                                         |
+|----------|----------|---------------------------------------------------------------------|
+| `and`    | `a`, `b` | AND gate                                                            |
+| `not`    | `in`     | NOT gate (inverter)                                                 |
+| `led`    | `in`     | Output indicator                                                    |
+| `wire`   | `in`     | Pass-through                                                        |
+| `output` | `in`     | Externally observable output pin (special-cased declaration kind)   |
+
+`input` is a sibling pin declaration with its own syntax (no port list), described above.
 
 **Built-in macro gates** expand at compile time to nested `and` / `not` (and optionally other macros). They use **`a`** and **`b`** as input ports and expose **`out`**. Unlike `and`/`not`, **no `import`** is required — the compiler behaves as if `import … from "<builtin>/<name>.circ"` were present.
 
@@ -110,20 +113,7 @@ led result (
 
 This circuit computes `pin1 AND (NOT pin2)` and displays the result on an LED.
 
-Equivalent WASM API construction:
-
-```typescript
-const pin1    = circuit.createComponent(ComponentKind.InputPinGate);
-const pin2    = circuit.createComponent(ComponentKind.InputPinGate);
-const notGate = circuit.createComponent(ComponentKind.NotGate);
-const andGate = circuit.createComponent(ComponentKind.AndGate);
-const led     = circuit.createComponent(ComponentKind.Led);
-
-circuit.connect(pin2,    0, notGate, 1);  // pin2.out  → not.in
-circuit.connect(pin1,    0, andGate, 2);  // pin1.out  → and.a
-circuit.connect(notGate, 0, andGate, 3);  // not.out   → and.b
-circuit.connect(andGate, 0, led,     1);  // and.out   → led.in
-```
+The compiled `.wasm` does not expose a programmatic graph-construction API — the topology is baked into the artifact as a custom section and materialised by the embedded runtime at `init()`. Hosts only see the fixed export surface (`setPin`, `run`, `getOutputState`, …) described in [`wasm-api.md`](wasm-api.md); the component IDs they need are emitted by `circ-compile --inspect` under each module's `Inputs (...)` / `Outputs (...)` block.
 
 ## Grammar
 
