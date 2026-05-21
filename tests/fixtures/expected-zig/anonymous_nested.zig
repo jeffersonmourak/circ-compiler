@@ -122,7 +122,7 @@ export fn setPin(component_id: i32, state: i32) void {
     const id: u32 = @intCast(component_id);
     if (id >= component_table.len) return;
     if (!containsId(input_component_ids, id)) return;
-    runtime_circuit.propagateEvent(component_table[id], engine.State.fromInt(state)) catch return;
+    runtime_circuit.propagateEvent(component_table[id], engine.BitVecState.fromInt(state, 1)) catch return;
 }
 
 export fn getOutputState(component_id: i32) i32 {
@@ -131,7 +131,7 @@ export fn getOutputState(component_id: i32) i32 {
     const id: u32 = @intCast(component_id);
     if (id >= component_table.len) return 2;
     if (!containsId(output_component_ids, id)) return 2;
-    return engine.State.toInt(component_table[id].output_state);
+    return runtime_circuit.readState(component_table[id].state_handle).toInt();
 }
 
 export fn getStateSnapshot() callconv(.c) PtrLen {

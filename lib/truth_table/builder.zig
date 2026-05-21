@@ -7,12 +7,10 @@ pub const State = enum(u2) {
     high = 1,
     undef = 2,
 
-    fn fromEngine(s: engine.State) State {
-        return switch (s) {
-            .low => .low,
-            .high => .high,
-            .undefined => .undef,
-        };
+    fn fromEngine(s: engine.BitVecState) State {
+        if (s.isUndefined()) return .undef;
+        if (s.isLow()) return .low;
+        return .high;
     }
 };
 
@@ -150,7 +148,7 @@ pub fn build(
     while (mask < row_count) : (mask += 1) {
         for (inputs, 0..) |pin, idx| {
             const bit = (mask >> @intCast(idx)) & 1;
-            const new_state: engine.State = if (bit == 1) .high else .low;
+            const new_state: engine.BitVecState = if (bit == 1) engine.BitVecState.high(1) else engine.BitVecState.low(1);
             const node = id_to_node.get(pin.component_id) orelse return error.InvalidTopology;
             circuit.propagateEvent(node, new_state) catch return error.InvalidTopology;
         }
@@ -158,7 +156,7 @@ pub fn build(
         const row_outputs = try arena_alloc.alloc(State, output_count);
         for (outputs, 0..) |pin, idx| {
             const node = id_to_node.get(pin.component_id) orelse return error.InvalidTopology;
-            row_outputs[idx] = State.fromEngine(node.output_state);
+            row_outputs[idx] = State.fromEngine(circuit.readState(node.state_handle));
         }
         rows[mask] = .{ .input_bits = mask, .outputs = row_outputs };
     }

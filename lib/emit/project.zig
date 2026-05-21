@@ -541,7 +541,7 @@ fn emitRuntimeBlock(
     try writer.writeLine("const id: u32 = @intCast(component_id);");
     try writer.writeLine("if (id >= component_table.len) return;");
     try writer.writeLine("if (!containsId(input_component_ids, id)) return;");
-    try writer.writeLine("runtime_circuit.propagateEvent(component_table[id], engine.State.fromInt(state)) catch return;");
+    try writer.writeLine("runtime_circuit.propagateEvent(component_table[id], engine.BitVecState.fromInt(state, 1)) catch return;");
     writer.dedent();
     try writer.writeLine("}");
     try writer.writeLine("");
@@ -552,7 +552,7 @@ fn emitRuntimeBlock(
     try writer.writeLine("const id: u32 = @intCast(component_id);");
     try writer.writeLine("if (id >= component_table.len) return 2;");
     try writer.writeLine("if (!containsId(output_component_ids, id)) return 2;");
-    try writer.writeLine("return engine.State.toInt(component_table[id].output_state);");
+    try writer.writeLine("return runtime_circuit.readState(component_table[id].state_handle).toInt();");
     writer.dedent();
     try writer.writeLine("}");
     try writer.writeLine("");

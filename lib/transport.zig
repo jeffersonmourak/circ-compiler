@@ -2,6 +2,7 @@ const std = @import("std");
 
 const Component = @import("circuit.zig").Component;
 const Circuit = @import("circuit.zig").Circuit;
+const BitVecState = @import("circuit.zig").BitVecState;
 
 fn kindByte(kind: anytype) u8 {
     return switch (kind) {
@@ -37,9 +38,17 @@ pub const EncodedState = extern struct {
     }
 };
 
-pub fn encodeState(component: *Component) EncodedState {
+/// Encodes a component's identity (kind + id) together with its current
+/// state into the 3-byte WASM wire format. State now arrives explicitly
+/// because the engine no longer carries it inline on `Component`; callers
+/// fetch it via `Circuit.readState(component.state_handle)`.
+///
+/// For width=1, `BitVecState.toTransportByte` produces the same byte values
+/// that `@intFromEnum(State)` did (undefined=0, low=1, high=2), so the wire
+/// format is byte-identical across the refactor.
+pub fn encodeState(component: *Component, state: BitVecState) EncodedState {
     return .{
-        .state = @as(u8, @intFromEnum(component.output_state)),
+        .state = state.toTransportByte(),
         .kind = kindByte(component.kind),
         .id = @as([4]u8, @bitCast(component.id)),
     };
@@ -50,7 +59,8 @@ test "transport: encodes output_pin state" {
     defer circuit.deinit();
 
     const output_pin = try circuit.createComponent(.{ .output_pin = .{} });
-    const encoded = try encodeState(output_pin).encode(std.testing.allocator);
+    const state = circuit.readState(output_pin.state_handle);
+    const encoded = try encodeState(output_pin, state).encode(std.testing.allocator);
     defer std.testing.allocator.free(encoded);
 
     try std.testing.expectEqual(@as(usize, 3), encoded.len);
