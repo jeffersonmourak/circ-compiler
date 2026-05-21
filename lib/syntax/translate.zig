@@ -5,24 +5,44 @@ const C_Parser = @import("CParser.zig").C_Parser;
 
 pub const Ast = ast;
 
+// langlang's Go API exposes NodeType discriminants as a Go iota; the
+// c-archive header omits them. Mirror the values from
+// lib/parser/parser.go (NodeType_String = iota, ...).
+const NodeType_String: u8 = 0;
+const NodeType_Sequence: u8 = 1;
+const NodeType_Node: u8 = 2;
+const NodeType_Error: u8 = 3;
+
+// Byte-offset range. Replaces C_Parser.ll_range; the Go API exposes
+// richer Span (line/column) info via TreeSpanStart/TreeSpanEnd, but we
+// flatten to byte offsets here so offsetToLineCol stays the source of
+// truth for line/column derivation.
+const Range = struct {
+    start: c_int,
+    end: c_int,
+};
+
 const TranslationContext = struct {
     allocator: std.mem.Allocator,
-    tree: [*c]C_Parser.ll_tree,
+    handle: @TypeOf(C_Parser.ParserNew()),
     source: []const u8,
     file_id: u32,
     anonymous_counter: usize = 0,
 };
 
-fn nodeType(ctx: *const TranslationContext, node_id: C_Parser.ll_node_id) C_Parser.ll_node_type {
-    return C_Parser.ll_tree_type(ctx.tree, node_id);
+fn nodeType(ctx: *const TranslationContext, node_id: u32) u8 {
+    return C_Parser.TreeType(ctx.handle, node_id);
 }
 
-fn nodeName(ctx: *const TranslationContext, node_id: C_Parser.ll_node_id) []const u8 {
-    return std.mem.span(C_Parser.ll_tree_name(ctx.tree, node_id));
+fn nodeName(ctx: *const TranslationContext, node_id: u32) []const u8 {
+    return std.mem.span(C_Parser.TreeName(ctx.handle, node_id));
 }
 
-fn nodeRange(ctx: *const TranslationContext, node_id: C_Parser.ll_node_id) C_Parser.ll_range {
-    return C_Parser.ll_tree_range(ctx.tree, node_id);
+fn nodeRange(ctx: *const TranslationContext, node_id: u32) Range {
+    return .{
+        .start = C_Parser.TreeSpanStart(ctx.handle, node_id),
+        .end = C_Parser.TreeSpanEnd(ctx.handle, node_id),
+    };
 }
 
 fn offsetToLineCol(source: []const u8, offset: usize) struct { line: u32, col: u32 } {
@@ -40,7 +60,7 @@ fn offsetToLineCol(source: []const u8, offset: usize) struct { line: u32, col: u
     return .{ .line = line, .col = col };
 }
 
-fn nodeSpan(ctx: *const TranslationContext, node_id: C_Parser.ll_node_id) Span {
+fn nodeSpan(ctx: *const TranslationContext, node_id: u32) Span {
     const range = nodeRange(ctx, node_id);
     const start: usize = @intCast(@max(range.start, 0));
     const end: usize = @intCast(@max(range.end, 0));
@@ -55,35 +75,35 @@ fn nodeSpan(ctx: *const TranslationContext, node_id: C_Parser.ll_node_id) Span {
     };
 }
 
-fn childAt(ctx: *const TranslationContext, parent: C_Parser.ll_node_id, index: usize) !C_Parser.ll_node_id {
-    var child: C_Parser.ll_node_id = undefined;
-    if (!C_Parser.ll_tree_children_at(ctx.tree, parent, @intCast(index), &child)) {
+fn childAt(ctx: *const TranslationContext, parent: u32, index: usize) !u32 {
+    var child: u32 = undefined;
+    if (!C_Parser.TreeChildrenAt(ctx.handle, parent, @intCast(index), &child)) {
         return error.InvalidChildIndex;
     }
     return child;
 }
 
-fn childCount(ctx: *const TranslationContext, parent: C_Parser.ll_node_id) usize {
-    return @intCast(C_Parser.ll_tree_children_len(ctx.tree, parent));
+fn childCount(ctx: *const TranslationContext, parent: u32) usize {
+    return @intCast(C_Parser.TreeChildrenLen(ctx.handle, parent));
 }
 
-fn firstChild(ctx: *const TranslationContext, parent: C_Parser.ll_node_id) !C_Parser.ll_node_id {
-    var child: C_Parser.ll_node_id = undefined;
-    if (!C_Parser.ll_tree_child(ctx.tree, parent, &child)) {
+fn firstChild(ctx: *const TranslationContext, parent: u32) !u32 {
+    var child: u32 = undefined;
+    if (!C_Parser.TreeChild(ctx.handle, parent, &child)) {
         return error.InvalidChild;
     }
     return child;
 }
 
-fn expectNamedNode(ctx: *const TranslationContext, node_id: C_Parser.ll_node_id, expected_name: []const u8) !void {
-    if (nodeType(ctx, node_id) != C_Parser.LL_NODE_NODE) return error.ExpectedNamedNode;
+fn expectNamedNode(ctx: *const TranslationContext, node_id: u32, expected_name: []const u8) !void {
+    if (nodeType(ctx, node_id) != NodeType_Node) return error.ExpectedNamedNode;
     if (!std.mem.eql(u8, nodeName(ctx, node_id), expected_name)) return error.UnexpectedNodeName;
 }
 
-fn parseIdentifier(ctx: *const TranslationContext, node_id: C_Parser.ll_node_id) !ast.Identifier {
+fn parseIdentifier(ctx: *const TranslationContext, node_id: u32) !ast.Identifier {
     try expectNamedNode(ctx, node_id, "Identifier");
     const string_node = try firstChild(ctx, node_id);
-    if (nodeType(ctx, string_node) != C_Parser.LL_NODE_STRING) return error.ExpectedString;
+    if (nodeType(ctx, string_node) != NodeType_String) return error.ExpectedString;
     const range = nodeRange(ctx, node_id);
     const start: usize = @intCast(range.start);
     const end: usize = @intCast(range.end);
@@ -93,25 +113,25 @@ fn parseIdentifier(ctx: *const TranslationContext, node_id: C_Parser.ll_node_id)
     };
 }
 
-fn parseComponentTypeText(ctx: *const TranslationContext, node_id: C_Parser.ll_node_id) ![]const u8 {
+fn parseComponentTypeText(ctx: *const TranslationContext, node_id: u32) ![]const u8 {
     try expectNamedNode(ctx, node_id, "ComponentType");
     const string_node = try firstChild(ctx, node_id);
-    if (nodeType(ctx, string_node) == C_Parser.LL_NODE_NODE and std.mem.eql(u8, nodeName(ctx, string_node), "Identifier")) {
+    if (nodeType(ctx, string_node) == NodeType_Node and std.mem.eql(u8, nodeName(ctx, string_node), "Identifier")) {
         const ident = try parseIdentifier(ctx, string_node);
         return ident.text;
     }
-    if (nodeType(ctx, string_node) != C_Parser.LL_NODE_STRING) return error.ExpectedString;
+    if (nodeType(ctx, string_node) != NodeType_String) return error.ExpectedString;
     const range = nodeRange(ctx, string_node);
     const start: usize = @intCast(range.start);
     const end: usize = @intCast(range.end);
     return ctx.source[start..end];
 }
 
-fn parsePortRef(ctx: *TranslationContext, node_id: C_Parser.ll_node_id) anyerror!ast.SignalSource {
+fn parsePortRef(ctx: *TranslationContext, node_id: u32) anyerror!ast.SignalSource {
     try expectNamedNode(ctx, node_id, "PortRef");
     const payload = try firstChild(ctx, node_id);
     switch (nodeType(ctx, payload)) {
-        C_Parser.LL_NODE_NODE => {
+        NodeType_Node => {
             const ident = try parseIdentifier(ctx, payload);
             const out_ident = ast.Identifier{ .text = "out", .span = ident.span };
             return .{
@@ -122,13 +142,13 @@ fn parsePortRef(ctx: *TranslationContext, node_id: C_Parser.ll_node_id) anyerror
                 },
             };
         },
-        C_Parser.LL_NODE_SEQUENCE => {
+        NodeType_Sequence => {
             const seq_len = childCount(ctx, payload);
             if (seq_len != 3) return error.InvalidPortReference;
             const left = try childAt(ctx, payload, 0);
             const right = try childAt(ctx, payload, 2);
 
-            if (nodeType(ctx, left) == C_Parser.LL_NODE_NODE and std.mem.eql(u8, nodeName(ctx, left), "Identifier")) {
+            if (nodeType(ctx, left) == NodeType_Node and std.mem.eql(u8, nodeName(ctx, left), "Identifier")) {
                 const left_ident = try parseIdentifier(ctx, left);
                 const right_ident = try parseIdentifier(ctx, right);
                 return .{
@@ -140,7 +160,7 @@ fn parsePortRef(ctx: *TranslationContext, node_id: C_Parser.ll_node_id) anyerror
                 };
             }
 
-            if (nodeType(ctx, left) == C_Parser.LL_NODE_NODE and std.mem.eql(u8, nodeName(ctx, left), "AnonDecl")) {
+            if (nodeType(ctx, left) == NodeType_Node and std.mem.eql(u8, nodeName(ctx, left), "AnonDecl")) {
                 const anon_component = try parseAnonymousComponent(ctx, left);
                 return .{ .anonymous = anon_component };
             }
@@ -151,22 +171,22 @@ fn parsePortRef(ctx: *TranslationContext, node_id: C_Parser.ll_node_id) anyerror
     }
 }
 
-fn parseBusType(ctx: *TranslationContext, node_id: C_Parser.ll_node_id) anyerror![]ast.PortConnection {
+fn parseBusType(ctx: *TranslationContext, node_id: u32) anyerror![]ast.PortConnection {
     try expectNamedNode(ctx, node_id, "BusType");
     const seq = try firstChild(ctx, node_id);
-    if (nodeType(ctx, seq) != C_Parser.LL_NODE_SEQUENCE) return error.InvalidBusType;
+    if (nodeType(ctx, seq) != NodeType_Sequence) return error.InvalidBusType;
 
     var connections: std.ArrayList(ast.PortConnection) = .{};
     const seq_len = childCount(ctx, seq);
     var index: usize = 0;
     while (index < seq_len) : (index += 1) {
         const child = try childAt(ctx, seq, index);
-        if (nodeType(ctx, child) == C_Parser.LL_NODE_NODE and std.mem.eql(u8, nodeName(ctx, child), "Identifier")) {
+        if (nodeType(ctx, child) == NodeType_Node and std.mem.eql(u8, nodeName(ctx, child), "Identifier")) {
             if (index + 2 >= seq_len) return error.InvalidBusType;
             const maybe_equal = try childAt(ctx, seq, index + 1);
             const maybe_ref = try childAt(ctx, seq, index + 2);
-            if (nodeType(ctx, maybe_equal) != C_Parser.LL_NODE_STRING) return error.InvalidBusType;
-            if (nodeType(ctx, maybe_ref) != C_Parser.LL_NODE_NODE or !std.mem.eql(u8, nodeName(ctx, maybe_ref), "PortRef")) {
+            if (nodeType(ctx, maybe_equal) != NodeType_String) return error.InvalidBusType;
+            if (nodeType(ctx, maybe_ref) != NodeType_Node or !std.mem.eql(u8, nodeName(ctx, maybe_ref), "PortRef")) {
                 return error.InvalidBusType;
             }
 
@@ -184,10 +204,10 @@ fn parseBusType(ctx: *TranslationContext, node_id: C_Parser.ll_node_id) anyerror
     return connections.toOwnedSlice(ctx.allocator);
 }
 
-fn parseAnonymousComponent(ctx: *TranslationContext, node_id: C_Parser.ll_node_id) anyerror!*const ast.ComponentInstance {
+fn parseAnonymousComponent(ctx: *TranslationContext, node_id: u32) anyerror!*const ast.ComponentInstance {
     try expectNamedNode(ctx, node_id, "AnonDecl");
     const seq = try firstChild(ctx, node_id);
-    if (nodeType(ctx, seq) != C_Parser.LL_NODE_SEQUENCE) return error.InvalidAnonymousDeclaration;
+    if (nodeType(ctx, seq) != NodeType_Sequence) return error.InvalidAnonymousDeclaration;
     if (childCount(ctx, seq) != 2) return error.InvalidAnonymousDeclaration;
 
     const type_node = try childAt(ctx, seq, 0);
@@ -208,10 +228,10 @@ fn parseAnonymousComponent(ctx: *TranslationContext, node_id: C_Parser.ll_node_i
     return component;
 }
 
-fn parseImportDecl(ctx: *TranslationContext, node_id: C_Parser.ll_node_id) !ast.Import {
+fn parseImportDecl(ctx: *TranslationContext, node_id: u32) !ast.Import {
     try expectNamedNode(ctx, node_id, "ImportDecl");
     const seq = try firstChild(ctx, node_id);
-    if (nodeType(ctx, seq) != C_Parser.LL_NODE_SEQUENCE) return error.InvalidImportDecl;
+    if (nodeType(ctx, seq) != NodeType_Sequence) return error.InvalidImportDecl;
 
     const seq_len = childCount(ctx, seq);
     if (seq_len < 4) return error.InvalidImportDecl;
@@ -219,7 +239,7 @@ fn parseImportDecl(ctx: *TranslationContext, node_id: C_Parser.ll_node_id) !ast.
     const path_node = try childAt(ctx, seq, 3);
 
     const alias = try parseIdentifier(ctx, alias_node);
-    if (nodeType(ctx, path_node) != C_Parser.LL_NODE_STRING) return error.InvalidImportDecl;
+    if (nodeType(ctx, path_node) != NodeType_String) return error.InvalidImportDecl;
     const path_range = nodeRange(ctx, path_node);
     const path_start: usize = @intCast(path_range.start);
     const path_end: usize = @intCast(path_range.end);
@@ -234,19 +254,19 @@ fn parseImportDecl(ctx: *TranslationContext, node_id: C_Parser.ll_node_id) !ast.
     };
 }
 
-fn parseInputDecl(ctx: *TranslationContext, ident_list_node: C_Parser.ll_node_id) !ast.InputDecl {
+fn parseInputDecl(ctx: *TranslationContext, ident_list_node: u32) !ast.InputDecl {
     try expectNamedNode(ctx, ident_list_node, "IdentList");
     const payload = try firstChild(ctx, ident_list_node);
 
     var names: std.ArrayList(ast.Identifier) = .{};
-    if (nodeType(ctx, payload) == C_Parser.LL_NODE_NODE) {
+    if (nodeType(ctx, payload) == NodeType_Node) {
         try names.append(ctx.allocator, try parseIdentifier(ctx, payload));
     } else {
         const payload_len = childCount(ctx, payload);
         var i: usize = 0;
         while (i < payload_len) : (i += 1) {
             const c = try childAt(ctx, payload, i);
-            if (nodeType(ctx, c) == C_Parser.LL_NODE_NODE and std.mem.eql(u8, nodeName(ctx, c), "Identifier")) {
+            if (nodeType(ctx, c) == NodeType_Node and std.mem.eql(u8, nodeName(ctx, c), "Identifier")) {
                 try names.append(ctx.allocator, try parseIdentifier(ctx, c));
             }
         }
@@ -258,7 +278,7 @@ fn parseInputDecl(ctx: *TranslationContext, ident_list_node: C_Parser.ll_node_id
     };
 }
 
-fn parseOutputFromBusType(ctx: *TranslationContext, instance_name: ast.Identifier, bus_node: C_Parser.ll_node_id, declaration_span: Span) !ast.OutputDecl {
+fn parseOutputFromBusType(ctx: *TranslationContext, instance_name: ast.Identifier, bus_node: u32, declaration_span: Span) !ast.OutputDecl {
     const ports = try parseBusType(ctx, bus_node);
     if (ports.len == 0) return error.InvalidOutputDecl;
 
@@ -269,7 +289,7 @@ fn parseOutputFromBusType(ctx: *TranslationContext, instance_name: ast.Identifie
     };
 }
 
-fn parseComponentDecl(ctx: *TranslationContext, type_name_text: []const u8, instance_name: ast.Identifier, bus_node: C_Parser.ll_node_id, declaration_span: Span) !ast.ComponentInstance {
+fn parseComponentDecl(ctx: *TranslationContext, type_name_text: []const u8, instance_name: ast.Identifier, bus_node: u32, declaration_span: Span) !ast.ComponentInstance {
     return .{
         .type_name = .{ .text = type_name_text, .span = nodeSpan(ctx, bus_node) },
         .instance_name = instance_name,
@@ -280,7 +300,7 @@ fn parseComponentDecl(ctx: *TranslationContext, type_name_text: []const u8, inst
 
 fn parseDeclaration(
     ctx: *TranslationContext,
-    node_id: C_Parser.ll_node_id,
+    node_id: u32,
     imports: *std.ArrayList(ast.Import),
     inputs: *std.ArrayList(ast.InputDecl),
     outputs: *std.ArrayList(ast.OutputDecl),
@@ -288,7 +308,7 @@ fn parseDeclaration(
 ) !void {
     try expectNamedNode(ctx, node_id, "Declaration");
     const seq = try firstChild(ctx, node_id);
-    if (nodeType(ctx, seq) != C_Parser.LL_NODE_SEQUENCE) return error.InvalidDeclaration;
+    if (nodeType(ctx, seq) != NodeType_Sequence) return error.InvalidDeclaration;
     const len = childCount(ctx, seq);
     if (len < 2) return error.InvalidDeclaration;
 
@@ -353,8 +373,8 @@ fn parseDeclaration(
 }
 
 fn translateTree(ctx: *TranslationContext) !ast.File {
-    var root: C_Parser.ll_node_id = undefined;
-    if (!C_Parser.ll_tree_root(ctx.tree, &root)) return error.ParsingFailed;
+    var root: u32 = undefined;
+    if (!C_Parser.TreeRoot(ctx.handle, &root)) return error.ParsingFailed;
     try expectNamedNode(ctx, root, "Program");
 
     var imports: std.ArrayList(ast.Import) = .{};
@@ -362,12 +382,12 @@ fn translateTree(ctx: *TranslationContext) !ast.File {
     var outputs: std.ArrayList(ast.OutputDecl) = .{};
     var components: std.ArrayList(ast.ComponentInstance) = .{};
     const payload = try firstChild(ctx, root);
-    if (nodeType(ctx, payload) == C_Parser.LL_NODE_SEQUENCE) {
+    if (nodeType(ctx, payload) == NodeType_Sequence) {
         const len = childCount(ctx, payload);
         var i: usize = 0;
         while (i < len) : (i += 1) {
             const child = try childAt(ctx, payload, i);
-            if (nodeType(ctx, child) != C_Parser.LL_NODE_NODE) continue;
+            if (nodeType(ctx, child) != NodeType_Node) continue;
             const name = nodeName(ctx, child);
 
             if (std.mem.eql(u8, name, "ImportDecl")) {
@@ -380,7 +400,7 @@ fn translateTree(ctx: *TranslationContext) !ast.File {
                 continue;
             }
         }
-    } else if (nodeType(ctx, payload) == C_Parser.LL_NODE_NODE) {
+    } else if (nodeType(ctx, payload) == NodeType_Node) {
         const name = nodeName(ctx, payload);
         if (std.mem.eql(u8, name, "ImportDecl")) {
             try imports.append(ctx.allocator, try parseImportDecl(ctx, payload));
@@ -402,13 +422,15 @@ fn translateTree(ctx: *TranslationContext) !ast.File {
     };
 }
 
-pub fn translate(allocator: std.mem.Allocator, tree: [*c]C_Parser.ll_tree, file_id: u32) !ast.File {
-    if (tree == null) return error.ParsingFailed;
-    const source_ptr: [*]const u8 = @ptrCast(tree.*.input);
-    const source: []const u8 = source_ptr[0..@intCast(tree.*.input_len)];
+pub fn translate(allocator: std.mem.Allocator, handle: @TypeOf(C_Parser.ParserNew()), file_id: u32) !ast.File {
+    var source_len: c_int = 0;
+    const source_ptr = C_Parser.TreeInput(handle, &source_len);
+    if (source_ptr == null or source_len <= 0) return error.ParsingFailed;
+    const source_bytes: [*]const u8 = @ptrCast(source_ptr);
+    const source: []const u8 = source_bytes[0..@intCast(source_len)];
     var ctx = TranslationContext{
         .allocator = allocator,
-        .tree = tree,
+        .handle = handle,
         .source = source,
         .file_id = file_id,
     };
@@ -416,18 +438,16 @@ pub fn translate(allocator: std.mem.Allocator, tree: [*c]C_Parser.ll_tree, file_
 }
 
 pub fn parseSource(allocator: std.mem.Allocator, file_id: u32, source: []const u8) !ast.File {
-    const parser = C_Parser.Parser_New();
-    defer C_Parser.Parser_Delete(parser);
+    const handle = C_Parser.ParserNew();
+    defer C_Parser.ParserDelete(handle);
 
-    var cursor: c_int = 0;
-    C_Parser.Parser_SetInput(parser, @ptrCast(source.ptr), @intCast(source.len));
-    const tree = C_Parser.Parser_Parse(parser, &cursor, null);
-    if (tree == null) return error.ParsingFailed;
-    defer C_Parser.ll_tree_free(tree);
+    if (!C_Parser.ParserParse(handle, @ptrCast(@constCast(source.ptr)), @intCast(source.len))) {
+        return error.ParsingFailed;
+    }
 
     var ctx = TranslationContext{
         .allocator = allocator,
-        .tree = tree,
+        .handle = handle,
         .source = source,
         .file_id = file_id,
     };
