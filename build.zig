@@ -1433,20 +1433,58 @@ pub fn build(b: *std.Build) void {
     // import the engine, so they don't care which circuit module is wired.
     // Only the truth-table builder, which actually instantiates a Circuit,
     // needs a bench-mode copy.
+    //
+    // Bench-specific optimize mode: defaults to ReleaseFast even when the
+    // rest of the build is Debug. Algorithmic counters are deterministic
+    // across optimize levels (the golden matches in either mode), but
+    // wall-clock is ~11x faster in ReleaseFast, which makes the drv_ms
+    // numbers the bench reports — and surfaces via the perf-pr-comment
+    // workflow on PRs — actually informative rather than dominated by
+    // Debug-mode safety checks and `@tagName` lookups for stripped log
+    // args. Override with `-Dbench-optimize=Debug` to debug the bench
+    // tool itself or to compare timing semantics under unoptimized code.
+    const bench_optimize = b.option(
+        std.builtin.OptimizeMode,
+        "bench-optimize",
+        "Optimize mode for the engine bench (default: ReleaseFast)",
+    ) orelse .ReleaseFast;
+
+    // Parallel parser library at bench_optimize. The shared `parser_lib` is
+    // built at the global optimize (Debug by default), and Zig inserts UBSan
+    // instrumentation for C sources in Debug. When the bench links a Debug
+    // libparser into a ReleaseFast executable, the UBSan runtime symbols
+    // (`__ubsan_handle_*`) go unresolved. Easier to give the bench its own
+    // copy than to fight the cross-optimize-mode link.
+    const parser_lib_bench = b.addLibrary(.{
+        .linkage = .static,
+        .name = "parser-bench",
+        .root_module = b.createModule(.{
+            .root_source_file = null,
+            .target = target,
+            .optimize = bench_optimize,
+        }),
+    });
+    parser_lib_bench.addCSourceFile(.{
+        .file = b.path("lib/parser.c"),
+        .flags = &.{},
+    });
+    parser_lib_bench.addIncludePath(b.path("."));
+    parser_lib_bench.linkLibC();
+
     const circuit_options_bench = b.addOptions();
     circuit_options_bench.addOption(bool, "collect_metrics", true);
 
     const bench_circuit_mod = b.createModule(.{
         .root_source_file = b.path("lib/circuit.zig"),
         .target = target,
-        .optimize = optimize,
+        .optimize = bench_optimize,
     });
     bench_circuit_mod.addOptions("build_options", circuit_options_bench);
 
     const bench_truth_table_builder_mod = b.createModule(.{
         .root_source_file = b.path("lib/truth_table/builder.zig"),
         .target = target,
-        .optimize = optimize,
+        .optimize = bench_optimize,
     });
     bench_truth_table_builder_mod.addImport("circuit", bench_circuit_mod);
     bench_truth_table_builder_mod.addImport("full_format", topology_full_format_mod);
@@ -1454,7 +1492,7 @@ pub fn build(b: *std.Build) void {
     const bench_mod = b.createModule(.{
         .root_source_file = b.path("tools/bench/main.zig"),
         .target = target,
-        .optimize = optimize,
+        .optimize = bench_optimize,
     });
     bench_mod.addImport("translate", translate_mod);
     bench_mod.addImport("resolver", resolver_mod);
@@ -1473,7 +1511,7 @@ pub fn build(b: *std.Build) void {
     });
     bench_exe.addIncludePath(b.path("."));
     bench_exe.addIncludePath(b.path("./lib"));
-    bench_exe.linkLibrary(parser_lib);
+    bench_exe.linkLibrary(parser_lib_bench);
     bench_exe.linkLibC();
 
     const run_bench = b.addRunArtifact(bench_exe);
