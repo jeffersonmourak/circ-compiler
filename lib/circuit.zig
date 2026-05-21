@@ -30,19 +30,26 @@ const OUT_PORT_NAME = "out";
 const OUTPUT_PIN_IN_PORT_NAME = "in";
 const OUTPUT_PIN_OUT_PORT_NAME = "out";
 
-fn calculateDominantState(input_comp_list: std.ArrayList(*Component)) State {
+fn calculateDominantState(circuit: *const Circuit, input_comp_list: std.ArrayList(*Component)) State {
+    // Preserves the existing asymmetric rule: any input reading `.high`
+    // wins immediately; otherwise the *last* input's state is dominant
+    // (the loop overwrites `dominant_state` on every iteration). Reads
+    // route through the pool accessor, but the comparison currency stays
+    // in `State` space so the AND/NOT/wire rules below don't have to
+    // change shape until Phase 4.
     var dominant_state: State = .undefined;
     for (input_comp_list.items) |input_comp| {
-        if (input_comp.output_state == .high) {
+        const s = circuit.readState(input_comp.state_handle).toState();
+        if (s == .high) {
             return .high;
         }
-
-        dominant_state = input_comp.output_state;
+        dominant_state = s;
     }
     return dominant_state;
 }
 
 fn recalculateAndReschedule(
+    circuit: *const Circuit,
     component: *Component,
     queue: *EventQueue,
     current_time: Timestamp,
@@ -51,11 +58,11 @@ fn recalculateAndReschedule(
 
     switch (component.kind) {
         .not_gate => |gate| {
-            calculated_state = calculateDominantState(gate.inputs).flip();
+            calculated_state = calculateDominantState(circuit, gate.inputs).flip();
         },
         .and_gate => |gate| {
-            const aValue = calculateDominantState(gate.inputs_a);
-            const bValue = calculateDominantState(gate.inputs_b);
+            const aValue = calculateDominantState(circuit, gate.inputs_a);
+            const bValue = calculateDominantState(circuit, gate.inputs_b);
 
             if (aValue == .low or bValue == .low) {
                 calculated_state = .low;
@@ -66,8 +73,9 @@ fn recalculateAndReschedule(
             }
         },
         .led => |led_internals| {
-            calculated_state = calculateDominantState(led_internals.inputs);
-            if (calculated_state != component.output_state) {
+            calculated_state = calculateDominantState(circuit, led_internals.inputs);
+            const current = circuit.readState(component.state_handle).toState();
+            if (calculated_state != current) {
                 if (comptime log.enabled(.info)) {
                     log.info("💡 LED (id={d}) state will be {s}", .{ component.id, @tagName(calculated_state) });
                 }
@@ -77,24 +85,26 @@ fn recalculateAndReschedule(
             // Wire relays the first non-null input to the output
             // If multiple inputs are connected, the wire takes the first defined state
             for (wire.inputs.items) |input_comp| {
-                if (input_comp.output_state != .undefined) {
-                    calculated_state = calculateDominantState(wire.inputs);
+                const s = circuit.readState(input_comp.state_handle).toState();
+                if (s != .undefined) {
+                    calculated_state = calculateDominantState(circuit, wire.inputs);
                     break;
                 }
             }
         },
         .output_pin => |output_pin| {
-            calculated_state = calculateDominantState(output_pin.inputs);
+            calculated_state = calculateDominantState(circuit, output_pin.inputs);
         },
         .input_pin_gate => |gate| {
             if (gate.inputs.items.len == 0) return;
-            calculated_state = calculateDominantState(gate.inputs);
+            calculated_state = calculateDominantState(circuit, gate.inputs);
         },
     }
 
-    if (component.output_state != calculated_state) {
+    const current_state = circuit.readState(component.state_handle).toState();
+    if (current_state != calculated_state) {
         if (comptime log.enabled(.info)) {
-            log.info(" - Component (id={d}, type={s}) output changed from {s} -> {s}. Scheduling new event.", .{ component.id, @tagName(component.kind), @tagName(component.output_state), @tagName(calculated_state) });
+            log.info(" - Component (id={d}, type={s}) output changed from {s} -> {s}. Scheduling new event.", .{ component.id, @tagName(component.kind), @tagName(current_state), @tagName(calculated_state) });
         }
 
         const delay = switch (component.kind) {
@@ -245,6 +255,18 @@ pub const BitVecState = struct {
         if (self.isLow()) return 0;
         if (self.isHigh()) return 1;
         return 2;
+    }
+
+    /// Transitional helper used during Phase 3 so engine sites that compare
+    /// against `Event.new_state` (still a `State` enum) can keep their
+    /// equality checks in `State` space while reads source from the pool.
+    /// Phase 4 deletes both `State` and this helper when the engine flips
+    /// to `BitVecState`-everywhere.
+    pub fn toState(self: BitVecState) State {
+        std.debug.assert(self.width == 1);
+        if (self.isUndefined()) return .undefined;
+        if (self.isLow()) return .low;
+        return .high;
     }
 };
 
@@ -609,18 +631,23 @@ pub const Circuit = struct {
                 if (COLLECT_METRICS) self.metrics.events_popped += 1;
                 const component = event.component;
 
-                if (component.output_state == event.new_state) continue;
+                // Phase-3 dedup: read the component's current state through
+                // the pool accessor, then compare in `State` space against
+                // the (still `State`-typed) event payload. Phase 4 flips
+                // `Event.new_state` to `BitVecState` and the comparison
+                // becomes a single `BitVecState.equals` call.
+                if (self.readState(component.state_handle).toState() == event.new_state) continue;
                 if (COLLECT_METRICS) self.metrics.events_committed += 1;
 
                 if (comptime log.enabled(.info)) {
                     log.info("[Time: {d}] Updating component id={d} to {s}", .{ self.current_time, component.id, @tagName(event.new_state) });
                 }
-                component.output_state = event.new_state;
-                // Mirror the inline write into the pool so the new
-                // `Circuit.readState` accessor sees the same value the
-                // engine sees inline. Phase 3 will flip every read site
-                // onto the accessor; Phase 4 deletes the inline field.
+                // The pool write is now the source of truth; the inline
+                // mirror keeps `output_state` consistent for any external
+                // reader (transport, emit, in-file tests) that still
+                // references the field. Phase 4 deletes the inline write.
                 self.writeState(component.state_handle, event.new_state.toBitVec());
+                component.output_state = event.new_state;
                 try self.changed_at_step.append(memory.allocator, component);
             }
 
@@ -633,9 +660,9 @@ pub const Circuit = struct {
                         log.info("  -> Notifying downstream component id={d}", .{output.id});
                     }
                     if (COLLECT_METRICS) self.metrics.recalcs += 1;
-                    try recalculateAndReschedule(output, &self.event_queue, self.current_time);
+                    try recalculateAndReschedule(self, output, &self.event_queue, self.current_time);
 
-                    self.notifyStateChange(output, output.output_state);
+                    self.notifyStateChange(output, self.readState(output.state_handle).toState());
                 }
             }
             self.changed_at_step.clearRetainingCapacity();
@@ -671,7 +698,7 @@ pub const Circuit = struct {
         // circuit, the only events that enter the queue from the outside
         // are the ones that genuinely change state; pop efficiency lifts
         // toward 100% across the corpus.
-        if (component.output_state == new_state) {
+        if (self.readState(component.state_handle).toState() == new_state) {
             self.current_time += PROPAGATION_DELAY;
             if (COLLECT_METRICS) self.metrics.final_time = self.current_time;
             return;
@@ -688,7 +715,8 @@ pub const Circuit = struct {
 
     pub fn printState(self: *Circuit) void {
         for (self.nodes.items) |node| {
-            log.info("Component id={d} type={s} state={s}", .{ node.id, @tagName(node.kind), @tagName(node.output_state) });
+            const s = self.readState(node.state_handle).toState();
+            log.info("Component id={d} type={s} state={s}", .{ node.id, @tagName(node.kind), @tagName(s) });
         }
     }
 
@@ -700,7 +728,8 @@ pub const Circuit = struct {
         try buffer.appendSlice(memory.allocator, std.mem.asBytes(&len_u32));
 
         for (self.nodes.items) |node| {
-            const encoded_state = try transport.encodeState(node).encode(memory.allocator);
+            const state = self.readState(node.state_handle);
+            const encoded_state = try transport.encodeState(node, state).encode(memory.allocator);
             defer memory.allocator.free(encoded_state);
 
             try buffer.appendSlice(memory.allocator, encoded_state);

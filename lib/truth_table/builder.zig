@@ -158,7 +158,8 @@ pub fn build(
         const row_outputs = try arena_alloc.alloc(State, output_count);
         for (outputs, 0..) |pin, idx| {
             const node = id_to_node.get(pin.component_id) orelse return error.InvalidTopology;
-            row_outputs[idx] = State.fromEngine(node.output_state);
+            const engine_state = circuit.readState(node.state_handle).toState();
+            row_outputs[idx] = State.fromEngine(engine_state);
         }
         rows[mask] = .{ .input_bits = mask, .outputs = row_outputs };
     }
