@@ -48,16 +48,16 @@ fn setPin_impl(component_id: i32, state: i32) callconv(.c) void {
     const comp = runtime_circuit.nodes.items[id];
     if (comp.kind != .input_pin_gate) return;
     
-    runtime_circuit.propagateEvent(comp, engine.State.fromInt(state)) catch return;
+    runtime_circuit.propagateEvent(comp, engine.BitVecState.fromInt(state, 1)) catch return;
 }
 
 fn getOutputState_impl(component_id: i32) callconv(.c) i32 {
     if (!runtime_initialized or component_id < 0) return 2; // 2 = undefined state
     const id: u32 = @intCast(component_id);
     if (id >= runtime_circuit.nodes.items.len) return 2;
-    
+
     const comp = runtime_circuit.nodes.items[id];
-    return engine.State.toInt(comp.output_state);
+    return runtime_circuit.readState(comp.state_handle).toInt();
 }
 
 comptime {

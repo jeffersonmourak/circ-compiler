@@ -30,18 +30,16 @@ const OUT_PORT_NAME = "out";
 const OUTPUT_PIN_IN_PORT_NAME = "in";
 const OUTPUT_PIN_OUT_PORT_NAME = "out";
 
-fn calculateDominantState(circuit: *const Circuit, input_comp_list: std.ArrayList(*Component)) State {
-    // Preserves the existing asymmetric rule: any input reading `.high`
-    // wins immediately; otherwise the *last* input's state is dominant
-    // (the loop overwrites `dominant_state` on every iteration). Reads
-    // route through the pool accessor, but the comparison currency stays
-    // in `State` space so the AND/NOT/wire rules below don't have to
-    // change shape until Phase 4.
-    var dominant_state: State = .undefined;
+fn calculateDominantState(circuit: *const Circuit, input_comp_list: std.ArrayList(*Component)) BitVecState {
+    // Preserves the existing asymmetric rule: any input reading high wins
+    // immediately; otherwise the *last* input's state is dominant (the
+    // loop overwrites `dominant_state` on every iteration). Reads source
+    // from the pool; the comparison currency is `BitVecState` width=1.
+    var dominant_state = BitVecState.undefined_(1);
     for (input_comp_list.items) |input_comp| {
-        const s = circuit.readState(input_comp.state_handle).toState();
-        if (s == .high) {
-            return .high;
+        const s = circuit.readState(input_comp.state_handle);
+        if (s.isHigh()) {
+            return BitVecState.high(1);
         }
         dominant_state = s;
     }
@@ -54,7 +52,7 @@ fn recalculateAndReschedule(
     queue: *EventQueue,
     current_time: Timestamp,
 ) !void {
-    var calculated_state: State = .undefined;
+    var calculated_state = BitVecState.undefined_(1);
 
     switch (component.kind) {
         .not_gate => |gate| {
@@ -64,29 +62,30 @@ fn recalculateAndReschedule(
             const aValue = calculateDominantState(circuit, gate.inputs_a);
             const bValue = calculateDominantState(circuit, gate.inputs_b);
 
-            if (aValue == .low or bValue == .low) {
-                calculated_state = .low;
-            } else if (aValue == .undefined or bValue == .undefined) {
-                calculated_state = .undefined;
+            if (aValue.isLow() or bValue.isLow()) {
+                calculated_state = BitVecState.low(1);
+            } else if (aValue.isUndefined() or bValue.isUndefined()) {
+                calculated_state = BitVecState.undefined_(1);
             } else {
-                calculated_state = .high;
+                calculated_state = BitVecState.high(1);
             }
         },
         .led => |led_internals| {
             calculated_state = calculateDominantState(circuit, led_internals.inputs);
-            const current = circuit.readState(component.state_handle).toState();
-            if (calculated_state != current) {
+            const current = circuit.readState(component.state_handle);
+            if (!calculated_state.equals(current)) {
                 if (comptime log.enabled(.info)) {
-                    log.info("💡 LED (id={d}) state will be {s}", .{ component.id, @tagName(calculated_state) });
+                    log.info("💡 LED (id={d}) state will be {s}", .{ component.id, calculated_state.tagName() });
                 }
             }
         },
         .wire => |wire| {
-            // Wire relays the first non-null input to the output
-            // If multiple inputs are connected, the wire takes the first defined state
+            // Wire relays the first non-null input to the output. If
+            // multiple inputs are connected, the wire takes the first
+            // defined state.
             for (wire.inputs.items) |input_comp| {
-                const s = circuit.readState(input_comp.state_handle).toState();
-                if (s != .undefined) {
+                const s = circuit.readState(input_comp.state_handle);
+                if (!s.isUndefined()) {
                     calculated_state = calculateDominantState(circuit, wire.inputs);
                     break;
                 }
@@ -101,10 +100,10 @@ fn recalculateAndReschedule(
         },
     }
 
-    const current_state = circuit.readState(component.state_handle).toState();
-    if (current_state != calculated_state) {
+    const current_state = circuit.readState(component.state_handle);
+    if (!current_state.equals(calculated_state)) {
         if (comptime log.enabled(.info)) {
-            log.info(" - Component (id={d}, type={s}) output changed from {s} -> {s}. Scheduling new event.", .{ component.id, @tagName(component.kind), @tagName(current_state), @tagName(calculated_state) });
+            log.info(" - Component (id={d}, type={s}) output changed from {s} -> {s}. Scheduling new event.", .{ component.id, @tagName(component.kind), current_state.tagName(), calculated_state.tagName() });
         }
 
         const delay = switch (component.kind) {
@@ -119,46 +118,6 @@ fn recalculateAndReschedule(
         });
     }
 }
-
-pub const State = enum {
-    undefined,
-    low,
-    high,
-
-    pub fn flip(self: State) State {
-        return switch (self) {
-            .low => .high,
-            .high => .low,
-            .undefined => .undefined,
-        };
-    }
-
-    pub fn fromInt(int: i32) State {
-        if (int == 0) return .low;
-        if (int == 1) return .high;
-        return .undefined;
-    }
-
-    pub fn toInt(self: State) i32 {
-        return switch (self) {
-            .low => 0,
-            .high => 1,
-            else => 2,
-        };
-    }
-
-    /// Transitional helper used during the Phase 2-4 migration so that any
-    /// site still talking in `State` can mirror its value through
-    /// `Circuit.writeState`. Removed in Phase 4 when `State` itself is
-    /// deleted in favor of `BitVecState`.
-    pub fn toBitVec(self: State) BitVecState {
-        return switch (self) {
-            .undefined => BitVecState.undefined_(1),
-            .low => BitVecState.low(1),
-            .high => BitVecState.high(1),
-        };
-    }
-};
 
 /// Maximum wire width supported by `BitVecState` and the pool tiers. Width is
 /// stored as `u8` for arithmetic convenience; the assertion in `widthMask`
@@ -257,16 +216,14 @@ pub const BitVecState = struct {
         return 2;
     }
 
-    /// Transitional helper used during Phase 3 so engine sites that compare
-    /// against `Event.new_state` (still a `State` enum) can keep their
-    /// equality checks in `State` space while reads source from the pool.
-    /// Phase 4 deletes both `State` and this helper when the engine flips
-    /// to `BitVecState`-everywhere.
-    pub fn toState(self: BitVecState) State {
+    /// Width=1 string label for logs and debug dumps. Matches the names
+    /// the old `State` enum carried, so log scrubbing doesn't have to
+    /// learn a new vocabulary.
+    pub fn tagName(self: BitVecState) []const u8 {
         std.debug.assert(self.width == 1);
-        if (self.isUndefined()) return .undefined;
-        if (self.isLow()) return .low;
-        return .high;
+        if (self.isUndefined()) return "undefined";
+        if (self.isLow()) return "low";
+        return "high";
     }
 };
 
@@ -281,7 +238,7 @@ pub const Timestamp = u64;
 pub const Event = struct {
     timestamp: Timestamp,
     component: *Component,
-    new_state: State,
+    new_state: BitVecState,
 
     pub fn lessThan(_: void, lhs: Event, rhs: Event) std.math.Order {
         return std.math.order(lhs.timestamp, rhs.timestamp);
@@ -307,14 +264,13 @@ pub const ComponentPortReference = struct { *Component, []const u8 };
 pub const Component = struct {
     id: u32,
     kind: Kind,
-    output_state: State = .undefined,
-    /// Opaque handle into a width-tiered pool owned by `Circuit`. Populated
-    /// by `Circuit.createComponent` immediately after `Component.init`
+    /// Opaque handle into a width-tiered pool owned by `Circuit`. The
+    /// pool is the source of truth for wire state; reads and writes go
+    /// through `Circuit.readState` / `Circuit.writeState`. Populated by
+    /// `Circuit.createComponent` immediately after `Component.init`
     /// returns. The default's `slot = maxInt(u32)` is a sentinel: reads
     /// against it trap with an out-of-bounds panic in `Pool.read`, which
-    /// catches "constructed a Component without going through Circuit"
-    /// during the Phase-2 / Phase-3 migration. Phase 4 removes the inline
-    /// `output_state` field above and makes this the source of truth.
+    /// catches "constructed a Component without going through Circuit".
     state_handle: PoolHandle = .{ .tier = 0, .slot = std.math.maxInt(u32) },
     /// Flat list of downstream components. Every component kind has exactly
     /// one output port (`"out"`), so the per-port map collapses to a single
@@ -337,7 +293,7 @@ pub const Component = struct {
 
     pub fn init(id: u32, kind: Kind) !*Component {
         const self = try memory.allocator.create(Component);
-        self.* = .{ .id = id, .output_state = .undefined, .kind = kind, .outputs = .{} };
+        self.* = .{ .id = id, .kind = kind, .outputs = .{} };
         return self;
     }
 
@@ -477,7 +433,7 @@ pub const Circuit = struct {
     event_queue: EventQueue,
     next_id: u32 = 0,
     current_time: Timestamp = 0,
-    listener: ?*const fn (component: *Component, new_state: State) void = null,
+    listener: ?*const fn (component: *Component, new_state: BitVecState) void = null,
     /// Scratch buffer reused across `propagate()` calls. Hoisted onto the
     /// circuit so the first append in each propagation doesn't reallocate
     /// from zero capacity; instead the previous run's capacity is retained
@@ -486,9 +442,8 @@ pub const Circuit = struct {
     /// Width-tiered SoA pool for wire state. Today only tier 1 (width=1) is
     /// exercised; the field is a single `Pool` rather than `[N]Pool` because
     /// nothing else has storage yet. The next issue widens this into an
-    /// array indexed by `PoolHandle.tier`. Phase-1 lands the type alongside
-    /// the inline `Component.output_state` field; Phases 2-4 migrate reads
-    /// and writes through the accessor.
+    /// array indexed by `PoolHandle.tier` once wider widths land in the
+    /// language surface and the topology format.
     tier1: Pool = Pool.init(1),
     /// Benchmark counters. Present only when `COLLECT_METRICS` is true so
     /// shipping builds carry zero bytes and zero instructions for the
@@ -549,7 +504,7 @@ pub const Circuit = struct {
         }
     }
 
-    pub fn notifyStateChange(self: *Circuit, component: *Component, new_state: State) void {
+    pub fn notifyStateChange(self: *Circuit, component: *Component, new_state: BitVecState) void {
         if (self.listener) |listener| {
             listener(component, new_state);
         }
@@ -631,23 +586,17 @@ pub const Circuit = struct {
                 if (COLLECT_METRICS) self.metrics.events_popped += 1;
                 const component = event.component;
 
-                // Phase-3 dedup: read the component's current state through
-                // the pool accessor, then compare in `State` space against
-                // the (still `State`-typed) event payload. Phase 4 flips
-                // `Event.new_state` to `BitVecState` and the comparison
-                // becomes a single `BitVecState.equals` call.
-                if (self.readState(component.state_handle).toState() == event.new_state) continue;
+                // Dedup: a single BitVecState equality check decides
+                // whether this event commits or is a no-op. Width=1 reads
+                // are a single bit lookup on each side; equality is a
+                // bitmask AND plus two compares.
+                if (self.readState(component.state_handle).equals(event.new_state)) continue;
                 if (COLLECT_METRICS) self.metrics.events_committed += 1;
 
                 if (comptime log.enabled(.info)) {
-                    log.info("[Time: {d}] Updating component id={d} to {s}", .{ self.current_time, component.id, @tagName(event.new_state) });
+                    log.info("[Time: {d}] Updating component id={d} to {s}", .{ self.current_time, component.id, event.new_state.tagName() });
                 }
-                // The pool write is now the source of truth; the inline
-                // mirror keeps `output_state` consistent for any external
-                // reader (transport, emit, in-file tests) that still
-                // references the field. Phase 4 deletes the inline write.
-                self.writeState(component.state_handle, event.new_state.toBitVec());
-                component.output_state = event.new_state;
+                self.writeState(component.state_handle, event.new_state);
                 try self.changed_at_step.append(memory.allocator, component);
             }
 
@@ -662,7 +611,7 @@ pub const Circuit = struct {
                     if (COLLECT_METRICS) self.metrics.recalcs += 1;
                     try recalculateAndReschedule(self, output, &self.event_queue, self.current_time);
 
-                    self.notifyStateChange(output, self.readState(output.state_handle).toState());
+                    self.notifyStateChange(output, self.readState(output.state_handle));
                 }
             }
             self.changed_at_step.clearRetainingCapacity();
@@ -682,14 +631,14 @@ pub const Circuit = struct {
         if (COLLECT_METRICS) self.metrics.final_time = self.current_time;
     }
 
-    pub fn propagateEvent(self: *Circuit, component: *Component, new_state: State) !void {
+    pub fn propagateEvent(self: *Circuit, component: *Component, new_state: BitVecState) !void {
         // Short-circuit no-op events: when the caller drives a component to
         // its current state, the event would just be popped and skipped at
-        // Phase 1 (the `component.output_state == event.new_state` check
-        // inside propagate), wasting a queue insertion plus a pop. Skip the
-        // enqueue, but still advance `current_time` by the propagation delay
-        // so the timing model — and the `final_time` counter — match what
-        // the original behavior would have produced.
+        // Phase 1 (the `BitVecState.equals` dedup inside propagate), wasting
+        // a queue insertion plus a pop. Skip the enqueue, but still advance
+        // `current_time` by the propagation delay so the timing model, and
+        // the `final_time` counter, match what the original behavior would
+        // have produced.
         //
         // Dominates the pop-inefficiency picture on the truth-table corpus:
         // the bench's driver unconditionally writes every input pin on every
@@ -698,7 +647,7 @@ pub const Circuit = struct {
         // circuit, the only events that enter the queue from the outside
         // are the ones that genuinely change state; pop efficiency lifts
         // toward 100% across the corpus.
-        if (self.readState(component.state_handle).toState() == new_state) {
+        if (self.readState(component.state_handle).equals(new_state)) {
             self.current_time += PROPAGATION_DELAY;
             if (COLLECT_METRICS) self.metrics.final_time = self.current_time;
             return;
@@ -715,8 +664,8 @@ pub const Circuit = struct {
 
     pub fn printState(self: *Circuit) void {
         for (self.nodes.items) |node| {
-            const s = self.readState(node.state_handle).toState();
-            log.info("Component id={d} type={s} state={s}", .{ node.id, @tagName(node.kind), @tagName(s) });
+            const s = self.readState(node.state_handle);
+            log.info("Component id={d} type={s} state={s}", .{ node.id, @tagName(node.kind), s.tagName() });
         }
     }
 
@@ -755,9 +704,9 @@ test "output_pin: passes input through" {
         const output_pin = try circuit.createComponent(.{ .output_pin = .{} });
         try circuit.connect(input.port(OUT_PORT_NAME), output_pin.port(OUTPUT_PIN_IN_PORT_NAME));
 
-        try circuit.propagateEvent(input, .low);
+        try circuit.propagateEvent(input, BitVecState.low(1));
 
-        try std.testing.expectEqual(State.low, output_pin.output_state);
+        try std.testing.expect(circuit.readState(output_pin.state_handle).equals(BitVecState.low(1)));
         try std.testing.expectEqual(@as(Timestamp, PROPAGATION_DELAY + WIRE_PROPAGATION_DELAY), circuit.current_time);
     }
 
@@ -769,9 +718,9 @@ test "output_pin: passes input through" {
         const output_pin = try circuit.createComponent(.{ .output_pin = .{} });
         try circuit.connect(input.port(OUT_PORT_NAME), output_pin.port(OUTPUT_PIN_IN_PORT_NAME));
 
-        try circuit.propagateEvent(input, .high);
+        try circuit.propagateEvent(input, BitVecState.high(1));
 
-        try std.testing.expectEqual(State.high, output_pin.output_state);
+        try std.testing.expect(circuit.readState(output_pin.state_handle).equals(BitVecState.high(1)));
         try std.testing.expectEqual(@as(Timestamp, PROPAGATION_DELAY + WIRE_PROPAGATION_DELAY), circuit.current_time);
     }
 
@@ -783,9 +732,9 @@ test "output_pin: passes input through" {
         const output_pin = try circuit.createComponent(.{ .output_pin = .{} });
         try circuit.connect(input.port(OUT_PORT_NAME), output_pin.port(OUTPUT_PIN_IN_PORT_NAME));
 
-        try circuit.propagateEvent(input, .undefined);
+        try circuit.propagateEvent(input, BitVecState.undefined_(1));
 
-        try std.testing.expectEqual(State.undefined, output_pin.output_state);
+        try std.testing.expect(circuit.readState(output_pin.state_handle).equals(BitVecState.undefined_(1)));
         try std.testing.expectEqual(@as(Timestamp, PROPAGATION_DELAY), circuit.current_time);
     }
 
@@ -797,12 +746,12 @@ test "output_pin: passes input through" {
         const output_pin = try circuit.createComponent(.{ .output_pin = .{} });
         try circuit.connect(input.port(OUT_PORT_NAME), output_pin.port(OUTPUT_PIN_IN_PORT_NAME));
 
-        try circuit.propagateEvent(input, .low);
-        try std.testing.expectEqual(State.low, output_pin.output_state);
+        try circuit.propagateEvent(input, BitVecState.low(1));
+        try std.testing.expect(circuit.readState(output_pin.state_handle).equals(BitVecState.low(1)));
 
-        try circuit.propagateEvent(input, .high);
+        try circuit.propagateEvent(input, BitVecState.high(1));
 
-        try std.testing.expectEqual(State.high, output_pin.output_state);
+        try std.testing.expect(circuit.readState(output_pin.state_handle).equals(BitVecState.high(1)));
         try std.testing.expectEqual(@as(Timestamp, (PROPAGATION_DELAY + WIRE_PROPAGATION_DELAY) * 2), circuit.current_time);
     }
 
@@ -816,10 +765,10 @@ test "output_pin: passes input through" {
         try circuit.connect(input.port(OUT_PORT_NAME), output_pin_1.port(OUTPUT_PIN_IN_PORT_NAME));
         try circuit.connect(output_pin_1.port(OUTPUT_PIN_OUT_PORT_NAME), output_pin_2.port(OUTPUT_PIN_IN_PORT_NAME));
 
-        try circuit.propagateEvent(input, .high);
+        try circuit.propagateEvent(input, BitVecState.high(1));
 
-        try std.testing.expectEqual(State.high, output_pin_1.output_state);
-        try std.testing.expectEqual(State.high, output_pin_2.output_state);
+        try std.testing.expect(circuit.readState(output_pin_1.state_handle).equals(BitVecState.high(1)));
+        try std.testing.expect(circuit.readState(output_pin_2.state_handle).equals(BitVecState.high(1)));
         try std.testing.expectEqual(@as(Timestamp, PROPAGATION_DELAY + (WIRE_PROPAGATION_DELAY * 2)), circuit.current_time);
     }
 
@@ -831,11 +780,11 @@ test "output_pin: passes input through" {
         const downstream = try circuit.createComponent(.{ .input_pin_gate = .{} });
         try circuit.connect(upstream.port(OUT_PORT_NAME), downstream.port(IN_PORT_NAME));
 
-        try circuit.propagateEvent(upstream, .low);
-        try std.testing.expectEqual(State.low, downstream.output_state);
+        try circuit.propagateEvent(upstream, BitVecState.low(1));
+        try std.testing.expect(circuit.readState(downstream.state_handle).equals(BitVecState.low(1)));
 
-        try circuit.propagateEvent(upstream, .high);
-        try std.testing.expectEqual(State.high, downstream.output_state);
+        try circuit.propagateEvent(upstream, BitVecState.high(1));
+        try std.testing.expect(circuit.readState(downstream.state_handle).equals(BitVecState.high(1)));
     }
 }
 
@@ -849,17 +798,17 @@ test "led: registers out port and drives downstream output_pin" {
     try circuit.connect(input.port(OUT_PORT_NAME), led.port(IN_PORT_NAME));
     try circuit.connect(led.port(OUT_PORT_NAME), output_pin.port(OUTPUT_PIN_IN_PORT_NAME));
 
-    try circuit.propagateEvent(input, .low);
-    try std.testing.expectEqual(State.low, led.output_state);
+    try circuit.propagateEvent(input, BitVecState.low(1));
+    try std.testing.expect(circuit.readState(led.state_handle).equals(BitVecState.low(1)));
 
-    try circuit.propagateEvent(input, .high);
-    try std.testing.expectEqual(State.high, led.output_state);
+    try circuit.propagateEvent(input, BitVecState.high(1));
+    try std.testing.expect(circuit.readState(led.state_handle).equals(BitVecState.high(1)));
 }
 
 // ============================================================================
-// Phase 1 (issue #11): BitVecState / Pool foundation tests. These run in
-// isolation against the new accessor surface; the engine itself does not yet
-// use them. Phases 2-4 will migrate the engine onto these structures.
+// BitVecState / Pool unit tests. Exercise the value-type equality / flip
+// rules and the tier-1 pool's slot allocator + read/write directly, without
+// going through the full engine.
 // ============================================================================
 
 test "BitVecState: equality masks undefined value bits" {
@@ -996,15 +945,12 @@ test "Circuit: allocateStateSlot returns tier-0 handle and round-trips" {
 }
 
 // ============================================================================
-// Phase 2 (issue #11): parity tests. `Circuit.createComponent` now allocates
-// a pool slot per component and `propagate()` mirrors every state write into
-// the pool. These tests assert the inline `output_state` and the pool's view
-// of the same component stay in lockstep across the engine's real code
-// paths. When Phase 4 deletes `output_state`, these tests are reworked to
-// assert pool reads directly.
+// End-to-end engine tests over the BitVecState / pool surface. State lives
+// exclusively in the per-tier SoA pool; `Circuit.createComponent` allocates
+// a slot per component and `propagate()` writes through `Circuit.writeState`.
 // ============================================================================
 
-test "Phase-2 parity: pool view matches output_state after a propagation chain" {
+test "engine: pool view tracks state across a propagation chain" {
     var circuit = try Circuit.init();
     defer circuit.deinit();
 
@@ -1019,24 +965,19 @@ test "Phase-2 parity: pool view matches output_state after a propagation chain" 
     try std.testing.expectEqual(@as(u32, 1), not_gate.state_handle.slot);
     try std.testing.expectEqual(@as(u32, 2), out.state_handle.slot);
 
-    try circuit.propagateEvent(input, .low);
+    try circuit.propagateEvent(input, BitVecState.low(1));
 
-    // After propagation: NOT(low) = high, output_pin relays it. Pool agrees.
-    try std.testing.expectEqual(State.low, input.output_state);
+    // NOT(low) = high, output_pin relays it.
     try std.testing.expect(circuit.readState(input.state_handle).equals(BitVecState.low(1)));
-    try std.testing.expectEqual(State.high, not_gate.output_state);
     try std.testing.expect(circuit.readState(not_gate.state_handle).equals(BitVecState.high(1)));
-    try std.testing.expectEqual(State.high, out.output_state);
     try std.testing.expect(circuit.readState(out.state_handle).equals(BitVecState.high(1)));
 
-    try circuit.propagateEvent(input, .high);
-    try std.testing.expectEqual(State.low, not_gate.output_state);
+    try circuit.propagateEvent(input, BitVecState.high(1));
     try std.testing.expect(circuit.readState(not_gate.state_handle).equals(BitVecState.low(1)));
-    try std.testing.expectEqual(State.low, out.output_state);
     try std.testing.expect(circuit.readState(out.state_handle).equals(BitVecState.low(1)));
 }
 
-test "Phase-2 parity: pool slot indices are dense and unique" {
+test "engine: pool slot indices are dense and unique" {
     var circuit = try Circuit.init();
     defer circuit.deinit();
 
