@@ -7,7 +7,7 @@ pub fn build(b: *std.Build) void {
 
     const optimize = b.standardOptimizeOption(.{});
 
-    const parser_gen = b.step("parser:gen", "Generate C Parser");
+    const parser_gen = b.step("parser:gen", "Generate Go Parser");
 
     const generate_parser_cmd = b.addSystemCommand(&.{
         "langlang",
@@ -15,11 +15,13 @@ pub fn build(b: *std.Build) void {
         GRAMMAR_FILE,
         "-disable-capture-spaces",
         "-output-language",
-        "c",
+        "go",
         "-output-path",
-        "lib/parser.c",
-        "-c-header-path",
-        "lib/parser.h",
+        "lib/parser/parser.go",
+        "-go-package",
+        "parser",
+        "-go-parser",
+        "Parser",
     });
 
     parser_gen.dependOn(&generate_parser_cmd.step);
