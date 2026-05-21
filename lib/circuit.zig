@@ -138,6 +138,110 @@ pub const State = enum {
     }
 };
 
+/// Maximum wire width supported by `BitVecState` and the pool tiers. Width is
+/// stored as `u8` for arithmetic convenience; the assertion in `widthMask`
+/// keeps the legal range to 1..=64.
+pub const MAX_WIDTH: u8 = 64;
+
+/// Width-agnostic wire state value type. Carries paired `value` / `defined`
+/// bitmaps and an explicit `width` so equality, flip, and downstream rules
+/// stay tier-agnostic. Width=1 is the only exercised case today; the next
+/// issue lifts wider widths into the language without re-touching this code.
+///
+/// Equality treats two undefined slots as equal regardless of payload bits
+/// in `value`: `(a.defined == b.defined) AND ((a.value & a.defined) ==
+/// (b.value & b.defined))`. That preserves today's `State.undefined ==
+/// State.undefined` semantics exactly, which the Phase-1 dedup at
+/// `propagate()` relies on.
+pub const BitVecState = struct {
+    value: u64,
+    defined: u64,
+    width: u8,
+
+    pub fn undefined_(width: u8) BitVecState {
+        return .{ .value = 0, .defined = 0, .width = width };
+    }
+
+    pub fn low(width: u8) BitVecState {
+        return .{ .value = 0, .defined = widthMask(width), .width = width };
+    }
+
+    pub fn high(width: u8) BitVecState {
+        const m = widthMask(width);
+        return .{ .value = m, .defined = m, .width = width };
+    }
+
+    pub fn equals(self: BitVecState, other: BitVecState) bool {
+        if (self.width != other.width) return false;
+        if (self.defined != other.defined) return false;
+        return (self.value & self.defined) == (other.value & other.defined);
+    }
+
+    /// Flips defined bits within `width`; undefined bits stay undefined.
+    /// Bits outside `width` are kept zero so `equals` stays canonical.
+    pub fn flip(self: BitVecState) BitVecState {
+        const m = widthMask(self.width);
+        return .{
+            .value = (~self.value) & m & self.defined,
+            .defined = self.defined,
+            .width = self.width,
+        };
+    }
+
+    /// Width=1 helper: defined and value bit set.
+    pub fn isHigh(self: BitVecState) bool {
+        std.debug.assert(self.width == 1);
+        return (self.defined & 1) != 0 and (self.value & 1) != 0;
+    }
+
+    /// Width=1 helper: defined and value bit clear.
+    pub fn isLow(self: BitVecState) bool {
+        std.debug.assert(self.width == 1);
+        return (self.defined & 1) != 0 and (self.value & 1) == 0;
+    }
+
+    /// Any-width helper: every bit is undefined.
+    pub fn isUndefined(self: BitVecState) bool {
+        return self.defined == 0;
+    }
+
+    /// Transport-wire encoding for the WASM API contract. Width=1 only:
+    /// undefined=0, low=1, high=2. Matches the byte values that
+    /// `@intFromEnum(State)` produced when wire state lived inline on
+    /// `Component` (declaration order: undefined, low, high).
+    pub fn toTransportByte(self: BitVecState) u8 {
+        std.debug.assert(self.width == 1);
+        if (self.defined == 0) return 0;
+        if ((self.value & 1) == 0) return 1;
+        return 2;
+    }
+
+    /// Width=1 mirror of `State.fromInt`: 0→low, 1→high, else→undefined.
+    /// Used by the truth-table driver, which today calls `State.fromInt`
+    /// per input vector bit.
+    pub fn fromInt(int: i32, width: u8) BitVecState {
+        std.debug.assert(width == 1);
+        if (int == 0) return low(1);
+        if (int == 1) return high(1);
+        return undefined_(1);
+    }
+
+    /// Width=1 mirror of `State.toInt`: low=0, high=1, undefined=2. Distinct
+    /// from `toTransportByte` (which uses the enum-declaration order).
+    pub fn toInt(self: BitVecState) i32 {
+        std.debug.assert(self.width == 1);
+        if (self.isLow()) return 0;
+        if (self.isHigh()) return 1;
+        return 2;
+    }
+};
+
+fn widthMask(width: u8) u64 {
+    std.debug.assert(width >= 1 and width <= MAX_WIDTH);
+    if (width == 64) return std.math.maxInt(u64);
+    return (@as(u64, 1) << @as(u6, @intCast(width))) - 1;
+}
+
 pub const Timestamp = u64;
 
 pub const Event = struct {
@@ -240,6 +344,92 @@ const EventQueue = struct {
     }
 };
 
+/// Opaque handle into a width-tiered state pool. Components carry one of
+/// these instead of an inline `output_state` field; `Circuit.readState` and
+/// `Circuit.writeState` dispatch on `tier` exactly once to land in the
+/// right pool's storage. Width is recovered from the pool, not stored on
+/// the handle.
+pub const PoolHandle = struct {
+    tier: u8,
+    slot: u32,
+};
+
+/// Maps a width to the index of the pool that owns it. Only width=1 (tier 0)
+/// is wired today; wider widths panic with a pointer back to the follow-up
+/// issue. Adding a tier in the future is purely additive here.
+fn tierIndexForWidth(width: u8) u8 {
+    std.debug.assert(width >= 1 and width <= MAX_WIDTH);
+    if (width == 1) return 0;
+    @panic("widths > 1 not wired yet; see issue #11 follow-up");
+}
+
+/// Width-tiered Structure-of-Arrays pool for wire state. For width=1, the
+/// pool packs 64 slots per `u64` word across two parallel buffers (one for
+/// value bits, one for defined bits). Reads and writes are direct bitmap
+/// operations; growth appends one `u64` to each buffer every 64 slots.
+///
+/// The two buffers grow together; `allocateSlot` is the only growth site
+/// and it always appends to both, so length-mismatch is structurally
+/// impossible.
+pub const Pool = struct {
+    width: u8,
+    next_slot: u32 = 0,
+    values: std.ArrayList(u64) = .{},
+    defined: std.ArrayList(u64) = .{},
+
+    pub fn init(width: u8) Pool {
+        std.debug.assert(width == 1);
+        return .{ .width = width };
+    }
+
+    pub fn deinit(self: *Pool) void {
+        self.values.deinit(memory.allocator);
+        self.defined.deinit(memory.allocator);
+    }
+
+    pub fn allocateSlot(self: *Pool) !u32 {
+        const slot = self.next_slot;
+        const word_idx: usize = @intCast(slot / 64);
+        if (word_idx >= self.values.items.len) {
+            try self.values.append(memory.allocator, 0);
+            try self.defined.append(memory.allocator, 0);
+        }
+        self.next_slot += 1;
+        return slot;
+    }
+
+    pub fn read(self: *const Pool, slot: u32) BitVecState {
+        std.debug.assert(self.width == 1);
+        const word_idx: usize = @intCast(slot / 64);
+        const bit_idx: u6 = @intCast(slot % 64);
+        const v: u64 = (self.values.items[word_idx] >> bit_idx) & 1;
+        const d: u64 = (self.defined.items[word_idx] >> bit_idx) & 1;
+        return .{ .value = v, .defined = d, .width = 1 };
+    }
+
+    pub fn write(self: *Pool, slot: u32, state: BitVecState) void {
+        std.debug.assert(self.width == 1);
+        std.debug.assert(state.width == 1);
+        const word_idx: usize = @intCast(slot / 64);
+        const bit_idx: u6 = @intCast(slot % 64);
+        const mask: u64 = @as(u64, 1) << bit_idx;
+        if ((state.defined & 1) != 0) {
+            self.defined.items[word_idx] |= mask;
+            if ((state.value & 1) != 0) {
+                self.values.items[word_idx] |= mask;
+            } else {
+                self.values.items[word_idx] &= ~mask;
+            }
+        } else {
+            // Undefined: clear both bits so reads canonicalize to value=0
+            // (matters for `BitVecState.equals`, which only masks `value` by
+            // `defined` and so could otherwise carry stale payload bits).
+            self.defined.items[word_idx] &= ~mask;
+            self.values.items[word_idx] &= ~mask;
+        }
+    }
+};
+
 pub const Circuit = struct {
     nodes: std.ArrayList(*Component),
     event_queue: EventQueue,
@@ -251,6 +441,13 @@ pub const Circuit = struct {
     /// from zero capacity; instead the previous run's capacity is retained
     /// (length reset to 0 at the end of each per-timestamp iteration).
     changed_at_step: std.ArrayList(*Component) = .{},
+    /// Width-tiered SoA pool for wire state. Today only tier 1 (width=1) is
+    /// exercised; the field is a single `Pool` rather than `[N]Pool` because
+    /// nothing else has storage yet. The next issue widens this into an
+    /// array indexed by `PoolHandle.tier`. Phase-1 lands the type alongside
+    /// the inline `Component.output_state` field; Phases 2-4 migrate reads
+    /// and writes through the accessor.
+    tier1: Pool = Pool.init(1),
     /// Benchmark counters. Present only when `COLLECT_METRICS` is true so
     /// shipping builds carry zero bytes and zero instructions for the
     /// metrics path. The conditional type is `void` (zero-sized) otherwise,
@@ -264,6 +461,7 @@ pub const Circuit = struct {
             .event_queue = EventQueue.init(),
             .listener = null,
             .changed_at_step = .{},
+            .tier1 = Pool.init(1),
             .metrics = if (COLLECT_METRICS) Metrics{} else {},
         };
     }
@@ -275,6 +473,38 @@ pub const Circuit = struct {
         self.nodes.deinit(memory.allocator);
         self.event_queue.deinit();
         self.changed_at_step.deinit(memory.allocator);
+        self.tier1.deinit();
+    }
+
+    /// Allocate a fresh state slot in the pool that owns `width`. Returns
+    /// the opaque handle that future `readState`/`writeState` calls use.
+    /// Today only width=1 is legal; wider widths trap via the dispatcher.
+    pub fn allocateStateSlot(self: *Circuit, width: u8) !PoolHandle {
+        const tier = tierIndexForWidth(width);
+        const slot = switch (tier) {
+            0 => try self.tier1.allocateSlot(),
+            else => unreachable,
+        };
+        return .{ .tier = tier, .slot = slot };
+    }
+
+    /// Read the BitVecState at `handle`. Tier dispatch happens exactly once;
+    /// everything above this line sees only the value type.
+    pub fn readState(self: *const Circuit, handle: PoolHandle) BitVecState {
+        return switch (handle.tier) {
+            0 => self.tier1.read(handle.slot),
+            else => unreachable,
+        };
+    }
+
+    /// Write `state` to the slot at `handle`. The caller is responsible for
+    /// the `state.width == pool.width` invariant; debug-mode asserts inside
+    /// the pool catch mismatches.
+    pub fn writeState(self: *Circuit, handle: PoolHandle, state: BitVecState) void {
+        switch (handle.tier) {
+            0 => self.tier1.write(handle.slot, state),
+            else => unreachable,
+        }
     }
 
     pub fn notifyStateChange(self: *Circuit, component: *Component, new_state: State) void {
@@ -566,4 +796,143 @@ test "led: registers out port and drives downstream output_pin" {
 
     try circuit.propagateEvent(input, .high);
     try std.testing.expectEqual(State.high, led.output_state);
+}
+
+// ============================================================================
+// Phase 1 (issue #11): BitVecState / Pool foundation tests. These run in
+// isolation against the new accessor surface; the engine itself does not yet
+// use them. Phases 2-4 will migrate the engine onto these structures.
+// ============================================================================
+
+test "BitVecState: equality masks undefined value bits" {
+    const a: BitVecState = .{ .value = 0xDEAD, .defined = 0, .width = 1 };
+    const b: BitVecState = .{ .value = 0xBEEF, .defined = 0, .width = 1 };
+    try std.testing.expect(a.equals(b));
+    try std.testing.expect(b.equals(a));
+}
+
+test "BitVecState: equality distinguishes low / high / undefined" {
+    const lo = BitVecState.low(1);
+    const hi = BitVecState.high(1);
+    const un = BitVecState.undefined_(1);
+    try std.testing.expect(!lo.equals(hi));
+    try std.testing.expect(!lo.equals(un));
+    try std.testing.expect(!hi.equals(un));
+    try std.testing.expect(lo.equals(BitVecState.low(1)));
+    try std.testing.expect(hi.equals(BitVecState.high(1)));
+    try std.testing.expect(un.equals(BitVecState.undefined_(1)));
+}
+
+test "BitVecState: equality rejects different widths" {
+    const lo1 = BitVecState.low(1);
+    const lo2: BitVecState = .{ .value = 0, .defined = 0b11, .width = 2 };
+    try std.testing.expect(!lo1.equals(lo2));
+}
+
+test "BitVecState: flip preserves undefined, swaps defined" {
+    try std.testing.expect(BitVecState.undefined_(1).flip().equals(BitVecState.undefined_(1)));
+    try std.testing.expect(BitVecState.low(1).flip().equals(BitVecState.high(1)));
+    try std.testing.expect(BitVecState.high(1).flip().equals(BitVecState.low(1)));
+}
+
+test "BitVecState: transport byte matches enum declaration order" {
+    // The WASM API contract uses @intFromEnum(State), which is the State
+    // enum's declaration order: undefined=0, low=1, high=2. The new
+    // BitVecState encoding must produce the same bytes for width=1 so
+    // transport.encodeState stays byte-identical across the refactor.
+    try std.testing.expectEqual(@as(u8, 0), BitVecState.undefined_(1).toTransportByte());
+    try std.testing.expectEqual(@as(u8, 1), BitVecState.low(1).toTransportByte());
+    try std.testing.expectEqual(@as(u8, 2), BitVecState.high(1).toTransportByte());
+}
+
+test "BitVecState: fromInt / toInt round-trip mirrors State" {
+    try std.testing.expect(BitVecState.fromInt(0, 1).equals(BitVecState.low(1)));
+    try std.testing.expect(BitVecState.fromInt(1, 1).equals(BitVecState.high(1)));
+    try std.testing.expect(BitVecState.fromInt(2, 1).equals(BitVecState.undefined_(1)));
+    try std.testing.expect(BitVecState.fromInt(-1, 1).equals(BitVecState.undefined_(1)));
+
+    // toInt mirrors State.toInt (low=0, high=1, else=2), distinct from the
+    // transport byte ordering.
+    try std.testing.expectEqual(@as(i32, 0), BitVecState.low(1).toInt());
+    try std.testing.expectEqual(@as(i32, 1), BitVecState.high(1).toInt());
+    try std.testing.expectEqual(@as(i32, 2), BitVecState.undefined_(1).toInt());
+}
+
+test "Pool: width=1 round-trip" {
+    var pool = Pool.init(1);
+    defer pool.deinit();
+
+    const a = try pool.allocateSlot();
+    const b = try pool.allocateSlot();
+    try std.testing.expectEqual(@as(u32, 0), a);
+    try std.testing.expectEqual(@as(u32, 1), b);
+
+    try std.testing.expect(pool.read(a).equals(BitVecState.undefined_(1)));
+    try std.testing.expect(pool.read(b).equals(BitVecState.undefined_(1)));
+
+    pool.write(a, BitVecState.low(1));
+    pool.write(b, BitVecState.high(1));
+    try std.testing.expect(pool.read(a).equals(BitVecState.low(1)));
+    try std.testing.expect(pool.read(b).equals(BitVecState.high(1)));
+
+    pool.write(a, BitVecState.undefined_(1));
+    try std.testing.expect(pool.read(a).equals(BitVecState.undefined_(1)));
+    try std.testing.expect(pool.read(b).equals(BitVecState.high(1)));
+}
+
+test "Pool: grows across 64-slot boundary, parallel buffers stay in lockstep" {
+    var pool = Pool.init(1);
+    defer pool.deinit();
+
+    var slots: [130]u32 = undefined;
+    for (&slots, 0..) |*s, i| {
+        s.* = try pool.allocateSlot();
+        try std.testing.expectEqual(@as(u32, @intCast(i)), s.*);
+    }
+
+    // Two words allocated for 65+ slots, three for 129+ slots.
+    try std.testing.expectEqual(@as(usize, 3), pool.values.items.len);
+    try std.testing.expectEqual(@as(usize, 3), pool.defined.items.len);
+
+    // Drive an alternating pattern across the boundary; confirm round-trip.
+    for (slots, 0..) |s, i| {
+        pool.write(s, if (i % 2 == 0) BitVecState.low(1) else BitVecState.high(1));
+    }
+    for (slots, 0..) |s, i| {
+        const expected = if (i % 2 == 0) BitVecState.low(1) else BitVecState.high(1);
+        try std.testing.expect(pool.read(s).equals(expected));
+    }
+}
+
+test "Pool: undefined writes clear both value and defined bits" {
+    var pool = Pool.init(1);
+    defer pool.deinit();
+
+    const s = try pool.allocateSlot();
+    pool.write(s, BitVecState.high(1));
+    try std.testing.expect(pool.read(s).equals(BitVecState.high(1)));
+
+    pool.write(s, BitVecState.undefined_(1));
+    const got = pool.read(s);
+    try std.testing.expectEqual(@as(u64, 0), got.value);
+    try std.testing.expectEqual(@as(u64, 0), got.defined);
+    try std.testing.expect(got.equals(BitVecState.undefined_(1)));
+}
+
+test "Circuit: allocateStateSlot returns tier-0 handle and round-trips" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    const h1 = try circuit.allocateStateSlot(1);
+    const h2 = try circuit.allocateStateSlot(1);
+    try std.testing.expectEqual(@as(u8, 0), h1.tier);
+    try std.testing.expectEqual(@as(u32, 0), h1.slot);
+    try std.testing.expectEqual(@as(u8, 0), h2.tier);
+    try std.testing.expectEqual(@as(u32, 1), h2.slot);
+
+    try std.testing.expect(circuit.readState(h1).equals(BitVecState.undefined_(1)));
+    circuit.writeState(h1, BitVecState.high(1));
+    circuit.writeState(h2, BitVecState.low(1));
+    try std.testing.expect(circuit.readState(h1).equals(BitVecState.high(1)));
+    try std.testing.expect(circuit.readState(h2).equals(BitVecState.low(1)));
 }
