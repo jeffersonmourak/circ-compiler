@@ -28,6 +28,21 @@ pub fn build(b: *std.Build) void {
 
     const parser_archive = b.step("parser:archive", "Build CGo c-archive (lib/parser/parser.a) from Go shim");
 
+    // Tell Go to cross-compile to the same arch/OS as the Zig target. Without
+    // this, a Go toolchain installed for amd64 (e.g. running under Rosetta on
+    // Apple Silicon) emits an x86_64 archive that the arm64 linker rejects.
+    const goarch = switch (target.result.cpu.arch) {
+        .aarch64 => "arm64",
+        .x86_64 => "amd64",
+        else => @panic("unsupported CPU arch for Go c-archive build"),
+    };
+    const goos = switch (target.result.os.tag) {
+        .macos => "darwin",
+        .linux => "linux",
+        .windows => "windows",
+        else => @panic("unsupported OS for Go c-archive build"),
+    };
+
     const build_archive_cmd = b.addSystemCommand(&.{
         "go",
         "build",
@@ -37,6 +52,9 @@ pub fn build(b: *std.Build) void {
         "./shim",
     });
     build_archive_cmd.setCwd(b.path("lib/parser"));
+    build_archive_cmd.setEnvironmentVariable("GOARCH", goarch);
+    build_archive_cmd.setEnvironmentVariable("GOOS", goos);
+    build_archive_cmd.setEnvironmentVariable("CGO_ENABLED", "1");
 
     parser_archive.dependOn(&build_archive_cmd.step);
 
@@ -50,13 +68,9 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
-    parser_lib.addCSourceFile(.{
-        .file = b.path("lib/parser.c"),
-        .flags = &.{},
-    });
-
-    parser_lib.addIncludePath(b.path("."));
+    parser_lib.addObjectFile(b.path("lib/parser/parser.a"));
     parser_lib.linkLibC();
+    parser_lib.step.dependOn(&build_archive_cmd.step);
 
     const golden_tests = b.addTest(.{
         .root_module = b.createModule(.{
@@ -1465,28 +1479,6 @@ pub fn build(b: *std.Build) void {
         "Optimize mode for the engine bench (default: ReleaseFast)",
     ) orelse .ReleaseFast;
 
-    // Parallel parser library at bench_optimize. The shared `parser_lib` is
-    // built at the global optimize (Debug by default), and Zig inserts UBSan
-    // instrumentation for C sources in Debug. When the bench links a Debug
-    // libparser into a ReleaseFast executable, the UBSan runtime symbols
-    // (`__ubsan_handle_*`) go unresolved. Easier to give the bench its own
-    // copy than to fight the cross-optimize-mode link.
-    const parser_lib_bench = b.addLibrary(.{
-        .linkage = .static,
-        .name = "parser-bench",
-        .root_module = b.createModule(.{
-            .root_source_file = null,
-            .target = target,
-            .optimize = bench_optimize,
-        }),
-    });
-    parser_lib_bench.addCSourceFile(.{
-        .file = b.path("lib/parser.c"),
-        .flags = &.{},
-    });
-    parser_lib_bench.addIncludePath(b.path("."));
-    parser_lib_bench.linkLibC();
-
     const circuit_options_bench = b.addOptions();
     circuit_options_bench.addOption(bool, "collect_metrics", true);
 
@@ -1527,7 +1519,7 @@ pub fn build(b: *std.Build) void {
     });
     bench_exe.addIncludePath(b.path("."));
     bench_exe.addIncludePath(b.path("./lib"));
-    bench_exe.linkLibrary(parser_lib_bench);
+    bench_exe.linkLibrary(parser_lib);
     bench_exe.linkLibC();
 
     const run_bench = b.addRunArtifact(bench_exe);
