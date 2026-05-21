@@ -63,7 +63,15 @@ const fixtures = [_]Fixture{
     .{ .name = "demux_2bit_1to2", .circ = "tests/fixtures/circuits/demux_2bit_1to2.circ" },
     .{ .name = "demux_3bit_1to2", .circ = "tests/fixtures/circuits/demux_3bit_1to2.circ" },
     .{ .name = "demux_4bit_1to2", .circ = "tests/fixtures/circuits/demux_4bit_1to2.circ" },
+    // 8 inputs feeding a 7-deep AND chain. Stresses cumulative-fanin
+    // behavior at a moderate vector count (256) where each input flip can
+    // ripple through up to seven gate evaluations.
+    .{ .name = "edge_wide_fanin", .circ = "tests/fixtures/circuits/edge_wide_fanin.circ" },
     .{ .name = "eight_bit_adder", .circ = "tests/fixtures/circuits/eight_bit_adder.circ" },
+    // 1 input fanning out to three parallel NOTs into three independent
+    // outputs. Smallest possible "Phase 2 visits multiple downstream
+    // components from one upstream change" exercise.
+    .{ .name = "fan_out", .circ = "tests/fixtures/circuits/fan_out.circ" },
     .{ .name = "five_bit_adder", .circ = "tests/fixtures/circuits/five_bit_adder.circ" },
     .{ .name = "four_bit_adder", .circ = "tests/fixtures/circuits/four_bit_adder.circ" },
     .{ .name = "full_adder", .circ = "tests/fixtures/circuits/full_adder_from_builtins.circ" },
@@ -90,6 +98,11 @@ const fixtures = [_]Fixture{
     .{ .name = "primitive_not", .circ = "tests/fixtures/circuits/single_gate.circ" },
     .{ .name = "primitive_wire", .circ = "tests/fixtures/circuits/wire_passthrough.circ" },
     .{ .name = "six_bit_adder", .circ = "tests/fixtures/circuits/six_bit_adder.circ" },
+    // 1 input through 100 NOT gates in series, 2 vectors. Pure cascade-depth
+    // probe: peak_queue stays small, but final_time grows linearly with
+    // depth, exposing any regression in per-step bookkeeping that scales
+    // with logical-time advance rather than fan-out width.
+    .{ .name = "stress_chain_100", .circ = "tests/fixtures/circuits/stress_chain_100.circ" },
     .{ .name = "three_bit_adder", .circ = "tests/fixtures/circuits/three_bit_adder.circ" },
     .{ .name = "two_bit_adder", .circ = "tests/fixtures/circuits/two_bit_adder.circ" },
     .{ .name = "xnor_2bit", .circ = "tests/fixtures/circuits/xnor_2bit.circ" },

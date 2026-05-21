@@ -68,7 +68,9 @@ fn recalculateAndReschedule(
         .led => |led_internals| {
             calculated_state = calculateDominantState(led_internals.inputs);
             if (calculated_state != component.output_state) {
-                log.info("💡 LED (id={d}) state will be {s}", .{ component.id, @tagName(calculated_state) });
+                if (comptime log.enabled(.info)) {
+                    log.info("💡 LED (id={d}) state will be {s}", .{ component.id, @tagName(calculated_state) });
+                }
             }
         },
         .wire => |wire| {
@@ -91,7 +93,9 @@ fn recalculateAndReschedule(
     }
 
     if (component.output_state != calculated_state) {
-        log.info(" - Component (id={d}, type={s}) output changed from {s} -> {s}. Scheduling new event.", .{ component.id, @tagName(component.kind), @tagName(component.output_state), @tagName(calculated_state) });
+        if (comptime log.enabled(.info)) {
+            log.info(" - Component (id={d}, type={s}) output changed from {s} -> {s}. Scheduling new event.", .{ component.id, @tagName(component.kind), @tagName(component.output_state), @tagName(calculated_state) });
+        }
 
         const delay = switch (component.kind) {
             .wire, .output_pin, .led => WIRE_PROPAGATION_DELAY,
@@ -354,7 +358,9 @@ pub const Circuit = struct {
                 if (component.output_state == event.new_state) continue;
                 if (COLLECT_METRICS) self.metrics.events_committed += 1;
 
-                log.info("[Time: {d}] Updating component id={d} to {s}", .{ self.current_time, component.id, @tagName(event.new_state) });
+                if (comptime log.enabled(.info)) {
+                    log.info("[Time: {d}] Updating component id={d} to {s}", .{ self.current_time, component.id, @tagName(event.new_state) });
+                }
                 component.output_state = event.new_state;
                 try self.changed_at_step.append(memory.allocator, component);
             }
@@ -364,7 +370,9 @@ pub const Circuit = struct {
             // see consistent upstream state.
             for (self.changed_at_step.items) |component| {
                 for (component.outputs.items) |output| {
-                    log.info("  -> Notifying downstream component id={d}", .{output.id});
+                    if (comptime log.enabled(.info)) {
+                        log.info("  -> Notifying downstream component id={d}", .{output.id});
+                    }
                     if (COLLECT_METRICS) self.metrics.recalcs += 1;
                     try recalculateAndReschedule(output, &self.event_queue, self.current_time);
 

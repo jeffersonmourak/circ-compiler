@@ -1,0 +1,139 @@
+# Hard-fails a PR that modifies bench-asserted counters in
+# `engine.bench.golden` without the `perf` label. Catches the silent
+# regression pattern where a `feat:` or `fix:` PR runs `UPDATE_GOLDENS=1
+# zig build bench` to "make the test pass" and quietly ships drifted engine
+# numbers alongside the intended change.
+#
+# Skipped when the PR is already labelled `perf`: the perf-pr-comment
+# workflow surfaces the deltas as a PR comment and the auto-record-milestone
+# workflow appends a milestone on merge, so the change is fully accounted for
+# downstream. The gate here is specifically for the unlabelled case.
+#
+# Allowed without a `perf` label:
+#   - new fixtures in `engine.bench.golden` (corpus expansion)
+#   - removed fixtures (corpus pruning)
+# Only `changed` (existing fixture with counter drift) is rejected.
+name: Bench golden gate
+
+on:
+  pull_request:
+    branches: [main]
+    # The `labeled` and `unlabeled` types let a maintainer toggle the
+    # `perf` label and have the gate re-evaluate immediately rather than
+    # waiting on the next push.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+env:
+  ZIG_VERSION: "0.15.1"
+
+permissions:
+  contents: read
+
+# Avoid duplicate runs racing each other on rapid push iteration. The latest
+# run wins; older runs cancel themselves.
+concurrency:
+  group: bench-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    # Skip cheaply for perf-labelled PRs: the comment workflow handles the
+    # diff there, and we don't want to gate work that's explicitly
+    # acknowledged as moving engine numbers.
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'perf') }}
+    name: Reject unlabelled bench drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # Need base-branch history available so `git show origin/<base>:...`
+          # can pull its golden file without a separate fetch dance.
+          fetch-depth: 0
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+
+      - name: Resolve base ref
+        id: base
+        run: |
+          echo "ref=${{ github.event.pull_request.base.ref }}" >> "$GITHUB_OUTPUT"
+
+      - name: Snapshot base branch's engine.bench.golden
+        run: |
+          git fetch --no-tags origin "${{ steps.base.outputs.ref }}" || true
+          git show "origin/${{ steps.base.outputs.ref }}:tests/fixtures/bench/engine.bench.golden" > /tmp/base.golden
+
+      - name: Run bench against the base golden
+        id: bench
+        # Same data path as the perf-pr-comment workflow: swap in main's
+        # golden, run the bench with --output=json, capture the structured
+        # diff. The bench exits non-zero on mismatch; we tolerate that here
+        # because the JSON document is the authoritative summary.
+        run: |
+          set +e
+          cp /tmp/base.golden tests/fixtures/bench/engine.bench.golden
+          zig build bench -- --output=json 1>/tmp/bench.json 2>/tmp/bench-stderr.txt
+          status=$?
+          set -e
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          echo "--- captured JSON (head) ---"
+          head -c 500 /tmp/bench.json || true
+          echo ""
+
+      - name: Classify the diff
+        id: classify
+        # Parse the JSON summary block. `changed` is the gate signal;
+        # `added` and `removed` are reported but allowed (corpus expansion
+        # or pruning isn't a perf concern). When the bench produced no JSON
+        # at all (compile error, OOM, missing golden), surface a separate
+        # failure mode so the author isn't told to add a `perf` label for
+        # what is actually a build problem.
+        run: |
+          if [ ! -s /tmp/bench.json ]; then
+            echo "no_json=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "no_json=false" >> "$GITHUB_OUTPUT"
+          changed=$(python3 -c "import json; print(json.load(open('/tmp/bench.json')).get('summary',{}).get('changed',0))")
+          added=$(python3 -c "import json; print(json.load(open('/tmp/bench.json')).get('summary',{}).get('added',0))")
+          removed=$(python3 -c "import json; print(json.load(open('/tmp/bench.json')).get('summary',{}).get('removed',0))")
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+          echo "added=$added" >> "$GITHUB_OUTPUT"
+          echo "removed=$removed" >> "$GITHUB_OUTPUT"
+
+      - name: Bench failed to produce a diff document
+        if: steps.classify.outputs.no_json == 'true'
+        env:
+          BASE_REF: ${{ steps.base.outputs.ref }}
+        run: |
+          echo "::error::Bench did not produce a JSON diff document against \`$BASE_REF\`. This is usually a compile error or a missing golden, not a regression."
+          echo ""
+          echo "--- bench stderr ---"
+          tail -50 /tmp/bench-stderr.txt || true
+          exit 1
+
+      - name: Report informational diff
+        if: steps.classify.outputs.no_json == 'false' && (steps.classify.outputs.added != '0' || steps.classify.outputs.removed != '0')
+        run: |
+          echo "::notice::This PR adds ${{ steps.classify.outputs.added }} fixture(s) and removes ${{ steps.classify.outputs.removed }} (allowed without 'perf' label, treated as corpus expansion / pruning)."
+
+      - name: Reject when existing fixtures drifted
+        if: steps.classify.outputs.no_json == 'false' && steps.classify.outputs.changed != '0'
+        env:
+          BASE_REF: ${{ steps.base.outputs.ref }}
+        run: |
+          echo "::error::This PR drifts bench-asserted counters on ${{ steps.classify.outputs.changed }} existing fixture(s) without the 'perf' label."
+          echo ""
+          echo "Bench delta against \`$BASE_REF\`:"
+          echo ""
+          python3 tools/bench/format-delta-comment.py < /tmp/bench.json
+          echo ""
+          echo "If this PR intentionally changes engine behaviour, add the 'perf' label."
+          echo "The perf-pr-comment workflow will surface the diff in a PR comment, and"
+          echo "the auto-record-milestone workflow will append a milestone to .hist.md on merge."
+          echo ""
+          echo "If the counter movement is incidental and unintended, undo the engine"
+          echo "change (or stop running UPDATE_GOLDENS=1) so the golden stays put."
+          exit 1

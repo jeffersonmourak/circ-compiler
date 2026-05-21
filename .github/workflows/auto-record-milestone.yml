@@ -1,0 +1,99 @@
+# Auto-records an `engine.bench.golden.hist.md` milestone after a perf-labelled
+# PR merges into `main`. The milestone label comes from the PR title.
+#
+# The workflow guards against duplicates: if the merge commit's short SHA
+# already appears in `.hist.md` (i.e., the PR author ran `RECORD_MILESTONE=
+# "<label>" zig build bench` locally and committed the result), the workflow
+# skips and exits. Otherwise it runs the bench against `main`'s golden,
+# appends a new milestone summary row plus a per-fixture detail block, and
+# pushes the updated `.hist.md` directly to `main`.
+#
+# Requires the repo's branch protection on `main` to allow pushes from the
+# default GITHUB_TOKEN (or to be explicitly bypassed for github-actions[bot]).
+# If main is locked down to require PR review, this workflow will fail at the
+# push step; the right pivot then is to have it open a PR with the milestone
+# update instead. Easy to swap in later.
+name: Auto-record bench milestone
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+env:
+  ZIG_VERSION: "0.15.1"
+
+permissions:
+  contents: write
+
+jobs:
+  record:
+    # Only run on merged PRs that were perf-labelled. The `merged == true`
+    # check matters because `closed` also fires on PRs that were closed
+    # without merging (cancelled work, dupes, etc.).
+    if: github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'perf')
+    name: Append milestone to .hist.md
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+          # Standard read-write token is enough for pushing back to the
+          # branch we just checked out, as long as branch protection permits.
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+
+      - name: Detect if this commit already recorded
+        id: detect
+        run: |
+          # The bench writes the short SHA into the milestone summary table's
+          # `commit` column, so a substring search on the file is enough to
+          # answer "did the PR author already record this milestone locally?"
+          # without parsing the markdown. False positives are vanishingly
+          # unlikely on 7-char SHAs in a file with at most ~50 rows.
+          sha=$(git rev-parse --short HEAD)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          if grep -q "$sha" tests/fixtures/bench/engine.bench.golden.hist.md 2>/dev/null; then
+            echo "already_recorded=true" >> "$GITHUB_OUTPUT"
+            echo "Milestone for $sha already present in .hist.md; nothing to do."
+          else
+            echo "already_recorded=false" >> "$GITHUB_OUTPUT"
+            echo "No existing milestone for $sha; will append one."
+          fi
+
+      - name: Run bench with RECORD_MILESTONE
+        if: steps.detect.outputs.already_recorded == 'false'
+        env:
+          # The PR title becomes the milestone label. Pipe characters would
+          # corrupt the markdown table cell, so swap them for slashes; that's
+          # the only sanitisation the label needs.
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          safe_label=$(printf '%s' "$PR_TITLE" | tr '|' '/')
+          RECORD_MILESTONE="$safe_label" zig build bench
+
+      - name: Commit and push the updated .hist.md
+        if: steps.detect.outputs.already_recorded == 'false'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # Only stage the .hist.md; the golden should not move on a clean
+          # post-merge run, but guard against accidentally pushing other
+          # files by being explicit about the path.
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/fixtures/bench/engine.bench.golden.hist.md
+
+          if git diff --cached --quiet; then
+            echo "No changes staged; .hist.md was unmodified. Skipping commit."
+            exit 0
+          fi
+
+          git commit -m "chore(bench): auto-record milestone for $PR_TITLE (#$PR_NUMBER)"
+          git push origin main
