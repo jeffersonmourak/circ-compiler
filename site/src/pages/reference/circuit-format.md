@@ -131,15 +131,15 @@ circuit.connect(andGate, 0, led,     1);  // and.out   → led.in
 
 ## Grammar
 
-The parser is generated from a PEG grammar at `lib/grammar/proto-circ.peg` using the `langlang` tool. The generated C parser is at `lib/parser.c` / `lib/parser.h` and is imported into Zig via `lib/syntax/CParser.zig`.
+The parser is generated from a PEG grammar at `lib/grammar/proto-circ.peg` using the `langlang` tool. The generated Go parser is at `lib/parser/parser.go`; a hand-written CGo shim at `lib/parser/shim/shim.go` exposes it as a C-callable archive (`lib/parser/parser.a` + `lib/parser/parser.h`) that Zig links via `lib/syntax/CParser.zig`.
 
 Parse tree node types used by `lib/syntax/translate.zig`:
 
-| Node type            | Meaning                               |
-|---------------------|---------------------------------------|
-| `LL_NODE_SEQUENCE`  | Ordered list of child nodes           |
-| `LL_NODE_NODE`      | Named grammar rule match              |
-| `LL_NODE_STRING`    | Matched literal text (identifier, etc.) |
-| `LL_NODE_ERROR`     | Parse failure at this position        |
+| Node type           | Meaning                                  |
+|---------------------|------------------------------------------|
+| `NodeType_Sequence` | Ordered list of child nodes              |
+| `NodeType_Node`     | Named grammar rule match                 |
+| `NodeType_String`   | Matched literal text (identifier, etc.)  |
+| `NodeType_Error`    | Parse failure at this position           |
 
 `lib/syntax/nodes/declaration.zig` handles `Declaration` rule nodes and recognises the sub-rules `input`, `output`, and `component` to determine declaration kind.

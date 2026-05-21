@@ -1,5 +1,31 @@
 const std = @import("std");
 const cli_args = @import("cli_args");
+
+// Engine info-level log calls (see lib/circuit.zig) are noisy in --truth-table
+// mode because the engine fires multiple per input vector. Default-suppress
+// them via a custom logFn; flip the gate from `false` to `true` when --verbose
+// is passed so curious users can still see the per-event trace.
+var verbose_engine_logs: bool = false;
+
+pub const std_options: std.Options = .{
+    .log_level = .info,
+    .logFn = filteredLog,
+};
+
+fn filteredLog(
+    comptime level: std.log.Level,
+    comptime scope: @Type(.enum_literal),
+    comptime format: []const u8,
+    args: anytype,
+) void {
+    if (scope == .log and (level == .info or level == .debug) and !verbose_engine_logs) {
+        return;
+    }
+    const level_txt = comptime level.asText();
+    const prefix2 = if (scope == .default) ": " else "(" ++ @tagName(scope) ++ "): ";
+    const stderr = std.fs.File.stderr().deprecatedWriter();
+    nosuspend stderr.print(level_txt ++ prefix2 ++ format ++ "\n", args) catch return;
+}
 const translate = @import("translate");
 const resolver = @import("resolver");
 const diagnostics = @import("diagnostics");
@@ -338,6 +364,7 @@ pub fn run(
             return 0;
         },
         .truth_table => {
+            verbose_engine_logs = args.truth_table_verbose;
             var topology = if (maybe_project) |*project|
                 full_serializer.buildFromProject(allocator, project) catch |err| {
                     try stderr_writer.print("topology build failed: {s}\n", .{@errorName(err)});

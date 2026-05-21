@@ -37,7 +37,8 @@ Built-in macros (`or`, `nand`, `nor`, `xor`, `xnor`) are auto-imported from a vi
 Prerequisites:
 
 - [Zig](https://ziglang.org/) 0.15.x.
-- Optional: [langlang](https://github.com/clarete/langlang) — only needed if you want to regenerate `lib/parser.c` / `lib/parser.h` from `lib/grammar/proto-circ.peg`. The generated sources are vendored in the repo, so day-to-day contributors do not need langlang installed.
+- [Go](https://go.dev/) 1.21+ — used to compile the langlang-generated parser into a CGo c-archive that links into the Zig binary. Every build runs `go build` once to (re)produce `lib/parser/parser.a`.
+- Optional: [langlang](https://github.com/clarete/langlang) `v0.0.12` — only needed if you want to regenerate `lib/parser/parser.go` from `lib/grammar/proto-circ.peg`. The generated source is vendored in the repo, so contributors who don't touch the grammar do not need langlang installed. Install with `go install github.com/clarete/langlang/go/cmd/langlang@v0.0.12`.
 
 Build the CLI:
 

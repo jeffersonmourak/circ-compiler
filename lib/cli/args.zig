@@ -26,6 +26,7 @@ pub const Args = struct {
     color: ColorMode = .auto,
     truth_table_format: TruthTableFormat = .markdown,
     truth_table_strict: bool = false,
+    truth_table_verbose: bool = false,
 };
 
 pub const ParseError = error{
@@ -65,6 +66,8 @@ pub const help_text =
     \\                                    JSON encodes undefined cells as null.
     \\    --strict                        Exit 1 on any undefined ('?') output cell, with one
     \\                                    diagnostic line per offending row on stderr.
+    \\    --verbose                       Print per-vector engine simulation traces on stderr
+    \\                                    (default: silent; useful for debugging propagation).
     \\
     \\EXIT CODES:
     \\    0   Success.
@@ -139,6 +142,10 @@ pub fn parse(argv: []const []const u8) ParseError!Args {
             args.truth_table_strict = true;
             continue;
         }
+        if (std.mem.eql(u8, token, "--verbose")) {
+            args.truth_table_verbose = true;
+            continue;
+        }
         if (std.mem.startsWith(u8, token, "--color=")) {
             const value = token["--color=".len..];
             if (std.mem.eql(u8, value, "auto")) {
@@ -187,6 +194,7 @@ pub fn parse(argv: []const []const u8) ParseError!Args {
     if (args.expand_macros and args.mode != .preview) return error.InvalidFlagValue;
     if (args.truth_table_format != .markdown and args.mode != .truth_table) return error.InvalidFlagValue;
     if (args.truth_table_strict and args.mode != .truth_table) return error.InvalidFlagValue;
+    if (args.truth_table_verbose and args.mode != .truth_table) return error.InvalidFlagValue;
 
     return args;
 }
@@ -361,6 +369,23 @@ test "cli_args_strict_rejects_outside_truth_table" {
     try std.testing.expectError(error.InvalidFlagValue, parse(&.{ "circ-compile", "in.circ", "-o", "out.wasm", "--strict" }));
 }
 
+test "cli_args_parse_verbose_flag" {
+    const parsed = try parse(&.{ "circ-compile", "in.circ", "--truth-table", "--verbose" });
+    try std.testing.expectEqual(Mode.truth_table, parsed.mode);
+    try std.testing.expect(parsed.truth_table_verbose);
+}
+
+test "cli_args_verbose_default_is_false" {
+    const parsed = try parse(&.{ "circ-compile", "in.circ", "--truth-table" });
+    try std.testing.expect(!parsed.truth_table_verbose);
+}
+
+test "cli_args_verbose_rejects_outside_truth_table" {
+    try std.testing.expectError(error.InvalidFlagValue, parse(&.{ "circ-compile", "in.circ", "--preview", "--verbose" }));
+    try std.testing.expectError(error.InvalidFlagValue, parse(&.{ "circ-compile", "in.circ", "--inspect", "--verbose" }));
+    try std.testing.expectError(error.InvalidFlagValue, parse(&.{ "circ-compile", "in.circ", "-o", "out.wasm", "--verbose" }));
+}
+
 test "cli_args_help_long_returns_help_requested" {
     try std.testing.expectError(error.HelpRequested, parse(&.{ "circ-compile", "--help" }));
 }
@@ -385,7 +410,7 @@ test "cli_args_help_text_mentions_every_mode_and_flag" {
         "--emit-zig",   "--inspect",     "--preview",          "--truth-table",
         "-o",           "--help",        "-h",                 "--warnings-as-errors",
         "-Werror",      "--expand-macros", "--color=",        "--format=",
-        "--strict",
+        "--strict",     "--verbose",
     };
     inline for (needles) |needle| {
         try std.testing.expect(std.mem.indexOf(u8, help_text, needle) != null);

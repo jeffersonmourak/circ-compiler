@@ -125,7 +125,8 @@ The template:
 
 This is the heart of the compiler:
 
-- **`lib/grammar/proto-circ.peg`** — PEG grammar source (regenerate `lib/parser.c` / `lib/parser.h` with [langlang](https://github.com/clarete/langlang) when the grammar changes; the generated sources are vendored).
+- **`lib/grammar/proto-circ.peg`** — PEG grammar source. Regenerate `lib/parser/parser.go` with [langlang](https://github.com/clarete/langlang) when the grammar changes; the generated source is vendored.
+- **`lib/parser/`** — `parser.go` (langlang-generated) plus `shim/shim.go` (CGo bridge exposing a C-callable surface). `go build -buildmode=c-archive` produces `parser.a` + `parser.h`, which Zig links via `lib/syntax/CParser.zig`.
 - **`lib/syntax/`** — `CParser.zig` is the FFI wrapper, `translate.zig` lowers the parse tree to the Zig AST in `ast.zig`, `span.zig` carries source spans through the rest of the pipeline.
 - **`lib/resolver/`** — splits into `scan_imports` (auto-imports `<builtin>/` macros if the file participates in a project), `import_cycle` (rejects cyclic imports with `E010`), `file_loader`, `resolve_bodies` (whole-project resolution into per-module IRs), and `builtins` (the in-memory definitions of `or`, `nand`, `nor`, `xor`, `xnor`).
 - **`lib/ir/`** — `types.zig` defines `Module` / `Project` / `Component` / `Pin`. `resolver.zig` is the single-file path used by `--inspect`.
