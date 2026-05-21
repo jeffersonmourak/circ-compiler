@@ -136,6 +136,18 @@ pub const State = enum {
             else => 2,
         };
     }
+
+    /// Transitional helper used during the Phase 2-4 migration so that any
+    /// site still talking in `State` can mirror its value through
+    /// `Circuit.writeState`. Removed in Phase 4 when `State` itself is
+    /// deleted in favor of `BitVecState`.
+    pub fn toBitVec(self: State) BitVecState {
+        return switch (self) {
+            .undefined => BitVecState.undefined_(1),
+            .low => BitVecState.low(1),
+            .high => BitVecState.high(1),
+        };
+    }
 };
 
 /// Maximum wire width supported by `BitVecState` and the pool tiers. Width is
@@ -274,6 +286,14 @@ pub const Component = struct {
     id: u32,
     kind: Kind,
     output_state: State = .undefined,
+    /// Opaque handle into a width-tiered pool owned by `Circuit`. Populated
+    /// by `Circuit.createComponent` immediately after `Component.init`
+    /// returns. The default's `slot = maxInt(u32)` is a sentinel: reads
+    /// against it trap with an out-of-bounds panic in `Pool.read`, which
+    /// catches "constructed a Component without going through Circuit"
+    /// during the Phase-2 / Phase-3 migration. Phase 4 removes the inline
+    /// `output_state` field above and makes this the source of truth.
+    state_handle: PoolHandle = .{ .tier = 0, .slot = std.math.maxInt(u32) },
     /// Flat list of downstream components. Every component kind has exactly
     /// one output port (`"out"`), so the per-port map collapses to a single
     /// slice. Phase 2 of propagate walks this list directly.
@@ -515,6 +535,10 @@ pub const Circuit = struct {
 
     pub fn createComponent(self: *Circuit, kind: Component.Kind) !*Component {
         const new_component = try Component.init(self.next_id, kind);
+        // Allocate the state slot before the component is published to
+        // `nodes`, so `deinit` (which never sees an in-flight component)
+        // does not have to special-case the half-constructed state.
+        new_component.state_handle = try self.allocateStateSlot(1);
         self.next_id += 1;
         try self.nodes.append(memory.allocator, new_component);
         return new_component;
@@ -592,6 +616,11 @@ pub const Circuit = struct {
                     log.info("[Time: {d}] Updating component id={d} to {s}", .{ self.current_time, component.id, @tagName(event.new_state) });
                 }
                 component.output_state = event.new_state;
+                // Mirror the inline write into the pool so the new
+                // `Circuit.readState` accessor sees the same value the
+                // engine sees inline. Phase 3 will flip every read site
+                // onto the accessor; Phase 4 deletes the inline field.
+                self.writeState(component.state_handle, event.new_state.toBitVec());
                 try self.changed_at_step.append(memory.allocator, component);
             }
 
@@ -935,4 +964,63 @@ test "Circuit: allocateStateSlot returns tier-0 handle and round-trips" {
     circuit.writeState(h2, BitVecState.low(1));
     try std.testing.expect(circuit.readState(h1).equals(BitVecState.high(1)));
     try std.testing.expect(circuit.readState(h2).equals(BitVecState.low(1)));
+}
+
+// ============================================================================
+// Phase 2 (issue #11): parity tests. `Circuit.createComponent` now allocates
+// a pool slot per component and `propagate()` mirrors every state write into
+// the pool. These tests assert the inline `output_state` and the pool's view
+// of the same component stay in lockstep across the engine's real code
+// paths. When Phase 4 deletes `output_state`, these tests are reworked to
+// assert pool reads directly.
+// ============================================================================
+
+test "Phase-2 parity: pool view matches output_state after a propagation chain" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    const input = try circuit.createComponent(.{ .input_pin_gate = .{} });
+    const not_gate = try circuit.createComponent(.{ .not_gate = .{} });
+    const out = try circuit.createComponent(.{ .output_pin = .{} });
+    try circuit.connect(input.port(OUT_PORT_NAME), not_gate.port(IN_PORT_NAME));
+    try circuit.connect(not_gate.port(OUT_PORT_NAME), out.port(OUTPUT_PIN_IN_PORT_NAME));
+
+    // Every component got a fresh pool slot.
+    try std.testing.expectEqual(@as(u32, 0), input.state_handle.slot);
+    try std.testing.expectEqual(@as(u32, 1), not_gate.state_handle.slot);
+    try std.testing.expectEqual(@as(u32, 2), out.state_handle.slot);
+
+    try circuit.propagateEvent(input, .low);
+
+    // After propagation: NOT(low) = high, output_pin relays it. Pool agrees.
+    try std.testing.expectEqual(State.low, input.output_state);
+    try std.testing.expect(circuit.readState(input.state_handle).equals(BitVecState.low(1)));
+    try std.testing.expectEqual(State.high, not_gate.output_state);
+    try std.testing.expect(circuit.readState(not_gate.state_handle).equals(BitVecState.high(1)));
+    try std.testing.expectEqual(State.high, out.output_state);
+    try std.testing.expect(circuit.readState(out.state_handle).equals(BitVecState.high(1)));
+
+    try circuit.propagateEvent(input, .high);
+    try std.testing.expectEqual(State.low, not_gate.output_state);
+    try std.testing.expect(circuit.readState(not_gate.state_handle).equals(BitVecState.low(1)));
+    try std.testing.expectEqual(State.low, out.output_state);
+    try std.testing.expect(circuit.readState(out.state_handle).equals(BitVecState.low(1)));
+}
+
+test "Phase-2 parity: pool slot indices are dense and unique" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    var ids: [70]u32 = undefined;
+    for (&ids, 0..) |*slot, i| {
+        const comp = try circuit.createComponent(.{ .wire = .{} });
+        slot.* = comp.state_handle.slot;
+        try std.testing.expectEqual(@as(u32, @intCast(i)), slot.*);
+        try std.testing.expectEqual(@as(u8, 0), comp.state_handle.tier);
+    }
+
+    // Slot 64 crossed the first word boundary; confirm the second word
+    // actually exists on both buffers.
+    try std.testing.expect(circuit.tier1.values.items.len >= 2);
+    try std.testing.expect(circuit.tier1.defined.items.len >= 2);
 }
