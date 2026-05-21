@@ -2,6 +2,15 @@ const std = @import("std");
 
 const GRAMMAR_FILE = "lib/grammar/proto-circ.peg";
 
+// Link the langlang Go c-archive (lib/parser/parser.a) into a Compile step.
+// Skips wrapping the archive in a Zig Library because `zig build-lib` on Linux
+// can't re-bundle a CGo c-archive into another static archive cross-platform;
+// adding it as a direct object file lets each consumer's linker handle it.
+fn linkParserArchive(b: *std.Build, compile: *std.Build.Step.Compile, build_archive_cmd: *std.Build.Step.Run) void {
+    compile.addObjectFile(b.path("lib/parser/parser.a"));
+    compile.step.dependOn(&build_archive_cmd.step);
+}
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
 
@@ -58,20 +67,6 @@ pub fn build(b: *std.Build) void {
 
     parser_archive.dependOn(&build_archive_cmd.step);
 
-    const parser_lib = b.addLibrary(.{
-        .linkage = .static,
-        .name = "parser",
-        .root_module = b.createModule(.{
-            .root_source_file = null,
-            .target = target,
-            .optimize = optimize,
-        }),
-    });
-
-    parser_lib.addObjectFile(b.path("lib/parser/parser.a"));
-    parser_lib.linkLibC();
-    parser_lib.step.dependOn(&build_archive_cmd.step);
-
     const golden_tests = b.addTest(.{
         .root_module = b.createModule(.{
             .root_source_file = b.path("tests/helpers/golden_test.zig"),
@@ -113,7 +108,7 @@ pub fn build(b: *std.Build) void {
     });
     translate_tests.addIncludePath(b.path("."));
     translate_tests.addIncludePath(b.path("./lib"));
-    translate_tests.linkLibrary(parser_lib);
+    linkParserArchive(b, translate_tests, build_archive_cmd);
     translate_tests.linkLibC();
     const run_translate_tests = b.addRunArtifact(translate_tests);
     const ir_types_mod = b.createModule(.{
@@ -154,7 +149,7 @@ pub fn build(b: *std.Build) void {
     });
     resolver_tests.addIncludePath(b.path("."));
     resolver_tests.addIncludePath(b.path("./lib"));
-    resolver_tests.linkLibrary(parser_lib);
+    linkParserArchive(b, resolver_tests, build_archive_cmd);
     resolver_tests.linkLibC();
     const run_resolver_tests = b.addRunArtifact(resolver_tests);
     const validator_codes_mod = b.createModule(.{
@@ -294,7 +289,7 @@ pub fn build(b: *std.Build) void {
     });
     validator_name_passes_tests.addIncludePath(b.path("."));
     validator_name_passes_tests.addIncludePath(b.path("./lib"));
-    validator_name_passes_tests.linkLibrary(parser_lib);
+    linkParserArchive(b, validator_name_passes_tests, build_archive_cmd);
     validator_name_passes_tests.linkLibC();
     const run_validator_name_passes_tests = b.addRunArtifact(validator_name_passes_tests);
     const validator_structural_tests_mod = b.createModule(.{
@@ -320,7 +315,7 @@ pub fn build(b: *std.Build) void {
     });
     validator_structural_tests.addIncludePath(b.path("."));
     validator_structural_tests.addIncludePath(b.path("./lib"));
-    validator_structural_tests.linkLibrary(parser_lib);
+    linkParserArchive(b, validator_structural_tests, build_archive_cmd);
     validator_structural_tests.linkLibC();
     const run_validator_structural_tests = b.addRunArtifact(validator_structural_tests);
     const validator_loop_tests_mod = b.createModule(.{
@@ -342,7 +337,7 @@ pub fn build(b: *std.Build) void {
     });
     validator_loop_tests.addIncludePath(b.path("."));
     validator_loop_tests.addIncludePath(b.path("./lib"));
-    validator_loop_tests.linkLibrary(parser_lib);
+    linkParserArchive(b, validator_loop_tests, build_archive_cmd);
     validator_loop_tests.linkLibC();
     const run_validator_loop_tests = b.addRunArtifact(validator_loop_tests);
     const validator_run_tests_mod = b.createModule(.{
@@ -364,7 +359,7 @@ pub fn build(b: *std.Build) void {
     });
     validator_run_tests.addIncludePath(b.path("."));
     validator_run_tests.addIncludePath(b.path("./lib"));
-    validator_run_tests.linkLibrary(parser_lib);
+    linkParserArchive(b, validator_run_tests, build_archive_cmd);
     validator_run_tests.linkLibC();
     const run_validator_run_tests = b.addRunArtifact(validator_run_tests);
     const emit_build_fn_mod = b.createModule(.{
@@ -446,7 +441,7 @@ pub fn build(b: *std.Build) void {
     });
     emit_build_fn_tests.addIncludePath(b.path("."));
     emit_build_fn_tests.addIncludePath(b.path("./lib"));
-    emit_build_fn_tests.linkLibrary(parser_lib);
+    linkParserArchive(b, emit_build_fn_tests, build_archive_cmd);
     emit_build_fn_tests.linkLibC();
     const run_emit_build_fn_tests = b.addRunArtifact(emit_build_fn_tests);
     const emit_metadata_tests_mod = b.createModule(.{
@@ -472,7 +467,7 @@ pub fn build(b: *std.Build) void {
     });
     emit_metadata_tests.addIncludePath(b.path("."));
     emit_metadata_tests.addIncludePath(b.path("./lib"));
-    emit_metadata_tests.linkLibrary(parser_lib);
+    linkParserArchive(b, emit_metadata_tests, build_archive_cmd);
     emit_metadata_tests.linkLibC();
     const run_emit_metadata_tests = b.addRunArtifact(emit_metadata_tests);
     const emit_full_tests_mod = b.createModule(.{
@@ -495,7 +490,7 @@ pub fn build(b: *std.Build) void {
     });
     emit_full_tests.addIncludePath(b.path("."));
     emit_full_tests.addIncludePath(b.path("./lib"));
-    emit_full_tests.linkLibrary(parser_lib);
+    linkParserArchive(b, emit_full_tests, build_archive_cmd);
     emit_full_tests.linkLibC();
     const run_emit_full_tests = b.addRunArtifact(emit_full_tests);
     const wasm_run_mod = b.createModule(.{
@@ -519,7 +514,7 @@ pub fn build(b: *std.Build) void {
     });
     emit_behavior_tests.addIncludePath(b.path("."));
     emit_behavior_tests.addIncludePath(b.path("./lib"));
-    emit_behavior_tests.linkLibrary(parser_lib);
+    linkParserArchive(b, emit_behavior_tests, build_archive_cmd);
     emit_behavior_tests.linkLibC();
     const run_emit_behavior_tests = b.addRunArtifact(emit_behavior_tests);
     // Phase 3 slice 1: color resolution module (depends only on std, used by cli_args).
@@ -604,7 +599,7 @@ pub fn build(b: *std.Build) void {
     });
     resolver_scan_imports_tests.addIncludePath(b.path("."));
     resolver_scan_imports_tests.addIncludePath(b.path("./lib"));
-    resolver_scan_imports_tests.linkLibrary(parser_lib);
+    linkParserArchive(b, resolver_scan_imports_tests, build_archive_cmd);
     resolver_scan_imports_tests.linkLibC();
     const run_resolver_scan_imports_tests = b.addRunArtifact(resolver_scan_imports_tests);
     const resolver_import_cycle_mod = b.createModule(.{
@@ -628,7 +623,7 @@ pub fn build(b: *std.Build) void {
     });
     resolver_import_cycle_tests.addIncludePath(b.path("."));
     resolver_import_cycle_tests.addIncludePath(b.path("./lib"));
-    resolver_import_cycle_tests.linkLibrary(parser_lib);
+    linkParserArchive(b, resolver_import_cycle_tests, build_archive_cmd);
     resolver_import_cycle_tests.linkLibC();
     const run_resolver_import_cycle_tests = b.addRunArtifact(resolver_import_cycle_tests);
     const resolver_resolve_bodies_mod = b.createModule(.{
@@ -655,7 +650,7 @@ pub fn build(b: *std.Build) void {
     });
     resolver_resolve_bodies_tests.addIncludePath(b.path("."));
     resolver_resolve_bodies_tests.addIncludePath(b.path("./lib"));
-    resolver_resolve_bodies_tests.linkLibrary(parser_lib);
+    linkParserArchive(b, resolver_resolve_bodies_tests, build_archive_cmd);
     resolver_resolve_bodies_tests.linkLibC();
     const run_resolver_resolve_bodies_tests = b.addRunArtifact(resolver_resolve_bodies_tests);
     const resolver_builtins_tests_mod = b.createModule(.{
@@ -670,7 +665,7 @@ pub fn build(b: *std.Build) void {
     });
     resolver_builtins_tests.addIncludePath(b.path("."));
     resolver_builtins_tests.addIncludePath(b.path("./lib"));
-    resolver_builtins_tests.linkLibrary(parser_lib);
+    linkParserArchive(b, resolver_builtins_tests, build_archive_cmd);
     resolver_builtins_tests.linkLibC();
     const run_resolver_builtins_tests = b.addRunArtifact(resolver_builtins_tests);
     const resolver_file_loader_tests_mod = b.createModule(.{
@@ -685,7 +680,7 @@ pub fn build(b: *std.Build) void {
     });
     resolver_file_loader_tests.addIncludePath(b.path("."));
     resolver_file_loader_tests.addIncludePath(b.path("./lib"));
-    resolver_file_loader_tests.linkLibrary(parser_lib);
+    linkParserArchive(b, resolver_file_loader_tests, build_archive_cmd);
     resolver_file_loader_tests.linkLibC();
     const run_resolver_file_loader_tests = b.addRunArtifact(resolver_file_loader_tests);
 
@@ -852,7 +847,7 @@ pub fn build(b: *std.Build) void {
     circ_compile_exe.step.dependOn(&install_runtime.step);
     circ_compile_exe.addIncludePath(b.path("."));
     circ_compile_exe.addIncludePath(b.path("./lib"));
-    circ_compile_exe.linkLibrary(parser_lib);
+    linkParserArchive(b, circ_compile_exe, build_archive_cmd);
     circ_compile_exe.linkLibC();
     b.installArtifact(circ_compile_exe);
     const circ_compile_step = b.step("circ-compile", "Build circ-compile CLI");
@@ -863,7 +858,7 @@ pub fn build(b: *std.Build) void {
     });
     circ_compile_tests.addIncludePath(b.path("."));
     circ_compile_tests.addIncludePath(b.path("./lib"));
-    circ_compile_tests.linkLibrary(parser_lib);
+    linkParserArchive(b, circ_compile_tests, build_archive_cmd);
     circ_compile_tests.linkLibC();
     const run_circ_compile_tests = b.addRunArtifact(circ_compile_tests);
     run_circ_compile_tests.step.dependOn(&install_runtime.step);
@@ -883,7 +878,7 @@ pub fn build(b: *std.Build) void {
     });
     validator_project_passes_tests.addIncludePath(b.path("."));
     validator_project_passes_tests.addIncludePath(b.path("./lib"));
-    validator_project_passes_tests.linkLibrary(parser_lib);
+    linkParserArchive(b, validator_project_passes_tests, build_archive_cmd);
     validator_project_passes_tests.linkLibC();
     const run_validator_project_passes_tests = b.addRunArtifact(validator_project_passes_tests);
     const validator_codes_snapshot_tests_mod = b.createModule(.{
@@ -909,7 +904,7 @@ pub fn build(b: *std.Build) void {
     });
     validator_codes_snapshot_tests.addIncludePath(b.path("."));
     validator_codes_snapshot_tests.addIncludePath(b.path("./lib"));
-    validator_codes_snapshot_tests.linkLibrary(parser_lib);
+    linkParserArchive(b, validator_codes_snapshot_tests, build_archive_cmd);
     validator_codes_snapshot_tests.linkLibC();
     const run_validator_codes_snapshot_tests = b.addRunArtifact(validator_codes_snapshot_tests);
     const test_step = b.step("test", "Run project test suite");
@@ -962,7 +957,7 @@ pub fn build(b: *std.Build) void {
     });
     emit_project_tests.addIncludePath(b.path("."));
     emit_project_tests.addIncludePath(b.path("./lib"));
-    emit_project_tests.linkLibrary(parser_lib);
+    linkParserArchive(b, emit_project_tests, build_archive_cmd);
     emit_project_tests.linkLibC();
     const run_emit_project_tests = b.addRunArtifact(emit_project_tests);
     test_step.dependOn(&run_emit_project_tests.step);
@@ -986,7 +981,7 @@ pub fn build(b: *std.Build) void {
     });
     project_behavior_tests.addIncludePath(b.path("."));
     project_behavior_tests.addIncludePath(b.path("./lib"));
-    project_behavior_tests.linkLibrary(parser_lib);
+    linkParserArchive(b, project_behavior_tests, build_archive_cmd);
     project_behavior_tests.linkLibC();
     const run_project_behavior_tests = b.addRunArtifact(project_behavior_tests);
     test_step.dependOn(&run_project_behavior_tests.step);
@@ -1345,7 +1340,7 @@ pub fn build(b: *std.Build) void {
     });
     preview_layout_integration_tests.addIncludePath(b.path("."));
     preview_layout_integration_tests.addIncludePath(b.path("./lib"));
-    preview_layout_integration_tests.linkLibrary(parser_lib);
+    linkParserArchive(b, preview_layout_integration_tests, build_archive_cmd);
     preview_layout_integration_tests.linkLibC();
     const run_preview_layout_integration_tests = b.addRunArtifact(preview_layout_integration_tests);
     test_step.dependOn(&run_preview_layout_integration_tests.step);
@@ -1370,7 +1365,7 @@ pub fn build(b: *std.Build) void {
     });
     topology_full_emit_integration_tests.addIncludePath(b.path("."));
     topology_full_emit_integration_tests.addIncludePath(b.path("./lib"));
-    topology_full_emit_integration_tests.linkLibrary(parser_lib);
+    linkParserArchive(b, topology_full_emit_integration_tests, build_archive_cmd);
     topology_full_emit_integration_tests.linkLibC();
     const run_topology_full_emit_integration_tests = b.addRunArtifact(topology_full_emit_integration_tests);
     run_topology_full_emit_integration_tests.step.dependOn(&install_runtime.step);
@@ -1394,7 +1389,7 @@ pub fn build(b: *std.Build) void {
     });
     section_writer_fixtures_tests.addIncludePath(b.path("."));
     section_writer_fixtures_tests.addIncludePath(b.path("./lib"));
-    section_writer_fixtures_tests.linkLibrary(parser_lib);
+    linkParserArchive(b, section_writer_fixtures_tests, build_archive_cmd);
     section_writer_fixtures_tests.linkLibC();
     const run_section_writer_fixtures_tests = b.addRunArtifact(section_writer_fixtures_tests);
     run_section_writer_fixtures_tests.step.dependOn(&install_runtime.step);
@@ -1417,7 +1412,7 @@ pub fn build(b: *std.Build) void {
     });
     serializer_fixtures_tests.addIncludePath(b.path("."));
     serializer_fixtures_tests.addIncludePath(b.path("./lib"));
-    serializer_fixtures_tests.linkLibrary(parser_lib);
+    linkParserArchive(b, serializer_fixtures_tests, build_archive_cmd);
     serializer_fixtures_tests.linkLibC();
     const run_serializer_fixtures_tests = b.addRunArtifact(serializer_fixtures_tests);
     run_serializer_fixtures_tests.step.dependOn(&install_runtime.step);
@@ -1519,7 +1514,7 @@ pub fn build(b: *std.Build) void {
     });
     bench_exe.addIncludePath(b.path("."));
     bench_exe.addIncludePath(b.path("./lib"));
-    bench_exe.linkLibrary(parser_lib);
+    linkParserArchive(b, bench_exe, build_archive_cmd);
     bench_exe.linkLibC();
 
     const run_bench = b.addRunArtifact(bench_exe);
