@@ -1,0 +1,72 @@
+# Runs the full Zig test suite WITH e2e on demand: either manually from the
+# Actions tab, or when a pull request carries the `e2e-required` label.
+#
+# This is the heavier counterpart to pr-tests.yml. The two differ in two ways:
+#   1. SKIP_WASM_E2E is NOT set, so tests/e2e/topology_protocol_test.zig runs
+#      against Node's WASM runtime instead of being skipped. (pr-tests.yml
+#      skips it because it fails reproducibly on Linux Node.)
+#   2. `zig build e2e-linux-docker` also runs, exercising the host-built ELF
+#      inside a Zig-free container.
+#
+# Before the label trigger works, create the label on the repo:
+#   gh label create e2e-required \
+#     --description "Run full E2E suite (topology_protocol + Linux Docker)" \
+#     --color "5e097a"
+name: E2E tests
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [labeled, synchronize]
+    branches: [main]
+
+env:
+  ZIG_VERSION: "0.15.1"
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    # Manual dispatch from the Actions tab, OR the PR currently carries the
+    # `e2e-required` label. The `synchronize` event re-triggers when new
+    # commits land on a labeled PR; `labeled` fires when any label is added,
+    # so contains() filters down to e2e-required specifically.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.labels.*.name, 'e2e-required')
+    name: zig build test + e2e-linux-docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+
+      # Node 24 pinned for topology_protocol_test, which spawns Node to drive
+      # the compiled WASM end-to-end. Same version as pr-tests.yml.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      # Go is needed for the langlang c-archive build step in build.zig.
+      # ubuntu-latest ships a recent Go but pin it for reproducibility.
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      # Full test suite WITHOUT SKIP_WASM_E2E. The topology_protocol_test
+      # currently fails reproducibly on Linux Node WASM init (init() never
+      # flips runtime_initialized to true); running it here surfaces that
+      # failure instead of hiding it like pr-tests.yml does.
+      - name: Run all tests (including WASM e2e)
+        run: zig build test --summary all
+
+      # Cross-compiles circ-compile for Linux ELF, stages it in a Docker
+      # build context, then runs the compiled binary inside a Zig-free
+      # container. Validates the distributed-as-binary story end to end.
+      # Docker is pre-installed on ubuntu-latest runners.
+      - name: Run Linux Docker E2E
+        run: zig build e2e-linux-docker
