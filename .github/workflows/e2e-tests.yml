@@ -1,12 +1,18 @@
-# Runs the full Zig test suite WITH e2e on demand: either manually from the
-# Actions tab, or when a pull request carries the `e2e-required` label.
+# Runs the heavier e2e suites on demand: either manually from the Actions
+# tab, or when a pull request carries the `e2e-required` label.
 #
-# This is the heavier counterpart to pr-tests.yml. The two differ in two ways:
-#   1. SKIP_WASM_E2E is NOT set, so tests/e2e/topology_protocol_test.zig runs
-#      against Node's WASM runtime instead of being skipped. (pr-tests.yml
-#      skips it because it fails reproducibly on Linux Node.)
-#   2. `zig build e2e-linux-docker` also runs, exercising the host-built ELF
-#      inside a Zig-free container.
+# Two parallel jobs give independent signals:
+#   * wasm-e2e: full `zig build test` WITHOUT SKIP_WASM_E2E, so
+#     tests/e2e/topology_protocol_test.zig runs against Node's WASM runtime.
+#     That test currently fails reproducibly on Linux Node (init() never
+#     flips runtime_initialized to true); the failure is surfaced here so
+#     it can't hide behind pr-tests.yml's SKIP_WASM_E2E=1 gate.
+#   * docker-e2e: `zig build e2e-linux-docker`, which cross-compiles
+#     circ-compile to a Linux ELF and runs it inside a Zig-free container.
+#     This is the canonical "did we break Linux distribution?" gate.
+#
+# The jobs are split rather than chained so the docker-e2e signal is still
+# produced when the known-broken wasm test fails.
 #
 # Before the label trigger works, create the label on the repo:
 #   gh label create e2e-required \
@@ -27,15 +33,13 @@ permissions:
   contents: read
 
 jobs:
-  e2e:
-    # Manual dispatch from the Actions tab, OR the PR currently carries the
-    # `e2e-required` label. The `synchronize` event re-triggers when new
-    # commits land on a labeled PR; `labeled` fires when any label is added,
-    # so contains() filters down to e2e-required specifically.
+  wasm-e2e:
+    # Manual dispatch, OR the PR carries the `e2e-required` label. `labeled`
+    # fires on any label add; the contains() check filters to e2e-required.
     if: >-
       github.event_name == 'workflow_dispatch' ||
       contains(github.event.pull_request.labels.*.name, 'e2e-required')
-    name: zig build test + e2e-linux-docker
+    name: zig build test (WASM e2e)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -52,21 +56,39 @@ jobs:
           node-version: "24"
 
       # Go is needed for the langlang c-archive build step in build.zig.
-      # ubuntu-latest ships a recent Go but pin it for reproducibility.
       - uses: actions/setup-go@v5
         with:
           go-version: "1.23"
 
-      # Full test suite WITHOUT SKIP_WASM_E2E. The topology_protocol_test
-      # currently fails reproducibly on Linux Node WASM init (init() never
-      # flips runtime_initialized to true); running it here surfaces that
-      # failure instead of hiding it like pr-tests.yml does.
+      # No SKIP_WASM_E2E here, so topology_protocol_test runs against Node.
+      # Expected to fail on Linux until the WASM init bug is investigated;
+      # this gate is the forcing function.
       - name: Run all tests (including WASM e2e)
         run: zig build test --summary all
 
+  docker-e2e:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.labels.*.name, 'e2e-required')
+    name: zig build e2e-linux-docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: ${{ env.ZIG_VERSION }}
+
+      # Go is needed for the langlang c-archive build step that the Linux
+      # ELF cross-compile invokes. Node is intentionally absent — the
+      # container image installs its own Node for the in-container drive.
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
       # Cross-compiles circ-compile for Linux ELF, stages it in a Docker
       # build context, then runs the compiled binary inside a Zig-free
-      # container. Validates the distributed-as-binary story end to end.
-      # Docker is pre-installed on ubuntu-latest runners.
+      # container. Docker is pre-installed on ubuntu-latest runners.
       - name: Run Linux Docker E2E
         run: zig build e2e-linux-docker
