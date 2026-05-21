@@ -52,6 +52,14 @@ pub fn build(b: *std.Build) void {
         else => @panic("unsupported OS for Go c-archive build"),
     };
 
+    // Route Go's CGo C compiler through `zig cc -target <triple>`. Go's
+    // runtime/cgo includes Linux-only C (linux_syscall.c uses setresuid /
+    // setresgid) that the host's clang can't compile when cross-building
+    // from macOS. Zig's bundled libc headers cover every target triple, so
+    // using it as CC makes both native and cross-builds hermetic.
+    const zig_triple = target.result.zigTriple(b.allocator) catch @panic("OOM");
+    const cc_value = b.fmt("zig cc -target {s}", .{zig_triple});
+
     const build_archive_cmd = b.addSystemCommand(&.{
         "go",
         "build",
@@ -64,6 +72,7 @@ pub fn build(b: *std.Build) void {
     build_archive_cmd.setEnvironmentVariable("GOARCH", goarch);
     build_archive_cmd.setEnvironmentVariable("GOOS", goos);
     build_archive_cmd.setEnvironmentVariable("CGO_ENABLED", "1");
+    build_archive_cmd.setEnvironmentVariable("CC", cc_value);
 
     parser_archive.dependOn(&build_archive_cmd.step);
 

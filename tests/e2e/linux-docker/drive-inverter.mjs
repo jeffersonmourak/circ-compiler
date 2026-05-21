@@ -1,7 +1,7 @@
 /**
  * Mirrors DOCS/getting-started.md § "4. Drive the compiled `.wasm` from Node".
- * The compiled WASM contains a `circ.topology` custom section; the host loads
- * it into linear memory via `topology_alloc(len)` before calling `init()`.
+ * The compiled WASM contains a `circ.topology.v0.min` custom section; the host
+ * loads it into linear memory via `topology_alloc(len)` before calling `init()`.
  */
 import fs from "node:fs";
 
@@ -26,11 +26,11 @@ const { exports: w } = await WebAssembly.instantiate(mod, {
   },
 });
 
-// Host protocol: copy the circ.topology custom section into WASM linear memory
-// before calling init().
-const [topoSection] = WebAssembly.Module.customSections(mod, "circ.topology");
+// Host protocol: copy the circ.topology.v0.min custom section into WASM
+// linear memory before calling init().
+const [topoSection] = WebAssembly.Module.customSections(mod, "circ.topology.v0.min");
 if (!topoSection) {
-  console.error("missing circ.topology custom section");
+  console.error("missing circ.topology.v0.min custom section");
   process.exit(1);
 }
 const topoBytes = new Uint8Array(topoSection);
