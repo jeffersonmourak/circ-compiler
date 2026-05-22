@@ -361,14 +361,21 @@ fn tierIndexForWidth(width: u8) u8 {
     @panic("widths > 1 not wired yet; see issue #11 follow-up");
 }
 
-/// Width-tiered Structure-of-Arrays pool for wire state. For width=1, the
-/// pool packs 64 slots per `u64` word across two parallel buffers (one for
-/// value bits, one for defined bits). Reads and writes are direct bitmap
-/// operations; growth appends one `u64` to each buffer every 64 slots.
+/// Width-tiered Structure-of-Arrays pool for wire state. The storage layout
+/// switches on `width`:
+///
+/// * **width = 1**: bit-packed, 64 slots per `u64` word across two parallel
+///   buffers (one for value bits, one for defined bits). Growth appends one
+///   `u64` to each buffer every 64 slots.
+/// * **widths 2..=64**: one `u64` per slot in each buffer. Reads return the
+///   slot's full `u64` directly; writes mask to `widthMask(width)` so
+///   out-of-width payload bits stay zero, and undefined bits are
+///   canonicalized to value=0 to preserve the invariant `BitVecState.equals`
+///   relies on.
 ///
 /// The two buffers grow together; `allocateSlot` is the only growth site
-/// and it always appends to both, so length-mismatch is structurally
-/// impossible.
+/// and always appends to both, so length-mismatch is structurally impossible
+/// regardless of width.
 pub const Pool = struct {
     width: u8,
     next_slot: u32 = 0,
@@ -376,7 +383,7 @@ pub const Pool = struct {
     defined: std.ArrayList(u64) = .{},
 
     pub fn init(width: u8) Pool {
-        std.debug.assert(width == 1);
+        std.debug.assert(width >= 1 and width <= MAX_WIDTH);
         return .{ .width = width };
     }
 
@@ -387,7 +394,9 @@ pub const Pool = struct {
 
     pub fn allocateSlot(self: *Pool) !u32 {
         const slot = self.next_slot;
-        const word_idx: usize = @intCast(slot / 64);
+        // Width=1 packs 64 slots per word; wider widths use one slot per word.
+        const slots_per_word: u32 = if (self.width == 1) 64 else 1;
+        const word_idx: usize = @intCast(slot / slots_per_word);
         if (word_idx >= self.values.items.len) {
             try self.values.append(memory.allocator, 0);
             try self.defined.append(memory.allocator, 0);
@@ -397,34 +406,51 @@ pub const Pool = struct {
     }
 
     pub fn read(self: *const Pool, slot: u32) BitVecState {
-        std.debug.assert(self.width == 1);
-        const word_idx: usize = @intCast(slot / 64);
-        const bit_idx: u6 = @intCast(slot % 64);
-        const v: u64 = (self.values.items[word_idx] >> bit_idx) & 1;
-        const d: u64 = (self.defined.items[word_idx] >> bit_idx) & 1;
-        return .{ .value = v, .defined = d, .width = 1 };
+        if (self.width == 1) {
+            const word_idx: usize = @intCast(slot / 64);
+            const bit_idx: u6 = @intCast(slot % 64);
+            const v: u64 = (self.values.items[word_idx] >> bit_idx) & 1;
+            const d: u64 = (self.defined.items[word_idx] >> bit_idx) & 1;
+            return .{ .value = v, .defined = d, .width = 1 };
+        }
+        const idx: usize = @intCast(slot);
+        return .{
+            .value = self.values.items[idx],
+            .defined = self.defined.items[idx],
+            .width = self.width,
+        };
     }
 
     pub fn write(self: *Pool, slot: u32, state: BitVecState) void {
-        std.debug.assert(self.width == 1);
-        std.debug.assert(state.width == 1);
-        const word_idx: usize = @intCast(slot / 64);
-        const bit_idx: u6 = @intCast(slot % 64);
-        const mask: u64 = @as(u64, 1) << bit_idx;
-        if ((state.defined & 1) != 0) {
-            self.defined.items[word_idx] |= mask;
-            if ((state.value & 1) != 0) {
-                self.values.items[word_idx] |= mask;
+        std.debug.assert(state.width == self.width);
+        if (self.width == 1) {
+            const word_idx: usize = @intCast(slot / 64);
+            const bit_idx: u6 = @intCast(slot % 64);
+            const mask: u64 = @as(u64, 1) << bit_idx;
+            if ((state.defined & 1) != 0) {
+                self.defined.items[word_idx] |= mask;
+                if ((state.value & 1) != 0) {
+                    self.values.items[word_idx] |= mask;
+                } else {
+                    self.values.items[word_idx] &= ~mask;
+                }
             } else {
+                // Undefined: clear both bits so reads canonicalize to value=0
+                // (matters for `BitVecState.equals`, which only masks `value`
+                // by `defined` and so could otherwise carry stale payload).
+                self.defined.items[word_idx] &= ~mask;
                 self.values.items[word_idx] &= ~mask;
             }
-        } else {
-            // Undefined: clear both bits so reads canonicalize to value=0
-            // (matters for `BitVecState.equals`, which only masks `value` by
-            // `defined` and so could otherwise carry stale payload bits).
-            self.defined.items[word_idx] &= ~mask;
-            self.values.items[word_idx] &= ~mask;
+            return;
         }
+        // Widths 2..=64: one u64 per slot. Mask to `widthMask` so out-of-width
+        // payload stays zero. `value & defined` implicitly canonicalizes
+        // undefined bits to value=0 (any "1" outside the defined mask is
+        // cleared), keeping reads consistent with the equals() invariant.
+        const idx: usize = @intCast(slot);
+        const m = widthMask(self.width);
+        self.values.items[idx] = state.value & state.defined & m;
+        self.defined.items[idx] = state.defined & m;
     }
 };
 
@@ -924,6 +950,26 @@ test "Pool: undefined writes clear both value and defined bits" {
     try std.testing.expectEqual(@as(u64, 0), got.value);
     try std.testing.expectEqual(@as(u64, 0), got.defined);
     try std.testing.expect(got.equals(BitVecState.undefined_(1)));
+}
+
+test "Pool: width 4 round-trip smoke test" {
+    // Smallest path through the new width > 1 storage: allocate a slot,
+    // observe its initial undefined state, write low / high / undefined,
+    // confirm read-back equals each write.
+    var pool = Pool.init(4);
+    defer pool.deinit();
+
+    const s = try pool.allocateSlot();
+    try std.testing.expect(pool.read(s).equals(BitVecState.undefined_(4)));
+
+    pool.write(s, BitVecState.low(4));
+    try std.testing.expect(pool.read(s).equals(BitVecState.low(4)));
+
+    pool.write(s, BitVecState.high(4));
+    try std.testing.expect(pool.read(s).equals(BitVecState.high(4)));
+
+    pool.write(s, BitVecState.undefined_(4));
+    try std.testing.expect(pool.read(s).equals(BitVecState.undefined_(4)));
 }
 
 test "Circuit: allocateStateSlot returns tier-0 handle and round-trips" {
