@@ -972,6 +972,106 @@ test "Pool: width 4 round-trip smoke test" {
     try std.testing.expect(pool.read(s).equals(BitVecState.undefined_(4)));
 }
 
+test "Pool: round-trip at widths 4, 8, 64" {
+    // Parameterized round-trip: undefined -> low -> high -> undefined for
+    // each of the canonical wider widths. `inline for` unrolls so each
+    // width sees its own comptime-bound Pool.init call.
+    inline for (.{ 4, 8, 64 }) |w| {
+        var pool = Pool.init(w);
+        defer pool.deinit();
+
+        const s = try pool.allocateSlot();
+        try std.testing.expect(pool.read(s).equals(BitVecState.undefined_(w)));
+
+        pool.write(s, BitVecState.low(w));
+        try std.testing.expect(pool.read(s).equals(BitVecState.low(w)));
+
+        pool.write(s, BitVecState.high(w));
+        try std.testing.expect(pool.read(s).equals(BitVecState.high(w)));
+
+        pool.write(s, BitVecState.undefined_(w));
+        try std.testing.expect(pool.read(s).equals(BitVecState.undefined_(w)));
+    }
+}
+
+test "Pool: width 4 stores mixed defined/undefined patterns" {
+    var pool = Pool.init(4);
+    defer pool.deinit();
+
+    const s = try pool.allocateSlot();
+    // Per-bit (LSB first): hi, undef, lo, hi -> value=0b1001, defined=0b1101
+    const mixed = BitVecState{ .value = 0b1001, .defined = 0b1101, .width = 4 };
+    pool.write(s, mixed);
+
+    const got = pool.read(s);
+    try std.testing.expectEqual(@as(u64, 0b1001), got.value);
+    try std.testing.expectEqual(@as(u64, 0b1101), got.defined);
+    try std.testing.expectEqual(@as(u8, 4), got.width);
+}
+
+test "Pool: widths > 1 allocate one u64 per slot and isolate writes" {
+    var pool = Pool.init(8);
+    defer pool.deinit();
+
+    var slots: [10]u32 = undefined;
+    for (&slots, 0..) |*s, i| {
+        s.* = try pool.allocateSlot();
+        try std.testing.expectEqual(@as(u32, @intCast(i)), s.*);
+    }
+
+    // Ten slots -> ten u64s in each buffer (one per slot, no packing).
+    // At width=1 the same ten slots would share one u64; this confirms
+    // the wider storage path is selected.
+    try std.testing.expectEqual(@as(usize, 10), pool.values.items.len);
+    try std.testing.expectEqual(@as(usize, 10), pool.defined.items.len);
+
+    // Distinct writes to different slots must not interfere.
+    for (slots, 0..) |s, i| {
+        pool.write(s, BitVecState{ .value = @intCast(i), .defined = 0xFF, .width = 8 });
+    }
+    for (slots, 0..) |s, i| {
+        const got = pool.read(s);
+        try std.testing.expectEqual(@as(u64, @intCast(i)), got.value);
+        try std.testing.expectEqual(@as(u64, 0xFF), got.defined);
+    }
+}
+
+test "Pool: widths > 1 write canonicalizes undefined and out-of-width bits" {
+    var pool = Pool.init(4);
+    defer pool.deinit();
+
+    const s = try pool.allocateSlot();
+
+    // Dirty input: bit 1 is undefined (defined=0) but its value bit is set;
+    // bits beyond width 4 are also set in both buffers. Canonical form has
+    // undefined positions cleared from value, and bits >= 4 cleared in both.
+    //   input    value=0b111011, defined=0b111101, width=4
+    //   canonical value=0b001001, defined=0b001101
+    const dirty = BitVecState{ .value = 0b111011, .defined = 0b111101, .width = 4 };
+    pool.write(s, dirty);
+
+    const got = pool.read(s);
+    try std.testing.expectEqual(@as(u64, 0), got.value & ~widthMask(4));
+    try std.testing.expectEqual(@as(u64, 0), got.defined & ~widthMask(4));
+    try std.testing.expectEqual(@as(u64, 0b1001), got.value);
+    try std.testing.expectEqual(@as(u64, 0b1101), got.defined);
+}
+
+test "Pool: widths > 1 undefined overwrite clears both buffers" {
+    var pool = Pool.init(8);
+    defer pool.deinit();
+
+    const s = try pool.allocateSlot();
+    pool.write(s, BitVecState.high(8));
+    try std.testing.expect(pool.read(s).equals(BitVecState.high(8)));
+
+    pool.write(s, BitVecState.undefined_(8));
+    const got = pool.read(s);
+    try std.testing.expectEqual(@as(u64, 0), got.value);
+    try std.testing.expectEqual(@as(u64, 0), got.defined);
+    try std.testing.expect(got.equals(BitVecState.undefined_(8)));
+}
+
 test "Circuit: allocateStateSlot returns tier-0 handle and round-trips" {
     var circuit = try Circuit.init();
     defer circuit.deinit();
