@@ -398,13 +398,12 @@ pub const PoolHandle = struct {
     slot: u32,
 };
 
-/// Maps a width to the index of the pool that owns it. Only width=1 (tier 0)
-/// is wired today; wider widths panic with a pointer back to the follow-up
-/// issue. Adding a tier in the future is purely additive here.
+/// Maps a width to the index of the pool that owns it. Convention: tier
+/// number equals width number, so `Circuit.tiers[width]` is the canonical
+/// pool lookup. Tier 0 is reserved/unused; legal widths are 1..=MAX_WIDTH.
 fn tierIndexForWidth(width: u8) u8 {
     std.debug.assert(width >= 1 and width <= MAX_WIDTH);
-    if (width == 1) return 0;
-    @panic("widths > 1 not wired yet; see issue #11 follow-up");
+    return width;
 }
 
 /// Width-tiered Structure-of-Arrays pool for wire state. The storage layout
@@ -511,12 +510,13 @@ pub const Circuit = struct {
     /// from zero capacity; instead the previous run's capacity is retained
     /// (length reset to 0 at the end of each per-timestamp iteration).
     changed_at_step: std.ArrayList(*Component) = .{},
-    /// Width-tiered SoA pool for wire state. Today only tier 1 (width=1) is
-    /// exercised; the field is a single `Pool` rather than `[N]Pool` because
-    /// nothing else has storage yet. The next issue widens this into an
-    /// array indexed by `PoolHandle.tier` once wider widths land in the
-    /// language surface and the topology format.
-    tier1: Pool = Pool.init(1),
+    /// Width-tiered SoA pool array indexed by tier number (tier N owns
+    /// width-N state slots). Tier 0 is reserved/unused; the convention
+    /// `tier = width` makes `tiers[handle.tier]` the canonical lookup for
+    /// any state. Each tier is allocated lazily by `getOrInitTier` on its
+    /// first use, so a single-bit circuit pays for only one Pool rather
+    /// than `MAX_WIDTH + 1` of them.
+    tiers: [MAX_WIDTH + 1]?Pool = [_]?Pool{null} ** (MAX_WIDTH + 1),
     /// Benchmark counters. Present only when `COLLECT_METRICS` is true so
     /// shipping builds carry zero bytes and zero instructions for the
     /// metrics path. The conditional type is `void` (zero-sized) otherwise,
@@ -530,7 +530,6 @@ pub const Circuit = struct {
             .event_queue = EventQueue.init(),
             .listener = null,
             .changed_at_step = .{},
-            .tier1 = Pool.init(1),
             .metrics = if (COLLECT_METRICS) Metrics{} else {},
         };
     }
@@ -542,38 +541,42 @@ pub const Circuit = struct {
         self.nodes.deinit(memory.allocator);
         self.event_queue.deinit();
         self.changed_at_step.deinit(memory.allocator);
-        self.tier1.deinit();
+        for (&self.tiers) |*maybe_pool| {
+            if (maybe_pool.* != null) maybe_pool.*.?.deinit();
+        }
+    }
+
+    /// Returns the pool that owns `width`, allocating it lazily on first
+    /// access. Cheap when the pool already exists (one null check); one
+    /// `Pool.init` plus an optional store otherwise.
+    fn getOrInitTier(self: *Circuit, width: u8) *Pool {
+        const tier = tierIndexForWidth(width);
+        if (self.tiers[tier] == null) {
+            self.tiers[tier] = Pool.init(width);
+        }
+        return &self.tiers[tier].?;
     }
 
     /// Allocate a fresh state slot in the pool that owns `width`. Returns
     /// the opaque handle that future `readState`/`writeState` calls use.
-    /// Today only width=1 is legal; wider widths trap via the dispatcher.
     pub fn allocateStateSlot(self: *Circuit, width: u8) !PoolHandle {
         const tier = tierIndexForWidth(width);
-        const slot = switch (tier) {
-            0 => try self.tier1.allocateSlot(),
-            else => unreachable,
-        };
+        const pool = self.getOrInitTier(width);
+        const slot = try pool.allocateSlot();
         return .{ .tier = tier, .slot = slot };
     }
 
     /// Read the BitVecState at `handle`. Tier dispatch happens exactly once;
     /// everything above this line sees only the value type.
     pub fn readState(self: *const Circuit, handle: PoolHandle) BitVecState {
-        return switch (handle.tier) {
-            0 => self.tier1.read(handle.slot),
-            else => unreachable,
-        };
+        return self.tiers[handle.tier].?.read(handle.slot);
     }
 
     /// Write `state` to the slot at `handle`. The caller is responsible for
     /// the `state.width == pool.width` invariant; debug-mode asserts inside
     /// the pool catch mismatches.
     pub fn writeState(self: *Circuit, handle: PoolHandle, state: BitVecState) void {
-        switch (handle.tier) {
-            0 => self.tier1.write(handle.slot, state),
-            else => unreachable,
-        }
+        self.tiers[handle.tier].?.write(handle.slot, state);
     }
 
     pub fn notifyStateChange(self: *Circuit, component: *Component, new_state: BitVecState) void {
@@ -582,12 +585,12 @@ pub const Circuit = struct {
         }
     }
 
-    pub fn createComponent(self: *Circuit, kind: Component.Kind) !*Component {
+    pub fn createComponent(self: *Circuit, kind: Component.Kind, width: u8) !*Component {
         const new_component = try Component.init(self.next_id, kind);
         // Allocate the state slot before the component is published to
         // `nodes`, so `deinit` (which never sees an in-flight component)
         // does not have to special-case the half-constructed state.
-        new_component.state_handle = try self.allocateStateSlot(1);
+        new_component.state_handle = try self.allocateStateSlot(width);
         self.next_id += 1;
         try self.nodes.append(memory.allocator, new_component);
         return new_component;
@@ -772,8 +775,8 @@ test "output_pin: passes input through" {
         var circuit = try Circuit.init();
         defer circuit.deinit();
 
-        const input = try circuit.createComponent(.{ .input_pin_gate = .{} });
-        const output_pin = try circuit.createComponent(.{ .output_pin = .{} });
+        const input = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+        const output_pin = try circuit.createComponent(.{ .output_pin = .{} }, 1);
         try circuit.connect(input.port(OUT_PORT_NAME), output_pin.port(OUTPUT_PIN_IN_PORT_NAME));
 
         try circuit.propagateEvent(input, BitVecState.low(1));
@@ -786,8 +789,8 @@ test "output_pin: passes input through" {
         var circuit = try Circuit.init();
         defer circuit.deinit();
 
-        const input = try circuit.createComponent(.{ .input_pin_gate = .{} });
-        const output_pin = try circuit.createComponent(.{ .output_pin = .{} });
+        const input = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+        const output_pin = try circuit.createComponent(.{ .output_pin = .{} }, 1);
         try circuit.connect(input.port(OUT_PORT_NAME), output_pin.port(OUTPUT_PIN_IN_PORT_NAME));
 
         try circuit.propagateEvent(input, BitVecState.high(1));
@@ -800,8 +803,8 @@ test "output_pin: passes input through" {
         var circuit = try Circuit.init();
         defer circuit.deinit();
 
-        const input = try circuit.createComponent(.{ .input_pin_gate = .{} });
-        const output_pin = try circuit.createComponent(.{ .output_pin = .{} });
+        const input = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+        const output_pin = try circuit.createComponent(.{ .output_pin = .{} }, 1);
         try circuit.connect(input.port(OUT_PORT_NAME), output_pin.port(OUTPUT_PIN_IN_PORT_NAME));
 
         try circuit.propagateEvent(input, BitVecState.undefined_(1));
@@ -814,8 +817,8 @@ test "output_pin: passes input through" {
         var circuit = try Circuit.init();
         defer circuit.deinit();
 
-        const input = try circuit.createComponent(.{ .input_pin_gate = .{} });
-        const output_pin = try circuit.createComponent(.{ .output_pin = .{} });
+        const input = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+        const output_pin = try circuit.createComponent(.{ .output_pin = .{} }, 1);
         try circuit.connect(input.port(OUT_PORT_NAME), output_pin.port(OUTPUT_PIN_IN_PORT_NAME));
 
         try circuit.propagateEvent(input, BitVecState.low(1));
@@ -831,9 +834,9 @@ test "output_pin: passes input through" {
         var circuit = try Circuit.init();
         defer circuit.deinit();
 
-        const input = try circuit.createComponent(.{ .input_pin_gate = .{} });
-        const output_pin_1 = try circuit.createComponent(.{ .output_pin = .{} });
-        const output_pin_2 = try circuit.createComponent(.{ .output_pin = .{} });
+        const input = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+        const output_pin_1 = try circuit.createComponent(.{ .output_pin = .{} }, 1);
+        const output_pin_2 = try circuit.createComponent(.{ .output_pin = .{} }, 1);
         try circuit.connect(input.port(OUT_PORT_NAME), output_pin_1.port(OUTPUT_PIN_IN_PORT_NAME));
         try circuit.connect(output_pin_1.port(OUTPUT_PIN_OUT_PORT_NAME), output_pin_2.port(OUTPUT_PIN_IN_PORT_NAME));
 
@@ -848,8 +851,8 @@ test "output_pin: passes input through" {
         var circuit = try Circuit.init();
         defer circuit.deinit();
 
-        const upstream = try circuit.createComponent(.{ .input_pin_gate = .{} });
-        const downstream = try circuit.createComponent(.{ .input_pin_gate = .{} });
+        const upstream = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+        const downstream = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
         try circuit.connect(upstream.port(OUT_PORT_NAME), downstream.port(IN_PORT_NAME));
 
         try circuit.propagateEvent(upstream, BitVecState.low(1));
@@ -864,9 +867,9 @@ test "led: registers out port and drives downstream output_pin" {
     var circuit = try Circuit.init();
     defer circuit.deinit();
 
-    const input = try circuit.createComponent(.{ .input_pin_gate = .{} });
-    const led = try circuit.createComponent(.{ .led = .{} });
-    const output_pin = try circuit.createComponent(.{ .output_pin = .{} });
+    const input = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const led = try circuit.createComponent(.{ .led = .{} }, 1);
+    const output_pin = try circuit.createComponent(.{ .output_pin = .{} }, 1);
     try circuit.connect(input.port(OUT_PORT_NAME), led.port(IN_PORT_NAME));
     try circuit.connect(led.port(OUT_PORT_NAME), output_pin.port(OUTPUT_PIN_IN_PORT_NAME));
 
@@ -1332,15 +1335,17 @@ test "Pool: widths > 1 undefined overwrite clears both buffers" {
     try std.testing.expect(got.equals(BitVecState.undefined_(8)));
 }
 
-test "Circuit: allocateStateSlot returns tier-0 handle and round-trips" {
+test "Circuit: allocateStateSlot returns a tier=width handle and round-trips" {
     var circuit = try Circuit.init();
     defer circuit.deinit();
 
     const h1 = try circuit.allocateStateSlot(1);
     const h2 = try circuit.allocateStateSlot(1);
-    try std.testing.expectEqual(@as(u8, 0), h1.tier);
+    // Width=1 now lives in tier 1 (the convention `tier = width`); tier 0
+    // is reserved/unused.
+    try std.testing.expectEqual(@as(u8, 1), h1.tier);
     try std.testing.expectEqual(@as(u32, 0), h1.slot);
-    try std.testing.expectEqual(@as(u8, 0), h2.tier);
+    try std.testing.expectEqual(@as(u8, 1), h2.tier);
     try std.testing.expectEqual(@as(u32, 1), h2.slot);
 
     try std.testing.expect(circuit.readState(h1).equals(BitVecState.undefined_(1)));
@@ -1348,6 +1353,103 @@ test "Circuit: allocateStateSlot returns tier-0 handle and round-trips" {
     circuit.writeState(h2, BitVecState.low(1));
     try std.testing.expect(circuit.readState(h1).equals(BitVecState.high(1)));
     try std.testing.expect(circuit.readState(h2).equals(BitVecState.low(1)));
+}
+
+test "Circuit: createComponent at widths 4, 8, 64 lands in the matching tier" {
+    inline for (.{ 4, 8, 64 }) |w| {
+        var circuit = try Circuit.init();
+        defer circuit.deinit();
+
+        const comp = try circuit.createComponent(.{ .wire = .{} }, w);
+        // Handle's tier equals the requested width under `tier = width`.
+        try std.testing.expectEqual(@as(u8, w), comp.state_handle.tier);
+        try std.testing.expectEqual(@as(u32, 0), comp.state_handle.slot);
+        // Initial state is undefined at the requested width.
+        try std.testing.expect(circuit.readState(comp.state_handle).equals(BitVecState.undefined_(w)));
+
+        // Round-trip a defined value to confirm the slot dispatches to the
+        // right pool's storage on both read and write.
+        circuit.writeState(comp.state_handle, BitVecState.high(w));
+        try std.testing.expect(circuit.readState(comp.state_handle).equals(BitVecState.high(w)));
+    }
+}
+
+test "Circuit: mixed-width components allocate in independent tiers" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    const scalar = try circuit.createComponent(.{ .wire = .{} }, 1);
+    const bus4 = try circuit.createComponent(.{ .wire = .{} }, 4);
+    const bus8 = try circuit.createComponent(.{ .wire = .{} }, 8);
+    const scalar2 = try circuit.createComponent(.{ .wire = .{} }, 1);
+
+    // Each width gets its own tier; same-width components share a tier
+    // and receive dense slot indices within it.
+    try std.testing.expectEqual(@as(u8, 1), scalar.state_handle.tier);
+    try std.testing.expectEqual(@as(u32, 0), scalar.state_handle.slot);
+    try std.testing.expectEqual(@as(u8, 4), bus4.state_handle.tier);
+    try std.testing.expectEqual(@as(u32, 0), bus4.state_handle.slot);
+    try std.testing.expectEqual(@as(u8, 8), bus8.state_handle.tier);
+    try std.testing.expectEqual(@as(u32, 0), bus8.state_handle.slot);
+    try std.testing.expectEqual(@as(u8, 1), scalar2.state_handle.tier);
+    try std.testing.expectEqual(@as(u32, 1), scalar2.state_handle.slot);
+
+    // Writes to one tier must not bleed into another.
+    circuit.writeState(scalar.state_handle, BitVecState.high(1));
+    circuit.writeState(bus4.state_handle, BitVecState{ .value = 0b1010, .defined = 0b1111, .width = 4 });
+    circuit.writeState(bus8.state_handle, BitVecState.low(8));
+    circuit.writeState(scalar2.state_handle, BitVecState.low(1));
+
+    try std.testing.expect(circuit.readState(scalar.state_handle).equals(BitVecState.high(1)));
+    try std.testing.expectEqual(@as(u64, 0b1010), circuit.readState(bus4.state_handle).value);
+    try std.testing.expectEqual(@as(u64, 0b1111), circuit.readState(bus4.state_handle).defined);
+    try std.testing.expect(circuit.readState(bus8.state_handle).equals(BitVecState.low(8)));
+    try std.testing.expect(circuit.readState(scalar2.state_handle).equals(BitVecState.low(1)));
+}
+
+test "Circuit: lazy tier init only allocates tiers actually used" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    // Empty Circuit: every tier slot is null.
+    for (circuit.tiers) |maybe_pool| {
+        try std.testing.expect(maybe_pool == null);
+    }
+
+    // After allocating at width 4: only tier 4 exists.
+    _ = try circuit.createComponent(.{ .wire = .{} }, 4);
+    try std.testing.expect(circuit.tiers[4] != null);
+    try std.testing.expect(circuit.tiers[1] == null);
+    try std.testing.expect(circuit.tiers[8] == null);
+    try std.testing.expect(circuit.tiers[64] == null);
+    // Tier 0 stays null forever (reserved/unused under `tier = width`).
+    try std.testing.expect(circuit.tiers[0] == null);
+
+    // After allocating at width 1: tiers 1 and 4 exist; others still null.
+    _ = try circuit.createComponent(.{ .wire = .{} }, 1);
+    try std.testing.expect(circuit.tiers[1] != null);
+    try std.testing.expect(circuit.tiers[4] != null);
+    try std.testing.expect(circuit.tiers[8] == null);
+    try std.testing.expect(circuit.tiers[64] == null);
+}
+
+test "Circuit: deinit frees every allocated tier with mixed widths" {
+    // Build a Circuit that touches four different tiers, then deinit.
+    // Zig's debug allocator catches double-frees and leaks at scope exit;
+    // a clean test pass here is the evidence that deinit walks every
+    // non-null tier and frees its ArrayLists.
+    var circuit = try Circuit.init();
+    _ = try circuit.createComponent(.{ .wire = .{} }, 1);
+    _ = try circuit.createComponent(.{ .wire = .{} }, 4);
+    _ = try circuit.createComponent(.{ .wire = .{} }, 8);
+    _ = try circuit.createComponent(.{ .wire = .{} }, 64);
+    // Force allocator growth in each tier so deinit has buffers to free.
+    var i: usize = 0;
+    while (i < 5) : (i += 1) {
+        _ = try circuit.createComponent(.{ .wire = .{} }, 4);
+        _ = try circuit.createComponent(.{ .wire = .{} }, 8);
+    }
+    circuit.deinit();
 }
 
 // ============================================================================
@@ -1360,9 +1462,9 @@ test "engine: pool view tracks state across a propagation chain" {
     var circuit = try Circuit.init();
     defer circuit.deinit();
 
-    const input = try circuit.createComponent(.{ .input_pin_gate = .{} });
-    const not_gate = try circuit.createComponent(.{ .not_gate = .{} });
-    const out = try circuit.createComponent(.{ .output_pin = .{} });
+    const input = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const not_gate = try circuit.createComponent(.{ .not_gate = .{} }, 1);
+    const out = try circuit.createComponent(.{ .output_pin = .{} }, 1);
     try circuit.connect(input.port(OUT_PORT_NAME), not_gate.port(IN_PORT_NAME));
     try circuit.connect(not_gate.port(OUT_PORT_NAME), out.port(OUTPUT_PIN_IN_PORT_NAME));
 
@@ -1389,14 +1491,15 @@ test "engine: pool slot indices are dense and unique" {
 
     var ids: [70]u32 = undefined;
     for (&ids, 0..) |*slot, i| {
-        const comp = try circuit.createComponent(.{ .wire = .{} });
+        const comp = try circuit.createComponent(.{ .wire = .{} }, 1);
         slot.* = comp.state_handle.slot;
         try std.testing.expectEqual(@as(u32, @intCast(i)), slot.*);
-        try std.testing.expectEqual(@as(u8, 0), comp.state_handle.tier);
+        // Width=1 components live in tier 1 under the `tier = width` rule.
+        try std.testing.expectEqual(@as(u8, 1), comp.state_handle.tier);
     }
 
     // Slot 64 crossed the first word boundary; confirm the second word
-    // actually exists on both buffers.
-    try std.testing.expect(circuit.tier1.values.items.len >= 2);
-    try std.testing.expect(circuit.tier1.defined.items.len >= 2);
+    // actually exists on both buffers of the lazily-initialized tier-1 pool.
+    try std.testing.expect(circuit.tiers[1].?.values.items.len >= 2);
+    try std.testing.expect(circuit.tiers[1].?.defined.items.len >= 2);
 }

@@ -327,7 +327,7 @@ fn emitFileBuildFunction(
                 const var_name = try componentVarName(allocator, writer, component);
                 defer allocator.free(var_name);
                 try writer.writeLineFmt(
-                    "const {s} = try circuit.createComponent({s});",
+                    "const {s} = try circuit.createComponent({s}, 1);",
                     .{ var_name, primitiveExpr(primitive) },
                 );
             },

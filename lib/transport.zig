@@ -58,7 +58,7 @@ test "transport: encodes output_pin state" {
     var circuit = try Circuit.init();
     defer circuit.deinit();
 
-    const output_pin = try circuit.createComponent(.{ .output_pin = .{} });
+    const output_pin = try circuit.createComponent(.{ .output_pin = .{} }, 1);
     const state = circuit.readState(output_pin.state_handle);
     const encoded = try encodeState(output_pin, state).encode(std.testing.allocator);
     defer std.testing.allocator.free(encoded);

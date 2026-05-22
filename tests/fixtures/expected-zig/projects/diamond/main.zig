@@ -10,11 +10,11 @@ fn buildFile_0(circuit: *engine.Circuit) !struct {
     input_a: *engine.Component,
     output_out: *engine.Component,
 } {
-    const comp_a_0 = try circuit.createComponent(.{ .input_pin_gate = .{} });
+    const comp_a_0 = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
     const inst_l_1 = try buildFile_1(circuit);
     const inst_r_2 = try buildFile_2(circuit);
-    const comp_comb_3 = try circuit.createComponent(.{ .and_gate = .{} });
-    const comp_out_4 = try circuit.createComponent(.{ .output_pin = .{} });
+    const comp_comb_3 = try circuit.createComponent(.{ .and_gate = .{} }, 1);
+    const comp_out_4 = try circuit.createComponent(.{ .output_pin = .{} }, 1);
     try circuit.connect(comp_a_0.port("out"), inst_l_1.input_in.port("in"));
     try circuit.connect(comp_a_0.port("out"), inst_r_2.input_in.port("in"));
     try circuit.connect(inst_l_1.output_out.port("out"), comp_comb_3.port("a"));
@@ -30,9 +30,9 @@ fn buildFile_1(circuit: *engine.Circuit) !struct {
     input_in: *engine.Component,
     output_out: *engine.Component,
 } {
-    const comp_in_0 = try circuit.createComponent(.{ .input_pin_gate = .{} });
+    const comp_in_0 = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
     const inst_b_1 = try buildFile_8(circuit);
-    const comp_out_2 = try circuit.createComponent(.{ .output_pin = .{} });
+    const comp_out_2 = try circuit.createComponent(.{ .output_pin = .{} }, 1);
     try circuit.connect(comp_in_0.port("out"), inst_b_1.input_in.port("in"));
     try circuit.connect(inst_b_1.output_out.port("out"), comp_out_2.port("in"));
     return .{
@@ -45,9 +45,9 @@ fn buildFile_2(circuit: *engine.Circuit) !struct {
     input_in: *engine.Component,
     output_out: *engine.Component,
 } {
-    const comp_in_0 = try circuit.createComponent(.{ .input_pin_gate = .{} });
+    const comp_in_0 = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
     const inst_b_1 = try buildFile_8(circuit);
-    const comp_out_2 = try circuit.createComponent(.{ .output_pin = .{} });
+    const comp_out_2 = try circuit.createComponent(.{ .output_pin = .{} }, 1);
     try circuit.connect(comp_in_0.port("out"), inst_b_1.input_in.port("in"));
     try circuit.connect(inst_b_1.output_out.port("out"), comp_out_2.port("in"));
     return .{
@@ -61,13 +61,13 @@ fn buildFile_3(circuit: *engine.Circuit) !struct {
     input_b: *engine.Component,
     output_out: *engine.Component,
 } {
-    const comp_a_0 = try circuit.createComponent(.{ .input_pin_gate = .{} });
-    const comp_b_1 = try circuit.createComponent(.{ .input_pin_gate = .{} });
-    const comp_na_2 = try circuit.createComponent(.{ .not_gate = .{} });
-    const comp_nb_3 = try circuit.createComponent(.{ .not_gate = .{} });
-    const comp_inner_4 = try circuit.createComponent(.{ .and_gate = .{} });
-    const comp_n_5 = try circuit.createComponent(.{ .not_gate = .{} });
-    const comp_out_6 = try circuit.createComponent(.{ .output_pin = .{} });
+    const comp_a_0 = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const comp_b_1 = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const comp_na_2 = try circuit.createComponent(.{ .not_gate = .{} }, 1);
+    const comp_nb_3 = try circuit.createComponent(.{ .not_gate = .{} }, 1);
+    const comp_inner_4 = try circuit.createComponent(.{ .and_gate = .{} }, 1);
+    const comp_n_5 = try circuit.createComponent(.{ .not_gate = .{} }, 1);
+    const comp_out_6 = try circuit.createComponent(.{ .output_pin = .{} }, 1);
     try circuit.connect(comp_a_0.port("out"), comp_na_2.port("in"));
     try circuit.connect(comp_b_1.port("out"), comp_nb_3.port("in"));
     try circuit.connect(comp_na_2.port("out"), comp_inner_4.port("a"));
@@ -86,11 +86,11 @@ fn buildFile_4(circuit: *engine.Circuit) !struct {
     input_b: *engine.Component,
     output_out: *engine.Component,
 } {
-    const comp_a_0 = try circuit.createComponent(.{ .input_pin_gate = .{} });
-    const comp_b_1 = try circuit.createComponent(.{ .input_pin_gate = .{} });
-    const comp_inner_2 = try circuit.createComponent(.{ .and_gate = .{} });
-    const comp_n_3 = try circuit.createComponent(.{ .not_gate = .{} });
-    const comp_out_4 = try circuit.createComponent(.{ .output_pin = .{} });
+    const comp_a_0 = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const comp_b_1 = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const comp_inner_2 = try circuit.createComponent(.{ .and_gate = .{} }, 1);
+    const comp_n_3 = try circuit.createComponent(.{ .not_gate = .{} }, 1);
+    const comp_out_4 = try circuit.createComponent(.{ .output_pin = .{} }, 1);
     try circuit.connect(comp_a_0.port("out"), comp_inner_2.port("a"));
     try circuit.connect(comp_b_1.port("out"), comp_inner_2.port("b"));
     try circuit.connect(comp_inner_2.port("out"), comp_n_3.port("in"));
@@ -107,11 +107,11 @@ fn buildFile_5(circuit: *engine.Circuit) !struct {
     input_b: *engine.Component,
     output_out: *engine.Component,
 } {
-    const comp_a_0 = try circuit.createComponent(.{ .input_pin_gate = .{} });
-    const comp_b_1 = try circuit.createComponent(.{ .input_pin_gate = .{} });
+    const comp_a_0 = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const comp_b_1 = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
     const inst_inner_2 = try buildFile_3(circuit);
-    const comp_n_3 = try circuit.createComponent(.{ .not_gate = .{} });
-    const comp_out_4 = try circuit.createComponent(.{ .output_pin = .{} });
+    const comp_n_3 = try circuit.createComponent(.{ .not_gate = .{} }, 1);
+    const comp_out_4 = try circuit.createComponent(.{ .output_pin = .{} }, 1);
     try circuit.connect(comp_a_0.port("out"), inst_inner_2.input_a.port("in"));
     try circuit.connect(comp_b_1.port("out"), inst_inner_2.input_b.port("in"));
     try circuit.connect(inst_inner_2.output_out.port("out"), comp_n_3.port("in"));
@@ -128,12 +128,12 @@ fn buildFile_6(circuit: *engine.Circuit) !struct {
     input_b: *engine.Component,
     output_out: *engine.Component,
 } {
-    const comp_a_0 = try circuit.createComponent(.{ .input_pin_gate = .{} });
-    const comp_b_1 = try circuit.createComponent(.{ .input_pin_gate = .{} });
+    const comp_a_0 = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const comp_b_1 = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
     const inst_o_2 = try buildFile_3(circuit);
     const inst_n_3 = try buildFile_4(circuit);
-    const comp_gate_4 = try circuit.createComponent(.{ .and_gate = .{} });
-    const comp_out_5 = try circuit.createComponent(.{ .output_pin = .{} });
+    const comp_gate_4 = try circuit.createComponent(.{ .and_gate = .{} }, 1);
+    const comp_out_5 = try circuit.createComponent(.{ .output_pin = .{} }, 1);
     try circuit.connect(comp_a_0.port("out"), inst_o_2.input_a.port("in"));
     try circuit.connect(comp_b_1.port("out"), inst_o_2.input_b.port("in"));
     try circuit.connect(comp_a_0.port("out"), inst_n_3.input_a.port("in"));
@@ -153,11 +153,11 @@ fn buildFile_7(circuit: *engine.Circuit) !struct {
     input_b: *engine.Component,
     output_out: *engine.Component,
 } {
-    const comp_a_0 = try circuit.createComponent(.{ .input_pin_gate = .{} });
-    const comp_b_1 = try circuit.createComponent(.{ .input_pin_gate = .{} });
+    const comp_a_0 = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const comp_b_1 = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
     const inst_inner_2 = try buildFile_6(circuit);
-    const comp_n_3 = try circuit.createComponent(.{ .not_gate = .{} });
-    const comp_out_4 = try circuit.createComponent(.{ .output_pin = .{} });
+    const comp_n_3 = try circuit.createComponent(.{ .not_gate = .{} }, 1);
+    const comp_out_4 = try circuit.createComponent(.{ .output_pin = .{} }, 1);
     try circuit.connect(comp_a_0.port("out"), inst_inner_2.input_a.port("in"));
     try circuit.connect(comp_b_1.port("out"), inst_inner_2.input_b.port("in"));
     try circuit.connect(inst_inner_2.output_out.port("out"), comp_n_3.port("in"));
@@ -173,8 +173,8 @@ fn buildFile_8(circuit: *engine.Circuit) !struct {
     input_in: *engine.Component,
     output_out: *engine.Component,
 } {
-    const comp_in_0 = try circuit.createComponent(.{ .input_pin_gate = .{} });
-    const comp_out_1 = try circuit.createComponent(.{ .output_pin = .{} });
+    const comp_in_0 = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const comp_out_1 = try circuit.createComponent(.{ .output_pin = .{} }, 1);
     try circuit.connect(comp_in_0.port("out"), comp_out_1.port("in"));
     return .{
         .input_in = comp_in_0,
