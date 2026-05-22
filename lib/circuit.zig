@@ -1355,6 +1355,103 @@ test "Circuit: allocateStateSlot returns a tier=width handle and round-trips" {
     try std.testing.expect(circuit.readState(h2).equals(BitVecState.low(1)));
 }
 
+test "Circuit: createComponent at widths 4, 8, 64 lands in the matching tier" {
+    inline for (.{ 4, 8, 64 }) |w| {
+        var circuit = try Circuit.init();
+        defer circuit.deinit();
+
+        const comp = try circuit.createComponent(.{ .wire = .{} }, w);
+        // Handle's tier equals the requested width under `tier = width`.
+        try std.testing.expectEqual(@as(u8, w), comp.state_handle.tier);
+        try std.testing.expectEqual(@as(u32, 0), comp.state_handle.slot);
+        // Initial state is undefined at the requested width.
+        try std.testing.expect(circuit.readState(comp.state_handle).equals(BitVecState.undefined_(w)));
+
+        // Round-trip a defined value to confirm the slot dispatches to the
+        // right pool's storage on both read and write.
+        circuit.writeState(comp.state_handle, BitVecState.high(w));
+        try std.testing.expect(circuit.readState(comp.state_handle).equals(BitVecState.high(w)));
+    }
+}
+
+test "Circuit: mixed-width components allocate in independent tiers" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    const scalar = try circuit.createComponent(.{ .wire = .{} }, 1);
+    const bus4 = try circuit.createComponent(.{ .wire = .{} }, 4);
+    const bus8 = try circuit.createComponent(.{ .wire = .{} }, 8);
+    const scalar2 = try circuit.createComponent(.{ .wire = .{} }, 1);
+
+    // Each width gets its own tier; same-width components share a tier
+    // and receive dense slot indices within it.
+    try std.testing.expectEqual(@as(u8, 1), scalar.state_handle.tier);
+    try std.testing.expectEqual(@as(u32, 0), scalar.state_handle.slot);
+    try std.testing.expectEqual(@as(u8, 4), bus4.state_handle.tier);
+    try std.testing.expectEqual(@as(u32, 0), bus4.state_handle.slot);
+    try std.testing.expectEqual(@as(u8, 8), bus8.state_handle.tier);
+    try std.testing.expectEqual(@as(u32, 0), bus8.state_handle.slot);
+    try std.testing.expectEqual(@as(u8, 1), scalar2.state_handle.tier);
+    try std.testing.expectEqual(@as(u32, 1), scalar2.state_handle.slot);
+
+    // Writes to one tier must not bleed into another.
+    circuit.writeState(scalar.state_handle, BitVecState.high(1));
+    circuit.writeState(bus4.state_handle, BitVecState{ .value = 0b1010, .defined = 0b1111, .width = 4 });
+    circuit.writeState(bus8.state_handle, BitVecState.low(8));
+    circuit.writeState(scalar2.state_handle, BitVecState.low(1));
+
+    try std.testing.expect(circuit.readState(scalar.state_handle).equals(BitVecState.high(1)));
+    try std.testing.expectEqual(@as(u64, 0b1010), circuit.readState(bus4.state_handle).value);
+    try std.testing.expectEqual(@as(u64, 0b1111), circuit.readState(bus4.state_handle).defined);
+    try std.testing.expect(circuit.readState(bus8.state_handle).equals(BitVecState.low(8)));
+    try std.testing.expect(circuit.readState(scalar2.state_handle).equals(BitVecState.low(1)));
+}
+
+test "Circuit: lazy tier init only allocates tiers actually used" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    // Empty Circuit: every tier slot is null.
+    for (circuit.tiers) |maybe_pool| {
+        try std.testing.expect(maybe_pool == null);
+    }
+
+    // After allocating at width 4: only tier 4 exists.
+    _ = try circuit.createComponent(.{ .wire = .{} }, 4);
+    try std.testing.expect(circuit.tiers[4] != null);
+    try std.testing.expect(circuit.tiers[1] == null);
+    try std.testing.expect(circuit.tiers[8] == null);
+    try std.testing.expect(circuit.tiers[64] == null);
+    // Tier 0 stays null forever (reserved/unused under `tier = width`).
+    try std.testing.expect(circuit.tiers[0] == null);
+
+    // After allocating at width 1: tiers 1 and 4 exist; others still null.
+    _ = try circuit.createComponent(.{ .wire = .{} }, 1);
+    try std.testing.expect(circuit.tiers[1] != null);
+    try std.testing.expect(circuit.tiers[4] != null);
+    try std.testing.expect(circuit.tiers[8] == null);
+    try std.testing.expect(circuit.tiers[64] == null);
+}
+
+test "Circuit: deinit frees every allocated tier with mixed widths" {
+    // Build a Circuit that touches four different tiers, then deinit.
+    // Zig's debug allocator catches double-frees and leaks at scope exit;
+    // a clean test pass here is the evidence that deinit walks every
+    // non-null tier and frees its ArrayLists.
+    var circuit = try Circuit.init();
+    _ = try circuit.createComponent(.{ .wire = .{} }, 1);
+    _ = try circuit.createComponent(.{ .wire = .{} }, 4);
+    _ = try circuit.createComponent(.{ .wire = .{} }, 8);
+    _ = try circuit.createComponent(.{ .wire = .{} }, 64);
+    // Force allocator growth in each tier so deinit has buffers to free.
+    var i: usize = 0;
+    while (i < 5) : (i += 1) {
+        _ = try circuit.createComponent(.{ .wire = .{} }, 4);
+        _ = try circuit.createComponent(.{ .wire = .{} }, 8);
+    }
+    circuit.deinit();
+}
+
 // ============================================================================
 // End-to-end engine tests over the BitVecState / pool surface. State lives
 // exclusively in the per-tier SoA pool; `Circuit.createComponent` allocates
