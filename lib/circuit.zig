@@ -30,20 +30,30 @@ const OUT_PORT_NAME = "out";
 const OUTPUT_PIN_IN_PORT_NAME = "in";
 const OUTPUT_PIN_OUT_PORT_NAME = "out";
 
-fn calculateDominantState(circuit: *const Circuit, input_comp_list: std.ArrayList(*Component)) BitVecState {
-    // Preserves the existing asymmetric rule: any input reading high wins
-    // immediately; otherwise the *last* input's state is dominant (the
-    // loop overwrites `dominant_state` on every iteration). Reads source
-    // from the pool; the comparison currency is `BitVecState` width=1.
-    var dominant_state = BitVecState.undefined_(1);
+fn calculateDominantState(circuit: *const Circuit, input_comp_list: std.ArrayList(*Component), width: u8) BitVecState {
+    // Per-bit dominance: every bit position where some input reads
+    // defined-high is locked high in the result; remaining bits come
+    // from the LAST input's state. Reduces at width=1 to the previous
+    // "any input reading high wins immediately, otherwise the last
+    // input's state is dominant" rule (the early-return on isHigh was
+    // an optimization; the bitwise form gives the same answer because
+    // a locked-high bit overrides whatever the last input said there).
+    var dominant_state = BitVecState.undefined_(width);
+    var locked_high: u64 = 0;
     for (input_comp_list.items) |input_comp| {
         const s = circuit.readState(input_comp.state_handle);
-        if (s.isHigh()) {
-            return BitVecState.high(1);
-        }
+        locked_high |= s.value & s.defined;
         dominant_state = s;
     }
-    return dominant_state;
+    const m = widthMask(width);
+    const high_mask = locked_high & m;
+    const carry_value = dominant_state.value & dominant_state.defined & m;
+    const carry_defined = dominant_state.defined & m;
+    return .{
+        .value = high_mask | carry_value,
+        .defined = high_mask | carry_defined,
+        .width = width,
+    };
 }
 
 fn recalculateAndReschedule(
@@ -52,26 +62,23 @@ fn recalculateAndReschedule(
     queue: *EventQueue,
     current_time: Timestamp,
 ) !void {
-    var calculated_state = BitVecState.undefined_(1);
+    // Width comes from the component's own state slot's tier (the
+    // `tier = width` convention); the dispatch below stays in this width
+    // throughout, and BitVecState ops compose with width-agnostic bit ops.
+    const width: u8 = component.state_handle.tier;
+    var calculated_state = BitVecState.undefined_(width);
 
     switch (component.kind) {
         .not_gate => |gate| {
-            calculated_state = calculateDominantState(circuit, gate.inputs).flip();
+            calculated_state = calculateDominantState(circuit, gate.inputs, width).flip();
         },
         .and_gate => |gate| {
-            const aValue = calculateDominantState(circuit, gate.inputs_a);
-            const bValue = calculateDominantState(circuit, gate.inputs_b);
-
-            if (aValue.isLow() or bValue.isLow()) {
-                calculated_state = BitVecState.low(1);
-            } else if (aValue.isUndefined() or bValue.isUndefined()) {
-                calculated_state = BitVecState.undefined_(1);
-            } else {
-                calculated_state = BitVecState.high(1);
-            }
+            const aValue = calculateDominantState(circuit, gate.inputs_a, width);
+            const bValue = calculateDominantState(circuit, gate.inputs_b, width);
+            calculated_state = aValue.bitAnd(bValue);
         },
         .led => |led_internals| {
-            calculated_state = calculateDominantState(circuit, led_internals.inputs);
+            calculated_state = calculateDominantState(circuit, led_internals.inputs, width);
             const current = circuit.readState(component.state_handle);
             if (!calculated_state.equals(current)) {
                 if (comptime log.enabled(.info)) {
@@ -86,17 +93,17 @@ fn recalculateAndReschedule(
             for (wire.inputs.items) |input_comp| {
                 const s = circuit.readState(input_comp.state_handle);
                 if (!s.isUndefined()) {
-                    calculated_state = calculateDominantState(circuit, wire.inputs);
+                    calculated_state = calculateDominantState(circuit, wire.inputs, width);
                     break;
                 }
             }
         },
         .output_pin => |output_pin| {
-            calculated_state = calculateDominantState(circuit, output_pin.inputs);
+            calculated_state = calculateDominantState(circuit, output_pin.inputs, width);
         },
         .input_pin_gate => |gate| {
             if (gate.inputs.items.len == 0) return;
-            calculated_state = calculateDominantState(circuit, gate.inputs);
+            calculated_state = calculateDominantState(circuit, gate.inputs, width);
         },
     }
 
@@ -262,11 +269,14 @@ pub const BitVecState = struct {
         return 2;
     }
 
-    /// Width=1 string label for logs and debug dumps. Matches the names
-    /// the old `State` enum carried, so log scrubbing doesn't have to
-    /// learn a new vocabulary.
+    /// Short label for logs and debug dumps. At width=1 matches the
+    /// names the old `State` enum carried ("undefined", "low", "high")
+    /// so log scrubbing doesn't have to learn a new vocabulary. At
+    /// wider widths returns "multi-bit" because the value/defined pair
+    /// doesn't reduce to a single label and the call sites are debug
+    /// logs that don't need the full bit pattern.
     pub fn tagName(self: BitVecState) []const u8 {
-        std.debug.assert(self.width == 1);
+        if (self.width != 1) return "multi-bit";
         if (self.isUndefined()) return "undefined";
         if (self.isLow()) return "low";
         return "high";
