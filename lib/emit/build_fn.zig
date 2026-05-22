@@ -77,7 +77,7 @@ pub fn emitBuildFunction(allocator: std.mem.Allocator, module: *const ir.Module)
             .sub_circuit_ref => return error.UnsupportedSubCircuitInPhase4,
             .unresolved_name => return error.UnresolvedComponentName,
         };
-        try writer.writeLineFmt("const {s} = try circuit.createComponent({s});", .{ var_name, expr });
+        try writer.writeLineFmt("const {s} = try circuit.createComponent({s}, 1);", .{ var_name, expr });
     }
 
     for (module.connections) |connection| {

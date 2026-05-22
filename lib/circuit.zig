@@ -585,12 +585,12 @@ pub const Circuit = struct {
         }
     }
 
-    pub fn createComponent(self: *Circuit, kind: Component.Kind) !*Component {
+    pub fn createComponent(self: *Circuit, kind: Component.Kind, width: u8) !*Component {
         const new_component = try Component.init(self.next_id, kind);
         // Allocate the state slot before the component is published to
         // `nodes`, so `deinit` (which never sees an in-flight component)
         // does not have to special-case the half-constructed state.
-        new_component.state_handle = try self.allocateStateSlot(1);
+        new_component.state_handle = try self.allocateStateSlot(width);
         self.next_id += 1;
         try self.nodes.append(memory.allocator, new_component);
         return new_component;
@@ -775,8 +775,8 @@ test "output_pin: passes input through" {
         var circuit = try Circuit.init();
         defer circuit.deinit();
 
-        const input = try circuit.createComponent(.{ .input_pin_gate = .{} });
-        const output_pin = try circuit.createComponent(.{ .output_pin = .{} });
+        const input = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+        const output_pin = try circuit.createComponent(.{ .output_pin = .{} }, 1);
         try circuit.connect(input.port(OUT_PORT_NAME), output_pin.port(OUTPUT_PIN_IN_PORT_NAME));
 
         try circuit.propagateEvent(input, BitVecState.low(1));
@@ -789,8 +789,8 @@ test "output_pin: passes input through" {
         var circuit = try Circuit.init();
         defer circuit.deinit();
 
-        const input = try circuit.createComponent(.{ .input_pin_gate = .{} });
-        const output_pin = try circuit.createComponent(.{ .output_pin = .{} });
+        const input = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+        const output_pin = try circuit.createComponent(.{ .output_pin = .{} }, 1);
         try circuit.connect(input.port(OUT_PORT_NAME), output_pin.port(OUTPUT_PIN_IN_PORT_NAME));
 
         try circuit.propagateEvent(input, BitVecState.high(1));
@@ -803,8 +803,8 @@ test "output_pin: passes input through" {
         var circuit = try Circuit.init();
         defer circuit.deinit();
 
-        const input = try circuit.createComponent(.{ .input_pin_gate = .{} });
-        const output_pin = try circuit.createComponent(.{ .output_pin = .{} });
+        const input = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+        const output_pin = try circuit.createComponent(.{ .output_pin = .{} }, 1);
         try circuit.connect(input.port(OUT_PORT_NAME), output_pin.port(OUTPUT_PIN_IN_PORT_NAME));
 
         try circuit.propagateEvent(input, BitVecState.undefined_(1));
@@ -817,8 +817,8 @@ test "output_pin: passes input through" {
         var circuit = try Circuit.init();
         defer circuit.deinit();
 
-        const input = try circuit.createComponent(.{ .input_pin_gate = .{} });
-        const output_pin = try circuit.createComponent(.{ .output_pin = .{} });
+        const input = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+        const output_pin = try circuit.createComponent(.{ .output_pin = .{} }, 1);
         try circuit.connect(input.port(OUT_PORT_NAME), output_pin.port(OUTPUT_PIN_IN_PORT_NAME));
 
         try circuit.propagateEvent(input, BitVecState.low(1));
@@ -834,9 +834,9 @@ test "output_pin: passes input through" {
         var circuit = try Circuit.init();
         defer circuit.deinit();
 
-        const input = try circuit.createComponent(.{ .input_pin_gate = .{} });
-        const output_pin_1 = try circuit.createComponent(.{ .output_pin = .{} });
-        const output_pin_2 = try circuit.createComponent(.{ .output_pin = .{} });
+        const input = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+        const output_pin_1 = try circuit.createComponent(.{ .output_pin = .{} }, 1);
+        const output_pin_2 = try circuit.createComponent(.{ .output_pin = .{} }, 1);
         try circuit.connect(input.port(OUT_PORT_NAME), output_pin_1.port(OUTPUT_PIN_IN_PORT_NAME));
         try circuit.connect(output_pin_1.port(OUTPUT_PIN_OUT_PORT_NAME), output_pin_2.port(OUTPUT_PIN_IN_PORT_NAME));
 
@@ -851,8 +851,8 @@ test "output_pin: passes input through" {
         var circuit = try Circuit.init();
         defer circuit.deinit();
 
-        const upstream = try circuit.createComponent(.{ .input_pin_gate = .{} });
-        const downstream = try circuit.createComponent(.{ .input_pin_gate = .{} });
+        const upstream = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+        const downstream = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
         try circuit.connect(upstream.port(OUT_PORT_NAME), downstream.port(IN_PORT_NAME));
 
         try circuit.propagateEvent(upstream, BitVecState.low(1));
@@ -867,9 +867,9 @@ test "led: registers out port and drives downstream output_pin" {
     var circuit = try Circuit.init();
     defer circuit.deinit();
 
-    const input = try circuit.createComponent(.{ .input_pin_gate = .{} });
-    const led = try circuit.createComponent(.{ .led = .{} });
-    const output_pin = try circuit.createComponent(.{ .output_pin = .{} });
+    const input = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const led = try circuit.createComponent(.{ .led = .{} }, 1);
+    const output_pin = try circuit.createComponent(.{ .output_pin = .{} }, 1);
     try circuit.connect(input.port(OUT_PORT_NAME), led.port(IN_PORT_NAME));
     try circuit.connect(led.port(OUT_PORT_NAME), output_pin.port(OUTPUT_PIN_IN_PORT_NAME));
 
@@ -1365,9 +1365,9 @@ test "engine: pool view tracks state across a propagation chain" {
     var circuit = try Circuit.init();
     defer circuit.deinit();
 
-    const input = try circuit.createComponent(.{ .input_pin_gate = .{} });
-    const not_gate = try circuit.createComponent(.{ .not_gate = .{} });
-    const out = try circuit.createComponent(.{ .output_pin = .{} });
+    const input = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const not_gate = try circuit.createComponent(.{ .not_gate = .{} }, 1);
+    const out = try circuit.createComponent(.{ .output_pin = .{} }, 1);
     try circuit.connect(input.port(OUT_PORT_NAME), not_gate.port(IN_PORT_NAME));
     try circuit.connect(not_gate.port(OUT_PORT_NAME), out.port(OUTPUT_PIN_IN_PORT_NAME));
 
@@ -1394,7 +1394,7 @@ test "engine: pool slot indices are dense and unique" {
 
     var ids: [70]u32 = undefined;
     for (&ids, 0..) |*slot, i| {
-        const comp = try circuit.createComponent(.{ .wire = .{} });
+        const comp = try circuit.createComponent(.{ .wire = .{} }, 1);
         slot.* = comp.state_handle.slot;
         try std.testing.expectEqual(@as(u32, @intCast(i)), slot.*);
         // Width=1 components live in tier 1 under the `tier = width` rule.

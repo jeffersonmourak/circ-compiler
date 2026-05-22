@@ -45,12 +45,12 @@ pub fn initFromTopology(circuit: *engine.Circuit, payload: []const u8) !void {
 
         const component_kind = std.meta.intToEnum(format.ComponentKind, kind_val) catch return error.InvalidComponentKind;
         const comp = switch (component_kind) {
-            .input_pin => try circuit.createComponent(.{ .input_pin_gate = .{} }),
-            .not_gate => try circuit.createComponent(.{ .not_gate = .{} }),
-            .and_gate => try circuit.createComponent(.{ .and_gate = .{} }),
-            .wire => try circuit.createComponent(.{ .wire = .{} }),
-            .led => try circuit.createComponent(.{ .led = .{} }),
-            .output_pin => try circuit.createComponent(.{ .output_pin = .{} }),
+            .input_pin => try circuit.createComponent(.{ .input_pin_gate = .{} }, 1),
+            .not_gate => try circuit.createComponent(.{ .not_gate = .{} }, 1),
+            .and_gate => try circuit.createComponent(.{ .and_gate = .{} }, 1),
+            .wire => try circuit.createComponent(.{ .wire = .{} }, 1),
+            .led => try circuit.createComponent(.{ .led = .{} }, 1),
+            .output_pin => try circuit.createComponent(.{ .output_pin = .{} }, 1),
         };
         comp.id = id; 
         comp_map.putAssumeCapacity(id, comp);

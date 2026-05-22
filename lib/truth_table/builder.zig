@@ -122,12 +122,12 @@ pub fn build(
     try id_to_node.ensureTotalCapacity(@intCast(topology.components.len));
     for (topology.components) |comp| {
         const node = switch (comp.kind) {
-            .input_pin => circuit.createComponent(.{ .input_pin_gate = .{} }),
-            .not_gate => circuit.createComponent(.{ .not_gate = .{} }),
-            .and_gate => circuit.createComponent(.{ .and_gate = .{} }),
-            .wire => circuit.createComponent(.{ .wire = .{} }),
-            .led => circuit.createComponent(.{ .led = .{} }),
-            .output_pin => circuit.createComponent(.{ .output_pin = .{} }),
+            .input_pin => circuit.createComponent(.{ .input_pin_gate = .{} }, 1),
+            .not_gate => circuit.createComponent(.{ .not_gate = .{} }, 1),
+            .and_gate => circuit.createComponent(.{ .and_gate = .{} }, 1),
+            .wire => circuit.createComponent(.{ .wire = .{} }, 1),
+            .led => circuit.createComponent(.{ .led = .{} }, 1),
+            .output_pin => circuit.createComponent(.{ .output_pin = .{} }, 1),
         } catch return error.InvalidTopology;
         node.id = comp.id;
         id_to_node.putAssumeCapacity(comp.id, node);
