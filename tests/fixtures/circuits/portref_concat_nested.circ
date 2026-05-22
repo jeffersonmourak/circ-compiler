@@ -1,0 +1,2 @@
+input a, b, c, d
+output o(in={a, {b, c}, d})

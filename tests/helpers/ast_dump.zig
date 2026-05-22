@@ -39,6 +39,27 @@ fn dumpSignalSource(writer: anytype, source: anytype, depth: usize) anyerror!voi
             try writer.writeAll("AnonymousComponent\n");
             try dumpComponent(writer, anon.*, depth + 1);
         },
+        .indexed => |idx| {
+            try writeIndent(writer, depth);
+            try writer.print("Indexed bit={d} ", .{idx.bit});
+            try writeSpan(writer, idx.span);
+            try writer.writeByte('\n');
+            try dumpSignalSource(writer, idx.source.*, depth + 1);
+        },
+        .sliced => |s| {
+            try writeIndent(writer, depth);
+            try writer.print("Sliced lo={d} hi={d} ", .{ s.lo, s.hi });
+            try writeSpan(writer, s.span);
+            try writer.writeByte('\n');
+            try dumpSignalSource(writer, s.source.*, depth + 1);
+        },
+        .concat => |c| {
+            try writeIndent(writer, depth);
+            try writer.print("Concat parts={d} ", .{c.parts.len});
+            try writeSpan(writer, c.span);
+            try writer.writeByte('\n');
+            for (c.parts) |part| try dumpSignalSource(writer, part, depth + 1);
+        },
     }
 }
 

@@ -1,0 +1,13 @@
+File [f0:1:1-2:28]
+Imports (0)
+Inputs (1)
+  Input a, b, c, d [f0:1:1-1:17]
+Outputs (1)
+  Output o [f0:2:1-2:28]
+    Concat parts=3 [f0:2:13-2:27]
+      NamedRef a.out [f0:2:14-2:15]
+      Concat parts=2 [f0:2:17-2:23]
+        NamedRef b.out [f0:2:18-2:19]
+        NamedRef c.out [f0:2:21-2:22]
+      NamedRef d.out [f0:2:25-2:26]
+Components (0)

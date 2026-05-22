@@ -14,7 +14,11 @@ CallWidths  <- '[' WidthArg (',' WidthArg)* ']'
 WidthArg    <- Integer / Identifier
 Integer     <- [0-9]+
 Identifier  <- [a-zA-Z_][a-zA-Z0-9_]*
-PortRef     <- (AnonDecl '.' Identifier) / (Identifier ('.' Identifier)?)
+PortRef     <- Concat / IndexedRef
+Concat      <- '{' PortRef (',' PortRef)* '}'
+IndexedRef  <- BaseRef #Subscript?
+Subscript   <- '[' Integer '..' Integer ']' / '[' Integer ']'
+BaseRef     <- (AnonDecl '.' Identifier) / (Identifier ('.' Identifier)?)
 IdentList   <- Identifier (',' Identifier)*
 BusType     <- '(' Identifier '=' PortRef (',' Identifier '=' PortRef)* ')'
 

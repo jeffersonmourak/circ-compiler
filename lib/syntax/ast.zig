@@ -44,11 +44,32 @@ pub const PortConnection = struct {
 pub const SignalSource = union(enum) {
     named: NamedSignalRef,
     anonymous: *const ComponentInstance,
+    indexed: IndexedSignalSource,
+    sliced: SlicedSignalSource,
+    concat: ConcatSignalSource,
 };
 
 pub const NamedSignalRef = struct {
     target: Identifier,
     port: Identifier,
+    span: Span,
+};
+
+pub const IndexedSignalSource = struct {
+    source: *const SignalSource,
+    bit: u8,
+    span: Span,
+};
+
+pub const SlicedSignalSource = struct {
+    source: *const SignalSource,
+    lo: u8,
+    hi: u8,
+    span: Span,
+};
+
+pub const ConcatSignalSource = struct {
+    parts: []const SignalSource,
     span: Span,
 };
 
