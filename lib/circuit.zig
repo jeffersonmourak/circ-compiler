@@ -1513,3 +1513,130 @@ test "engine: pool slot indices are dense and unique" {
     try std.testing.expect(circuit.tiers[1].?.values.items.len >= 2);
     try std.testing.expect(circuit.tiers[1].?.defined.items.len >= 2);
 }
+
+test "engine: width=4 AND gate propagates bit-by-bit through full circuit" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    const a = try circuit.createComponent(.{ .input_pin_gate = .{} }, 4);
+    const b = try circuit.createComponent(.{ .input_pin_gate = .{} }, 4);
+    const gate = try circuit.createComponent(.{ .and_gate = .{} }, 4);
+    const out = try circuit.createComponent(.{ .output_pin = .{} }, 4);
+    try circuit.connect(a.port(OUT_PORT_NAME), gate.port(A_PORT_NAME));
+    try circuit.connect(b.port(OUT_PORT_NAME), gate.port(B_PORT_NAME));
+    try circuit.connect(gate.port(OUT_PORT_NAME), out.port(OUTPUT_PIN_IN_PORT_NAME));
+
+    // 0b1100 AND 0b1010 = 0b1000 (only bit 3 high in both operands).
+    try circuit.propagateEvent(a, BitVecState{ .value = 0b1100, .defined = 0b1111, .width = 4 });
+    try circuit.propagateEvent(b, BitVecState{ .value = 0b1010, .defined = 0b1111, .width = 4 });
+    var result = circuit.readState(out.state_handle);
+    try std.testing.expectEqual(@as(u64, 0b1000), result.value);
+    try std.testing.expectEqual(@as(u64, 0b1111), result.defined);
+    try std.testing.expectEqual(@as(u8, 4), result.width);
+
+    // All-ones AND zero = zero across every bit.
+    try circuit.propagateEvent(a, BitVecState.high(4));
+    try circuit.propagateEvent(b, BitVecState.low(4));
+    result = circuit.readState(out.state_handle);
+    try std.testing.expect(result.equals(BitVecState.low(4)));
+
+    // Mixed-defined operand: defined-low at any bit forces the result
+    // bit low even when the other operand is undefined there.
+    //   a (LSB..MSB): hi, undef, lo, hi -> value=0b1001, defined=0b1101
+    //   b (LSB..MSB): hi, hi,    hi, hi -> value=0b1111, defined=0b1111
+    //   result:       hi, undef, lo, hi -> value=0b1001, defined=0b1101
+    try circuit.propagateEvent(a, BitVecState{ .value = 0b1001, .defined = 0b1101, .width = 4 });
+    try circuit.propagateEvent(b, BitVecState.high(4));
+    result = circuit.readState(out.state_handle);
+    try std.testing.expectEqual(@as(u64, 0b1001), result.value);
+    try std.testing.expectEqual(@as(u64, 0b1101), result.defined);
+}
+
+test "engine: width=4 NOT gate flips defined bits, preserves undefined" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    const input = try circuit.createComponent(.{ .input_pin_gate = .{} }, 4);
+    const inverter = try circuit.createComponent(.{ .not_gate = .{} }, 4);
+    const out = try circuit.createComponent(.{ .output_pin = .{} }, 4);
+    try circuit.connect(input.port(OUT_PORT_NAME), inverter.port(IN_PORT_NAME));
+    try circuit.connect(inverter.port(OUT_PORT_NAME), out.port(OUTPUT_PIN_IN_PORT_NAME));
+
+    // NOT 0b1010 = 0b0101.
+    try circuit.propagateEvent(input, BitVecState{ .value = 0b1010, .defined = 0b1111, .width = 4 });
+    var result = circuit.readState(out.state_handle);
+    try std.testing.expectEqual(@as(u64, 0b0101), result.value);
+    try std.testing.expectEqual(@as(u64, 0b1111), result.defined);
+
+    // NOT all-high = all-low.
+    try circuit.propagateEvent(input, BitVecState.high(4));
+    result = circuit.readState(out.state_handle);
+    try std.testing.expect(result.equals(BitVecState.low(4)));
+
+    // Mixed: undefined bits stay undefined; defined bits flip.
+    //   input  (LSB..MSB): hi, undef, lo, hi -> value=0b1001, defined=0b1101
+    //   output (LSB..MSB): lo, undef, hi, lo -> value=0b0100, defined=0b1101
+    try circuit.propagateEvent(input, BitVecState{ .value = 0b1001, .defined = 0b1101, .width = 4 });
+    result = circuit.readState(out.state_handle);
+    try std.testing.expectEqual(@as(u64, 0b0100), result.value);
+    try std.testing.expectEqual(@as(u64, 0b1101), result.defined);
+}
+
+test "engine: width=64 NOT gate handles full-register patterns" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    const input = try circuit.createComponent(.{ .input_pin_gate = .{} }, 64);
+    const inverter = try circuit.createComponent(.{ .not_gate = .{} }, 64);
+    const out = try circuit.createComponent(.{ .output_pin = .{} }, 64);
+    try circuit.connect(input.port(OUT_PORT_NAME), inverter.port(IN_PORT_NAME));
+    try circuit.connect(inverter.port(OUT_PORT_NAME), out.port(OUTPUT_PIN_IN_PORT_NAME));
+
+    // NOT 0xF0F0... = 0x0F0F...
+    try circuit.propagateEvent(input, BitVecState{
+        .value = 0xF0F0F0F0F0F0F0F0,
+        .defined = std.math.maxInt(u64),
+        .width = 64,
+    });
+    var result = circuit.readState(out.state_handle);
+    try std.testing.expectEqual(@as(u64, 0x0F0F0F0F0F0F0F0F), result.value);
+    try std.testing.expectEqual(@as(u64, std.math.maxInt(u64)), result.defined);
+
+    // NOT all-high = all-low at width 64.
+    try circuit.propagateEvent(input, BitVecState.high(64));
+    result = circuit.readState(out.state_handle);
+    try std.testing.expect(result.equals(BitVecState.low(64)));
+}
+
+test "engine: width=4 wire passes multi-bit state through unchanged" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    const input = try circuit.createComponent(.{ .input_pin_gate = .{} }, 4);
+    const buf = try circuit.createComponent(.{ .wire = .{} }, 4);
+    const out = try circuit.createComponent(.{ .output_pin = .{} }, 4);
+    try circuit.connect(input.port(OUT_PORT_NAME), buf.port(IN_PORT_NAME));
+    try circuit.connect(buf.port(OUT_PORT_NAME), out.port(OUTPUT_PIN_IN_PORT_NAME));
+
+    try circuit.propagateEvent(input, BitVecState{ .value = 0b1010, .defined = 0b1111, .width = 4 });
+    const result = circuit.readState(out.state_handle);
+    try std.testing.expectEqual(@as(u64, 0b1010), result.value);
+    try std.testing.expectEqual(@as(u64, 0b1111), result.defined);
+}
+
+test "engine: width=8 LED records the driven state across all bits" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    const input = try circuit.createComponent(.{ .input_pin_gate = .{} }, 8);
+    const led = try circuit.createComponent(.{ .led = .{} }, 8);
+    try circuit.connect(input.port(OUT_PORT_NAME), led.port(IN_PORT_NAME));
+
+    try circuit.propagateEvent(input, BitVecState{ .value = 0xAB, .defined = 0xFF, .width = 8 });
+    const driven = circuit.readState(led.state_handle);
+    try std.testing.expectEqual(@as(u64, 0xAB), driven.value);
+    try std.testing.expectEqual(@as(u64, 0xFF), driven.defined);
+
+    try circuit.propagateEvent(input, BitVecState.undefined_(8));
+    try std.testing.expect(circuit.readState(led.state_handle).equals(BitVecState.undefined_(8)));
+}
