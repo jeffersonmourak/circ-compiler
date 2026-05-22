@@ -1640,3 +1640,103 @@ test "engine: width=8 LED records the driven state across all bits" {
     try circuit.propagateEvent(input, BitVecState.undefined_(8));
     try std.testing.expect(circuit.readState(led.state_handle).equals(BitVecState.undefined_(8)));
 }
+
+test "engine: width=2 AND gate covers two-bit combinations including undefined" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    const a = try circuit.createComponent(.{ .input_pin_gate = .{} }, 2);
+    const b = try circuit.createComponent(.{ .input_pin_gate = .{} }, 2);
+    const gate = try circuit.createComponent(.{ .and_gate = .{} }, 2);
+    const out = try circuit.createComponent(.{ .output_pin = .{} }, 2);
+    try circuit.connect(a.port(OUT_PORT_NAME), gate.port(A_PORT_NAME));
+    try circuit.connect(b.port(OUT_PORT_NAME), gate.port(B_PORT_NAME));
+    try circuit.connect(gate.port(OUT_PORT_NAME), out.port(OUTPUT_PIN_IN_PORT_NAME));
+
+    // 0b01 AND 0b10 = 0b00: no bit position has both operands high.
+    try circuit.propagateEvent(a, BitVecState{ .value = 0b01, .defined = 0b11, .width = 2 });
+    try circuit.propagateEvent(b, BitVecState{ .value = 0b10, .defined = 0b11, .width = 2 });
+    var result = circuit.readState(out.state_handle);
+    try std.testing.expectEqual(@as(u64, 0b00), result.value);
+    try std.testing.expectEqual(@as(u64, 0b11), result.defined);
+    try std.testing.expectEqual(@as(u8, 2), result.width);
+
+    // 0b11 AND 0b10 = 0b10: bit 1 is high in both operands; bit 0 fails.
+    try circuit.propagateEvent(a, BitVecState{ .value = 0b11, .defined = 0b11, .width = 2 });
+    try circuit.propagateEvent(b, BitVecState{ .value = 0b10, .defined = 0b11, .width = 2 });
+    result = circuit.readState(out.state_handle);
+    try std.testing.expectEqual(@as(u64, 0b10), result.value);
+    try std.testing.expectEqual(@as(u64, 0b11), result.defined);
+
+    // Mixed-defined: a (bit 0..1) = undef, hi -> value=0b10, defined=0b10;
+    //                b (bit 0..1) = hi,    hi -> value=0b11, defined=0b11.
+    // Result bit 1 = hi (both defined-high); bit 0 stays undefined.
+    try circuit.propagateEvent(a, BitVecState{ .value = 0b10, .defined = 0b10, .width = 2 });
+    try circuit.propagateEvent(b, BitVecState.high(2));
+    result = circuit.readState(out.state_handle);
+    try std.testing.expectEqual(@as(u64, 0b10), result.value);
+    try std.testing.expectEqual(@as(u64, 0b10), result.defined);
+}
+
+test "engine: width=8 NOT gate inverts a byte and preserves undefined nibbles" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    const input = try circuit.createComponent(.{ .input_pin_gate = .{} }, 8);
+    const inverter = try circuit.createComponent(.{ .not_gate = .{} }, 8);
+    const out = try circuit.createComponent(.{ .output_pin = .{} }, 8);
+    try circuit.connect(input.port(OUT_PORT_NAME), inverter.port(IN_PORT_NAME));
+    try circuit.connect(inverter.port(OUT_PORT_NAME), out.port(OUTPUT_PIN_IN_PORT_NAME));
+
+    // NOT 0xAA = 0x55: alternating bit pattern flips perfectly.
+    try circuit.propagateEvent(input, BitVecState{ .value = 0xAA, .defined = 0xFF, .width = 8 });
+    var result = circuit.readState(out.state_handle);
+    try std.testing.expectEqual(@as(u64, 0x55), result.value);
+    try std.testing.expectEqual(@as(u64, 0xFF), result.defined);
+
+    // NOT all-high = all-low at byte width.
+    try circuit.propagateEvent(input, BitVecState.high(8));
+    result = circuit.readState(out.state_handle);
+    try std.testing.expect(result.equals(BitVecState.low(8)));
+
+    // Mixed: upper nibble defined, lower nibble undefined.
+    //   input  value=0xA5, defined=0xF0  -> defined bits in value are 0xA0
+    //   flip masks (~value & widthMask & defined) = 0x5A & 0xF0 = 0x50
+    //   undefined lower nibble stays undefined: value=0x50, defined=0xF0.
+    try circuit.propagateEvent(input, BitVecState{ .value = 0xA5, .defined = 0xF0, .width = 8 });
+    result = circuit.readState(out.state_handle);
+    try std.testing.expectEqual(@as(u64, 0x50), result.value);
+    try std.testing.expectEqual(@as(u64, 0xF0), result.defined);
+}
+
+test "engine: width=64 wire passes a full-register pattern through unchanged" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    const input = try circuit.createComponent(.{ .input_pin_gate = .{} }, 64);
+    const buf = try circuit.createComponent(.{ .wire = .{} }, 64);
+    const out = try circuit.createComponent(.{ .output_pin = .{} }, 64);
+    try circuit.connect(input.port(OUT_PORT_NAME), buf.port(IN_PORT_NAME));
+    try circuit.connect(buf.port(OUT_PORT_NAME), out.port(OUTPUT_PIN_IN_PORT_NAME));
+
+    // Full-register alternating pattern round-trips bit-for-bit.
+    try circuit.propagateEvent(input, BitVecState{
+        .value = 0xAAAAAAAAAAAAAAAA,
+        .defined = std.math.maxInt(u64),
+        .width = 64,
+    });
+    var result = circuit.readState(out.state_handle);
+    try std.testing.expectEqual(@as(u64, 0xAAAAAAAAAAAAAAAA), result.value);
+    try std.testing.expectEqual(@as(u64, std.math.maxInt(u64)), result.defined);
+
+    // Mixed defined/undefined halves survive the round-trip: the upper
+    // 32 bits are defined to 0xDEADBEEF, the lower 32 are undefined.
+    try circuit.propagateEvent(input, BitVecState{
+        .value = 0xDEADBEEF00000000,
+        .defined = 0xFFFFFFFF00000000,
+        .width = 64,
+    });
+    result = circuit.readState(out.state_handle);
+    try std.testing.expectEqual(@as(u64, 0xDEADBEEF00000000), result.value);
+    try std.testing.expectEqual(@as(u64, 0xFFFFFFFF00000000), result.defined);
+}
