@@ -1,0 +1,2 @@
+input x, y
+and[8] g(a=x, b=y)

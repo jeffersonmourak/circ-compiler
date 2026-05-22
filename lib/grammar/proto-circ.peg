@@ -3,9 +3,11 @@ Annotation  <- '//' (![\n] .)*
 
 ImportDecl  <- 'import' Identifier '"' (!["] .)* '"'
 
-Declaration <- (ComponentType Identifier BusType) / (ComponentType IdentList)
+Declaration <- (ComponentType WidthAnnot? Identifier BusType) / (ComponentType WidthAnnot? IdentList)
 AnonDecl    <- (ComponentType BusType)
 ComponentType    <- 'input' / 'output' / 'bus' / 'led' / 'and' / 'or' / 'not' / 'xor' / 'nand' / Identifier
+WidthAnnot  <- '[' Integer ']'
+Integer     <- [0-9]+
 Identifier  <- [a-zA-Z_][a-zA-Z0-9_]*
 PortRef     <- (AnonDecl '.' Identifier) / (Identifier ('.' Identifier)?)
 IdentList   <- Identifier (',' Identifier)*

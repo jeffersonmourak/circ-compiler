@@ -1,0 +1,21 @@
+File [f0:1:1-4:20]
+Imports (0)
+Inputs (1)
+  Input x, y [f0:1:7-1:11]
+Outputs (0)
+Components (3)
+  Component type=and width=[4] instance=g width=[4] [f0:2:1-2:18]
+    Port a [f0:2:9-2:10]
+      NamedRef x.out [f0:2:11-2:12]
+    Port b [f0:2:14-2:15]
+      NamedRef y.out [f0:2:16-2:17]
+  Component type=and width=[4] instance=h width=[4] [f0:3:1-3:20]
+    Port a [f0:3:11-3:12]
+      NamedRef x.out [f0:3:13-3:14]
+    Port b [f0:3:16-3:17]
+      NamedRef y.out [f0:3:18-3:19]
+  Component type=and width=[4] instance=i width=[4] [f0:4:1-4:20]
+    Port a [f0:4:11-4:12]
+      NamedRef x.out [f0:4:13-4:14]
+    Port b [f0:4:16-4:17]
+      NamedRef y.out [f0:4:18-4:19]

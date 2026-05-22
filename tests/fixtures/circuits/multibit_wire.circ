@@ -1,0 +1,2 @@
+input a
+bus[4] w(in=a)

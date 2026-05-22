@@ -1,0 +1,4 @@
+input x, y
+and[4]g(a=x, b=y)
+and [4] h(a=x, b=y)
+and[ 4 ]i(a=x, b=y)

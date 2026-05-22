@@ -1,0 +1,2 @@
+input a
+led[4] l(in=a)

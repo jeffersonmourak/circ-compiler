@@ -50,9 +50,15 @@ pub const NamedSignalRef = struct {
     span: Span,
 };
 
+pub const WidthSpec = union(enum) {
+    literal: u8,
+    parameter: []const u8,
+};
+
 pub const Identifier = struct {
     text: []const u8,
     span: Span,
+    width: ?WidthSpec = null,
 };
 
 pub const StringLiteral = struct {

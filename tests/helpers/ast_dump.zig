@@ -17,6 +17,15 @@ fn writeSpan(writer: anytype, span: anytype) !void {
     });
 }
 
+fn writeWidth(writer: anytype, width: anytype) !void {
+    if (width) |w| {
+        switch (w) {
+            .literal => |n| try writer.print(" width=[{d}]", .{n}),
+            .parameter => |name| try writer.print(" width=[{s}]", .{name}),
+        }
+    }
+}
+
 fn dumpSignalSource(writer: anytype, source: anytype, depth: usize) anyerror!void {
     switch (source) {
         .named => |named| {
@@ -43,9 +52,13 @@ fn dumpPortConnection(writer: anytype, conn: anytype, depth: usize) anyerror!voi
 
 fn dumpComponent(writer: anytype, comp: anytype, depth: usize) anyerror!void {
     try writeIndent(writer, depth);
-    try writer.print("Component type={s} instance=", .{comp.type_name.text});
+    try writer.print("Component type={s}", .{comp.type_name.text});
+    try writeWidth(writer, comp.type_name.width);
+    try writer.writeAll(" instance=");
     if (comp.instance_name) |name| {
-        try writer.print("{s} ", .{name.text});
+        try writer.print("{s}", .{name.text});
+        try writeWidth(writer, name.width);
+        try writer.writeByte(' ');
     } else {
         try writer.writeAll("<anonymous> ");
     }
@@ -79,6 +92,7 @@ pub fn dumpFile(allocator: std.mem.Allocator, file: anytype) ![]u8 {
         while (idx < input_decl.names.len) : (idx += 1) {
             if (idx > 0) try writer.writeAll(", ");
             try writer.print("{s}", .{input_decl.names[idx].text});
+            try writeWidth(writer, input_decl.names[idx].width);
         }
         try writer.writeByte(' ');
         try writeSpan(writer, input_decl.span);
@@ -87,7 +101,9 @@ pub fn dumpFile(allocator: std.mem.Allocator, file: anytype) ![]u8 {
 
     try writer.print("Outputs ({d})\n", .{file.outputs.len});
     for (file.outputs) |output_decl| {
-        try writer.print("  Output {s} ", .{output_decl.name.text});
+        try writer.print("  Output {s}", .{output_decl.name.text});
+        try writeWidth(writer, output_decl.name.width);
+        try writer.writeByte(' ');
         try writeSpan(writer, output_decl.span);
         try writer.writeByte('\n');
         try dumpSignalSource(writer, output_decl.value, 2);
