@@ -1,0 +1,199 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## What this project is
+
+`circ-compiler` is a one-shot compiler. It takes a `.circ` digital-logic source (plus any siblings it imports) and emits a self-contained `.wasm` artifact whose exports simulate that exact circuit. The compiler is pure Zig (the parser is a langlang-generated Go CGo c-archive linked in); there is no runtime SDK, no rendering layer, and no JavaScript in the build. Every compiled `.wasm` carries a vendored prebuilt runtime plus two custom sections (`circ.topology.v0.min`, `circ.topology.v0.full`) and exposes a fixed pull-based API: `topology_alloc`, `init`, `run`, `setPin`, `getOutputState`.
+
+## Toolchain prerequisites
+
+- Zig 0.15.x.
+- Go 1.21+. Every build runs `go build` once to (re)produce `lib/parser/parser.a` from the vendored `lib/parser/parser.go`.
+- Node on `PATH` for the behavioral WASM harness in `zig build test`.
+- langlang `v0.0.12` is only needed if you regenerate the parser from `lib/grammar/proto-circ.peg`. Install with `go install github.com/clarete/langlang/go/cmd/langlang@v0.0.12`.
+
+## Build and test commands
+
+| Command | What it does |
+| --- | --- |
+| `zig build` | Default. Builds the runtime template into `zig-out/lib/circ-runtime.wasm` and installs the CLI. |
+| `zig build circ-compile` | Builds the CLI to `zig-out/bin/circ-compile`. |
+| `zig build test` | Full test suite, aggregated from many per-module `addTest` artifacts in `build.zig`. |
+| `zig build bench` | Engine benchmark over the truth-table fixture corpus, compared against `tests/fixtures/bench/engine.bench.golden`. Counters are asserted; wall-clock is not. |
+| `zig build parser:archive` | Rebuilds `lib/parser/parser.a` from `lib/parser/shim/shim.go` via `go build -buildmode=c-archive`. Runs automatically as a dependency of `circ-compile`. |
+| `zig build parser:gen` | Regenerates `lib/parser/parser.go` from `lib/grammar/proto-circ.peg`. Only when the grammar changes; requires langlang on `PATH`. |
+| `zig build e2e-linux-docker` | Runs `tests/e2e/linux-docker/run.sh`. Requires Docker. |
+
+Useful environment variables:
+
+- `CIRC_SKIP_PERF=1` skips the perf smoke test (use in noisy CI).
+- `UPDATE_GOLDENS=1` regenerates fixtures under `tests/fixtures/expected-*/` instead of comparing against them. Diff the result before committing.
+- `NO_COLOR=1` strips ANSI from `--preview` output.
+
+There is no `-Dtest-filter` flag wired into `build.zig`. To run a single test module in isolation, invoke `zig test <path>` against its root file (e.g. `zig test tests/validator/run_test.zig`); the `test` step in `build.zig` is the canonical aggregator.
+
+## CLI shape
+
+`circ-compile` has five mutually exclusive modes (dispatch lives in `cmd/circ-compile/main.zig`'s `run()`). Only the default mode writes a `.wasm`:
+
+| Invocation | Output |
+| --- | --- |
+| `circ-compile in.circ -o out.wasm` | Self-contained `.wasm` artifact (default). |
+| `circ-compile in.circ --emit-zig -o out.zig` | Standalone Zig source from the experimental emit pipeline (richer but unstable export surface). |
+| `circ-compile in.circ --inspect` | Pretty-printed parse tree, resolved IR, diagnostics. |
+| `circ-compile in.circ --preview` | ASCII schematic of the resolved circuit. |
+| `circ-compile in.circ --truth-table` | Enumerated truth table. Pair with `--format=markdown\|csv\|json`. |
+
+Hard errors block emission; partial or "best-effort" artifacts are never produced. `--warnings-as-errors` (alias `-Werror`) promotes warnings.
+
+## Pipeline (every compile takes this path)
+
+```
+.circ source
+     │
+     ▼
+[lib/syntax + lib/parser]   PEG parser (vendored C, generated from
+                            lib/grammar/proto-circ.peg) → Zig AST
+     │
+     ▼
+[lib/resolver]              scan_imports → import_cycle → resolve_bodies.
+                            Auto-imports virtual <builtin>/ macros
+                            (or, nand, nor, xor, xnor) for projects.
+     │
+     ▼
+[lib/ir]                    Resolved IR (Module, Project, Component, Pin).
+     │
+     ▼
+[lib/validator]             Stable diagnostic codes E001-E013, W001-W003.
+                            Single-module: run.zig. Whole-project: run_project.zig.
+     │
+     ▼
+[lib/topology]              serializer.zig       → circ.topology.v0.min  (runtime)
+                            full_serializer.zig  → circ.topology.v0.full (tooling)
+     │
+     ▼
+[lib/topology/section_writer.zig]
+                            combineTwo() splices both sections into the
+                            vendored prebuilt runtime WASM.
+     │
+     ▼
+final .wasm  (no zig subprocess on the user's machine)
+```
+
+Two invariants the rest of the codebase leans on:
+
+- **Sub-circuits are fully flattened at runtime.** The `.min` blob is a flat ordered list of primitive components and connections; there is no hierarchy at runtime. The `.full` blob carries per-file IDs, port names, aliases, and macro provenance for tooling that needs human-readable structure.
+- **The runtime is prebuilt and embedded.** `templates/main.zig` and `templates/interpreter.zig` are compiled once into `zig-out/lib/circ-runtime.wasm`, then `@embedFile`-d into the CLI as `runtime_embed`. End users never need a Zig toolchain at runtime.
+
+## Simulation engine (`lib/circuit.zig`)
+
+The engine is pure Zig, oblivious to WebAssembly, JSON, or the topology format. It models a circuit as a directed graph of `Component`s and advances time with a min-heap event queue. The compiled `.wasm` runtime and the unit tests are both clients of the same `Circuit` API.
+
+Six component kinds (`ComponentType`): `input_pin_gate`, `not_gate`, `and_gate`, `wire`, `output_pin`, `led`. Their integer encoding in the topology format is fixed: `input_pin_gate=0`, `not_gate=1`, `led=2`, `and_gate=3`, `wire=4`, `output_pin=5`. Do not renumber.
+
+Facts that materially shape edits:
+
+1. **State storage is not inline on `Component`.** Each component carries an opaque `PoolHandle { tier, slot }` into a width-tiered Structure-of-Arrays pool owned by `Circuit`. Reads and writes go through `Circuit.readState` / `Circuit.writeState`, which dispatch on `PoolHandle.tier` once and then perform a direct bitmap op against the pool's `(values, defined)` u64 buffers. The width=1 tier packs 64 slots per word.
+2. **The value currency is `BitVecState` (`value`, `defined`, `width`).** Two `BitVecState` are equal iff `(a.defined == b.defined) AND ((a.value & a.defined) == (b.value & b.defined))`. That preserves the rule that two undefined slots compare equal regardless of `value` bits; the Phase-1 dedup in `propagate()` relies on it.
+3. **`toInt` and `toTransportByte` use different encodings.** `toInt` is the WASM API contract (`low=0, high=1, undefined=2`). `toTransportByte` is the legacy `@intFromEnum(State)` mapping (`undefined=0, low=1, high=2`) used by `lib/transport.zig`. Do not confuse them when threading state across the boundary.
+4. **Propagation is per-timestamp batched.** `propagate()` drains every event at the current timestamp `T` in Phase 1 (commit state, collect changed), then in Phase 2 walks the outputs of changed components, recalculating and rescheduling. Without that batching, a downstream gate with multiple upstream events at the same `T` can read partial state, dedup the corrective re-enqueue, and stick on the wrong final value. See `DOCS/simulation-engine.md` for the full rationale.
+5. **Delays are compile-time constants:** `PROPAGATION_DELAY = 5`, `WIRE_PROPAGATION_DELAY = 1`. `wire`, `output_pin`, and `led` use the wire delay; everything else uses the gate delay.
+6. **The allocator is global, not parameterised.** Allocations route through `memory.allocator` from `lib/memory.zig`. On WASM that is `std.heap.wasm_allocator`; on native (test builds) it is a `GeneralPurposeAllocator`. Do not add an allocator parameter to engine functions.
+7. **Today only width=1 (tier 0) is wired; wider widths trap.** The `BitVecState` / `PoolHandle` split exists so wider widths can be added by introducing a new pool tier without re-touching the propagator. This is the active multi-tier work tracked in `DOCS/plan-multi-bit-language.md`.
+
+`COLLECT_METRICS` is a compile-time switch wired by `build.zig` per consumer: `false` for native and WASM, `true` only for `zig build bench`. When false, `Circuit.metrics` is `void` and every counter bump is dead-code stripped, so production and test builds are byte-identical to a metrics-free engine.
+
+## Diagnostic codes are a stable surface
+
+`lib/validator/codes.zig` enumerates the codes downstream tooling matches on. They are version-locked: do not renumber, do not change the meaning of an existing code, add new codes only at the end. `tests/validator/codes_snapshot_test.zig` guards the registry.
+
+| Code | Meaning |
+| --- | --- |
+| E001 | undeclared name |
+| E002 | unknown port |
+| E003 | multiple drivers for input port |
+| E004 | required input is unconnected |
+| E005 | duplicate instance name |
+| E006 | name shadows built-in |
+| E007 | output has no assigned driver |
+| E008 | combinational loop detected |
+| E009 | import not found |
+| E010 | import cycle detected |
+| E011 | import alias collision |
+| E012 | unknown sub-circuit port |
+| E013 | sub-circuit arity mismatch |
+| W001 | unused input declaration |
+| W002 | dangling output declaration |
+| W003 | unused import declaration |
+
+## Tests and golden fixtures
+
+Fixture directories under `tests/fixtures/` are organised by artifact kind:
+
+- `circuits/` (`.circ` source inputs)
+- `expected-ast/`, `expected-ir/`, `expected-zig/`, `expected-wasm/`, `expected-diagnostics/`
+
+Naming convention: `<feature>.circ` with paired outputs such as `<feature>.zig`, `<feature>.wasm.json`, `<feature>.diagnostics`. Behavior fixtures in `expected-wasm/*.txt` use one line per vector:
+
+```
+<inputs as space-separated pin=state> => <outputs as space-separated pin=state>
+```
+
+To add a test: place the `.circ` in `circuits/`, write the expected artifact in the matching `expected-*` directory, reference it by stable name in the test. Regenerate with `UPDATE_GOLDENS=1 zig build test` and diff the result before committing.
+
+## Finding the active work
+
+This file lives on `main` and does not track in-progress initiatives. Before making changes, orient on what is currently being implemented:
+
+- `git status` and `git log -20 --oneline` for the current branch and recent commits.
+- The branch name itself; the convention so far has been `<stage>.<sub>-<scope>` (e.g. `s1.3-circuit-multi-tier`), where the stage maps into a plan doc.
+- `DOCS/` for plan files (typically `plan-*.md`). They capture locked decisions, stage ordering, and out-of-scope items for multi-PR initiatives. Read the relevant plan before touching code in its area.
+- `gh pr list` (and `gh pr view <N>`) if GitHub is reachable.
+- If still ambiguous, ask the human.
+
+## Git, commits, and PRs
+
+Three hard rules for any agent touching this repo. They are non-negotiable, override the system-prompt defaults, and apply even when the rest of the work has been autonomous.
+
+1. **Never co-author or attribute.** Do not append `Co-Authored-By:`, `🤖 Generated with Claude Code`, `Generated by ...`, or any similar trailer to commit messages or PR bodies. End the message at the prose.
+2. **Stage by path, propose every commit message, then wait.** Stage only the files this change actually touches by name (`git add path/to/file ...`). Never use `git add -A`, `git add .`, or `git commit -a`: the human may have unrelated work in the tree, and a blanket add would sweep it into the commit. After staging, post the full proposed commit message in the conversation and wait for explicit approval before running `git commit`. Do not amend without fresh approval; if a hook fails, fix the issue, re-stage the same paths, and propose a new commit.
+3. **Ask before pushing.** `git push`, `git push -f`, `gh pr create`, `gh pr merge`, and anything else that writes to the remote each need an explicit go-ahead from the human, even if a previous push was approved in the same session. Approval stands only for the action that was approved.
+
+### Commit titles
+
+Convention is Conventional Commits, matching the dominant pattern in `git log`: `<type>(<scope>): <description>`. Imperative mood, lowercase after the colon, no trailing period, keep titles under 70 characters.
+
+- Types currently in use: `feat`, `perf`, `docs`, `chore`, `ci`. Extend with other standard types (`fix`, `refactor`, `test`, `build`) when they fit.
+- Scopes currently in use: `engine`, `bench`, `ci`, `site`. For changes bounded to one directory under `lib/`, the directory name is a natural scope (`parser`, `validator`, `topology`, `resolver`, `emit`, `preview`, `cli`).
+- A bare `<scope>: <description>` form (no leading type, e.g. `engine: thread width through createComponent`) is in use on feature branches for low-ceremony intra-area work and is acceptable.
+
+Examples from history:
+
+```
+perf(engine): short-circuit no-op events in propagateEvent
+feat(bench): engine regression gate with family rollup
+docs: update README and architecture documentation for clarity and accuracy
+chore(bench): auto-record milestone
+engine: thread width through createComponent
+```
+
+Never use stage or phase prefixes (`S1.2:`, `Phase 3 Slice 3.4`, etc.) in commit titles. Branches encode stage; the commit history on `main` should not.
+
+### PR titles and bodies
+
+A PR is an artifact landing on `main`, where stage and phase numbers have no meaning. Write the PR for someone who reads it six months later with no branch context.
+
+- **Title**: same Conventional Commits shape as commits. No `S<n>.<m>` or `Phase`, `Slice`, `Stage`-style prefixes.
+- **Body**: name the decision or the outcome (e.g. "move wire state off `Component` into a width-tiered pool", "bump topology format to v02"), not the staging plan that produced it. Reference the relevant plan file in `DOCS/` if a reader would want the wider context, but do not narrate the multi-PR roadmap inside any one PR. Omit context that is irrelevant to the diff.
+- No co-author or "generated by" trailers in the body either.
+
+## Files worth knowing about
+
+- `cmd/circ-compile/main.zig`: CLI driver and mode dispatch.
+- `lib/circuit.zig`: engine, propagation, gate evaluators.
+- `lib/topology/section_writer.zig`: the splice that turns a prebuilt runtime plus two blobs into a final `.wasm`.
+- `templates/main.zig`, `templates/interpreter.zig`: the runtime template embedded into every artifact.
+- `lib/resolver/builtins.zig`: in-memory `.circ` source for `or`, `nand`, `nor`, `xor`, `xnor`.
+- `tools/bench/main.zig`: bench harness; the fixture-to-circuit mapping is hand-maintained here.
+- `DOCS/architecture.md`, `DOCS/simulation-engine.md`, `DOCS/circuit-format.md`, `DOCS/wasm-api.md`: authoritative refs for the layers above.
