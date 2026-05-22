@@ -195,6 +195,6 @@ A PR is an artifact landing on `main`, where stage and phase numbers have no mea
 - `lib/circuit.zig`: engine, propagation, gate evaluators.
 - `lib/topology/section_writer.zig`: the splice that turns a prebuilt runtime plus two blobs into a final `.wasm`.
 - `templates/main.zig`, `templates/interpreter.zig`: the runtime template embedded into every artifact.
-- `lib/resolver/builtins.zig`: in-memory `.circ` source for `or`, `nand`, `nor`, `xor`, `xnor`.
+- `lib/resolver/builtin_circ/{or,nand,nor,xor,xnor}.circ`: macro source files for the five built-ins. `lib/resolver/builtins.zig` is the loader: it `@embedFile`s each `.circ` and exposes them via the `<builtin>/<name>.circ` virtual import path.
 - `tools/bench/main.zig`: bench harness; the fixture-to-circuit mapping is hand-maintained here.
 - `DOCS/architecture.md`, `DOCS/simulation-engine.md`, `DOCS/circuit-format.md`, `DOCS/wasm-api.md`: authoritative refs for the layers above.
