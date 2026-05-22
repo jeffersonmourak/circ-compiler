@@ -71,6 +71,7 @@ pub fn decode(allocator: std.mem.Allocator, bytes: []const u8) !FullTopology {
         const id = try cursor.readU32LE();
         const kind_byte = try cursor.readU8();
         const kind = std.meta.intToEnum(ComponentKind, kind_byte) catch return error.UnknownComponentKind;
+        const width = try cursor.readU8();
         const name = try dupString(allocator, &cursor);
         errdefer allocator.free(name);
 
@@ -94,7 +95,7 @@ pub fn decode(allocator: std.mem.Allocator, bytes: []const u8) !FullTopology {
             origin_built += 1;
         }
 
-        comp.* = .{ .id = id, .kind = kind, .name = name, .origin = origin };
+        comp.* = .{ .id = id, .kind = kind, .width = width, .name = name, .origin = origin };
         components_built += 1;
     }
 
@@ -128,7 +129,7 @@ test "full_decode: empty payload round-trips" {
     const allocator = std.testing.allocator;
     const bytes = [_]u8{
         'C', 'I', 'R', 'F',
-        0x01,
+        0x02,
         0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00,
     };
@@ -139,8 +140,14 @@ test "full_decode: empty payload round-trips" {
     try std.testing.expectEqual(@as(usize, 0), topo.connections.len);
 }
 
+test "full_decode_rejects_v01" {
+    const allocator = std.testing.allocator;
+    const bytes = [_]u8{ 'C', 'I', 'R', 'F', 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+    try std.testing.expectError(error.UnsupportedVersion, decode(allocator, &bytes));
+}
+
 test "full_decode_rejects_truncated_input" {
     const allocator = std.testing.allocator;
-    const truncated = [_]u8{ 'C', 'I', 'R', 'F', 0x01 };
+    const truncated = [_]u8{ 'C', 'I', 'R', 'F', 0x02 };
     try std.testing.expectError(error.Truncated, decode(allocator, &truncated));
 }

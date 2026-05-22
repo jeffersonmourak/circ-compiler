@@ -289,9 +289,9 @@ test "collapse_drops_wire_primitives" {
 
     // pin → wire → led
     const components = [_]FullComponentRecord{
-        .{ .id = 0, .kind = .input_pin, .name = "p", .origin = &.{} },
-        .{ .id = 1, .kind = .wire, .name = "w", .origin = &.{} },
-        .{ .id = 2, .kind = .led, .name = "l", .origin = &.{} },
+        .{ .id = 0, .kind = .input_pin, .width = 1, .name = "p", .origin = &.{} },
+        .{ .id = 1, .kind = .wire, .width = 1, .name = "w", .origin = &.{} },
+        .{ .id = 2, .kind = .led, .width = 1, .name = "l", .origin = &.{} },
     };
     const connections = [_]FullConnectionRecord{
         .{ .from_id = 0, .to_id = 1, .port = @intFromEnum(full_format.PortName.in) },
@@ -322,11 +322,11 @@ test "collapse_chains_of_wires" {
 
     // pin → wire → wire → wire → led
     const components = [_]FullComponentRecord{
-        .{ .id = 0, .kind = .input_pin, .name = "p", .origin = &.{} },
-        .{ .id = 1, .kind = .wire, .name = "w1", .origin = &.{} },
-        .{ .id = 2, .kind = .wire, .name = "w2", .origin = &.{} },
-        .{ .id = 3, .kind = .wire, .name = "w3", .origin = &.{} },
-        .{ .id = 4, .kind = .led, .name = "l", .origin = &.{} },
+        .{ .id = 0, .kind = .input_pin, .width = 1, .name = "p", .origin = &.{} },
+        .{ .id = 1, .kind = .wire, .width = 1, .name = "w1", .origin = &.{} },
+        .{ .id = 2, .kind = .wire, .width = 1, .name = "w2", .origin = &.{} },
+        .{ .id = 3, .kind = .wire, .width = 1, .name = "w3", .origin = &.{} },
+        .{ .id = 4, .kind = .led, .width = 1, .name = "l", .origin = &.{} },
     };
     const connections = [_]FullConnectionRecord{
         .{ .from_id = 0, .to_id = 1, .port = @intFromEnum(full_format.PortName.in) },
@@ -359,10 +359,10 @@ test "collapse_opaque_subcircuit" {
         .{ .alias = "g", .subcircuit = "xor", .target_file = 1 },
     };
     const components = [_]FullComponentRecord{
-        .{ .id = 0, .kind = .input_pin, .name = "p", .origin = &.{} },
-        .{ .id = 1, .kind = .not_gate, .name = "n", .origin = &xor_origin },
-        .{ .id = 2, .kind = .and_gate, .name = "a", .origin = &xor_origin },
-        .{ .id = 3, .kind = .led, .name = "l", .origin = &.{} },
+        .{ .id = 0, .kind = .input_pin, .width = 1, .name = "p", .origin = &.{} },
+        .{ .id = 1, .kind = .not_gate, .width = 1, .name = "n", .origin = &xor_origin },
+        .{ .id = 2, .kind = .and_gate, .width = 1, .name = "a", .origin = &xor_origin },
+        .{ .id = 3, .kind = .led, .width = 1, .name = "l", .origin = &.{} },
     };
     const connections = [_]FullConnectionRecord{
         .{ .from_id = 0, .to_id = 1, .port = @intFromEnum(full_format.PortName.in) },
@@ -410,10 +410,10 @@ test "collapse_expanded_subcircuit" {
         .{ .alias = "g", .subcircuit = "xor", .target_file = 1 },
     };
     const components = [_]FullComponentRecord{
-        .{ .id = 0, .kind = .input_pin, .name = "p", .origin = &.{} },
-        .{ .id = 1, .kind = .not_gate, .name = "n", .origin = &xor_origin },
-        .{ .id = 2, .kind = .and_gate, .name = "a", .origin = &xor_origin },
-        .{ .id = 3, .kind = .led, .name = "l", .origin = &.{} },
+        .{ .id = 0, .kind = .input_pin, .width = 1, .name = "p", .origin = &.{} },
+        .{ .id = 1, .kind = .not_gate, .width = 1, .name = "n", .origin = &xor_origin },
+        .{ .id = 2, .kind = .and_gate, .width = 1, .name = "a", .origin = &xor_origin },
+        .{ .id = 3, .kind = .led, .width = 1, .name = "l", .origin = &.{} },
     };
     const connections = [_]FullConnectionRecord{
         .{ .from_id = 0, .to_id = 1, .port = @intFromEnum(full_format.PortName.in) },

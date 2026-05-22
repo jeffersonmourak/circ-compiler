@@ -112,9 +112,9 @@ test "preview_dump_primitives" {
     defer buf.deinit(allocator);
 
     const components = [_]FullComponentRecord{
-        .{ .id = 0, .kind = .input_pin, .name = "a", .origin = &.{} },
-        .{ .id = 1, .kind = .input_pin, .name = "b", .origin = &.{} },
-        .{ .id = 2, .kind = .and_gate, .name = "g", .origin = &.{} },
+        .{ .id = 0, .kind = .input_pin, .width = 1, .name = "a", .origin = &.{} },
+        .{ .id = 1, .kind = .input_pin, .width = 1, .name = "b", .origin = &.{} },
+        .{ .id = 2, .kind = .and_gate, .width = 1, .name = "g", .origin = &.{} },
     };
     const connections = [_]FullConnectionRecord{
         .{ .from_id = 0, .to_id = 2, .port = @intFromEnum(full_format.PortName.a) },
@@ -151,9 +151,9 @@ test "preview_dump_with_origin" {
         .{ .alias = "g", .subcircuit = "xor", .target_file = 1 },
     };
     const components = [_]FullComponentRecord{
-        .{ .id = 0, .kind = .input_pin, .name = "a", .origin = &.{} },
-        .{ .id = 1, .kind = .not_gate, .name = "n1", .origin = &single_frame },
-        .{ .id = 2, .kind = .and_gate, .name = "a1", .origin = &single_frame },
+        .{ .id = 0, .kind = .input_pin, .width = 1, .name = "a", .origin = &.{} },
+        .{ .id = 1, .kind = .not_gate, .width = 1, .name = "n1", .origin = &single_frame },
+        .{ .id = 2, .kind = .and_gate, .width = 1, .name = "a1", .origin = &single_frame },
     };
     const topo = FullTopology{ .components = &components, .connections = &.{} };
 
@@ -185,7 +185,7 @@ test "preview_dump_nested_origin" {
         .{ .alias = "", .subcircuit = "xor", .target_file = 1 },
     };
     const components = [_]FullComponentRecord{
-        .{ .id = 5, .kind = .not_gate, .name = "deep", .origin = &nested },
+        .{ .id = 5, .kind = .not_gate, .width = 1, .name = "deep", .origin = &nested },
     };
     const topo = FullTopology{ .components = &components, .connections = &.{} };
 
@@ -211,7 +211,7 @@ test "preview_dump_anonymous_component_name" {
     defer buf.deinit(allocator);
 
     const components = [_]FullComponentRecord{
-        .{ .id = 0, .kind = .not_gate, .name = "", .origin = &.{} },
+        .{ .id = 0, .kind = .not_gate, .width = 1, .name = "", .origin = &.{} },
     };
     const topo = FullTopology{ .components = &components, .connections = &.{} };
 
@@ -227,9 +227,9 @@ test "preview_dump_port_decoding" {
     defer buf.deinit(allocator);
 
     const components = [_]FullComponentRecord{
-        .{ .id = 0, .kind = .input_pin, .name = "x", .origin = &.{} },
-        .{ .id = 1, .kind = .not_gate, .name = "n", .origin = &.{} },
-        .{ .id = 2, .kind = .and_gate, .name = "a", .origin = &.{} },
+        .{ .id = 0, .kind = .input_pin, .width = 1, .name = "x", .origin = &.{} },
+        .{ .id = 1, .kind = .not_gate, .width = 1, .name = "n", .origin = &.{} },
+        .{ .id = 2, .kind = .and_gate, .width = 1, .name = "a", .origin = &.{} },
     };
     const connections = [_]FullConnectionRecord{
         .{ .from_id = 0, .to_id = 1, .port = @intFromEnum(full_format.PortName.in) },
@@ -249,8 +249,8 @@ test "preview_dump_deterministic_ordering" {
     const allocator = std.testing.allocator;
 
     const components = [_]FullComponentRecord{
-        .{ .id = 0, .kind = .input_pin, .name = "a", .origin = &.{} },
-        .{ .id = 1, .kind = .and_gate, .name = "g", .origin = &.{} },
+        .{ .id = 0, .kind = .input_pin, .width = 1, .name = "a", .origin = &.{} },
+        .{ .id = 1, .kind = .and_gate, .width = 1, .name = "g", .origin = &.{} },
     };
     const connections = [_]FullConnectionRecord{
         .{ .from_id = 0, .to_id = 1, .port = @intFromEnum(full_format.PortName.a) },

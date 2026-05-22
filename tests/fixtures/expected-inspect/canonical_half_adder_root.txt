@@ -28,11 +28,11 @@ Outputs (2)
   id=0 name=sum driver=2.sum
   id=1 name=carry driver=2.carry
 Components (5)
-  id=0 name=a kind=primitive:input_pin
-  id=1 name=b kind=primitive:input_pin
-  id=2 name=ha kind=sub_circuit_ref:half_adder
-  id=3 name=sum kind=primitive:output_pin
-  id=4 name=carry kind=primitive:output_pin
+  id=0 name=a kind=primitive:input_pin width=1
+  id=1 name=b kind=primitive:input_pin width=1
+  id=2 name=ha kind=sub_circuit_ref:half_adder width=1
+  id=3 name=sum kind=primitive:output_pin width=1
+  id=4 name=carry kind=primitive:output_pin width=1
 Connections (4)
   0.out -> 2.a
   1.out -> 2.b

@@ -148,6 +148,7 @@ pub fn dumpIrModule(allocator: std.mem.Allocator, module: anytype) ![]u8 {
             try writer.writeAll("<none> kind=");
         }
         try dumpComponentKind(writer, component.kind);
+        try writer.writeAll(" width=1");
         try writer.writeByte('\n');
     }
 
