@@ -1,0 +1,4 @@
+input<W,X>a
+input < W , X > b
+something p[4,8](in=a)
+something q [ 4 , 8 ] (in=b)

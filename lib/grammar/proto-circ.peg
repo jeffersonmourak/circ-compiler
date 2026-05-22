@@ -1,12 +1,17 @@
-Program     <- (Annotation / ImportDecl / Declaration / Connection)*
+Program     <- (Annotation / ImportDecl / InputDecl / Declaration / Connection)*
 Annotation  <- '//' (![\n] .)*
 
 ImportDecl  <- 'import' Identifier '"' (!["] .)* '"'
 
-Declaration <- (ComponentType WidthAnnot? Identifier BusType) / (ComponentType WidthAnnot? IdentList)
+InputDecl   <- 'input' ParamIntro? WidthAnnot? IdentList
+ParamIntro  <- '<' Identifier (',' Identifier)* '>'
+
+Declaration <- (ComponentType WidthAnnot? Identifier CallWidths? BusType) / (ComponentType WidthAnnot? IdentList)
 AnonDecl    <- (ComponentType BusType)
-ComponentType    <- 'input' / 'output' / 'bus' / 'led' / 'and' / 'or' / 'not' / 'xor' / 'nand' / Identifier
-WidthAnnot  <- '[' Integer ']'
+ComponentType    <- 'output' / 'bus' / 'led' / 'and' / 'or' / 'not' / 'xor' / 'nand' / Identifier
+WidthAnnot  <- '[' WidthArg ']'
+CallWidths  <- '[' WidthArg (',' WidthArg)* ']'
+WidthArg    <- Integer / Identifier
 Integer     <- [0-9]+
 Identifier  <- [a-zA-Z_][a-zA-Z0-9_]*
 PortRef     <- (AnonDecl '.' Identifier) / (Identifier ('.' Identifier)?)

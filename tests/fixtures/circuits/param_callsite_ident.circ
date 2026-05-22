@@ -1,0 +1,2 @@
+input<W> a, b
+something my_inst[W](a=a, b=b)

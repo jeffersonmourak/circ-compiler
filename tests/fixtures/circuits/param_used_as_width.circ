@@ -1,0 +1,2 @@
+input<W> a, b
+and[W] g(a=a, b=b)

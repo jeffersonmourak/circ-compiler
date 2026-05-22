@@ -1,7 +1,7 @@
 File [f0:1:1-2:17]
 Imports (0)
 Inputs (1)
-  Input a [f0:1:7-1:8]
+  Input a [f0:1:1-1:8]
 Outputs (1)
   Output out [f0:2:1-2:17]
     NamedRef a.out [f0:2:15-2:16]

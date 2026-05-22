@@ -1,7 +1,7 @@
 File [f0:1:1-3:28]
 Imports (0)
 Inputs (1)
-  Input a, b [f0:1:7-1:11]
+  Input a, b [f0:1:1-1:11]
 Outputs (1)
   Output result [f0:3:1-3:28]
     NamedRef gate1.out [f0:3:18-3:27]

@@ -115,22 +115,41 @@ fn parseIdentifier(ctx: *const TranslationContext, node_id: u32) !ast.Identifier
 
 fn parseWidthAnnot(ctx: *const TranslationContext, node_id: u32) !ast.WidthSpec {
     try expectNamedNode(ctx, node_id, "WidthAnnot");
+    return parseFirstWidthArg(ctx, node_id);
+}
+
+fn parseFirstWidthArg(ctx: *const TranslationContext, node_id: u32) !ast.WidthSpec {
     const inner = try firstChild(ctx, node_id);
-    // WidthAnnot's body is '[' Integer ']'. The Integer child can be either the
-    // direct first child or wrapped in a sequence with the bracket literals.
-    if (nodeType(ctx, inner) == NodeType_Node and std.mem.eql(u8, nodeName(ctx, inner), "Integer")) {
-        return parseIntegerAsWidth(ctx, inner);
+    if (nodeType(ctx, inner) == NodeType_Node) {
+        return try parseWidthArgNode(ctx, inner);
     }
     if (nodeType(ctx, inner) != NodeType_Sequence) return error.InvalidWidthAnnot;
     const len = childCount(ctx, inner);
     var i: usize = 0;
     while (i < len) : (i += 1) {
         const child = try childAt(ctx, inner, i);
-        if (nodeType(ctx, child) == NodeType_Node and std.mem.eql(u8, nodeName(ctx, child), "Integer")) {
-            return parseIntegerAsWidth(ctx, child);
+        if (nodeType(ctx, child) != NodeType_Node) continue;
+        const name = nodeName(ctx, child);
+        if (std.mem.eql(u8, name, "Integer") or std.mem.eql(u8, name, "Identifier") or std.mem.eql(u8, name, "WidthArg")) {
+            return try parseWidthArgNode(ctx, child);
         }
     }
     return error.InvalidWidthAnnot;
+}
+
+fn parseWidthArgNode(ctx: *const TranslationContext, node_id: u32) !ast.WidthSpec {
+    const name = nodeName(ctx, node_id);
+    if (std.mem.eql(u8, name, "Integer")) return parseIntegerAsWidth(ctx, node_id);
+    if (std.mem.eql(u8, name, "Identifier")) {
+        const ident = try parseIdentifier(ctx, node_id);
+        return .{ .parameter = ident.text };
+    }
+    if (std.mem.eql(u8, name, "WidthArg")) {
+        const inner = try firstChild(ctx, node_id);
+        if (nodeType(ctx, inner) != NodeType_Node) return error.InvalidWidthArg;
+        return parseWidthArgNode(ctx, inner);
+    }
+    return error.InvalidWidthArg;
 }
 
 fn parseIntegerAsWidth(ctx: *const TranslationContext, node_id: u32) !ast.WidthSpec {
@@ -141,6 +160,48 @@ fn parseIntegerAsWidth(ctx: *const TranslationContext, node_id: u32) !ast.WidthS
     const text = ctx.source[start..end];
     const value = std.fmt.parseInt(u8, text, 10) catch return error.InvalidIntegerWidth;
     return .{ .literal = value };
+}
+
+fn parseCallWidths(ctx: *const TranslationContext, node_id: u32) ![]const ast.WidthSpec {
+    try expectNamedNode(ctx, node_id, "CallWidths");
+    const seq = try firstChild(ctx, node_id);
+    var widths: std.ArrayList(ast.WidthSpec) = .{};
+    if (nodeType(ctx, seq) == NodeType_Node) {
+        try widths.append(ctx.allocator, try parseWidthArgNode(ctx, seq));
+        return widths.toOwnedSlice(ctx.allocator);
+    }
+    if (nodeType(ctx, seq) != NodeType_Sequence) return error.InvalidCallWidths;
+    const len = childCount(ctx, seq);
+    var i: usize = 0;
+    while (i < len) : (i += 1) {
+        const child = try childAt(ctx, seq, i);
+        if (nodeType(ctx, child) != NodeType_Node) continue;
+        const name = nodeName(ctx, child);
+        if (std.mem.eql(u8, name, "Integer") or std.mem.eql(u8, name, "Identifier") or std.mem.eql(u8, name, "WidthArg")) {
+            try widths.append(ctx.allocator, try parseWidthArgNode(ctx, child));
+        }
+    }
+    return widths.toOwnedSlice(ctx.allocator);
+}
+
+fn parseParamIntro(ctx: *TranslationContext, node_id: u32) ![]const ast.Identifier {
+    try expectNamedNode(ctx, node_id, "ParamIntro");
+    const seq = try firstChild(ctx, node_id);
+    var params: std.ArrayList(ast.Identifier) = .{};
+    if (nodeType(ctx, seq) == NodeType_Node and std.mem.eql(u8, nodeName(ctx, seq), "Identifier")) {
+        try params.append(ctx.allocator, try parseIdentifier(ctx, seq));
+        return params.toOwnedSlice(ctx.allocator);
+    }
+    if (nodeType(ctx, seq) != NodeType_Sequence) return error.InvalidParamIntro;
+    const len = childCount(ctx, seq);
+    var i: usize = 0;
+    while (i < len) : (i += 1) {
+        const child = try childAt(ctx, seq, i);
+        if (nodeType(ctx, child) == NodeType_Node and std.mem.eql(u8, nodeName(ctx, child), "Identifier")) {
+            try params.append(ctx.allocator, try parseIdentifier(ctx, child));
+        }
+    }
+    return params.toOwnedSlice(ctx.allocator);
 }
 
 fn parseComponentTypeText(ctx: *const TranslationContext, node_id: u32) ![]const u8 {
@@ -284,6 +345,44 @@ fn parseImportDecl(ctx: *TranslationContext, node_id: u32) !ast.Import {
     };
 }
 
+fn parseInputDeclNode(ctx: *TranslationContext, node_id: u32) !ast.InputDecl {
+    try expectNamedNode(ctx, node_id, "InputDecl");
+    const seq = try firstChild(ctx, node_id);
+    if (nodeType(ctx, seq) != NodeType_Sequence) return error.InvalidInputDecl;
+    const len = childCount(ctx, seq);
+
+    var parameters: []const ast.Identifier = &.{};
+    var width: ?ast.WidthSpec = null;
+    var ident_list_node: ?u32 = null;
+
+    var i: usize = 0;
+    while (i < len) : (i += 1) {
+        const child = try childAt(ctx, seq, i);
+        if (nodeType(ctx, child) != NodeType_Node) continue;
+        const name = nodeName(ctx, child);
+        if (std.mem.eql(u8, name, "ParamIntro")) {
+            parameters = try parseParamIntro(ctx, child);
+        } else if (std.mem.eql(u8, name, "WidthAnnot")) {
+            width = try parseWidthAnnot(ctx, child);
+        } else if (std.mem.eql(u8, name, "IdentList")) {
+            ident_list_node = child;
+        }
+    }
+
+    const idents_node = ident_list_node orelse return error.InvalidInputDecl;
+    var decl = try parseInputDecl(ctx, idents_node);
+    decl.parameters = parameters;
+    decl.span = nodeSpan(ctx, node_id);
+    if (width) |w| {
+        const decorated = try ctx.allocator.alloc(ast.Identifier, decl.names.len);
+        for (decl.names, decorated) |src, *dst| {
+            dst.* = .{ .text = src.text, .span = src.span, .width = w };
+        }
+        decl.names = decorated;
+    }
+    return decl;
+}
+
 fn parseInputDecl(ctx: *TranslationContext, ident_list_node: u32) !ast.InputDecl {
     try expectNamedNode(ctx, ident_list_node, "IdentList");
     const payload = try firstChild(ctx, ident_list_node);
@@ -331,8 +430,6 @@ fn parseComponentDecl(ctx: *TranslationContext, type_name_text: []const u8, inst
 fn parseDeclaration(
     ctx: *TranslationContext,
     node_id: u32,
-    imports: *std.ArrayList(ast.Import),
-    inputs: *std.ArrayList(ast.InputDecl),
     outputs: *std.ArrayList(ast.OutputDecl),
     components: *std.ArrayList(ast.ComponentInstance),
 ) !void {
@@ -347,15 +444,28 @@ fn parseDeclaration(
     const declaration_span = nodeSpan(ctx, node_id);
 
     var width: ?ast.WidthSpec = null;
-    var rest_start: usize = 1;
-    if (len >= 2) {
-        const second = try childAt(ctx, seq, 1);
-        if (nodeType(ctx, second) == NodeType_Node and std.mem.eql(u8, nodeName(ctx, second), "WidthAnnot")) {
-            width = try parseWidthAnnot(ctx, second);
-            rest_start = 2;
+    var call_widths: []const ast.WidthSpec = &.{};
+    var instance_name_node: ?u32 = null;
+    var ident_list_node: ?u32 = null;
+    var bus_node: ?u32 = null;
+
+    var i: usize = 1;
+    while (i < len) : (i += 1) {
+        const child = try childAt(ctx, seq, i);
+        if (nodeType(ctx, child) != NodeType_Node) continue;
+        const name = nodeName(ctx, child);
+        if (std.mem.eql(u8, name, "WidthAnnot")) {
+            width = try parseWidthAnnot(ctx, child);
+        } else if (std.mem.eql(u8, name, "CallWidths")) {
+            call_widths = try parseCallWidths(ctx, child);
+        } else if (std.mem.eql(u8, name, "Identifier")) {
+            instance_name_node = child;
+        } else if (std.mem.eql(u8, name, "IdentList")) {
+            ident_list_node = child;
+        } else if (std.mem.eql(u8, name, "BusType")) {
+            bus_node = child;
         }
     }
-    const remaining = len - rest_start;
 
     const type_identifier = ast.Identifier{
         .text = type_name,
@@ -363,23 +473,35 @@ fn parseDeclaration(
         .width = width,
     };
 
-    if (remaining == 1) {
-        const ident_list_node = try childAt(ctx, seq, rest_start);
-        if (std.mem.eql(u8, type_name, "input")) {
-            var decl = try parseInputDecl(ctx, ident_list_node);
-            if (width) |w| {
-                const decorated = try ctx.allocator.alloc(ast.Identifier, decl.names.len);
-                for (decl.names, decorated) |src, *dst| {
-                    dst.* = .{ .text = src.text, .span = src.span, .width = w };
-                }
-                decl.names = decorated;
-            }
-            try inputs.append(ctx.allocator, decl);
+    if (instance_name_node) |inst_node| {
+        const raw_instance = try parseIdentifier(ctx, inst_node);
+        const instance_name = ast.Identifier{ .text = raw_instance.text, .span = raw_instance.span, .width = width };
+        const bn = bus_node orelse return error.InvalidDeclaration;
+
+        if (std.mem.eql(u8, type_name, "output")) {
+            const ports = try parseBusType(ctx, bn);
+            if (ports.len == 0) return error.InvalidOutputDecl;
+            try outputs.append(ctx.allocator, .{
+                .name = instance_name,
+                .value = ports[0].value,
+                .span = declaration_span,
+            });
             return;
         }
 
+        try components.append(ctx.allocator, .{
+            .type_name = type_identifier,
+            .instance_name = instance_name,
+            .ports = try parseBusType(ctx, bn),
+            .width_args = call_widths,
+            .span = declaration_span,
+        });
+        return;
+    }
+
+    if (ident_list_node) |idents| {
         if (std.mem.eql(u8, type_name, "output")) {
-            const names = try parseInputDecl(ctx, ident_list_node);
+            const names = try parseInputDecl(ctx, idents);
             for (names.names) |name| {
                 const widened_name = ast.Identifier{ .text = name.text, .span = name.span, .width = width };
                 const out_ident = ast.Identifier{ .text = "out", .span = name.span };
@@ -398,7 +520,7 @@ fn parseDeclaration(
             return;
         }
 
-        const names = try parseInputDecl(ctx, ident_list_node);
+        const names = try parseInputDecl(ctx, idents);
         for (names.names) |name| {
             const widened_name = ast.Identifier{ .text = name.text, .span = name.span, .width = width };
             try components.append(ctx.allocator, .{
@@ -411,33 +533,6 @@ fn parseDeclaration(
         return;
     }
 
-    if (remaining == 2) {
-        const instance_name_node = try childAt(ctx, seq, rest_start);
-        const bus_node = try childAt(ctx, seq, rest_start + 1);
-        const raw_instance = try parseIdentifier(ctx, instance_name_node);
-        const instance_name = ast.Identifier{ .text = raw_instance.text, .span = raw_instance.span, .width = width };
-
-        if (std.mem.eql(u8, type_name, "output")) {
-            const ports = try parseBusType(ctx, bus_node);
-            if (ports.len == 0) return error.InvalidOutputDecl;
-            try outputs.append(ctx.allocator, .{
-                .name = instance_name,
-                .value = ports[0].value,
-                .span = declaration_span,
-            });
-            return;
-        }
-
-        try components.append(ctx.allocator, .{
-            .type_name = type_identifier,
-            .instance_name = instance_name,
-            .ports = try parseBusType(ctx, bus_node),
-            .span = declaration_span,
-        });
-        return;
-    }
-
-    _ = imports;
     return error.InvalidDeclaration;
 }
 
@@ -464,8 +559,13 @@ fn translateTree(ctx: *TranslationContext) !ast.File {
                 continue;
             }
 
+            if (std.mem.eql(u8, name, "InputDecl")) {
+                try inputs.append(ctx.allocator, try parseInputDeclNode(ctx, child));
+                continue;
+            }
+
             if (std.mem.eql(u8, name, "Declaration")) {
-                try parseDeclaration(ctx, child, &imports, &inputs, &outputs, &components);
+                try parseDeclaration(ctx, child, &outputs, &components);
                 continue;
             }
         }
@@ -473,8 +573,10 @@ fn translateTree(ctx: *TranslationContext) !ast.File {
         const name = nodeName(ctx, payload);
         if (std.mem.eql(u8, name, "ImportDecl")) {
             try imports.append(ctx.allocator, try parseImportDecl(ctx, payload));
+        } else if (std.mem.eql(u8, name, "InputDecl")) {
+            try inputs.append(ctx.allocator, try parseInputDeclNode(ctx, payload));
         } else if (std.mem.eql(u8, name, "Declaration")) {
-            try parseDeclaration(ctx, payload, &imports, &inputs, &outputs, &components);
+            try parseDeclaration(ctx, payload, &outputs, &components);
         } else {
             return error.InvalidProgram;
         }

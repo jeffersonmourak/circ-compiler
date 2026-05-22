@@ -1,7 +1,7 @@
 File [f0:1:1-2:15]
 Imports (0)
 Inputs (1)
-  Input a [f0:1:7-1:8]
+  Input a [f0:1:1-1:8]
 Outputs (0)
 Components (1)
   Component type=bus width=[4] instance=w width=[4] [f0:2:1-2:15]

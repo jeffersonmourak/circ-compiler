@@ -3,7 +3,7 @@ File [f0:1:1-5:26]
 Imports (1)
   Import alias=half_adder path=half_adder.circ [f0:1:1-1:36]
 Inputs (1)
-  Input a, b [f0:2:7-2:11]
+  Input a, b [f0:2:1-2:11]
 Outputs (2)
   Output sum [f0:4:1-4:22]
     NamedRef ha.sum [f0:4:15-4:21]
