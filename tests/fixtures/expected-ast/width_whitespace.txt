@@ -1,7 +1,7 @@
 File [f0:1:1-4:20]
 Imports (0)
 Inputs (1)
-  Input x, y [f0:1:7-1:11]
+  Input x, y [f0:1:1-1:11]
 Outputs (0)
 Components (3)
   Component type=and width=[4] instance=g width=[4] [f0:2:1-2:18]

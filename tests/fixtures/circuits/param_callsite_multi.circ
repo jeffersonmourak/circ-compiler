@@ -1,0 +1,2 @@
+input a, b
+something my_inst[4, 8](a=a, b=b)

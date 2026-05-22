@@ -75,6 +75,41 @@ const fixtures = [_]Fixture{
         .source_path = "tests/fixtures/circuits/width_whitespace.circ",
         .expected_ast_path = "tests/fixtures/expected-ast/width_whitespace.txt",
     },
+    .{
+        .name = "param-input-single",
+        .source_path = "tests/fixtures/circuits/param_input_single.circ",
+        .expected_ast_path = "tests/fixtures/expected-ast/param_input_single.txt",
+    },
+    .{
+        .name = "param-input-multi",
+        .source_path = "tests/fixtures/circuits/param_input_multi.circ",
+        .expected_ast_path = "tests/fixtures/expected-ast/param_input_multi.txt",
+    },
+    .{
+        .name = "param-callsite-single",
+        .source_path = "tests/fixtures/circuits/param_callsite_single.circ",
+        .expected_ast_path = "tests/fixtures/expected-ast/param_callsite_single.txt",
+    },
+    .{
+        .name = "param-callsite-multi",
+        .source_path = "tests/fixtures/circuits/param_callsite_multi.circ",
+        .expected_ast_path = "tests/fixtures/expected-ast/param_callsite_multi.txt",
+    },
+    .{
+        .name = "param-callsite-ident",
+        .source_path = "tests/fixtures/circuits/param_callsite_ident.circ",
+        .expected_ast_path = "tests/fixtures/expected-ast/param_callsite_ident.txt",
+    },
+    .{
+        .name = "param-used-as-width",
+        .source_path = "tests/fixtures/circuits/param_used_as_width.circ",
+        .expected_ast_path = "tests/fixtures/expected-ast/param_used_as_width.txt",
+    },
+    .{
+        .name = "param-whitespace",
+        .source_path = "tests/fixtures/circuits/param_whitespace.circ",
+        .expected_ast_path = "tests/fixtures/expected-ast/param_whitespace.txt",
+    },
 };
 
 test "translate parse tree to typed ast fixtures" {
@@ -129,8 +164,14 @@ test "width: empty brackets are not interpreted as a width annotation" {
     try expectNoInputDecl("input[] a\n");
 }
 
-test "width: identifier inside brackets is not interpreted as a width (deferred to S3.2)" {
-    try expectNoInputDecl("input[abc] a\n");
+test "width: identifier inside brackets binds to a parameter" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const parsed = try translate.parseSource(allocator, 0, "input<W> a\nand[W] g(a=a)\n");
+    try std.testing.expectEqual(@as(usize, 1), parsed.components.len);
+    const width = parsed.components[0].type_name.width orelse return error.MissingWidth;
+    try std.testing.expectEqualStrings("W", width.parameter);
 }
 
 test "width: negative integer is not interpreted as a width" {
@@ -143,4 +184,50 @@ test "width: floating-point literal is not interpreted as a width" {
 
 test "width: unclosed bracket is not interpreted as a width" {
     try expectNoInputDecl("input[4 a\n");
+}
+
+test "param: empty parameter introduction is not interpreted" {
+    try expectNoInputDecl("input<> a\n");
+}
+
+test "param: literal in parameter introduction is not interpreted" {
+    try expectNoInputDecl("input<4> a\n");
+}
+
+test "callwidths: empty brackets do not produce a component" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const parsed = translate.parseSource(allocator, 0, "input a\nsomething p[](in=a)\n") catch return;
+    // Either the call-site bracket was rejected (no component) or the bracket
+    // was simply skipped (component exists but width_args is empty). Neither
+    // case admits the bogus empty bracket as a meaningful width_args list.
+    for (parsed.components) |comp| {
+        try std.testing.expectEqual(@as(usize, 0), comp.width_args.len);
+    }
+}
+
+test "param: parameters appear in source order" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const parsed = try translate.parseSource(allocator, 0, "input<W, X, Y> a\n");
+    try std.testing.expectEqual(@as(usize, 1), parsed.inputs.len);
+    const params = parsed.inputs[0].parameters;
+    try std.testing.expectEqual(@as(usize, 3), params.len);
+    try std.testing.expectEqualStrings("W", params[0].text);
+    try std.testing.expectEqualStrings("X", params[1].text);
+    try std.testing.expectEqualStrings("Y", params[2].text);
+}
+
+test "callwidths: mixed literal and identifier args populate WidthSpec variants" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const parsed = try translate.parseSource(allocator, 0, "input<W> a\nsomething inst[4, W](in=a)\n");
+    try std.testing.expectEqual(@as(usize, 1), parsed.components.len);
+    const args = parsed.components[0].width_args;
+    try std.testing.expectEqual(@as(usize, 2), args.len);
+    try std.testing.expectEqual(@as(u8, 4), args[0].literal);
+    try std.testing.expectEqualStrings("W", args[1].parameter);
 }

@@ -17,6 +17,7 @@ pub const Import = struct {
 
 pub const InputDecl = struct {
     names: []const Identifier,
+    parameters: []const Identifier = &.{},
     span: Span,
 };
 
@@ -30,6 +31,7 @@ pub const ComponentInstance = struct {
     type_name: Identifier,
     instance_name: ?Identifier,
     ports: []const PortConnection,
+    width_args: []const WidthSpec = &.{},
     span: Span,
 };
 

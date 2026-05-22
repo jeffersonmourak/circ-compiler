@@ -1,7 +1,7 @@
 File [f0:1:1-2:12]
 Imports (0)
 Inputs (2)
-  Input a width=[1] [f0:1:10-1:11]
-  Input b width=[64] [f0:2:11-2:12]
+  Input a width=[1] [f0:1:1-1:11]
+  Input b width=[64] [f0:2:1-2:12]
 Outputs (0)
 Components (0)

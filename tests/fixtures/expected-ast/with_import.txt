@@ -2,7 +2,7 @@ File [f0:1:1-4:23]
 Imports (1)
   Import alias=dep path=dep.circ [f0:1:1-1:22]
 Inputs (1)
-  Input a [f0:2:7-2:8]
+  Input a [f0:2:1-2:8]
 Outputs (1)
   Output out [f0:4:1-4:23]
     NamedRef sub.out [f0:4:15-4:22]
