@@ -940,6 +940,168 @@ test "BitVecState: bitXor width=1 truth table" {
     try std.testing.expect(un.bitXor(un).equals(un));
 }
 
+test "BitVecState: bitAnd at widths > 1" {
+    // Width 4, all-defined: per-bit AND of arbitrary patterns.
+    {
+        const a = BitVecState{ .value = 0b1100, .defined = 0b1111, .width = 4 };
+        const b = BitVecState{ .value = 0b1010, .defined = 0b1111, .width = 4 };
+        const result = a.bitAnd(b);
+        try std.testing.expectEqual(@as(u64, 0b1000), result.value);
+        try std.testing.expectEqual(@as(u64, 0b1111), result.defined);
+        try std.testing.expectEqual(@as(u8, 4), result.width);
+    }
+
+    // Width 4, mixed undefined: a defined-low input forces the result bit
+    // to low even when the other input is undefined at that bit.
+    //   a (bit 0..3): hi, undef, lo, hi  -> value=0b1001, defined=0b1101
+    //   b (bit 0..3): lo, hi,    hi, hi  -> value=0b1110, defined=0b1111
+    //   result:       lo, undef, lo, hi  -> value=0b1000, defined=0b1101
+    {
+        const a = BitVecState{ .value = 0b1001, .defined = 0b1101, .width = 4 };
+        const b = BitVecState{ .value = 0b1110, .defined = 0b1111, .width = 4 };
+        const result = a.bitAnd(b);
+        try std.testing.expectEqual(@as(u64, 0b1000), result.value);
+        try std.testing.expectEqual(@as(u64, 0b1101), result.defined);
+    }
+
+    // Width 8, all-defined.
+    {
+        const a = BitVecState{ .value = 0xF0, .defined = 0xFF, .width = 8 };
+        const b = BitVecState{ .value = 0xAA, .defined = 0xFF, .width = 8 };
+        const result = a.bitAnd(b);
+        try std.testing.expectEqual(@as(u64, 0xA0), result.value);
+        try std.testing.expectEqual(@as(u64, 0xFF), result.defined);
+    }
+
+    // Width 64, all-defined: full-register pattern.
+    {
+        const a = BitVecState{ .value = 0xF0F0F0F0F0F0F0F0, .defined = std.math.maxInt(u64), .width = 64 };
+        const b = BitVecState{ .value = 0xAAAAAAAAAAAAAAAA, .defined = std.math.maxInt(u64), .width = 64 };
+        const result = a.bitAnd(b);
+        try std.testing.expectEqual(@as(u64, 0xA0A0A0A0A0A0A0A0), result.value);
+        try std.testing.expectEqual(@as(u64, std.math.maxInt(u64)), result.defined);
+    }
+
+    // All-undefined remains all-undefined at any width.
+    try std.testing.expect(BitVecState.undefined_(4).bitAnd(BitVecState.undefined_(4)).equals(BitVecState.undefined_(4)));
+    try std.testing.expect(BitVecState.undefined_(64).bitAnd(BitVecState.undefined_(64)).equals(BitVecState.undefined_(64)));
+}
+
+test "BitVecState: bitOr at widths > 1" {
+    // Width 4, all-defined: per-bit OR of arbitrary patterns.
+    {
+        const a = BitVecState{ .value = 0b1100, .defined = 0b1111, .width = 4 };
+        const b = BitVecState{ .value = 0b1010, .defined = 0b1111, .width = 4 };
+        const result = a.bitOr(b);
+        try std.testing.expectEqual(@as(u64, 0b1110), result.value);
+        try std.testing.expectEqual(@as(u64, 0b1111), result.defined);
+    }
+
+    // Width 4, mixed undefined: a defined-high input forces the result bit
+    // to high even when the other input is undefined at that bit.
+    //   a (bit 0..3): hi, undef, lo, hi  -> value=0b1001, defined=0b1101
+    //   b (bit 0..3): lo, hi,    hi, lo  -> value=0b0110, defined=0b1111
+    //   result:       hi, hi,    hi, hi  -> value=0b1111, defined=0b1111
+    {
+        const a = BitVecState{ .value = 0b1001, .defined = 0b1101, .width = 4 };
+        const b = BitVecState{ .value = 0b0110, .defined = 0b1111, .width = 4 };
+        const result = a.bitOr(b);
+        try std.testing.expectEqual(@as(u64, 0b1111), result.value);
+        try std.testing.expectEqual(@as(u64, 0b1111), result.defined);
+    }
+
+    // Width 8, all-defined: complementary halves OR to all-ones.
+    {
+        const a = BitVecState{ .value = 0xF0, .defined = 0xFF, .width = 8 };
+        const b = BitVecState{ .value = 0x0F, .defined = 0xFF, .width = 8 };
+        const result = a.bitOr(b);
+        try std.testing.expectEqual(@as(u64, 0xFF), result.value);
+        try std.testing.expectEqual(@as(u64, 0xFF), result.defined);
+    }
+
+    // Width 64, all-defined.
+    {
+        const a = BitVecState{ .value = 0xF0F0F0F0F0F0F0F0, .defined = std.math.maxInt(u64), .width = 64 };
+        const b = BitVecState{ .value = 0x0F0F0F0F0F0F0F0F, .defined = std.math.maxInt(u64), .width = 64 };
+        const result = a.bitOr(b);
+        try std.testing.expectEqual(@as(u64, std.math.maxInt(u64)), result.value);
+        try std.testing.expectEqual(@as(u64, std.math.maxInt(u64)), result.defined);
+    }
+
+    // All-undefined remains all-undefined.
+    try std.testing.expect(BitVecState.undefined_(4).bitOr(BitVecState.undefined_(4)).equals(BitVecState.undefined_(4)));
+    try std.testing.expect(BitVecState.undefined_(64).bitOr(BitVecState.undefined_(64)).equals(BitVecState.undefined_(64)));
+}
+
+test "BitVecState: bitXor at widths > 1" {
+    // Width 4, all-defined: per-bit XOR of arbitrary patterns.
+    {
+        const a = BitVecState{ .value = 0b1100, .defined = 0b1111, .width = 4 };
+        const b = BitVecState{ .value = 0b1010, .defined = 0b1111, .width = 4 };
+        const result = a.bitXor(b);
+        try std.testing.expectEqual(@as(u64, 0b0110), result.value);
+        try std.testing.expectEqual(@as(u64, 0b1111), result.defined);
+    }
+
+    // Width 4, mixed undefined: any undefined input bit makes the result
+    // bit undefined, regardless of the other operand. The XOR's "defined
+    // iff both defined" rule shows up here as defined = a.defined & b.defined.
+    //   a (bit 0..3): hi, undef, lo, hi  -> value=0b1001, defined=0b1101
+    //   b (bit 0..3): lo, hi,    hi, lo  -> value=0b0110, defined=0b1111
+    //   defined = 0b1101 & 0b1111 = 0b1101
+    //   value   = (0b1001 ^ 0b0110) & 0b1101 = 0b1111 & 0b1101 = 0b1101
+    {
+        const a = BitVecState{ .value = 0b1001, .defined = 0b1101, .width = 4 };
+        const b = BitVecState{ .value = 0b0110, .defined = 0b1111, .width = 4 };
+        const result = a.bitXor(b);
+        try std.testing.expectEqual(@as(u64, 0b1101), result.value);
+        try std.testing.expectEqual(@as(u64, 0b1101), result.defined);
+    }
+
+    // Width 8, all-defined: all-ones XOR with low nibble flips the low half.
+    {
+        const a = BitVecState{ .value = 0xFF, .defined = 0xFF, .width = 8 };
+        const b = BitVecState{ .value = 0x0F, .defined = 0xFF, .width = 8 };
+        const result = a.bitXor(b);
+        try std.testing.expectEqual(@as(u64, 0xF0), result.value);
+        try std.testing.expectEqual(@as(u64, 0xFF), result.defined);
+    }
+
+    // Width 64, all-defined.
+    {
+        const a = BitVecState{ .value = std.math.maxInt(u64), .defined = std.math.maxInt(u64), .width = 64 };
+        const b = BitVecState{ .value = 0x0F0F0F0F0F0F0F0F, .defined = std.math.maxInt(u64), .width = 64 };
+        const result = a.bitXor(b);
+        try std.testing.expectEqual(@as(u64, 0xF0F0F0F0F0F0F0F0), result.value);
+        try std.testing.expectEqual(@as(u64, std.math.maxInt(u64)), result.defined);
+    }
+
+    // Any undefined input propagates as undefined.
+    {
+        const lo4 = BitVecState.low(4);
+        const un4 = BitVecState.undefined_(4);
+        try std.testing.expect(lo4.bitXor(un4).equals(un4));
+        try std.testing.expect(un4.bitXor(lo4).equals(un4));
+        try std.testing.expect(un4.bitXor(un4).equals(un4));
+    }
+}
+
+test "BitVecState: bitwise ops mask out-of-width payload to zero" {
+    // The public constructors normally prevent out-of-width payload, but
+    // the bitwise ops still apply `widthMask` to result bitmaps so a
+    // hand-built value with dirty high bits cannot leak past `width`.
+    const dirty_a = BitVecState{ .value = 0xFF, .defined = 0xFF, .width = 4 };
+    const dirty_b = BitVecState{ .value = 0xFF, .defined = 0xFF, .width = 4 };
+    const high_bits = ~widthMask(4);
+
+    try std.testing.expectEqual(@as(u64, 0), dirty_a.bitAnd(dirty_b).value & high_bits);
+    try std.testing.expectEqual(@as(u64, 0), dirty_a.bitAnd(dirty_b).defined & high_bits);
+    try std.testing.expectEqual(@as(u64, 0), dirty_a.bitOr(dirty_b).value & high_bits);
+    try std.testing.expectEqual(@as(u64, 0), dirty_a.bitOr(dirty_b).defined & high_bits);
+    try std.testing.expectEqual(@as(u64, 0), dirty_a.bitXor(dirty_b).value & high_bits);
+    try std.testing.expectEqual(@as(u64, 0), dirty_a.bitXor(dirty_b).defined & high_bits);
+}
+
 test "BitVecState: transport byte matches enum declaration order" {
     // The WASM API contract uses @intFromEnum(State), which is the State
     // enum's declaration order: undefined=0, low=1, high=2. The new
