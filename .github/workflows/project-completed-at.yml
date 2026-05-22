@@ -1,0 +1,80 @@
+# Sets the "Completed At" date field on a Projects v2 item when its issue is
+# closed with the `completed` state_reason. Issues closed as "Not planned"
+# are intentionally ignored. The workflow is a no-op when the closed issue
+# isn't on the target project.
+#
+# Auth: the default GITHUB_TOKEN cannot write to user/org Projects v2.
+# A PAT (classic, `project` scope) stored as `secrets.PROJECT_TOKEN` is
+# required; without it the final mutation will 401.
+name: Set "Completed At" on issue close
+
+on:
+  issues:
+    types: [closed]
+
+permissions:
+  contents: read
+
+jobs:
+  set-completed-at:
+    # `closed` fires for both "Completed" and "Not planned". Only the former
+    # counts as success; the latter would stamp work that was abandoned or
+    # rejected, which is the wrong signal for a Completed At column.
+    if: github.event.issue.state_reason == 'completed'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.PROJECT_TOKEN }}
+      # For an org-owned project, swap `user(login:)` for `organization(login:)`
+      # in the resolve-project query below.
+      PROJECT_OWNER: jeffersonmourak
+      PROJECT_NUMBER: 1                # TODO: integer at the end of the project URL
+      FIELD_NAME: "Completed At"
+    steps:
+      - name: Update Completed At
+        env:
+          ISSUE_NODE_ID: ${{ github.event.issue.node_id }}
+          CLOSED_AT: ${{ github.event.issue.closed_at }}
+        run: |
+          # 1. Resolve the project ID and the date field's ID by name. Doing
+          # this at runtime means renaming the field in the UI doesn't break
+          # the workflow as long as the env var above is updated.
+          read project_id field_id < <(gh api graphql -f query='
+            query($owner: String!, $number: Int!, $field: String!) {
+              user(login: $owner) {
+                projectV2(number: $number) {
+                  id
+                  field(name: $field) { ... on ProjectV2Field { id } }
+                }
+              }
+            }' -F owner="$PROJECT_OWNER" -F number="$PROJECT_NUMBER" -F field="$FIELD_NAME" \
+            --jq '.data.user.projectV2 | "\(.id) \(.field.id)"')
+
+          # 2. Find this issue's item in the target project. An issue can be
+          # tracked in multiple projects; filter by project_id so we only
+          # touch the one we care about.
+          item_id=$(gh api graphql -f query='
+            query($id: ID!) {
+              node(id: $id) {
+                ... on Issue {
+                  projectItems(first: 20) { nodes { id project { id } } }
+                }
+              }
+            }' -F id="$ISSUE_NODE_ID" \
+            --jq ".data.node.projectItems.nodes[] | select(.project.id == \"$project_id\") | .id")
+
+          if [ -z "$item_id" ]; then
+            echo "Issue is not on project $PROJECT_OWNER/#$PROJECT_NUMBER; nothing to do."
+            exit 0
+          fi
+
+          # 3. Write the close date (UTC) into the field. ProjectV2 Date
+          # fields take YYYY-MM-DD, so strip the time off `closed_at`.
+          gh api graphql -f query='
+            mutation($project: ID!, $item: ID!, $field: ID!, $date: Date!) {
+              updateProjectV2ItemFieldValue(input: {
+                projectId: $project, itemId: $item, fieldId: $field,
+                value: { date: $date }
+              }) { projectV2Item { id } }
+            }' \
+            -F project="$project_id" -F item="$item_id" -F field="$field_id" \
+            -F date="${CLOSED_AT%T*}"
