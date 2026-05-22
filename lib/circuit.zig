@@ -169,6 +169,52 @@ pub const BitVecState = struct {
         };
     }
 
+    /// Bitwise AND with three-state semantics: a bit is low if either
+    /// operand's bit is defined-low, high if both are defined-high, and
+    /// undefined otherwise. Reduces to the existing width=1 AND predicate
+    /// in `recalculateAndReschedule` for all nine three-state combinations.
+    pub fn bitAnd(self: BitVecState, other: BitVecState) BitVecState {
+        std.debug.assert(self.width == other.width);
+        const m = widthMask(self.width);
+        const high_mask = self.value & self.defined & other.value & other.defined;
+        const low_mask = ((~self.value) & self.defined) | ((~other.value) & other.defined);
+        return .{
+            .value = high_mask & m,
+            .defined = (high_mask | low_mask) & m,
+            .width = self.width,
+        };
+    }
+
+    /// Bitwise OR with three-state semantics: a bit is high if either
+    /// operand's bit is defined-high, low if both are defined-low, and
+    /// undefined otherwise. Dual of `bitAnd`.
+    pub fn bitOr(self: BitVecState, other: BitVecState) BitVecState {
+        std.debug.assert(self.width == other.width);
+        const m = widthMask(self.width);
+        const high_mask = (self.value & self.defined) | (other.value & other.defined);
+        const low_mask = ((~self.value) & self.defined) & ((~other.value) & other.defined);
+        return .{
+            .value = high_mask & m,
+            .defined = (high_mask | low_mask) & m,
+            .width = self.width,
+        };
+    }
+
+    /// Bitwise XOR with three-state semantics: a bit is defined iff both
+    /// operands' bits are defined; its value is `self.value ^ other.value`
+    /// within the both-defined mask. Any undefined input bit propagates as
+    /// undefined regardless of the other operand.
+    pub fn bitXor(self: BitVecState, other: BitVecState) BitVecState {
+        std.debug.assert(self.width == other.width);
+        const m = widthMask(self.width);
+        const both_defined = self.defined & other.defined;
+        return .{
+            .value = (self.value ^ other.value) & both_defined & m,
+            .defined = both_defined & m,
+            .width = self.width,
+        };
+    }
+
     /// Width=1 helper: defined and value bit set.
     pub fn isHigh(self: BitVecState) bool {
         std.debug.assert(self.width == 1);
@@ -840,6 +886,58 @@ test "BitVecState: flip preserves undefined, swaps defined" {
     try std.testing.expect(BitVecState.undefined_(1).flip().equals(BitVecState.undefined_(1)));
     try std.testing.expect(BitVecState.low(1).flip().equals(BitVecState.high(1)));
     try std.testing.expect(BitVecState.high(1).flip().equals(BitVecState.low(1)));
+}
+
+test "BitVecState: bitAnd width=1 matches the engine's AND predicate" {
+    // Mirror the three-branch logic in `recalculateAndReschedule`'s
+    // and_gate arm so the new bitwise op is provably equivalent at the
+    // width the existing engine actually exercises.
+    const refAnd = struct {
+        fn pred(a: BitVecState, b: BitVecState) BitVecState {
+            if (a.isLow() or b.isLow()) return BitVecState.low(1);
+            if (a.isUndefined() or b.isUndefined()) return BitVecState.undefined_(1);
+            return BitVecState.high(1);
+        }
+    };
+
+    const states = [_]BitVecState{ BitVecState.low(1), BitVecState.high(1), BitVecState.undefined_(1) };
+    for (states) |a| {
+        for (states) |b| {
+            try std.testing.expect(a.bitAnd(b).equals(refAnd.pred(a, b)));
+        }
+    }
+}
+
+test "BitVecState: bitOr width=1 truth table" {
+    const lo = BitVecState.low(1);
+    const hi = BitVecState.high(1);
+    const un = BitVecState.undefined_(1);
+
+    try std.testing.expect(lo.bitOr(lo).equals(lo));
+    try std.testing.expect(lo.bitOr(hi).equals(hi));
+    try std.testing.expect(lo.bitOr(un).equals(un));
+    try std.testing.expect(hi.bitOr(lo).equals(hi));
+    try std.testing.expect(hi.bitOr(hi).equals(hi));
+    try std.testing.expect(hi.bitOr(un).equals(hi));
+    try std.testing.expect(un.bitOr(lo).equals(un));
+    try std.testing.expect(un.bitOr(hi).equals(hi));
+    try std.testing.expect(un.bitOr(un).equals(un));
+}
+
+test "BitVecState: bitXor width=1 truth table" {
+    const lo = BitVecState.low(1);
+    const hi = BitVecState.high(1);
+    const un = BitVecState.undefined_(1);
+
+    try std.testing.expect(lo.bitXor(lo).equals(lo));
+    try std.testing.expect(lo.bitXor(hi).equals(hi));
+    try std.testing.expect(lo.bitXor(un).equals(un));
+    try std.testing.expect(hi.bitXor(lo).equals(hi));
+    try std.testing.expect(hi.bitXor(hi).equals(lo));
+    try std.testing.expect(hi.bitXor(un).equals(un));
+    try std.testing.expect(un.bitXor(lo).equals(un));
+    try std.testing.expect(un.bitXor(hi).equals(un));
+    try std.testing.expect(un.bitXor(un).equals(un));
 }
 
 test "BitVecState: transport byte matches enum declaration order" {
