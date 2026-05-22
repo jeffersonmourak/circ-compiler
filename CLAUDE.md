@@ -149,6 +149,7 @@ This file lives on `main` and does not track in-progress initiatives. Before mak
 - `git status` and `git log -20 --oneline` for the current branch and recent commits.
 - The branch name itself; the convention so far has been `<stage>.<sub>-<scope>` (e.g. `s1.3-circuit-multi-tier`), where the stage maps into a plan doc.
 - `DOCS/` for plan files (typically `plan-*.md`). They capture locked decisions, stage ordering, and out-of-scope items for multi-PR initiatives. Read the relevant plan before touching code in its area.
+- The GitHub project is the tracker for this work. Stage IDs in branch names and plan docs map directly to GitHub issues: `S<N>` (e.g. `S1`, `S2`) is a top-level stage issue, and `S<N>.<M>` (e.g. `S1.3`) is always a sub-issue of `S<N>`. Use `gh issue list`, `gh issue view <N>`, and `gh issue view <N> --comments` to read scope, acceptance criteria, and open discussion before starting; the issue is the source of truth when the plan doc and the branch disagree.
 - `gh pr list` (and `gh pr view <N>`) if GitHub is reachable.
 - If still ambiguous, ask the human.
 
