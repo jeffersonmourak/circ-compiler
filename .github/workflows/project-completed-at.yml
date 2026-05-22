@@ -1,12 +1,15 @@
-# Sets the "Completed At" date field on a Projects v2 item when its issue is
-# closed with the `completed` state_reason. Issues closed as "Not planned"
-# are intentionally ignored. The workflow is a no-op when the closed issue
-# isn't on the target project.
+# Sets the "Completed At" and "Started At" date fields on a Projects v2 item
+# when its issue is closed with the `completed` state_reason. Started At
+# lands at Completed At minus STARTED_OFFSET_DAYS so the issue renders as
+# a visible bar on the project's roadmap grid (a presentation hack; the
+# offset has no meaning beyond span width). Issues closed as "Not planned"
+# are ignored. The workflow is a no-op when the issue isn't on the target
+# project or when either field is missing from the project schema.
 #
 # Auth: the default GITHUB_TOKEN cannot write to user/org Projects v2.
 # A PAT (classic, `project` scope) stored as `secrets.PROJECT_TOKEN` is
 # required; without it the final mutation will 401.
-name: Set "Completed At" on issue close
+name: Set "Started At" / "Completed At" on issue close
 
 on:
   issues:
@@ -16,10 +19,10 @@ permissions:
   contents: read
 
 jobs:
-  set-completed-at:
+  set-dates:
     # `closed` fires for both "Completed" and "Not planned". Only the former
     # counts as success; the latter would stamp work that was abandoned or
-    # rejected, which is the wrong signal for a Completed At column.
+    # rejected, which is the wrong signal for completion dates.
     if: github.event.issue.state_reason == 'completed'
     runs-on: ubuntu-latest
     env:
@@ -27,27 +30,36 @@ jobs:
       # For an org-owned project, swap `user(login:)` for `organization(login:)`
       # in the resolve-project query below.
       PROJECT_OWNER: jeffersonmourak
-      PROJECT_NUMBER: 1                # TODO: integer at the end of the project URL
-      FIELD_NAME: "Completed At"
+      PROJECT_NUMBER: 7
+      COMPLETED_FIELD_NAME: "Completed At"
+      STARTED_FIELD_NAME: "Started At"
+      STARTED_OFFSET_DAYS: "2"
     steps:
-      - name: Update Completed At
+      - name: Update project dates
         env:
           ISSUE_NODE_ID: ${{ github.event.issue.node_id }}
           CLOSED_AT: ${{ github.event.issue.closed_at }}
         run: |
-          # 1. Resolve the project ID and the date field's ID by name. Doing
-          # this at runtime means renaming the field in the UI doesn't break
-          # the workflow as long as the env var above is updated.
-          read project_id field_id < <(gh api graphql -f query='
-            query($owner: String!, $number: Int!, $field: String!) {
+          # 1. Resolve the project ID and both date field IDs by name. Doing
+          # this at runtime means renaming a field in the UI only requires
+          # updating the env vars above, not the GraphQL.
+          read project_id completed_id started_id < <(gh api graphql -f query='
+            query($owner: String!, $number: Int!, $completed: String!, $started: String!) {
               user(login: $owner) {
                 projectV2(number: $number) {
                   id
-                  field(name: $field) { ... on ProjectV2Field { id } }
+                  completed: field(name: $completed) { ... on ProjectV2Field { id } }
+                  started:   field(name: $started)   { ... on ProjectV2Field { id } }
                 }
               }
-            }' -F owner="$PROJECT_OWNER" -F number="$PROJECT_NUMBER" -F field="$FIELD_NAME" \
-            --jq '.data.user.projectV2 | "\(.id) \(.field.id)"')
+            }' -F owner="$PROJECT_OWNER" -F number="$PROJECT_NUMBER" \
+               -F completed="$COMPLETED_FIELD_NAME" -F started="$STARTED_FIELD_NAME" \
+            --jq '.data.user.projectV2 | "\(.id) \(.completed.id // "null") \(.started.id // "null")"')
+
+          if [ "$completed_id" = "null" ] || [ "$started_id" = "null" ]; then
+            echo "Missing field on project: completed=$completed_id started=$started_id; skipping."
+            exit 0
+          fi
 
           # 2. Find this issue's item in the target project. An issue can be
           # tracked in multiple projects; filter by project_id so we only
@@ -67,14 +79,28 @@ jobs:
             exit 0
           fi
 
-          # 3. Write the close date (UTC) into the field. ProjectV2 Date
-          # fields take YYYY-MM-DD, so strip the time off `closed_at`.
+          # 3. Compute both dates (UTC). ProjectV2 Date fields take YYYY-MM-DD,
+          # so strip the time off closed_at, then shift back by the configured
+          # offset for the Started At placeholder. GNU `date` is available on
+          # ubuntu-latest.
+          completed_date="${CLOSED_AT%T*}"
+          started_date=$(date -u -d "$completed_date - $STARTED_OFFSET_DAYS days" +%F)
+
+          # 4. Write both in a single batched mutation so they land atomically;
+          # if either write fails the other is rejected too.
           gh api graphql -f query='
-            mutation($project: ID!, $item: ID!, $field: ID!, $date: Date!) {
-              updateProjectV2ItemFieldValue(input: {
-                projectId: $project, itemId: $item, fieldId: $field,
-                value: { date: $date }
+            mutation($project: ID!, $item: ID!,
+                     $cfield: ID!, $cdate: Date!,
+                     $sfield: ID!, $sdate: Date!) {
+              setCompleted: updateProjectV2ItemFieldValue(input: {
+                projectId: $project, itemId: $item,
+                fieldId: $cfield, value: { date: $cdate }
+              }) { projectV2Item { id } }
+              setStarted: updateProjectV2ItemFieldValue(input: {
+                projectId: $project, itemId: $item,
+                fieldId: $sfield, value: { date: $sdate }
               }) { projectV2Item { id } }
             }' \
-            -F project="$project_id" -F item="$item_id" -F field="$field_id" \
-            -F date="${CLOSED_AT%T*}"
+            -F project="$project_id" -F item="$item_id" \
+            -F cfield="$completed_id" -F cdate="$completed_date" \
+            -F sfield="$started_id" -F sdate="$started_date"
