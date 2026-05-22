@@ -30,20 +30,30 @@ const OUT_PORT_NAME = "out";
 const OUTPUT_PIN_IN_PORT_NAME = "in";
 const OUTPUT_PIN_OUT_PORT_NAME = "out";
 
-fn calculateDominantState(circuit: *const Circuit, input_comp_list: std.ArrayList(*Component)) BitVecState {
-    // Preserves the existing asymmetric rule: any input reading high wins
-    // immediately; otherwise the *last* input's state is dominant (the
-    // loop overwrites `dominant_state` on every iteration). Reads source
-    // from the pool; the comparison currency is `BitVecState` width=1.
-    var dominant_state = BitVecState.undefined_(1);
+fn calculateDominantState(circuit: *const Circuit, input_comp_list: std.ArrayList(*Component), width: u8) BitVecState {
+    // Per-bit dominance: every bit position where some input reads
+    // defined-high is locked high in the result; remaining bits come
+    // from the LAST input's state. Reduces at width=1 to the previous
+    // "any input reading high wins immediately, otherwise the last
+    // input's state is dominant" rule (the early-return on isHigh was
+    // an optimization; the bitwise form gives the same answer because
+    // a locked-high bit overrides whatever the last input said there).
+    var dominant_state = BitVecState.undefined_(width);
+    var locked_high: u64 = 0;
     for (input_comp_list.items) |input_comp| {
         const s = circuit.readState(input_comp.state_handle);
-        if (s.isHigh()) {
-            return BitVecState.high(1);
-        }
+        locked_high |= s.value & s.defined;
         dominant_state = s;
     }
-    return dominant_state;
+    const m = widthMask(width);
+    const high_mask = locked_high & m;
+    const carry_value = dominant_state.value & dominant_state.defined & m;
+    const carry_defined = dominant_state.defined & m;
+    return .{
+        .value = high_mask | carry_value,
+        .defined = high_mask | carry_defined,
+        .width = width,
+    };
 }
 
 fn recalculateAndReschedule(
@@ -52,26 +62,23 @@ fn recalculateAndReschedule(
     queue: *EventQueue,
     current_time: Timestamp,
 ) !void {
-    var calculated_state = BitVecState.undefined_(1);
+    // Width comes from the component's own state slot's tier (the
+    // `tier = width` convention); the dispatch below stays in this width
+    // throughout, and BitVecState ops compose with width-agnostic bit ops.
+    const width: u8 = component.state_handle.tier;
+    var calculated_state = BitVecState.undefined_(width);
 
     switch (component.kind) {
         .not_gate => |gate| {
-            calculated_state = calculateDominantState(circuit, gate.inputs).flip();
+            calculated_state = calculateDominantState(circuit, gate.inputs, width).flip();
         },
         .and_gate => |gate| {
-            const aValue = calculateDominantState(circuit, gate.inputs_a);
-            const bValue = calculateDominantState(circuit, gate.inputs_b);
-
-            if (aValue.isLow() or bValue.isLow()) {
-                calculated_state = BitVecState.low(1);
-            } else if (aValue.isUndefined() or bValue.isUndefined()) {
-                calculated_state = BitVecState.undefined_(1);
-            } else {
-                calculated_state = BitVecState.high(1);
-            }
+            const aValue = calculateDominantState(circuit, gate.inputs_a, width);
+            const bValue = calculateDominantState(circuit, gate.inputs_b, width);
+            calculated_state = aValue.bitAnd(bValue);
         },
         .led => |led_internals| {
-            calculated_state = calculateDominantState(circuit, led_internals.inputs);
+            calculated_state = calculateDominantState(circuit, led_internals.inputs, width);
             const current = circuit.readState(component.state_handle);
             if (!calculated_state.equals(current)) {
                 if (comptime log.enabled(.info)) {
@@ -86,17 +93,17 @@ fn recalculateAndReschedule(
             for (wire.inputs.items) |input_comp| {
                 const s = circuit.readState(input_comp.state_handle);
                 if (!s.isUndefined()) {
-                    calculated_state = calculateDominantState(circuit, wire.inputs);
+                    calculated_state = calculateDominantState(circuit, wire.inputs, width);
                     break;
                 }
             }
         },
         .output_pin => |output_pin| {
-            calculated_state = calculateDominantState(circuit, output_pin.inputs);
+            calculated_state = calculateDominantState(circuit, output_pin.inputs, width);
         },
         .input_pin_gate => |gate| {
             if (gate.inputs.items.len == 0) return;
-            calculated_state = calculateDominantState(circuit, gate.inputs);
+            calculated_state = calculateDominantState(circuit, gate.inputs, width);
         },
     }
 
@@ -262,11 +269,14 @@ pub const BitVecState = struct {
         return 2;
     }
 
-    /// Width=1 string label for logs and debug dumps. Matches the names
-    /// the old `State` enum carried, so log scrubbing doesn't have to
-    /// learn a new vocabulary.
+    /// Short label for logs and debug dumps. At width=1 matches the
+    /// names the old `State` enum carried ("undefined", "low", "high")
+    /// so log scrubbing doesn't have to learn a new vocabulary. At
+    /// wider widths returns "multi-bit" because the value/defined pair
+    /// doesn't reduce to a single label and the call sites are debug
+    /// logs that don't need the full bit pattern.
     pub fn tagName(self: BitVecState) []const u8 {
-        std.debug.assert(self.width == 1);
+        if (self.width != 1) return "multi-bit";
         if (self.isUndefined()) return "undefined";
         if (self.isLow()) return "low";
         return "high";
@@ -1502,4 +1512,131 @@ test "engine: pool slot indices are dense and unique" {
     // actually exists on both buffers of the lazily-initialized tier-1 pool.
     try std.testing.expect(circuit.tiers[1].?.values.items.len >= 2);
     try std.testing.expect(circuit.tiers[1].?.defined.items.len >= 2);
+}
+
+test "engine: width=4 AND gate propagates bit-by-bit through full circuit" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    const a = try circuit.createComponent(.{ .input_pin_gate = .{} }, 4);
+    const b = try circuit.createComponent(.{ .input_pin_gate = .{} }, 4);
+    const gate = try circuit.createComponent(.{ .and_gate = .{} }, 4);
+    const out = try circuit.createComponent(.{ .output_pin = .{} }, 4);
+    try circuit.connect(a.port(OUT_PORT_NAME), gate.port(A_PORT_NAME));
+    try circuit.connect(b.port(OUT_PORT_NAME), gate.port(B_PORT_NAME));
+    try circuit.connect(gate.port(OUT_PORT_NAME), out.port(OUTPUT_PIN_IN_PORT_NAME));
+
+    // 0b1100 AND 0b1010 = 0b1000 (only bit 3 high in both operands).
+    try circuit.propagateEvent(a, BitVecState{ .value = 0b1100, .defined = 0b1111, .width = 4 });
+    try circuit.propagateEvent(b, BitVecState{ .value = 0b1010, .defined = 0b1111, .width = 4 });
+    var result = circuit.readState(out.state_handle);
+    try std.testing.expectEqual(@as(u64, 0b1000), result.value);
+    try std.testing.expectEqual(@as(u64, 0b1111), result.defined);
+    try std.testing.expectEqual(@as(u8, 4), result.width);
+
+    // All-ones AND zero = zero across every bit.
+    try circuit.propagateEvent(a, BitVecState.high(4));
+    try circuit.propagateEvent(b, BitVecState.low(4));
+    result = circuit.readState(out.state_handle);
+    try std.testing.expect(result.equals(BitVecState.low(4)));
+
+    // Mixed-defined operand: defined-low at any bit forces the result
+    // bit low even when the other operand is undefined there.
+    //   a (LSB..MSB): hi, undef, lo, hi -> value=0b1001, defined=0b1101
+    //   b (LSB..MSB): hi, hi,    hi, hi -> value=0b1111, defined=0b1111
+    //   result:       hi, undef, lo, hi -> value=0b1001, defined=0b1101
+    try circuit.propagateEvent(a, BitVecState{ .value = 0b1001, .defined = 0b1101, .width = 4 });
+    try circuit.propagateEvent(b, BitVecState.high(4));
+    result = circuit.readState(out.state_handle);
+    try std.testing.expectEqual(@as(u64, 0b1001), result.value);
+    try std.testing.expectEqual(@as(u64, 0b1101), result.defined);
+}
+
+test "engine: width=4 NOT gate flips defined bits, preserves undefined" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    const input = try circuit.createComponent(.{ .input_pin_gate = .{} }, 4);
+    const inverter = try circuit.createComponent(.{ .not_gate = .{} }, 4);
+    const out = try circuit.createComponent(.{ .output_pin = .{} }, 4);
+    try circuit.connect(input.port(OUT_PORT_NAME), inverter.port(IN_PORT_NAME));
+    try circuit.connect(inverter.port(OUT_PORT_NAME), out.port(OUTPUT_PIN_IN_PORT_NAME));
+
+    // NOT 0b1010 = 0b0101.
+    try circuit.propagateEvent(input, BitVecState{ .value = 0b1010, .defined = 0b1111, .width = 4 });
+    var result = circuit.readState(out.state_handle);
+    try std.testing.expectEqual(@as(u64, 0b0101), result.value);
+    try std.testing.expectEqual(@as(u64, 0b1111), result.defined);
+
+    // NOT all-high = all-low.
+    try circuit.propagateEvent(input, BitVecState.high(4));
+    result = circuit.readState(out.state_handle);
+    try std.testing.expect(result.equals(BitVecState.low(4)));
+
+    // Mixed: undefined bits stay undefined; defined bits flip.
+    //   input  (LSB..MSB): hi, undef, lo, hi -> value=0b1001, defined=0b1101
+    //   output (LSB..MSB): lo, undef, hi, lo -> value=0b0100, defined=0b1101
+    try circuit.propagateEvent(input, BitVecState{ .value = 0b1001, .defined = 0b1101, .width = 4 });
+    result = circuit.readState(out.state_handle);
+    try std.testing.expectEqual(@as(u64, 0b0100), result.value);
+    try std.testing.expectEqual(@as(u64, 0b1101), result.defined);
+}
+
+test "engine: width=64 NOT gate handles full-register patterns" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    const input = try circuit.createComponent(.{ .input_pin_gate = .{} }, 64);
+    const inverter = try circuit.createComponent(.{ .not_gate = .{} }, 64);
+    const out = try circuit.createComponent(.{ .output_pin = .{} }, 64);
+    try circuit.connect(input.port(OUT_PORT_NAME), inverter.port(IN_PORT_NAME));
+    try circuit.connect(inverter.port(OUT_PORT_NAME), out.port(OUTPUT_PIN_IN_PORT_NAME));
+
+    // NOT 0xF0F0... = 0x0F0F...
+    try circuit.propagateEvent(input, BitVecState{
+        .value = 0xF0F0F0F0F0F0F0F0,
+        .defined = std.math.maxInt(u64),
+        .width = 64,
+    });
+    var result = circuit.readState(out.state_handle);
+    try std.testing.expectEqual(@as(u64, 0x0F0F0F0F0F0F0F0F), result.value);
+    try std.testing.expectEqual(@as(u64, std.math.maxInt(u64)), result.defined);
+
+    // NOT all-high = all-low at width 64.
+    try circuit.propagateEvent(input, BitVecState.high(64));
+    result = circuit.readState(out.state_handle);
+    try std.testing.expect(result.equals(BitVecState.low(64)));
+}
+
+test "engine: width=4 wire passes multi-bit state through unchanged" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    const input = try circuit.createComponent(.{ .input_pin_gate = .{} }, 4);
+    const buf = try circuit.createComponent(.{ .wire = .{} }, 4);
+    const out = try circuit.createComponent(.{ .output_pin = .{} }, 4);
+    try circuit.connect(input.port(OUT_PORT_NAME), buf.port(IN_PORT_NAME));
+    try circuit.connect(buf.port(OUT_PORT_NAME), out.port(OUTPUT_PIN_IN_PORT_NAME));
+
+    try circuit.propagateEvent(input, BitVecState{ .value = 0b1010, .defined = 0b1111, .width = 4 });
+    const result = circuit.readState(out.state_handle);
+    try std.testing.expectEqual(@as(u64, 0b1010), result.value);
+    try std.testing.expectEqual(@as(u64, 0b1111), result.defined);
+}
+
+test "engine: width=8 LED records the driven state across all bits" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    const input = try circuit.createComponent(.{ .input_pin_gate = .{} }, 8);
+    const led = try circuit.createComponent(.{ .led = .{} }, 8);
+    try circuit.connect(input.port(OUT_PORT_NAME), led.port(IN_PORT_NAME));
+
+    try circuit.propagateEvent(input, BitVecState{ .value = 0xAB, .defined = 0xFF, .width = 8 });
+    const driven = circuit.readState(led.state_handle);
+    try std.testing.expectEqual(@as(u64, 0xAB), driven.value);
+    try std.testing.expectEqual(@as(u64, 0xFF), driven.defined);
+
+    try circuit.propagateEvent(input, BitVecState.undefined_(8));
+    try std.testing.expect(circuit.readState(led.state_handle).equals(BitVecState.undefined_(8)));
 }
