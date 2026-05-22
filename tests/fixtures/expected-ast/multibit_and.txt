@@ -1,0 +1,11 @@
+File [f0:1:1-2:19]
+Imports (0)
+Inputs (1)
+  Input x, y [f0:1:7-1:11]
+Outputs (0)
+Components (1)
+  Component type=and width=[8] instance=g width=[8] [f0:2:1-2:19]
+    Port a [f0:2:10-2:11]
+      NamedRef x.out [f0:2:12-2:13]
+    Port b [f0:2:15-2:16]
+      NamedRef y.out [f0:2:17-2:18]

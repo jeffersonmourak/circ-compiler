@@ -1,0 +1,3 @@
+input a, b
+and g(a=a, b=b)
+output[16] r(in=g.out)
