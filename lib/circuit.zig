@@ -398,13 +398,12 @@ pub const PoolHandle = struct {
     slot: u32,
 };
 
-/// Maps a width to the index of the pool that owns it. Only width=1 (tier 0)
-/// is wired today; wider widths panic with a pointer back to the follow-up
-/// issue. Adding a tier in the future is purely additive here.
+/// Maps a width to the index of the pool that owns it. Convention: tier
+/// number equals width number, so `Circuit.tiers[width]` is the canonical
+/// pool lookup. Tier 0 is reserved/unused; legal widths are 1..=MAX_WIDTH.
 fn tierIndexForWidth(width: u8) u8 {
     std.debug.assert(width >= 1 and width <= MAX_WIDTH);
-    if (width == 1) return 0;
-    @panic("widths > 1 not wired yet; see issue #11 follow-up");
+    return width;
 }
 
 /// Width-tiered Structure-of-Arrays pool for wire state. The storage layout
@@ -511,12 +510,13 @@ pub const Circuit = struct {
     /// from zero capacity; instead the previous run's capacity is retained
     /// (length reset to 0 at the end of each per-timestamp iteration).
     changed_at_step: std.ArrayList(*Component) = .{},
-    /// Width-tiered SoA pool for wire state. Today only tier 1 (width=1) is
-    /// exercised; the field is a single `Pool` rather than `[N]Pool` because
-    /// nothing else has storage yet. The next issue widens this into an
-    /// array indexed by `PoolHandle.tier` once wider widths land in the
-    /// language surface and the topology format.
-    tier1: Pool = Pool.init(1),
+    /// Width-tiered SoA pool array indexed by tier number (tier N owns
+    /// width-N state slots). Tier 0 is reserved/unused; the convention
+    /// `tier = width` makes `tiers[handle.tier]` the canonical lookup for
+    /// any state. Each tier is allocated lazily by `getOrInitTier` on its
+    /// first use, so a single-bit circuit pays for only one Pool rather
+    /// than `MAX_WIDTH + 1` of them.
+    tiers: [MAX_WIDTH + 1]?Pool = [_]?Pool{null} ** (MAX_WIDTH + 1),
     /// Benchmark counters. Present only when `COLLECT_METRICS` is true so
     /// shipping builds carry zero bytes and zero instructions for the
     /// metrics path. The conditional type is `void` (zero-sized) otherwise,
@@ -530,7 +530,6 @@ pub const Circuit = struct {
             .event_queue = EventQueue.init(),
             .listener = null,
             .changed_at_step = .{},
-            .tier1 = Pool.init(1),
             .metrics = if (COLLECT_METRICS) Metrics{} else {},
         };
     }
@@ -542,38 +541,42 @@ pub const Circuit = struct {
         self.nodes.deinit(memory.allocator);
         self.event_queue.deinit();
         self.changed_at_step.deinit(memory.allocator);
-        self.tier1.deinit();
+        for (&self.tiers) |*maybe_pool| {
+            if (maybe_pool.* != null) maybe_pool.*.?.deinit();
+        }
+    }
+
+    /// Returns the pool that owns `width`, allocating it lazily on first
+    /// access. Cheap when the pool already exists (one null check); one
+    /// `Pool.init` plus an optional store otherwise.
+    fn getOrInitTier(self: *Circuit, width: u8) *Pool {
+        const tier = tierIndexForWidth(width);
+        if (self.tiers[tier] == null) {
+            self.tiers[tier] = Pool.init(width);
+        }
+        return &self.tiers[tier].?;
     }
 
     /// Allocate a fresh state slot in the pool that owns `width`. Returns
     /// the opaque handle that future `readState`/`writeState` calls use.
-    /// Today only width=1 is legal; wider widths trap via the dispatcher.
     pub fn allocateStateSlot(self: *Circuit, width: u8) !PoolHandle {
         const tier = tierIndexForWidth(width);
-        const slot = switch (tier) {
-            0 => try self.tier1.allocateSlot(),
-            else => unreachable,
-        };
+        const pool = self.getOrInitTier(width);
+        const slot = try pool.allocateSlot();
         return .{ .tier = tier, .slot = slot };
     }
 
     /// Read the BitVecState at `handle`. Tier dispatch happens exactly once;
     /// everything above this line sees only the value type.
     pub fn readState(self: *const Circuit, handle: PoolHandle) BitVecState {
-        return switch (handle.tier) {
-            0 => self.tier1.read(handle.slot),
-            else => unreachable,
-        };
+        return self.tiers[handle.tier].?.read(handle.slot);
     }
 
     /// Write `state` to the slot at `handle`. The caller is responsible for
     /// the `state.width == pool.width` invariant; debug-mode asserts inside
     /// the pool catch mismatches.
     pub fn writeState(self: *Circuit, handle: PoolHandle, state: BitVecState) void {
-        switch (handle.tier) {
-            0 => self.tier1.write(handle.slot, state),
-            else => unreachable,
-        }
+        self.tiers[handle.tier].?.write(handle.slot, state);
     }
 
     pub fn notifyStateChange(self: *Circuit, component: *Component, new_state: BitVecState) void {
@@ -1332,15 +1335,17 @@ test "Pool: widths > 1 undefined overwrite clears both buffers" {
     try std.testing.expect(got.equals(BitVecState.undefined_(8)));
 }
 
-test "Circuit: allocateStateSlot returns tier-0 handle and round-trips" {
+test "Circuit: allocateStateSlot returns a tier=width handle and round-trips" {
     var circuit = try Circuit.init();
     defer circuit.deinit();
 
     const h1 = try circuit.allocateStateSlot(1);
     const h2 = try circuit.allocateStateSlot(1);
-    try std.testing.expectEqual(@as(u8, 0), h1.tier);
+    // Width=1 now lives in tier 1 (the convention `tier = width`); tier 0
+    // is reserved/unused.
+    try std.testing.expectEqual(@as(u8, 1), h1.tier);
     try std.testing.expectEqual(@as(u32, 0), h1.slot);
-    try std.testing.expectEqual(@as(u8, 0), h2.tier);
+    try std.testing.expectEqual(@as(u8, 1), h2.tier);
     try std.testing.expectEqual(@as(u32, 1), h2.slot);
 
     try std.testing.expect(circuit.readState(h1).equals(BitVecState.undefined_(1)));
@@ -1392,11 +1397,12 @@ test "engine: pool slot indices are dense and unique" {
         const comp = try circuit.createComponent(.{ .wire = .{} });
         slot.* = comp.state_handle.slot;
         try std.testing.expectEqual(@as(u32, @intCast(i)), slot.*);
-        try std.testing.expectEqual(@as(u8, 0), comp.state_handle.tier);
+        // Width=1 components live in tier 1 under the `tier = width` rule.
+        try std.testing.expectEqual(@as(u8, 1), comp.state_handle.tier);
     }
 
     // Slot 64 crossed the first word boundary; confirm the second word
-    // actually exists on both buffers.
-    try std.testing.expect(circuit.tier1.values.items.len >= 2);
-    try std.testing.expect(circuit.tier1.defined.items.len >= 2);
+    // actually exists on both buffers of the lazily-initialized tier-1 pool.
+    try std.testing.expect(circuit.tiers[1].?.values.items.len >= 2);
+    try std.testing.expect(circuit.tiers[1].?.defined.items.len >= 2);
 }
