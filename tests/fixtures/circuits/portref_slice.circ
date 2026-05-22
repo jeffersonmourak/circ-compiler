@@ -1,0 +1,4 @@
+input a, b
+output o1(in=a.out[0..4])
+output o2(in=b[0..2])
+output o3(in=a.sum[2..8])

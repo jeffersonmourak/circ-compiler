@@ -1,0 +1,2 @@
+input a
+output o(in=a.port[0..4])

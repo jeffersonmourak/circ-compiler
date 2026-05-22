@@ -1,0 +1,4 @@
+input a, b
+output o1(in={a, b})
+output o2(in={ a , b })
+output o3(in={a,b})

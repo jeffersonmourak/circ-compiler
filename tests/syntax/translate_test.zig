@@ -110,6 +110,41 @@ const fixtures = [_]Fixture{
         .source_path = "tests/fixtures/circuits/param_whitespace.circ",
         .expected_ast_path = "tests/fixtures/expected-ast/param_whitespace.txt",
     },
+    .{
+        .name = "portref-index",
+        .source_path = "tests/fixtures/circuits/portref_index.circ",
+        .expected_ast_path = "tests/fixtures/expected-ast/portref_index.txt",
+    },
+    .{
+        .name = "portref-slice",
+        .source_path = "tests/fixtures/circuits/portref_slice.circ",
+        .expected_ast_path = "tests/fixtures/expected-ast/portref_slice.txt",
+    },
+    .{
+        .name = "portref-concat-simple",
+        .source_path = "tests/fixtures/circuits/portref_concat_simple.circ",
+        .expected_ast_path = "tests/fixtures/expected-ast/portref_concat_simple.txt",
+    },
+    .{
+        .name = "portref-concat-mixed",
+        .source_path = "tests/fixtures/circuits/portref_concat_mixed.circ",
+        .expected_ast_path = "tests/fixtures/expected-ast/portref_concat_mixed.txt",
+    },
+    .{
+        .name = "portref-concat-nested",
+        .source_path = "tests/fixtures/circuits/portref_concat_nested.circ",
+        .expected_ast_path = "tests/fixtures/expected-ast/portref_concat_nested.txt",
+    },
+    .{
+        .name = "portref-compose",
+        .source_path = "tests/fixtures/circuits/portref_compose.circ",
+        .expected_ast_path = "tests/fixtures/expected-ast/portref_compose.txt",
+    },
+    .{
+        .name = "portref-concat-whitespace",
+        .source_path = "tests/fixtures/circuits/portref_concat_whitespace.circ",
+        .expected_ast_path = "tests/fixtures/expected-ast/portref_concat_whitespace.txt",
+    },
 };
 
 test "translate parse tree to typed ast fixtures" {
@@ -230,4 +265,104 @@ test "callwidths: mixed literal and identifier args populate WidthSpec variants"
     try std.testing.expectEqual(@as(usize, 2), args.len);
     try std.testing.expectEqual(@as(u8, 4), args[0].literal);
     try std.testing.expectEqualStrings("W", args[1].parameter);
+}
+
+// PEG with `IndexedRef <- BaseRef #Subscript?` makes the `[...]` after a port
+// name lexified — `a[2]` parses, `a [2]` does not.
+fn outputSourceTag(source: anytype) []const u8 {
+    return @tagName(source);
+}
+
+test "subscript: name[i] parses as indexed" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const parsed = try translate.parseSource(allocator, 0, "input a\noutput o(in=a[2])\n");
+    try std.testing.expectEqual(@as(usize, 1), parsed.outputs.len);
+    try std.testing.expectEqualStrings("indexed", @tagName(parsed.outputs[0].value));
+    try std.testing.expectEqual(@as(u8, 2), parsed.outputs[0].value.indexed.bit);
+}
+
+test "subscript: name [i] with space parses as indexed (langlang lexification limitation)" {
+    // The S3.3 issue pinned `IndexedRef <- BaseRef #Subscript?` with the
+    // intent that whitespace would defeat the subscript binding. langlang
+    // v0.0.12's grammar compiler silently ignores the `#` lexification
+    // operator and injects automatic Spacing between every sequence element,
+    // so `a [2]` parses identically to `a[2]`. The expectation is captured
+    // here so the gap is explicit if/when langlang gains real lexification.
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const parsed = try translate.parseSource(allocator, 0, "input a\noutput o(in=a [2])\n");
+    try std.testing.expectEqualStrings("indexed", @tagName(parsed.outputs[0].value));
+}
+
+test "subscript: slice vs index disambiguation" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const parsed = try translate.parseSource(allocator, 0,
+        "input a\noutput o1(in=a[2])\noutput o2(in=a[2..5])\n");
+    try std.testing.expectEqual(@as(usize, 2), parsed.outputs.len);
+    try std.testing.expectEqualStrings("indexed", @tagName(parsed.outputs[0].value));
+    try std.testing.expectEqualStrings("sliced", @tagName(parsed.outputs[1].value));
+    try std.testing.expectEqual(@as(u8, 2), parsed.outputs[1].value.sliced.lo);
+    try std.testing.expectEqual(@as(u8, 5), parsed.outputs[1].value.sliced.hi);
+}
+
+test "concat: empty braces fail to parse" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const parsed = translate.parseSource(allocator, 0, "input a\noutput o(in={})\n") catch return;
+    for (parsed.outputs) |out| {
+        try std.testing.expect(out.value != .concat);
+    }
+}
+
+test "slice: open-ended bounds fail to parse" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const a = translate.parseSource(allocator, 0, "input x\noutput o(in=x[1..])\n") catch return;
+    for (a.outputs) |out| try std.testing.expect(out.value != .sliced);
+    const b = translate.parseSource(allocator, 0, "input x\noutput o(in=x[..2])\n") catch return;
+    for (b.outputs) |out| try std.testing.expect(out.value != .sliced);
+}
+
+test "concat: parts preserve source order" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const parsed = try translate.parseSource(allocator, 0,
+        "input a, b, c\noutput o(in={a, b, c})\n");
+    try std.testing.expectEqual(@as(usize, 1), parsed.outputs.len);
+    try std.testing.expectEqualStrings("concat", @tagName(parsed.outputs[0].value));
+    const parts = parsed.outputs[0].value.concat.parts;
+    try std.testing.expectEqual(@as(usize, 3), parts.len);
+    try std.testing.expectEqualStrings("a", parts[0].named.target.text);
+    try std.testing.expectEqualStrings("b", parts[1].named.target.text);
+    try std.testing.expectEqualStrings("c", parts[2].named.target.text);
+}
+
+test "concat: nested produces nested AST (not flattened)" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const parsed = try translate.parseSource(allocator, 0,
+        "input a, b, c, d\noutput o(in={a, {b, c}, d})\n");
+    const outer = parsed.outputs[0].value.concat;
+    try std.testing.expectEqual(@as(usize, 3), outer.parts.len);
+    try std.testing.expectEqualStrings("concat", @tagName(outer.parts[1]));
+    try std.testing.expectEqual(@as(usize, 2), outer.parts[1].concat.parts.len);
+}
+
+test "slice: half-open bounds for a[0..4] are lo=0, hi=4" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const parsed = try translate.parseSource(allocator, 0, "input a\noutput o(in=a[0..4])\n");
+    const s = parsed.outputs[0].value.sliced;
+    try std.testing.expectEqual(@as(u8, 0), s.lo);
+    try std.testing.expectEqual(@as(u8, 4), s.hi);
 }

@@ -1,0 +1,13 @@
+File [f0:1:1-2:36]
+Imports (0)
+Inputs (1)
+  Input x, y, z [f0:1:1-1:14]
+Outputs (1)
+  Output o [f0:2:1-2:36]
+    Concat parts=3 [f0:2:13-2:35]
+      Sliced lo=0 hi=2 [f0:2:15-2:21]
+        NamedRef x.out [f0:2:14-2:15]
+      NamedRef y.out [f0:2:23-2:28]
+      Indexed bit=3 [f0:2:31-2:34]
+        NamedRef z.out [f0:2:30-2:31]
+Components (0)

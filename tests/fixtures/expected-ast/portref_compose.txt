@@ -1,0 +1,9 @@
+File [f0:1:1-2:26]
+Imports (0)
+Inputs (1)
+  Input a [f0:1:1-1:8]
+Outputs (1)
+  Output o [f0:2:1-2:26]
+    Sliced lo=0 hi=4 [f0:2:19-2:25]
+      NamedRef a.port [f0:2:13-2:19]
+Components (0)

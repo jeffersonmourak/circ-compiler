@@ -220,6 +220,105 @@ fn parseComponentTypeText(ctx: *const TranslationContext, node_id: u32) ![]const
 
 fn parsePortRef(ctx: *TranslationContext, node_id: u32) anyerror!ast.SignalSource {
     try expectNamedNode(ctx, node_id, "PortRef");
+    const child = try firstChild(ctx, node_id);
+    if (nodeType(ctx, child) != NodeType_Node) return error.InvalidPortReference;
+    const name = nodeName(ctx, child);
+    if (std.mem.eql(u8, name, "Concat")) return parseConcat(ctx, child);
+    if (std.mem.eql(u8, name, "IndexedRef")) return parseIndexedRef(ctx, child);
+    return error.InvalidPortReference;
+}
+
+fn parseConcat(ctx: *TranslationContext, node_id: u32) anyerror!ast.SignalSource {
+    try expectNamedNode(ctx, node_id, "Concat");
+    const seq = try firstChild(ctx, node_id);
+    var parts: std.ArrayList(ast.SignalSource) = .{};
+    if (nodeType(ctx, seq) == NodeType_Node and std.mem.eql(u8, nodeName(ctx, seq), "PortRef")) {
+        try parts.append(ctx.allocator, try parsePortRef(ctx, seq));
+    } else if (nodeType(ctx, seq) == NodeType_Sequence) {
+        const len = childCount(ctx, seq);
+        var i: usize = 0;
+        while (i < len) : (i += 1) {
+            const c = try childAt(ctx, seq, i);
+            if (nodeType(ctx, c) == NodeType_Node and std.mem.eql(u8, nodeName(ctx, c), "PortRef")) {
+                try parts.append(ctx.allocator, try parsePortRef(ctx, c));
+            }
+        }
+    } else return error.InvalidConcat;
+    if (parts.items.len == 0) return error.InvalidConcat;
+    return .{ .concat = .{
+        .parts = try parts.toOwnedSlice(ctx.allocator),
+        .span = nodeSpan(ctx, node_id),
+    } };
+}
+
+fn parseIndexedRef(ctx: *TranslationContext, node_id: u32) anyerror!ast.SignalSource {
+    try expectNamedNode(ctx, node_id, "IndexedRef");
+    const child = try firstChild(ctx, node_id);
+    var base_node: ?u32 = null;
+    var sub_node: ?u32 = null;
+    if (nodeType(ctx, child) == NodeType_Node) {
+        const cname = nodeName(ctx, child);
+        if (std.mem.eql(u8, cname, "BaseRef")) base_node = child;
+    } else if (nodeType(ctx, child) == NodeType_Sequence) {
+        const len = childCount(ctx, child);
+        var i: usize = 0;
+        while (i < len) : (i += 1) {
+            const c = try childAt(ctx, child, i);
+            if (nodeType(ctx, c) != NodeType_Node) continue;
+            const cname = nodeName(ctx, c);
+            if (std.mem.eql(u8, cname, "BaseRef")) base_node = c;
+            if (std.mem.eql(u8, cname, "Subscript")) sub_node = c;
+        }
+    }
+    const bn = base_node orelse return error.InvalidIndexedRef;
+    const base_source = try parseBaseRef(ctx, bn);
+    if (sub_node) |sn| {
+        const heap_source = try ctx.allocator.create(ast.SignalSource);
+        heap_source.* = base_source;
+        return parseSubscript(ctx, sn, heap_source);
+    }
+    return base_source;
+}
+
+fn parseSubscript(ctx: *TranslationContext, node_id: u32, source: *ast.SignalSource) anyerror!ast.SignalSource {
+    try expectNamedNode(ctx, node_id, "Subscript");
+    const seq = try firstChild(ctx, node_id);
+    var integers: std.ArrayList(u8) = .{};
+    defer integers.deinit(ctx.allocator);
+    if (nodeType(ctx, seq) == NodeType_Node and std.mem.eql(u8, nodeName(ctx, seq), "Integer")) {
+        const w = try parseIntegerAsWidth(ctx, seq);
+        try integers.append(ctx.allocator, w.literal);
+    } else if (nodeType(ctx, seq) == NodeType_Sequence) {
+        const len = childCount(ctx, seq);
+        var i: usize = 0;
+        while (i < len) : (i += 1) {
+            const c = try childAt(ctx, seq, i);
+            if (nodeType(ctx, c) == NodeType_Node and std.mem.eql(u8, nodeName(ctx, c), "Integer")) {
+                const w = try parseIntegerAsWidth(ctx, c);
+                try integers.append(ctx.allocator, w.literal);
+            }
+        }
+    } else return error.InvalidSubscript;
+    if (integers.items.len == 1) {
+        return .{ .indexed = .{
+            .source = source,
+            .bit = integers.items[0],
+            .span = nodeSpan(ctx, node_id),
+        } };
+    }
+    if (integers.items.len == 2) {
+        return .{ .sliced = .{
+            .source = source,
+            .lo = integers.items[0],
+            .hi = integers.items[1],
+            .span = nodeSpan(ctx, node_id),
+        } };
+    }
+    return error.InvalidSubscript;
+}
+
+fn parseBaseRef(ctx: *TranslationContext, node_id: u32) anyerror!ast.SignalSource {
+    try expectNamedNode(ctx, node_id, "BaseRef");
     const payload = try firstChild(ctx, node_id);
     switch (nodeType(ctx, payload)) {
         NodeType_Node => {

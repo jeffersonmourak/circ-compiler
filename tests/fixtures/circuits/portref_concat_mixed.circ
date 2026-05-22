@@ -1,0 +1,2 @@
+input x, y, z
+output o(in={x[0..2], y.out, z[3]})

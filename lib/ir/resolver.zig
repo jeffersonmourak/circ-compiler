@@ -107,6 +107,10 @@ fn resolveSource(ctx: *ResolveContext, source: ast.SignalSource) anyerror!ir.Sig
                 .port = "out",
             };
         },
+        // Index/slice/concat lowering lands in the slice/concat IR stage. The
+        // parser produces these AST shapes today; the resolver can't yet emit
+        // an equivalent connection graph.
+        .indexed, .sliced, .concat => return error.UnsupportedSignalSource,
     };
 }
 
