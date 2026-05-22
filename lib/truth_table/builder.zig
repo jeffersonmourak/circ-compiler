@@ -187,10 +187,10 @@ fn topo(components: []const FullComponentRecord, connections: []const FullConnec
 test "truth_table_build_and_two_inputs" {
     // a (id=0, input_pin) → and.a, b (id=1, input_pin) → and.b, and(id=2) → out(id=3, output_pin)
     const components = [_]FullComponentRecord{
-        .{ .id = 0, .kind = .input_pin, .name = "a", .origin = &.{} },
-        .{ .id = 1, .kind = .input_pin, .name = "b", .origin = &.{} },
-        .{ .id = 2, .kind = .and_gate, .name = "g", .origin = &.{} },
-        .{ .id = 3, .kind = .output_pin, .name = "result", .origin = &.{} },
+        .{ .id = 0, .kind = .input_pin, .width = 1, .name = "a", .origin = &.{} },
+        .{ .id = 1, .kind = .input_pin, .width = 1, .name = "b", .origin = &.{} },
+        .{ .id = 2, .kind = .and_gate, .width = 1, .name = "g", .origin = &.{} },
+        .{ .id = 3, .kind = .output_pin, .width = 1, .name = "result", .origin = &.{} },
     };
     const connections = [_]FullConnectionRecord{
         .{ .from_id = 0, .to_id = 2, .port = @intFromEnum(full_format.PortName.a) },
@@ -221,9 +221,9 @@ test "truth_table_build_and_two_inputs" {
 test "truth_table_build_not_gate" {
     // Single-input NOT: input(0) → not(1) → output_pin(2)
     const components = [_]FullComponentRecord{
-        .{ .id = 0, .kind = .input_pin, .name = "in", .origin = &.{} },
-        .{ .id = 1, .kind = .not_gate, .name = "n", .origin = &.{} },
-        .{ .id = 2, .kind = .output_pin, .name = "out", .origin = &.{} },
+        .{ .id = 0, .kind = .input_pin, .width = 1, .name = "in", .origin = &.{} },
+        .{ .id = 1, .kind = .not_gate, .width = 1, .name = "n", .origin = &.{} },
+        .{ .id = 2, .kind = .output_pin, .width = 1, .name = "out", .origin = &.{} },
     };
     const connections = [_]FullConnectionRecord{
         .{ .from_id = 0, .to_id = 1, .port = @intFromEnum(full_format.PortName.in) },
@@ -242,11 +242,11 @@ test "truth_table_build_rejects_too_many_inputs" {
     // 17 input pins exceeds the default 16 cap.
     var components: [17]FullComponentRecord = undefined;
     inline for (0..17) |idx| {
-        components[idx] = .{ .id = idx, .kind = .input_pin, .name = "x", .origin = &.{} };
+        components[idx] = .{ .id = idx, .kind = .input_pin, .width = 1, .name = "x", .origin = &.{} };
     }
     // Need at least one output so we don't hit NoOutputs first.
     const all_components = components ++ [_]FullComponentRecord{
-        .{ .id = 17, .kind = .output_pin, .name = "out", .origin = &.{} },
+        .{ .id = 17, .kind = .output_pin, .width = 1, .name = "out", .origin = &.{} },
     };
     const t = topo(&all_components, &.{});
     try std.testing.expectError(error.TooManyInputs, build(test_alloc, t, .{}));
@@ -255,7 +255,7 @@ test "truth_table_build_rejects_too_many_inputs" {
 test "truth_table_build_rejects_no_outputs" {
     // Inputs only, no outputs.
     const components = [_]FullComponentRecord{
-        .{ .id = 0, .kind = .input_pin, .name = "a", .origin = &.{} },
+        .{ .id = 0, .kind = .input_pin, .width = 1, .name = "a", .origin = &.{} },
     };
     const t = topo(&components, &.{});
     try std.testing.expectError(error.NoOutputs, build(test_alloc, t, .{}));
@@ -265,8 +265,8 @@ test "truth_table_build_undefined_for_unconnected_output" {
     // input(0), output(1) but no connection between them. The output_pin has
     // no driver, so its state stays .undefined for every input vector.
     const components = [_]FullComponentRecord{
-        .{ .id = 0, .kind = .input_pin, .name = "a", .origin = &.{} },
-        .{ .id = 1, .kind = .output_pin, .name = "out", .origin = &.{} },
+        .{ .id = 0, .kind = .input_pin, .width = 1, .name = "a", .origin = &.{} },
+        .{ .id = 1, .kind = .output_pin, .width = 1, .name = "out", .origin = &.{} },
     };
     const t = topo(&components, &.{});
     var table = try build(test_alloc, t, .{});

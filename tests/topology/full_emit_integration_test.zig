@@ -141,8 +141,8 @@ test "phase0_full_pipeline_roundtrip: and_pair fixture carries both sections wit
     try std.testing.expectEqual(@as(usize, min_conn_count), decoded.connections.len);
 
     // Walk min bytes to extract each connection record and compare with decoded full.
-    // Min layout: header(13) + components(5 bytes each) + connections(9 bytes each).
-    var min_pos: usize = 13 + min_component_count * 5;
+    // Min layout: header(13) + components(6 bytes each: id+kind+width) + connections(9 bytes each).
+    var min_pos: usize = 13 + min_component_count * 6;
     for (decoded.connections) |full_conn| {
         const from_id = std.mem.readInt(u32, min_bytes[min_pos..][0..4], .little);
         min_pos += 4;

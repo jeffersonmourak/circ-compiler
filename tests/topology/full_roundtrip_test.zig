@@ -11,6 +11,7 @@ const OriginFrame = full_format.OriginFrame;
 fn expectComponentEqual(expected: FullComponentRecord, actual: FullComponentRecord) !void {
     try std.testing.expectEqual(expected.id, actual.id);
     try std.testing.expectEqual(expected.kind, actual.kind);
+    try std.testing.expectEqual(expected.width, actual.width);
     try std.testing.expectEqualStrings(expected.name, actual.name);
     try std.testing.expectEqual(expected.origin.len, actual.origin.len);
     for (expected.origin, actual.origin) |exp_frame, act_frame| {
@@ -24,9 +25,9 @@ test "full_encode_decode_roundtrip_simple" {
     const allocator = std.testing.allocator;
 
     const components = [_]FullComponentRecord{
-        .{ .id = 0, .kind = .input_pin, .name = "a", .origin = &.{} },
-        .{ .id = 1, .kind = .input_pin, .name = "b", .origin = &.{} },
-        .{ .id = 2, .kind = .and_gate, .name = "g1", .origin = &.{} },
+        .{ .id = 0, .kind = .input_pin, .width = 1, .name = "a", .origin = &.{} },
+        .{ .id = 1, .kind = .input_pin, .width = 1, .name = "b", .origin = &.{} },
+        .{ .id = 2, .kind = .and_gate, .width = 1, .name = "g1", .origin = &.{} },
     };
     const connections = [_]FullConnectionRecord{
         .{ .from_id = 0, .to_id = 2, .port = @intFromEnum(full_format.PortName.a) },
@@ -62,9 +63,9 @@ test "full_encode_decode_roundtrip_with_origin" {
     };
 
     const components = [_]FullComponentRecord{
-        .{ .id = 10, .kind = .not_gate, .name = "n_in_combine", .origin = &single_frame },
-        .{ .id = 11, .kind = .and_gate, .name = "a_in_combine", .origin = &single_frame },
-        .{ .id = 12, .kind = .not_gate, .name = "n_in_nested", .origin = &nested_frames },
+        .{ .id = 10, .kind = .not_gate, .width = 1, .name = "n_in_combine", .origin = &single_frame },
+        .{ .id = 11, .kind = .and_gate, .width = 1, .name = "a_in_combine", .origin = &single_frame },
+        .{ .id = 12, .kind = .not_gate, .width = 1, .name = "n_in_nested", .origin = &nested_frames },
     };
     const original = FullTopology{ .components = &components, .connections = &.{} };
 
@@ -82,4 +83,28 @@ test "full_encode_decode_roundtrip_with_origin" {
     try std.testing.expectEqualStrings("", decoded.components[2].origin[1].alias);
     try std.testing.expectEqualStrings("xor", decoded.components[2].origin[1].subcircuit);
     try std.testing.expectEqual(@as(u32, 7), decoded.components[2].origin[1].target_file);
+}
+
+test "full_encode_decode_roundtrip_widths_1_4_8" {
+    // S2 reserves the width byte. The IR doesn't carry width yet (S4), so this
+    // constructs FullComponentRecord values directly at the topology layer and
+    // verifies the width survives encode → decode unchanged.
+    const allocator = std.testing.allocator;
+    const widths = [_]u8{ 1, 4, 8 };
+    for (widths) |w| {
+        const components = [_]FullComponentRecord{
+            .{ .id = 0, .kind = .input_pin, .width = w, .name = "a", .origin = &.{} },
+            .{ .id = 1, .kind = .and_gate, .width = w, .name = "g", .origin = &.{} },
+        };
+        const original = FullTopology{ .components = &components, .connections = &.{} };
+
+        const bytes = try full_serializer.encode(allocator, original);
+        defer allocator.free(bytes);
+
+        var decoded = try full_decoder.decode(allocator, bytes);
+        defer decoded.deinit(allocator);
+
+        try std.testing.expectEqual(@as(usize, 2), decoded.components.len);
+        for (components, decoded.components) |exp, act| try expectComponentEqual(exp, act);
+    }
 }

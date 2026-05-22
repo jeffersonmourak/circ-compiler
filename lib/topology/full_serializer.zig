@@ -30,6 +30,7 @@ pub fn encode(allocator: std.mem.Allocator, topology: FullTopology) ![]u8 {
     for (topology.components) |comp| {
         try appendU32LE(&out, allocator, comp.id);
         try out.append(allocator, @intFromEnum(comp.kind));
+        try out.append(allocator, comp.width);
         try appendString(&out, allocator, comp.name);
         try appendU32LE(&out, allocator, @intCast(comp.origin.len));
         for (comp.origin) |frame| {
@@ -179,6 +180,7 @@ fn expandModule(
                 try state.components.append(state.allocator, .{
                     .id = global_id,
                     .kind = primitiveToKind(p),
+                    .width = 1,
                     .name = name_copy,
                     .origin = origin_copy,
                 });
@@ -318,6 +320,7 @@ pub fn buildFromModule(allocator: std.mem.Allocator, module: *const ir.Module) !
                 try components.append(allocator, .{
                     .id = comp.id.value,
                     .kind = primitiveToKind(p),
+                    .width = 1,
                     .name = name_copy,
                     .origin = empty_origin,
                 });
@@ -359,7 +362,7 @@ test "full_encode_empty: locks the wire format" {
     // magic(4) + version(1) + num_components(4) + num_connections(4) = 13 bytes
     const expected = [_]u8{
         'C', 'I', 'R', 'F',
-        0x01,
+        0x02,
         0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00,
     };
@@ -369,31 +372,33 @@ test "full_encode_empty: locks the wire format" {
 test "full_encode: single component with no origin emits expected layout" {
     const allocator = std.testing.allocator;
     const components = [_]FullComponentRecord{
-        .{ .id = 7, .kind = .not_gate, .name = "n1", .origin = &.{} },
+        .{ .id = 7, .kind = .not_gate, .width = 1, .name = "n1", .origin = &.{} },
     };
     const topo = FullTopology{ .components = &components, .connections = &.{} };
 
     const bytes = try encode(allocator, topo);
     defer allocator.free(bytes);
 
-    // magic(4)+ver(1)+num_components(4) + id(4)+kind(1)+name_len(4)+name(2)+origin_len(4) + num_connections(4) = 28
-    try std.testing.expectEqual(@as(usize, 28), bytes.len);
+    // magic(4)+ver(1)+num_components(4) + id(4)+kind(1)+width(1)+name_len(4)+name(2)+origin_len(4) + num_connections(4) = 29
+    try std.testing.expectEqual(@as(usize, 29), bytes.len);
     try std.testing.expectEqualSlices(u8, "CIRF", bytes[0..4]);
-    try std.testing.expectEqual(@as(u8, 0x01), bytes[4]);
+    try std.testing.expectEqual(@as(u8, 0x02), bytes[4]);
     // num_components = 1
     try std.testing.expectEqual(@as(u32, 1), std.mem.readInt(u32, bytes[5..9], .little));
     // id = 7
     try std.testing.expectEqual(@as(u32, 7), std.mem.readInt(u32, bytes[9..13], .little));
     // kind = not_gate
     try std.testing.expectEqual(@intFromEnum(full_format.ComponentKind.not_gate), bytes[13]);
+    // width = 1
+    try std.testing.expectEqual(@as(u8, 1), bytes[14]);
     // name_len = 2
-    try std.testing.expectEqual(@as(u32, 2), std.mem.readInt(u32, bytes[14..18], .little));
+    try std.testing.expectEqual(@as(u32, 2), std.mem.readInt(u32, bytes[15..19], .little));
     // name = "n1"
-    try std.testing.expectEqualSlices(u8, "n1", bytes[18..20]);
+    try std.testing.expectEqualSlices(u8, "n1", bytes[19..21]);
     // origin_len = 0
-    try std.testing.expectEqual(@as(u32, 0), std.mem.readInt(u32, bytes[20..24], .little));
+    try std.testing.expectEqual(@as(u32, 0), std.mem.readInt(u32, bytes[21..25], .little));
     // num_connections = 0
-    try std.testing.expectEqual(@as(u32, 0), std.mem.readInt(u32, bytes[24..28], .little));
+    try std.testing.expectEqual(@as(u32, 0), std.mem.readInt(u32, bytes[25..29], .little));
 }
 
 // ---------- IR-walk tests (slice 4) ----------

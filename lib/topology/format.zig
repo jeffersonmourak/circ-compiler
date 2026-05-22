@@ -1,7 +1,7 @@
 const std = @import("std");
 
 pub const MAGIC: [4]u8 = .{ 'C', 'I', 'R', 'C' };
-pub const VERSION: u8 = 0x01;
+pub const VERSION: u8 = 0x02;
 
 pub const ComponentKind = enum(u8) {
     input_pin = 0,
@@ -22,6 +22,7 @@ pub const PortName = enum(u8) {
 pub const ComponentRecord = extern struct {
     id: u32,
     kind: u8,
+    width: u8,
 };
 
 pub const ConnectionRecord = extern struct {

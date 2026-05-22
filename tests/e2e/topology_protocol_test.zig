@@ -50,13 +50,15 @@ test "topology host protocol: inverter round-trip via Node" {
     try topo.appendSlice(allocator, &[_]u8{2, 0, 0, 0}); // comp_count = 2
     try topo.appendSlice(allocator, &[_]u8{1, 0, 0, 0}); // conn_count = 1
     
-    // Component 0: input_pin
+    // Component 0: input_pin (width=1)
     try topo.appendSlice(allocator, &[_]u8{0, 0, 0, 0});
     try topo.append(allocator, @intFromEnum(format.ComponentKind.input_pin));
-    
-    // Component 1: not_gate
+    try topo.append(allocator, 1);
+
+    // Component 1: not_gate (width=1)
     try topo.appendSlice(allocator, &[_]u8{1, 0, 0, 0});
     try topo.append(allocator, @intFromEnum(format.ComponentKind.not_gate));
+    try topo.append(allocator, 1);
     
     // Connection: from 0, to 1, port "in"
     try topo.appendSlice(allocator, &[_]u8{0, 0, 0, 0});

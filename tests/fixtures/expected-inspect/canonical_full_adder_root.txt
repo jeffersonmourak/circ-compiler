@@ -39,14 +39,14 @@ Outputs (2)
   id=0 name=sum driver=4.sum
   id=1 name=cout driver=5.out
 Components (8)
-  id=0 name=a kind=primitive:input_pin
-  id=1 name=b kind=primitive:input_pin
-  id=2 name=cin kind=primitive:input_pin
-  id=3 name=ha1 kind=sub_circuit_ref:half_adder
-  id=4 name=ha2 kind=sub_circuit_ref:half_adder
-  id=5 name=cout_or kind=unresolved_name:or
-  id=6 name=sum kind=primitive:output_pin
-  id=7 name=cout kind=primitive:output_pin
+  id=0 name=a kind=primitive:input_pin width=1
+  id=1 name=b kind=primitive:input_pin width=1
+  id=2 name=cin kind=primitive:input_pin width=1
+  id=3 name=ha1 kind=sub_circuit_ref:half_adder width=1
+  id=4 name=ha2 kind=sub_circuit_ref:half_adder width=1
+  id=5 name=cout_or kind=unresolved_name:or width=1
+  id=6 name=sum kind=primitive:output_pin width=1
+  id=7 name=cout kind=primitive:output_pin width=1
 Connections (8)
   0.out -> 3.a
   1.out -> 3.b

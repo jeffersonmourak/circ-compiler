@@ -26,6 +26,7 @@ pub fn serializeModule(
         try components.append(allocator, .{
             .id = comp.id.value,
             .kind = @intFromEnum(kind),
+            .width = 1,
         });
     }
 
@@ -167,6 +168,7 @@ fn expandModule(
                 try state.components.append(state.allocator, .{
                     .id = global_id,
                     .kind = @intFromEnum(kind),
+                    .width = 1,
                 });
             },
             .sub_circuit_ref => |ref| {
@@ -309,6 +311,7 @@ fn encodePayload(
         std.mem.writeInt(u32, &buf, comp.id, .little);
         try out.appendSlice(allocator, &buf);
         try out.append(allocator, comp.kind);
+        try out.append(allocator, comp.width);
     }
 
     for (connections) |connection| {
@@ -365,20 +368,23 @@ test "serialize: inverter module bytes" {
     // conn_count = 2
     try std.testing.expectEqual(@as(u32, 2), std.mem.readInt(u32, payload[9..13][0..4], .little));
     
-    // Verify records
+    // Verify records (each: id(4)+kind(1)+width(1) = 6 bytes)
     var offset: usize = 13;
     // Comp 0
     try std.testing.expectEqual(@as(u32, 0), std.mem.readInt(u32, payload[offset..offset+4][0..4], .little));
     try std.testing.expectEqual(@intFromEnum(format.ComponentKind.input_pin), payload[offset+4]);
-    offset += 5;
+    try std.testing.expectEqual(@as(u8, 1), payload[offset+5]);
+    offset += 6;
     // Comp 1
     try std.testing.expectEqual(@as(u32, 1), std.mem.readInt(u32, payload[offset..offset+4][0..4], .little));
     try std.testing.expectEqual(@intFromEnum(format.ComponentKind.not_gate), payload[offset+4]);
-    offset += 5;
+    try std.testing.expectEqual(@as(u8, 1), payload[offset+5]);
+    offset += 6;
     // Comp 2
     try std.testing.expectEqual(@as(u32, 2), std.mem.readInt(u32, payload[offset..offset+4][0..4], .little));
     try std.testing.expectEqual(@intFromEnum(format.ComponentKind.output_pin), payload[offset+4]);
-    offset += 5;
+    try std.testing.expectEqual(@as(u8, 1), payload[offset+5]);
+    offset += 6;
     
     // Conn 0
     try std.testing.expectEqual(@as(u32, 0), std.mem.readInt(u32, payload[offset..offset+4][0..4], .little));
@@ -413,6 +419,26 @@ test "serialize: unknown port name returns error" {
     };
     
     try std.testing.expectError(error.UnknownPortName, serializeModule(allocator, &module));
+}
+
+test "serialize: width round-trip at 1, 4, 8" {
+    // Construct ComponentRecord values directly at the topology layer (S2 scope:
+    // the IR doesn't carry width yet; S4 lands the producer side). This checks
+    // that encodePayload preserves the width byte for arbitrary u8 values.
+    const allocator = std.testing.allocator;
+    const widths = [_]u8{ 1, 4, 8 };
+    for (widths) |w| {
+        const components = [_]format.ComponentRecord{
+            .{ .id = 0, .kind = @intFromEnum(format.ComponentKind.and_gate), .width = w },
+        };
+        const payload = try encodePayload(allocator, &components, &.{});
+        defer allocator.free(payload);
+
+        try std.testing.expectEqual(format.VERSION, payload[4]);
+        // Layout: magic(4)+ver(1)+comp_count(4)+conn_count(4) = 13, then id(4)+kind(1)+width(1).
+        try std.testing.expectEqual(@intFromEnum(format.ComponentKind.and_gate), payload[13 + 4]);
+        try std.testing.expectEqual(w, payload[13 + 5]);
+    }
 }
 
 test "serialize: half-adder project flat" {

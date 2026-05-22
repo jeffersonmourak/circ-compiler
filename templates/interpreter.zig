@@ -28,7 +28,7 @@ pub fn initFromTopology(circuit: *engine.Circuit, payload: []const u8) !void {
     const comp_count = readU32(payload[5..9][0..4]);
     const conn_count = readU32(payload[9..13][0..4]);
 
-    const comp_bytes = 5 * comp_count;
+    const comp_bytes = 6 * comp_count;
     const conn_bytes = 9 * conn_count;
 
     if (payload.len < 13 + comp_bytes + conn_bytes) return error.TruncatedPayload;
@@ -41,18 +41,19 @@ pub fn initFromTopology(circuit: *engine.Circuit, payload: []const u8) !void {
     for (0..comp_count) |_| {
         const id = readU32(payload[offset .. offset + 4][0..4]);
         const kind_val = payload[offset + 4];
-        offset += 5;
+        const width = payload[offset + 5];
+        offset += 6;
 
         const component_kind = std.meta.intToEnum(format.ComponentKind, kind_val) catch return error.InvalidComponentKind;
         const comp = switch (component_kind) {
-            .input_pin => try circuit.createComponent(.{ .input_pin_gate = .{} }, 1),
-            .not_gate => try circuit.createComponent(.{ .not_gate = .{} }, 1),
-            .and_gate => try circuit.createComponent(.{ .and_gate = .{} }, 1),
-            .wire => try circuit.createComponent(.{ .wire = .{} }, 1),
-            .led => try circuit.createComponent(.{ .led = .{} }, 1),
-            .output_pin => try circuit.createComponent(.{ .output_pin = .{} }, 1),
+            .input_pin => try circuit.createComponent(.{ .input_pin_gate = .{} }, width),
+            .not_gate => try circuit.createComponent(.{ .not_gate = .{} }, width),
+            .and_gate => try circuit.createComponent(.{ .and_gate = .{} }, width),
+            .wire => try circuit.createComponent(.{ .wire = .{} }, width),
+            .led => try circuit.createComponent(.{ .led = .{} }, width),
+            .output_pin => try circuit.createComponent(.{ .output_pin = .{} }, width),
         };
-        comp.id = id; 
+        comp.id = id;
         comp_map.putAssumeCapacity(id, comp);
     }
 
@@ -89,7 +90,16 @@ test "interpreter: rejects unknown version" {
     defer circuit.deinit();
     var payload = [_]u8{0} ** 13;
     std.mem.copyForwards(u8, payload[0..4], &format.MAGIC);
-    payload[4] = 0x02; 
+    payload[4] = 0x99;
+    try std.testing.expectError(error.UnsupportedVersion, initFromTopology(&circuit, &payload));
+}
+
+test "interpreter: rejects v01 payload" {
+    var circuit = try engine.Circuit.init();
+    defer circuit.deinit();
+    var payload = [_]u8{0} ** 13;
+    std.mem.copyForwards(u8, payload[0..4], &format.MAGIC);
+    payload[4] = 0x01;
     try std.testing.expectError(error.UnsupportedVersion, initFromTopology(&circuit, &payload));
 }
 
@@ -108,9 +118,11 @@ test "interpreter: single not-gate topology" {
     
     try payload.appendSlice(allocator, &[_]u8{0, 0, 0, 0});
     try payload.append(allocator, @intFromEnum(format.ComponentKind.wire));
-    
+    try payload.append(allocator, 1);
+
     try payload.appendSlice(allocator, &[_]u8{1, 0, 0, 0});
     try payload.append(allocator, @intFromEnum(format.ComponentKind.not_gate));
+    try payload.append(allocator, 1);
     
     try payload.appendSlice(allocator, &[_]u8{0, 0, 0, 0}); 
     try payload.appendSlice(allocator, &[_]u8{1, 0, 0, 0}); 
