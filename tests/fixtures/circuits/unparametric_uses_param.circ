@@ -1,0 +1,2 @@
+input[W] a
+output[W] o(in=a.out)

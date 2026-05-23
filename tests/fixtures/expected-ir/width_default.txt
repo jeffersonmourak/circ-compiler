@@ -4,12 +4,12 @@ Inputs (2)
   id=0 name=a component=0 width=1
   id=1 name=b component=1 width=1
 Outputs (1)
-  id=0 name=result driver=2.out width=1
+  id=0 name=r driver=2.out width=1
 Components (4)
   id=0 name=a kind=primitive:input_pin width=1
   id=1 name=b kind=primitive:input_pin width=1
-  id=2 name=gate1 kind=primitive:and_gate width=1
-  id=3 name=result kind=primitive:output_pin width=1
+  id=2 name=g kind=primitive:and_gate width=1
+  id=3 name=r kind=primitive:output_pin width=1
 Connections (3)
   0.out -> 2.a
   1.out -> 2.b

@@ -39,6 +39,7 @@ pub const Component = struct {
     kind: ComponentKind,
     instance_name: ?[]const u8,
     span: Span,
+    width: u8 = 1,
 };
 
 pub const SignalEndpoint = struct {
@@ -62,6 +63,7 @@ pub const InputPin = struct {
     name: []const u8,
     component: ComponentId,
     span: Span,
+    width: u8 = 1,
 };
 
 pub const OutputPin = struct {
@@ -69,6 +71,7 @@ pub const OutputPin = struct {
     name: []const u8,
     driver: SignalEndpoint,
     span: Span,
+    width: u8 = 1,
 };
 
 pub const UnresolvedImport = struct {

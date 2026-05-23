@@ -1,0 +1,10 @@
+Module file_id=0
+Imports (0)
+Inputs (1)
+  id=0 name=a component=0 width=4
+Outputs (0)
+Components (2)
+  id=0 name=a kind=primitive:input_pin width=4
+  id=1 name=l kind=primitive:led width=4
+Connections (1)
+  0.out -> 1.in
