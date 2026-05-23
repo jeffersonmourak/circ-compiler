@@ -108,7 +108,7 @@ test "resolve bodies propagates widths through imported sub-circuits" {
     // Find the imported module by file path suffix (file ids depend on scan order).
     var lib_module: ?@import("ir_types").Module = null;
     for (project.files, project.file_paths) |module, path| {
-        if (std.mem.endsWith(u8, path, "and4_lib.circ")) {
+        if (std.mem.endsWith(u8, path, "wide_and_lib.circ")) {
             lib_module = module;
             break;
         }
@@ -131,7 +131,7 @@ test "resolve bodies propagates widths through imported sub-circuits" {
         if (!std.mem.eql(u8, component.instance_name.?, "inst")) continue;
         switch (component.kind) {
             .sub_circuit_ref => |sub| {
-                try std.testing.expectEqualStrings("and4", sub.name);
+                try std.testing.expectEqualStrings("wide_and", sub.name);
                 linked_sub_ref = true;
             },
             else => {},
