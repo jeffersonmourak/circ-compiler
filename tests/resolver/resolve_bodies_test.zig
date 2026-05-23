@@ -97,3 +97,45 @@ test "resolve bodies preserves primitive components" {
 
     try std.testing.expect(found_and_gate);
 }
+
+test "resolve bodies propagates widths through imported sub-circuits" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const project = try resolveProject(allocator, fixtureRoot("multibit_import"));
+
+    // Find the imported module by file path suffix (file ids depend on scan order).
+    var lib_module: ?@import("ir_types").Module = null;
+    for (project.files, project.file_paths) |module, path| {
+        if (std.mem.endsWith(u8, path, "and4_lib.circ")) {
+            lib_module = module;
+            break;
+        }
+    }
+    const lib = lib_module orelse return error.LibModuleMissing;
+
+    for (lib.inputs) |input| try std.testing.expectEqual(@as(u8, 4), input.width);
+    for (lib.outputs) |output| try std.testing.expectEqual(@as(u8, 4), output.width);
+    for (lib.components) |component| try std.testing.expectEqual(@as(u8, 4), component.width);
+
+    // Root module pins are also width 4; the imported sub_circuit_ref instance
+    // inherits no width itself (width gates on primitive expansion downstream).
+    const root = project.files[project.root_file_id.value];
+    for (root.inputs) |input| try std.testing.expectEqual(@as(u8, 4), input.width);
+    for (root.outputs) |output| try std.testing.expectEqual(@as(u8, 4), output.width);
+
+    var linked_sub_ref = false;
+    for (root.components) |component| {
+        if (component.instance_name == null) continue;
+        if (!std.mem.eql(u8, component.instance_name.?, "inst")) continue;
+        switch (component.kind) {
+            .sub_circuit_ref => |sub| {
+                try std.testing.expectEqualStrings("and4", sub.name);
+                linked_sub_ref = true;
+            },
+            else => {},
+        }
+    }
+    try std.testing.expect(linked_sub_ref);
+}
