@@ -155,3 +155,41 @@ test "phase0_full_pipeline_roundtrip: and_pair fixture carries both sections wit
         try std.testing.expectEqual(port, full_conn.port);
     }
 }
+
+test "multibit_import: widths flow through the import boundary into the min payload" {
+    const allocator = std.testing.allocator;
+
+    var arena = std.heap.ArenaAllocator.init(allocator);
+    defer arena.deinit();
+    const arena_alloc = arena.allocator();
+
+    const root_path = "tests/fixtures/projects/multibit_import/root.circ";
+    const scan_result = try scan_imports.scanProjectImports(arena_alloc, root_path);
+    if (hasHardErrors(scan_result.diagnostics.items)) return error.ScanFailed;
+    const cycle_result = try import_cycle.analyzeImports(arena_alloc, scan_result.file_paths, scan_result.import_table);
+    if (hasHardErrors(cycle_result.diagnostics.items)) return error.CycleFailed;
+    const project = try resolve_bodies.resolveBodies(
+        arena_alloc,
+        scan_result.file_paths,
+        scan_result.import_table,
+        cycle_result.topo_order,
+    );
+    var diag_list = try validator_run_project.run(arena_alloc, &project);
+    defer diag_list.deinit(arena_alloc);
+    if (hasHardErrors(diag_list.items)) return error.UnexpectedDiagnostics;
+
+    const min_bytes = try serializer.serializeProject(allocator, &project);
+    defer allocator.free(min_bytes);
+
+    // Header: magic(4) + ver(1) + comp_count(4) + conn_count(4) = 13. Each record is id(4)+kind(1)+width(1).
+    const min_component_count = std.mem.readInt(u32, min_bytes[5..9], .little);
+    try std.testing.expect(min_component_count > 0);
+
+    var offset: usize = 13;
+    var i: usize = 0;
+    while (i < min_component_count) : (i += 1) {
+        const width = min_bytes[offset + 5];
+        try std.testing.expectEqual(@as(u8, 4), width);
+        offset += 6;
+    }
+}

@@ -1,0 +1,4 @@
+import wide_and "wide_and_lib.circ"
+input[4] x, y
+wide_and inst(a=x, b=y)
+output[4] z(in=inst.r)
