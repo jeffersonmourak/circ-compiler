@@ -1,17 +1,17 @@
 Module file_id=0
 Imports (0)
 Inputs (2)
-  id=0 name=a component=0
-  id=1 name=b component=1
+  id=0 name=a component=0 width=1
+  id=1 name=b component=1 width=1
 Outputs (2)
-  id=0 name=out1 driver=2.out
-  id=1 name=out2 driver=0.out
+  id=0 name=out1 driver=2.out width=1
+  id=1 name=out2 driver=0.out width=1
 Components (5)
-  id=0 name=a kind=primitive:input_pin
-  id=1 name=b kind=primitive:input_pin
-  id=2 name=gate kind=primitive:and_gate
-  id=3 name=out1 kind=primitive:output_pin
-  id=4 name=out2 kind=primitive:output_pin
+  id=0 name=a kind=primitive:input_pin width=1
+  id=1 name=b kind=primitive:input_pin width=1
+  id=2 name=gate kind=primitive:and_gate width=1
+  id=3 name=out1 kind=primitive:output_pin width=1
+  id=4 name=out2 kind=primitive:output_pin width=1
 Connections (4)
   0.out -> 2.a
   1.out -> 2.b

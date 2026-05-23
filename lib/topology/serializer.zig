@@ -26,7 +26,7 @@ pub fn serializeModule(
         try components.append(allocator, .{
             .id = comp.id.value,
             .kind = @intFromEnum(kind),
-            .width = 1,
+            .width = comp.width,
         });
     }
 
@@ -168,7 +168,7 @@ fn expandModule(
                 try state.components.append(state.allocator, .{
                     .id = global_id,
                     .kind = @intFromEnum(kind),
-                    .width = 1,
+                    .width = comp.width,
                 });
             },
             .sub_circuit_ref => |ref| {
@@ -422,9 +422,6 @@ test "serialize: unknown port name returns error" {
 }
 
 test "serialize: width round-trip at 1, 4, 8" {
-    // Construct ComponentRecord values directly at the topology layer (S2 scope:
-    // the IR doesn't carry width yet; S4 lands the producer side). This checks
-    // that encodePayload preserves the width byte for arbitrary u8 values.
     const allocator = std.testing.allocator;
     const widths = [_]u8{ 1, 4, 8 };
     for (widths) |w| {
@@ -438,6 +435,35 @@ test "serialize: width round-trip at 1, 4, 8" {
         // Layout: magic(4)+ver(1)+comp_count(4)+conn_count(4) = 13, then id(4)+kind(1)+width(1).
         try std.testing.expectEqual(@intFromEnum(format.ComponentKind.and_gate), payload[13 + 4]);
         try std.testing.expectEqual(w, payload[13 + 5]);
+    }
+}
+
+test "serialize: ir.Component.width threads into payload width byte" {
+    const allocator = std.testing.allocator;
+    const span = ir.Span{ .file_id = 0, .start_line = 0, .start_col = 0, .end_line = 0, .end_col = 0 };
+
+    const components = [_]ir.Component{
+        .{ .id = .{ .value = 0 }, .kind = .{ .primitive = .input_pin }, .instance_name = "a", .span = span, .width = 4 },
+        .{ .id = .{ .value = 1 }, .kind = .{ .primitive = .and_gate }, .instance_name = "g", .span = span, .width = 4 },
+        .{ .id = .{ .value = 2 }, .kind = .{ .primitive = .output_pin }, .instance_name = "r", .span = span, .width = 4 },
+    };
+    const module = ir.Module{
+        .file_id = .{ .value = 0 },
+        .inputs = &.{},
+        .outputs = &.{},
+        .components = &components,
+        .connections = &.{},
+        .imports = &.{},
+    };
+
+    const payload = try serializeModule(allocator, &module);
+    defer allocator.free(payload);
+
+    // Header is magic(4)+ver(1)+comp_count(4)+conn_count(4) = 13. Each record is id(4)+kind(1)+width(1) = 6.
+    var offset: usize = 13;
+    for (components) |_| {
+        try std.testing.expectEqual(@as(u8, 4), payload[offset + 5]);
+        offset += 6;
     }
 }
 

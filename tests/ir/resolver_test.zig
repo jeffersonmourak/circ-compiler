@@ -36,6 +36,31 @@ const fixtures = [_]Fixture{
         .source_path = "tests/fixtures/circuits/multi_output.circ",
         .expected_ir_path = "tests/fixtures/expected-ir/multi_output.txt",
     },
+    .{
+        .name = "multibit-and-end-to-end",
+        .source_path = "tests/fixtures/circuits/multibit_and_full.circ",
+        .expected_ir_path = "tests/fixtures/expected-ir/multibit_and_full.txt",
+    },
+    .{
+        .name = "multibit-not-end-to-end",
+        .source_path = "tests/fixtures/circuits/multibit_not_full.circ",
+        .expected_ir_path = "tests/fixtures/expected-ir/multibit_not_full.txt",
+    },
+    .{
+        .name = "multibit-wire-end-to-end",
+        .source_path = "tests/fixtures/circuits/multibit_wire_full.circ",
+        .expected_ir_path = "tests/fixtures/expected-ir/multibit_wire_full.txt",
+    },
+    .{
+        .name = "multibit-led-end-to-end",
+        .source_path = "tests/fixtures/circuits/multibit_led_full.circ",
+        .expected_ir_path = "tests/fixtures/expected-ir/multibit_led_full.txt",
+    },
+    .{
+        .name = "scalar-default-width-one",
+        .source_path = "tests/fixtures/circuits/width_default.circ",
+        .expected_ir_path = "tests/fixtures/expected-ir/width_default.txt",
+    },
 };
 
 test "resolve ast to ir fixtures" {
@@ -54,4 +79,21 @@ test "resolve ast to ir fixtures" {
             return err;
         };
     }
+}
+
+test "parameter width without introduction is a placeholder error" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const source = try std.fs.cwd().readFileAlloc(
+        allocator,
+        "tests/fixtures/circuits/unparametric_uses_param.circ",
+        1024 * 1024,
+    );
+    const ast_file = try translate.parseSource(allocator, 0, source);
+    try std.testing.expectError(
+        error.ParametricWidthNotImplemented,
+        resolver.resolve(allocator, ast_file, 0),
+    );
 }

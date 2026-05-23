@@ -1,0 +1,3 @@
+input[8] a
+not[8] inv(in=a)
+output[8] o(in=inv.out)

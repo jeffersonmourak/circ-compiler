@@ -29,20 +29,22 @@ pub fn dumpModule(allocator: std.mem.Allocator, module: anytype) ![]u8 {
 
     try writer.print("Inputs ({d})\n", .{module.inputs.len});
     for (module.inputs) |input_pin| {
-        try writer.print("  id={d} name={s} component={d}\n", .{
+        try writer.print("  id={d} name={s} component={d} width={d}\n", .{
             input_pin.id.value,
             input_pin.name,
             input_pin.component.value,
+            input_pin.width,
         });
     }
 
     try writer.print("Outputs ({d})\n", .{module.outputs.len});
     for (module.outputs) |output_pin| {
-        try writer.print("  id={d} name={s} driver={d}.{s}\n", .{
+        try writer.print("  id={d} name={s} driver={d}.{s} width={d}\n", .{
             output_pin.id.value,
             output_pin.name,
             output_pin.driver.component.value,
             output_pin.driver.port,
+            output_pin.width,
         });
     }
 
@@ -56,7 +58,7 @@ pub fn dumpModule(allocator: std.mem.Allocator, module: anytype) ![]u8 {
             try writer.writeAll("<none> kind=");
         }
         try dumpComponentKind(writer, component.kind);
-        try writer.writeByte('\n');
+        try writer.print(" width={d}\n", .{component.width});
     }
 
     try writer.print("Connections ({d})\n", .{module.connections.len});

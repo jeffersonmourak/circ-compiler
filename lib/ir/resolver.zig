@@ -31,6 +31,14 @@ fn toIrSpan(span: anytype) ir.Span {
     };
 }
 
+fn widthFromSpec(spec: ?ast.WidthSpec) !u8 {
+    const w = spec orelse return 1;
+    return switch (w) {
+        .literal => |n| n,
+        .parameter => error.ParametricWidthNotImplemented,
+    };
+}
+
 fn isPrimitive(name: []const u8) ?ir.PrimitiveKind {
     if (std.mem.eql(u8, name, "and")) return .and_gate;
     if (std.mem.eql(u8, name, "not")) return .not_gate;
@@ -78,11 +86,14 @@ fn addComponent(
     else
         ir.ComponentKind{ .unresolved_name = component_ast.type_name.text };
 
+    const width = try widthFromSpec(component_ast.type_name.width);
+
     try ctx.components.append(ctx.allocator, .{
         .id = id,
         .kind = kind,
         .instance_name = if (component_ast.instance_name) |name| name.text else null,
         .span = toIrSpan(component_ast.span),
+        .width = width,
     });
 
     if (component_ast.instance_name) |name| {
@@ -163,12 +174,14 @@ pub fn resolve(allocator: std.mem.Allocator, file: ast.File, file_id: u32) anyer
 
     for (file.inputs) |input_decl| {
         for (input_decl.names) |name| {
+            const width = try widthFromSpec(name.width);
             const component_id = nextComponentId(&ctx);
             try ctx.components.append(allocator, .{
                 .id = component_id,
                 .kind = .{ .primitive = .input_pin },
                 .instance_name = name.text,
                 .span = toIrSpan(input_decl.span),
+                .width = width,
             });
             try ctx.name_to_component.put(name.text, component_id);
             try ctx.input_pins.append(allocator, .{
@@ -176,6 +189,7 @@ pub fn resolve(allocator: std.mem.Allocator, file: ast.File, file_id: u32) anyer
                 .name = name.text,
                 .component = component_id,
                 .span = toIrSpan(name.span),
+                .width = width,
             });
         }
     }
@@ -187,12 +201,14 @@ pub fn resolve(allocator: std.mem.Allocator, file: ast.File, file_id: u32) anyer
     try resolvePendingPorts(&ctx);
 
     for (file.outputs) |output_decl| {
+        const width = try widthFromSpec(output_decl.name.width);
         const output_component_id = nextComponentId(&ctx);
         try ctx.components.append(allocator, .{
             .id = output_component_id,
             .kind = .{ .primitive = .output_pin },
             .instance_name = output_decl.name.text,
             .span = toIrSpan(output_decl.span),
+            .width = width,
         });
         try ctx.name_to_component.put(output_decl.name.text, output_component_id);
 
@@ -202,6 +218,7 @@ pub fn resolve(allocator: std.mem.Allocator, file: ast.File, file_id: u32) anyer
             .name = output_decl.name.text,
             .driver = driver,
             .span = toIrSpan(output_decl.span),
+            .width = width,
         });
         if (!isValidEndpoint(driver)) continue;
         try ctx.connections.append(allocator, .{

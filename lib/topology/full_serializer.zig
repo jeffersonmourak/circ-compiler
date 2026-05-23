@@ -180,7 +180,7 @@ fn expandModule(
                 try state.components.append(state.allocator, .{
                     .id = global_id,
                     .kind = primitiveToKind(p),
-                    .width = 1,
+                    .width = comp.width,
                     .name = name_copy,
                     .origin = origin_copy,
                 });
@@ -320,7 +320,7 @@ pub fn buildFromModule(allocator: std.mem.Allocator, module: *const ir.Module) !
                 try components.append(allocator, .{
                     .id = comp.id.value,
                     .kind = primitiveToKind(p),
-                    .width = 1,
+                    .width = comp.width,
                     .name = name_copy,
                     .origin = empty_origin,
                 });
