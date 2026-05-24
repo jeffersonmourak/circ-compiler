@@ -133,6 +133,30 @@ fn walkFile(
 
                 try walkFile(ctx, target_file_id, child_prefix, &inner_inputs, &inner_outputs);
             },
+            .slice => {
+                // Slice components are synthesized by the resolver for
+                // bit-range extraction. They behave like primitives at
+                // the project-layout layer: get a global id, append an
+                // entry under the current path prefix. They are never
+                // input/output pins, so neither the input nor output map
+                // gets updated for them.
+                const global_id = ctx.next_global_id;
+                ctx.next_global_id += 1;
+
+                const leaf = if (component.instance_name) |name|
+                    try ctx.allocator.dupe(u8, name)
+                else
+                    try std.fmt.allocPrint(ctx.allocator, "slice_{d}", .{component.id.value});
+                defer ctx.allocator.free(leaf);
+
+                const segments = try dupeSegments(ctx.allocator, path_prefix, leaf);
+                try ctx.entries.append(ctx.allocator, .{
+                    .global_id = global_id,
+                    .file_id = file_id,
+                    .local_id = component.id.value,
+                    .segments = segments,
+                });
+            },
             .unresolved_name => return error.UnresolvedComponentName,
         }
     }
@@ -327,8 +351,16 @@ fn emitFileBuildFunction(
                 const var_name = try componentVarName(allocator, writer, component);
                 defer allocator.free(var_name);
                 try writer.writeLineFmt(
-                    "const {s} = try circuit.createComponent({s}, 1);",
-                    .{ var_name, primitiveExpr(primitive) },
+                    "const {s} = try circuit.createComponent({s}, {d});",
+                    .{ var_name, primitiveExpr(primitive), component.width },
+                );
+            },
+            .slice => |s| {
+                const var_name = try componentVarName(allocator, writer, component);
+                defer allocator.free(var_name);
+                try writer.writeLineFmt(
+                    "const {s} = try circuit.createComponent(.{{ .slice = .{{ .lo = {d}, .hi = {d} }} }}, {d});",
+                    .{ var_name, s.lo, s.hi, component.width },
                 );
             },
             .sub_circuit_ref => |sub_ref| {

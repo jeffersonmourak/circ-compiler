@@ -1,0 +1,2 @@
+input[4] a
+output[2] o(in=a[3..1])

@@ -61,6 +61,21 @@ const fixtures = [_]Fixture{
         .source_path = "tests/fixtures/circuits/width_default.circ",
         .expected_ir_path = "tests/fixtures/expected-ir/width_default.txt",
     },
+    .{
+        .name = "slice-basic-low-bits",
+        .source_path = "tests/fixtures/circuits/slice_basic.circ",
+        .expected_ir_path = "tests/fixtures/expected-ir/slice_basic.txt",
+    },
+    .{
+        .name = "slice-high-bits-nonzero-lo",
+        .source_path = "tests/fixtures/circuits/slice_high_bits.circ",
+        .expected_ir_path = "tests/fixtures/expected-ir/slice_high_bits.txt",
+    },
+    .{
+        .name = "bit-index-lowers-to-width-1-slice",
+        .source_path = "tests/fixtures/circuits/bit_index_a2.circ",
+        .expected_ir_path = "tests/fixtures/expected-ir/bit_index_a2.txt",
+    },
 };
 
 test "resolve ast to ir fixtures" {

@@ -12,6 +12,7 @@ fn kindByte(kind: anytype) u8 {
         .and_gate => 3,
         .wire => 4,
         .output_pin => 5,
+        .slice => 6,
     };
 }
 

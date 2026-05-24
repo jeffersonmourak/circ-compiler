@@ -95,7 +95,18 @@ pub fn decode(allocator: std.mem.Allocator, bytes: []const u8) !FullTopology {
             origin_built += 1;
         }
 
-        comp.* = .{ .id = id, .kind = kind, .width = width, .name = name, .origin = origin };
+        // Kind-dispatched aux: slice carries (lo, hi); other kinds emit
+        // no trailing bytes for backward compatibility.
+        const aux: full_format.Aux = switch (kind) {
+            .slice => blk: {
+                const lo = try cursor.readU8();
+                const hi = try cursor.readU8();
+                break :blk .{ .slice = .{ .lo = lo, .hi = hi } };
+            },
+            else => .none,
+        };
+
+        comp.* = .{ .id = id, .kind = kind, .width = width, .name = name, .origin = origin, .aux = aux };
         components_built += 1;
     }
 

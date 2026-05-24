@@ -14,12 +14,20 @@ pub const OriginFrame = struct {
     target_file: u32,
 };
 
+/// Kind-dispatched auxiliary metadata for the full topology section. Slice
+/// records carry the bit-range; everything else has `.none`.
+pub const Aux = union(enum) {
+    none,
+    slice: struct { lo: u8, hi: u8 },
+};
+
 pub const FullComponentRecord = struct {
     id: u32,
     kind: ComponentKind,
     width: u8,
     name: []const u8,
     origin: []const OriginFrame,
+    aux: Aux = .none,
 };
 
 pub const FullTopology = struct {

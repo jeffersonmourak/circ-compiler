@@ -18,6 +18,10 @@ pub const primitive_sizing = std.EnumArray(full_format.ComponentKind, PrimitiveS
     .and_gate = .{ .width = 5, .height = 5 },
     .wire = .{ .width = 0, .height = 0 },
     .output_pin = .{ .width = 0, .height = 0 },
+    // Slice components are collapsed alongside wires in `collapse.zig` so
+    // they never reach placement. The zero entry is a sentinel; placement
+    // code that looks at a slice would draw an empty box.
+    .slice = .{ .width = 0, .height = 0 },
 });
 
 /// Pin (input or output) box size. Width grows with the pin name to keep the

@@ -20,7 +20,7 @@ pub fn drawComponent(canvas: *Canvas, placed: PlacedComponent) void {
             .not_gate => drawNotGate(canvas, placed),
             .and_gate => drawAndGate(canvas, placed),
             .led => drawLed(canvas, placed),
-            .wire => unreachable, // collapsed before placement
+            .wire, .slice => unreachable, // collapsed before placement
         },
         .subcircuit => |sub| drawMacroBox(canvas, placed, sub),
     }
@@ -51,7 +51,7 @@ fn hasOutPort(placed: PlacedComponent) bool {
     // component with no listed output role as sinkless. Distinguish by kind.
     return switch (placed.kind) {
         .primitive => |p| switch (p) {
-            .output_pin, .led, .wire => false,
+            .output_pin, .led, .wire, .slice => false,
             else => true,
         },
         .subcircuit => true,
@@ -65,7 +65,7 @@ fn colorTagFor(kind: layout.NodeKind) ColorTag {
             .not_gate => .not_gate,
             .and_gate => .and_gate,
             .led => .led,
-            .wire => .none,
+            .wire, .slice => .none,
         },
         .subcircuit => .macro,
     };

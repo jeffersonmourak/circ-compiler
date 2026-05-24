@@ -108,6 +108,37 @@ fn addComponent(
     return id;
 }
 
+fn synthesizeSlice(
+    ctx: *ResolveContext,
+    inner: ast.SignalSource,
+    lo: u8,
+    hi: u8,
+    span: ast.Span,
+) anyerror!ir.SignalEndpoint {
+    const source_endpoint = try resolveSource(ctx, inner);
+    const slice_id = nextComponentId(ctx);
+    // Width must stay >= 1 because the engine's tier dispatch asserts
+    // `1 <= width <= MAX_WIDTH`. Inverted ranges (`hi <= lo`) are caught
+    // by the validator; the placeholder width=1 here keeps the IR
+    // structurally valid until the diagnostic surfaces.
+    const width: u8 = if (hi > lo) hi - lo else 1;
+    try ctx.components.append(ctx.allocator, .{
+        .id = slice_id,
+        .kind = .{ .slice = .{ .lo = lo, .hi = hi } },
+        .instance_name = null,
+        .span = toIrSpan(span),
+        .width = width,
+    });
+    if (isValidEndpoint(source_endpoint)) {
+        try ctx.connections.append(ctx.allocator, .{
+            .from = source_endpoint,
+            .to = .{ .component = slice_id, .port = "in" },
+            .span = toIrSpan(span),
+        });
+    }
+    return .{ .component = slice_id, .port = "out" };
+}
+
 fn resolveSource(ctx: *ResolveContext, source: ast.SignalSource) anyerror!ir.SignalEndpoint {
     return switch (source) {
         .named => |named| try ensureNamedReference(ctx, named),
@@ -118,10 +149,11 @@ fn resolveSource(ctx: *ResolveContext, source: ast.SignalSource) anyerror!ir.Sig
                 .port = "out",
             };
         },
-        // Index/slice/concat lowering lands in the slice/concat IR stage. The
-        // parser produces these AST shapes today; the resolver can't yet emit
-        // an equivalent connection graph.
-        .indexed, .sliced, .concat => return error.UnsupportedSignalSource,
+        // Bit-index `a[i]` is a width-1 slice [i..i+1); the resolver
+        // collapses both AST shapes onto the same IR engine kind.
+        .indexed => |idx| try synthesizeSlice(ctx, idx.source.*, idx.bit, idx.bit + 1, idx.span),
+        .sliced => |s| try synthesizeSlice(ctx, s.source.*, s.lo, s.hi, s.span),
+        .concat => return error.UnsupportedSignalSource,
     };
 }
 

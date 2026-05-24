@@ -105,6 +105,22 @@ fn recalculateAndReschedule(
             if (gate.inputs.items.len == 0) return;
             calculated_state = calculateDominantState(circuit, gate.inputs, width);
         },
+        .slice => |s| {
+            // Slice extracts bits [lo..hi) from `from`. Width equals
+            // `hi - lo` and was set when the slice's state slot was
+            // allocated; shift-right-by-lo and mask with widthMask(width)
+            // give the canonical (value, defined) pair for the new width.
+            if (s.from) |from| {
+                const src = circuit.readState(from.state_handle);
+                const m = widthMask(width);
+                const shift: u6 = @intCast(s.lo);
+                calculated_state = .{
+                    .value = (src.value >> shift) & m,
+                    .defined = (src.defined >> shift) & m,
+                    .width = width,
+                };
+            }
+        },
     }
 
     const current_state = circuit.readState(component.state_handle);
@@ -114,7 +130,7 @@ fn recalculateAndReschedule(
         }
 
         const delay = switch (component.kind) {
-            .wire, .output_pin, .led => WIRE_PROPAGATION_DELAY,
+            .wire, .output_pin, .led, .slice => WIRE_PROPAGATION_DELAY,
             else => PROPAGATION_DELAY,
         };
 
@@ -301,7 +317,7 @@ pub const Event = struct {
     }
 };
 
-pub const ComponentType = enum { input_pin_gate, not_gate, led, and_gate, wire, output_pin };
+pub const ComponentType = enum { input_pin_gate, not_gate, led, and_gate, wire, output_pin, slice };
 
 pub fn toKind(kind: u8) !Component.Kind {
     return switch (kind) {
@@ -311,6 +327,7 @@ pub fn toKind(kind: u8) !Component.Kind {
         3 => .and_gate,
         4 => .wire,
         5 => .output_pin,
+        6 => .{ .slice = .{} },
         else => return error.InvalidComponentKind,
     };
 }
@@ -345,6 +362,11 @@ pub const Component = struct {
         },
         wire: struct { inputs: std.ArrayList(*Component) = .{} },
         output_pin: struct { inputs: std.ArrayList(*Component) = .{} },
+        /// Single-input pass-through that extracts bits `[lo..hi)` from
+        /// `from`'s state. Output width equals `hi - lo`; the engine
+        /// allocates the slice's state slot in tier (hi - lo). `from` is
+        /// populated by `Circuit.connect` once the source is wired in.
+        slice: struct { from: ?*Component = null, lo: u8 = 0, hi: u8 = 0 },
     };
 
     pub fn init(id: u32, kind: Kind) !*Component {
@@ -365,6 +387,7 @@ pub const Component = struct {
             .wire => |*g| g.inputs.deinit(memory.allocator),
             .output_pin => |*g| g.inputs.deinit(memory.allocator),
             .input_pin_gate => |*g| g.inputs.deinit(memory.allocator),
+            .slice => {},
         }
         memory.allocator.destroy(self);
     }
@@ -641,6 +664,10 @@ pub const Circuit = struct {
             .input_pin_gate => |*g| {
                 if (!std.mem.eql(u8, toPort, IN_PORT_NAME)) return error.InvalidInputPort;
                 try g.inputs.append(memory.allocator, fromComponent);
+            },
+            .slice => |*s| {
+                if (!std.mem.eql(u8, toPort, IN_PORT_NAME)) return error.InvalidInputPort;
+                s.from = fromComponent;
             },
         }
     }
@@ -1739,4 +1766,80 @@ test "engine: width=64 wire passes a full-register pattern through unchanged" {
     result = circuit.readState(out.state_handle);
     try std.testing.expectEqual(@as(u64, 0xDEADBEEF00000000), result.value);
     try std.testing.expectEqual(@as(u64, 0xFFFFFFFF00000000), result.defined);
+}
+
+// ============================================================================
+// Slice evaluator tests. Exercise the per-bit shift/mask semantics added in
+// S5.1 across width 1, 2, and 4 sources, including the "indexed" form
+// `a[i]` lowering to a width-1 slice.
+// ============================================================================
+
+test "engine: width-2 slice from a width-4 source extracts bits [1..3)" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    const input = try circuit.createComponent(.{ .input_pin_gate = .{} }, 4);
+    const sl = try circuit.createComponent(.{ .slice = .{ .lo = 1, .hi = 3 } }, 2);
+    const out = try circuit.createComponent(.{ .output_pin = .{} }, 2);
+    try circuit.connect(input.port(OUT_PORT_NAME), sl.port(IN_PORT_NAME));
+    try circuit.connect(sl.port(OUT_PORT_NAME), out.port(OUTPUT_PIN_IN_PORT_NAME));
+
+    // 0b1010 with all bits defined: slice [1..3) takes bits 1 and 2 → 0b01.
+    try circuit.propagateEvent(input, BitVecState{ .value = 0b1010, .defined = 0b1111, .width = 4 });
+    var result = circuit.readState(out.state_handle);
+    try std.testing.expectEqual(@as(u64, 0b01), result.value);
+    try std.testing.expectEqual(@as(u64, 0b11), result.defined);
+    try std.testing.expectEqual(@as(u8, 2), result.width);
+
+    // Undefined source bits propagate undefined into the slice output at
+    // the corresponding output positions.
+    //   src value=0b0110, defined=0b1011 (bit 2 undef) → slice[1..3)
+    //   output value=(0b0110 >> 1) & 0b11 = 0b11 & 0b11 = 0b11
+    //   output defined=(0b1011 >> 1) & 0b11 = 0b101 & 0b11 = 0b01
+    try circuit.propagateEvent(input, BitVecState{ .value = 0b0110, .defined = 0b1011, .width = 4 });
+    result = circuit.readState(out.state_handle);
+    try std.testing.expectEqual(@as(u64, 0b11), result.value);
+    try std.testing.expectEqual(@as(u64, 0b01), result.defined);
+}
+
+test "engine: width-1 slice models the indexed form a[i]" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    const input = try circuit.createComponent(.{ .input_pin_gate = .{} }, 4);
+    // a[2] lowers to slice with lo=2, hi=3, output width=1.
+    const sl = try circuit.createComponent(.{ .slice = .{ .lo = 2, .hi = 3 } }, 1);
+    const out = try circuit.createComponent(.{ .output_pin = .{} }, 1);
+    try circuit.connect(input.port(OUT_PORT_NAME), sl.port(IN_PORT_NAME));
+    try circuit.connect(sl.port(OUT_PORT_NAME), out.port(OUTPUT_PIN_IN_PORT_NAME));
+
+    // 0b0100: only bit 2 is high. a[2] should read high.
+    try circuit.propagateEvent(input, BitVecState{ .value = 0b0100, .defined = 0b1111, .width = 4 });
+    try std.testing.expect(circuit.readState(out.state_handle).equals(BitVecState.high(1)));
+
+    // 0b1011: bit 2 is low. a[2] should read low.
+    try circuit.propagateEvent(input, BitVecState{ .value = 0b1011, .defined = 0b1111, .width = 4 });
+    try std.testing.expect(circuit.readState(out.state_handle).equals(BitVecState.low(1)));
+
+    // Bit 2 undefined: a[2] should read undefined.
+    try circuit.propagateEvent(input, BitVecState{ .value = 0b1111, .defined = 0b1011, .width = 4 });
+    try std.testing.expect(circuit.readState(out.state_handle).equals(BitVecState.undefined_(1)));
+}
+
+test "engine: slice [0..2) of a width-4 source covers the low nibble" {
+    // Mirrors slice_basic.circ: 4-bit bus → [0..2] → 2-bit sink. Confirms
+    // lo=0 (no shift) yields the source's low two bits verbatim.
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    const input = try circuit.createComponent(.{ .input_pin_gate = .{} }, 4);
+    const sl = try circuit.createComponent(.{ .slice = .{ .lo = 0, .hi = 2 } }, 2);
+    const out = try circuit.createComponent(.{ .output_pin = .{} }, 2);
+    try circuit.connect(input.port(OUT_PORT_NAME), sl.port(IN_PORT_NAME));
+    try circuit.connect(sl.port(OUT_PORT_NAME), out.port(OUTPUT_PIN_IN_PORT_NAME));
+
+    try circuit.propagateEvent(input, BitVecState{ .value = 0b1101, .defined = 0b1111, .width = 4 });
+    const result = circuit.readState(out.state_handle);
+    try std.testing.expectEqual(@as(u64, 0b01), result.value);
+    try std.testing.expectEqual(@as(u64, 0b11), result.defined);
 }
