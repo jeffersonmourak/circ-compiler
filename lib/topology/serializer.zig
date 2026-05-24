@@ -12,6 +12,8 @@ pub fn serializeModule(
     defer connections.deinit(allocator);
 
     for (module.components) |comp| {
+        var aux_lo: u8 = 0;
+        var aux_hi: u8 = 0;
         const kind: format.ComponentKind = switch (comp.kind) {
             .primitive => |p| switch (p) {
                 .and_gate => .and_gate,
@@ -21,12 +23,19 @@ pub fn serializeModule(
                 .input_pin => .input_pin,
                 .output_pin => .output_pin,
             },
+            .slice => |s| blk: {
+                aux_lo = s.lo;
+                aux_hi = s.hi;
+                break :blk .slice;
+            },
             else => return error.SubCircuitInFlatModule,
         };
         try components.append(allocator, .{
             .id = comp.id.value,
             .kind = @intFromEnum(kind),
             .width = comp.width,
+            .aux_lo = aux_lo,
+            .aux_hi = aux_hi,
         });
     }
 
@@ -171,6 +180,19 @@ fn expandModule(
                     .width = comp.width,
                 });
             },
+            .slice => |s| {
+                const global_id = state.next_global_id;
+                state.next_global_id += 1;
+                try local_to_global.put(comp.id.value, global_id);
+
+                try state.components.append(state.allocator, .{
+                    .id = global_id,
+                    .kind = @intFromEnum(format.ComponentKind.slice),
+                    .width = comp.width,
+                    .aux_lo = s.lo,
+                    .aux_hi = s.hi,
+                });
+            },
             .sub_circuit_ref => |ref| {
                 var child_module: ?*const ir.Module = null;
                 for (state.project.import_table) |imp| {
@@ -198,10 +220,13 @@ fn expandModule(
         }
     }
 
-    // 2. Second pass: Handle module-level connections (rewiring primitives)
+    // 2. Second pass: Handle module-level connections (rewiring primitives and slices)
     for (module.connections) |conn| {
         const to_comp = findComponent(module, conn.to.component) orelse return error.ComponentNotFound;
-        if (to_comp.kind != .primitive) continue;
+        switch (to_comp.kind) {
+            .primitive, .slice => {},
+            else => continue,
+        }
 
         const from_global_id = try resolveSignalGlobalId(module, conn.from, local_to_global, sub_output_map);
         const to_global_id = local_to_global.get(conn.to.component.value) orelse return error.InternalError;
@@ -262,7 +287,7 @@ fn resolveSignalGlobalId(
 ) !u32 {
     const comp = findComponent(module, endpoint.component) orelse return error.ComponentNotFound;
     switch (comp.kind) {
-        .primitive => {
+        .primitive, .slice => {
             return local_to_global.get(endpoint.component.value) orelse error.InternalError;
         },
         .sub_circuit_ref => {
@@ -312,6 +337,12 @@ fn encodePayload(
         try out.appendSlice(allocator, &buf);
         try out.append(allocator, comp.kind);
         try out.append(allocator, comp.width);
+        // Kind-dispatched suffix: slice records carry `(lo, hi)` after
+        // the fixed prefix. Older kinds keep their historical 6 bytes.
+        if (comp.kind == @intFromEnum(format.ComponentKind.slice)) {
+            try out.append(allocator, comp.aux_lo);
+            try out.append(allocator, comp.aux_hi);
+        }
     }
 
     for (connections) |connection| {

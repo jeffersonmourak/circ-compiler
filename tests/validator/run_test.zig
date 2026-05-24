@@ -37,6 +37,16 @@ const fixtures = [_]Fixture{
         .source_path = "tests/fixtures/circuits/W003_unused_import.circ",
         .expected_path = "tests/fixtures/expected-diagnostics/W003_unused_import.txt",
     },
+    .{
+        .name = "slice out of bounds",
+        .source_path = "tests/fixtures/circuits/slice_out_of_bounds.circ",
+        .expected_path = "tests/fixtures/expected-diagnostics/slice_out_of_bounds.txt",
+    },
+    .{
+        .name = "slice inverted range",
+        .source_path = "tests/fixtures/circuits/slice_inverted.circ",
+        .expected_path = "tests/fixtures/expected-diagnostics/slice_inverted.txt",
+    },
 };
 
 fn lessByLocation(_: void, lhs: diagnostics.Diagnostic, rhs: diagnostics.Diagnostic) bool {

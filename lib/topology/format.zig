@@ -10,6 +10,13 @@ pub const ComponentKind = enum(u8) {
     wire = 3,
     led = 4,
     output_pin = 5,
+    // S5.1: bit-range extraction. Min `ComponentRecord` for a slice carries
+    // two extra trailing bytes (`lo`, `hi`) after the fixed `(id, kind,
+    // width)` prefix, dispatched by kind. Older readers reading a slice
+    // record without knowing the suffix layout would mis-frame the next
+    // record — but the only reader of this format is the embedded
+    // runtime interpreter, which is bumped in lockstep.
+    slice = 6,
 };
 
 pub const PortName = enum(u8) {
@@ -23,6 +30,12 @@ pub const ComponentRecord = extern struct {
     id: u32,
     kind: u8,
     width: u8,
+    /// Kind-dispatched aux bytes. Present in the encoded payload only when
+    /// `kind` calls for them: today, only `slice` carries trailing
+    /// `(lo, hi)` data. Default zero keeps existing kinds' records at the
+    /// historical 6-byte size on the wire.
+    aux_lo: u8 = 0,
+    aux_hi: u8 = 0,
 };
 
 pub const ConnectionRecord = extern struct {
@@ -38,6 +51,7 @@ test "format: ComponentKind values are stable" {
     try std.testing.expectEqual(@as(u8, 3), @intFromEnum(ComponentKind.wire));
     try std.testing.expectEqual(@as(u8, 4), @intFromEnum(ComponentKind.led));
     try std.testing.expectEqual(@as(u8, 5), @intFromEnum(ComponentKind.output_pin));
+    try std.testing.expectEqual(@as(u8, 6), @intFromEnum(ComponentKind.slice));
 }
 
 test "format: PortName values are stable" {

@@ -120,6 +120,7 @@ fn dumpComponentKind(writer: anytype, kind: anytype) !void {
         .primitive => |primitive| try writer.print("primitive:{s}", .{@tagName(primitive)}),
         .sub_circuit_ref => |sub_ref| try writer.print("sub_circuit_ref:{s}", .{sub_ref.name}),
         .unresolved_name => |name| try writer.print("unresolved_name:{s}", .{name}),
+        .slice => |s| try writer.print("slice:[{d}..{d})", .{ s.lo, s.hi }),
     }
 }
 
@@ -163,7 +164,7 @@ pub fn dumpIrModule(allocator: std.mem.Allocator, module: anytype) ![]u8 {
             try writer.writeAll("<none> kind=");
         }
         try dumpComponentKind(writer, component.kind);
-        try writer.writeAll(" width=1");
+        try writer.print(" width={d}", .{component.width});
         try writer.writeByte('\n');
     }
 

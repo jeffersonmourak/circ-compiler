@@ -28,10 +28,22 @@ pub const UnresolvedRef = struct {
     span: Span,
 };
 
+pub const Slice = struct {
+    lo: u8,
+    hi: u8,
+};
+
 pub const ComponentKind = union(enum) {
     primitive: PrimitiveKind,
     sub_circuit_ref: UnresolvedRef,
     unresolved_name: []const u8,
+    /// Bit-range extraction component synthesized by the resolver when
+    /// lowering AST `.indexed` / `.sliced` SignalSource variants. Carries
+    /// the half-open range `[lo, hi)`; the IR `Component.width` field is
+    /// set to `hi - lo`. The source feeds in through a regular IR
+    /// Connection (`source.out -> slice.in`), so name resolution and
+    /// loop detection see slice components like any other primitive.
+    slice: Slice,
 };
 
 pub const Component = struct {

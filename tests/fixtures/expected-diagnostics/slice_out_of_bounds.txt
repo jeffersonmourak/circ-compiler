@@ -1,0 +1,1 @@
+tests/fixtures/circuits/slice_out_of_bounds.circ:2:17: error: E002: slice range [3..5) exceeds source width 4

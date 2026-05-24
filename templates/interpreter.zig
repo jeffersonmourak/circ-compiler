@@ -28,17 +28,13 @@ pub fn initFromTopology(circuit: *engine.Circuit, payload: []const u8) !void {
     const comp_count = readU32(payload[5..9][0..4]);
     const conn_count = readU32(payload[9..13][0..4]);
 
-    const comp_bytes = 6 * comp_count;
-    const conn_bytes = 9 * conn_count;
-
-    if (payload.len < 13 + comp_bytes + conn_bytes) return error.TruncatedPayload;
-
     var comp_map = std.AutoHashMap(u32, *engine.Component).init(allocator);
     defer comp_map.deinit();
     try comp_map.ensureTotalCapacity(@intCast(comp_count));
 
     var offset: usize = 13;
     for (0..comp_count) |_| {
+        if (offset + 6 > payload.len) return error.TruncatedPayload;
         const id = readU32(payload[offset .. offset + 4][0..4]);
         const kind_val = payload[offset + 4];
         const width = payload[offset + 5];
@@ -52,10 +48,25 @@ pub fn initFromTopology(circuit: *engine.Circuit, payload: []const u8) !void {
             .wire => try circuit.createComponent(.{ .wire = .{} }, width),
             .led => try circuit.createComponent(.{ .led = .{} }, width),
             .output_pin => try circuit.createComponent(.{ .output_pin = .{} }, width),
+            .slice => blk: {
+                // Slice records carry two trailing aux bytes `(lo, hi)`.
+                // The `from` pointer is wired up later when the
+                // source→slice connection is processed.
+                if (offset + 2 > payload.len) return error.TruncatedPayload;
+                const lo = payload[offset];
+                const hi = payload[offset + 1];
+                offset += 2;
+                break :blk try circuit.createComponent(
+                    .{ .slice = .{ .lo = lo, .hi = hi } },
+                    width,
+                );
+            },
         };
         comp.id = id;
         comp_map.putAssumeCapacity(id, comp);
     }
+
+    if (offset + 9 * conn_count > payload.len) return error.TruncatedPayload;
 
     for (0..conn_count) |_| {
         const from_id = readU32(payload[offset .. offset + 4][0..4]);

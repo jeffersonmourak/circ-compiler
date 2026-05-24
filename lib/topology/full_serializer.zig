@@ -38,6 +38,16 @@ pub fn encode(allocator: std.mem.Allocator, topology: FullTopology) ![]u8 {
             try appendString(&out, allocator, frame.subcircuit);
             try appendU32LE(&out, allocator, frame.target_file);
         }
+        // Kind-dispatched aux suffix. Slice records carry `(lo, hi)`.
+        // Other kinds emit zero aux bytes so the existing wire-format
+        // bytes are unchanged for unaffected kinds.
+        switch (comp.aux) {
+            .none => {},
+            .slice => |s| {
+                try out.append(allocator, s.lo);
+                try out.append(allocator, s.hi);
+            },
+        }
     }
 
     try appendU32LE(&out, allocator, @intCast(topology.connections.len));
@@ -132,7 +142,7 @@ fn resolveSignalGlobalId(
 ) !u32 {
     const comp = findComponent(module, endpoint.component) orelse return error.ComponentNotFound;
     switch (comp.kind) {
-        .primitive => return local_to_global.get(endpoint.component.value) orelse error.InternalError,
+        .primitive, .slice => return local_to_global.get(endpoint.component.value) orelse error.InternalError,
         .sub_circuit_ref => {
             const outputs = sub_output_map.get(endpoint.component.value) orelse return error.InternalError;
             return outputs.get(endpoint.port) orelse return error.UnknownPortName;
@@ -185,6 +195,32 @@ fn expandModule(
                     .origin = origin_copy,
                 });
             },
+            .slice => |s| {
+                const global_id = state.next_global_id;
+                state.next_global_id += 1;
+                try local_to_global.put(comp.id.value, global_id);
+
+                const name_src = comp.instance_name orelse "";
+                const name_copy = try state.allocator.dupe(u8, name_src);
+                errdefer state.allocator.free(name_copy);
+                const origin_copy = try dupOrigin(state.allocator, origin_stack.items);
+                errdefer {
+                    for (origin_copy) |frame| {
+                        state.allocator.free(frame.alias);
+                        state.allocator.free(frame.subcircuit);
+                    }
+                    state.allocator.free(origin_copy);
+                }
+
+                try state.components.append(state.allocator, .{
+                    .id = global_id,
+                    .kind = .slice,
+                    .width = comp.width,
+                    .name = name_copy,
+                    .origin = origin_copy,
+                    .aux = .{ .slice = .{ .lo = s.lo, .hi = s.hi } },
+                });
+            },
             .sub_circuit_ref => |ref| {
                 var child_module: ?*const ir.Module = null;
                 var target_file_id: u32 = 0;
@@ -225,10 +261,13 @@ fn expandModule(
         }
     }
 
-    // Pass 2: emit module-level connections targeting primitives in this module.
+    // Pass 2: emit module-level connections targeting primitives or slices in this module.
     for (module.connections) |conn| {
         const to_comp = findComponent(module, conn.to.component) orelse return error.ComponentNotFound;
-        if (to_comp.kind != .primitive) continue;
+        switch (to_comp.kind) {
+            .primitive, .slice => {},
+            else => continue,
+        }
 
         const from_global_id = try resolveSignalGlobalId(module, conn.from, local_to_global, sub_output_map);
         const to_global_id = local_to_global.get(conn.to.component.value) orelse return error.InternalError;
@@ -323,6 +362,20 @@ pub fn buildFromModule(allocator: std.mem.Allocator, module: *const ir.Module) !
                     .width = comp.width,
                     .name = name_copy,
                     .origin = empty_origin,
+                });
+            },
+            .slice => |s| {
+                const name_src = comp.instance_name orelse "";
+                const name_copy = try allocator.dupe(u8, name_src);
+                errdefer allocator.free(name_copy);
+                const empty_origin = try allocator.alloc(OriginFrame, 0);
+                try components.append(allocator, .{
+                    .id = comp.id.value,
+                    .kind = .slice,
+                    .width = comp.width,
+                    .name = name_copy,
+                    .origin = empty_origin,
+                    .aux = .{ .slice = .{ .lo = s.lo, .hi = s.hi } },
                 });
             },
             .sub_circuit_ref => return error.SubCircuitInFlatModule,

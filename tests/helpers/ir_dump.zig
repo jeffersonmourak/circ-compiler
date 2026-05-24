@@ -12,6 +12,7 @@ fn dumpComponentKind(writer: anytype, kind: anytype) !void {
         .primitive => |primitive| try writer.print("primitive:{s}", .{@tagName(primitive)}),
         .sub_circuit_ref => |sub_ref| try writer.print("sub_circuit_ref:{s}", .{sub_ref.name}),
         .unresolved_name => |name| try writer.print("unresolved_name:{s}", .{name}),
+        .slice => |s| try writer.print("slice:[{d}..{d})", .{ s.lo, s.hi }),
     }
 }
 

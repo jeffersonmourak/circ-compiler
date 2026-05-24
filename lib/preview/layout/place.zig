@@ -111,6 +111,10 @@ fn sizeOf(node: VirtualNode) sizing.PrimitiveSize {
     return switch (node.kind) {
         .primitive => |p| switch (p) {
             .input_pin, .output_pin => sizing.pinSize(node.name.len),
+            // Slice is collapsed in stage 1; the layer should never
+            // ask for its size. Return the sentinel zero so a stray
+            // call doesn't crash.
+            .slice => sizing.primitive_sizing.get(.slice),
             else => sizing.primitive_sizing.get(p),
         },
         .subcircuit => |sub| sizing.macroSize(
@@ -173,7 +177,7 @@ fn resolvePortCoords(arena: std.mem.Allocator, node: VirtualNode, x: u32, y: u32
                 try in_list.append(arena, .{ .port_name = "in", .coord = .{ .x = x -| 1, .y = y + 1 } });
                 // out_port unused on sinks.
             },
-            .wire => unreachable, // wires were collapsed in stage 1.
+            .wire, .slice => unreachable, // wires and slices were collapsed in stage 1.
         },
         .subcircuit => {
             // Active inputs land on consecutive non-corner border rows (y+1, y+3, …)

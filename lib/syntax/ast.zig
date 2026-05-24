@@ -1,5 +1,5 @@
 const std = @import("std");
-const Span = @import("span.zig").Span;
+pub const Span = @import("span.zig").Span;
 
 pub const File = struct {
     imports: []const Import,

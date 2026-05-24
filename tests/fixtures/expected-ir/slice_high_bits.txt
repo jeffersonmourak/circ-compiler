@@ -1,0 +1,13 @@
+Module file_id=0
+Imports (0)
+Inputs (1)
+  id=0 name=a component=0 width=4
+Outputs (1)
+  id=0 name=o driver=2.out width=2
+Components (3)
+  id=0 name=a kind=primitive:input_pin width=4
+  id=1 name=o kind=primitive:output_pin width=2
+  id=2 name=<none> kind=slice:[2..4) width=2
+Connections (2)
+  0.out -> 2.in
+  2.out -> 1.in

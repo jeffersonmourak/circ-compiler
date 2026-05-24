@@ -72,12 +72,18 @@ pub fn emitBuildFunction(allocator: std.mem.Allocator, module: *const ir.Module)
     for (module.components) |component| {
         const var_name = try componentVarName(allocator, &writer, component);
         defer allocator.free(var_name);
-        const expr = switch (component.kind) {
-            .primitive => |primitive| primitiveExpr(primitive),
+        switch (component.kind) {
+            .primitive => |primitive| try writer.writeLineFmt(
+                "const {s} = try circuit.createComponent({s}, {d});",
+                .{ var_name, primitiveExpr(primitive), component.width },
+            ),
+            .slice => |s| try writer.writeLineFmt(
+                "const {s} = try circuit.createComponent(.{{ .slice = .{{ .lo = {d}, .hi = {d} }} }}, {d});",
+                .{ var_name, s.lo, s.hi, component.width },
+            ),
             .sub_circuit_ref => return error.UnsupportedSubCircuitInPhase4,
             .unresolved_name => return error.UnresolvedComponentName,
-        };
-        try writer.writeLineFmt("const {s} = try circuit.createComponent({s}, 1);", .{ var_name, expr });
+        }
     }
 
     for (module.connections) |connection| {
