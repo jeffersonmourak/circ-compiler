@@ -645,6 +645,7 @@ pub fn build(b: *std.Build) void {
     resolver_resolve_bodies_mod.addImport("ir_types", ir_types_mod);
     resolver_resolve_bodies_mod.addImport("scan_imports", resolver_scan_imports_mod);
     resolver_resolve_bodies_mod.addImport("file_loader", resolver_file_loader_mod);
+    resolver_resolve_bodies_mod.addImport("diagnostics", validator_diagnostics_mod);
     const resolver_resolve_bodies_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/resolver/resolve_bodies_test.zig"),
         .target = target,
@@ -654,6 +655,7 @@ pub fn build(b: *std.Build) void {
     resolver_resolve_bodies_tests_mod.addImport("import_cycle", resolver_import_cycle_mod);
     resolver_resolve_bodies_tests_mod.addImport("resolve_bodies", resolver_resolve_bodies_mod);
     resolver_resolve_bodies_tests_mod.addImport("ir_types", ir_types_mod);
+    resolver_resolve_bodies_tests_mod.addImport("diagnostics", validator_diagnostics_mod);
     const resolver_resolve_bodies_tests = b.addTest(.{
         .root_module = resolver_resolve_bodies_tests_mod,
     });
@@ -1512,6 +1514,7 @@ pub fn build(b: *std.Build) void {
     bench_mod.addImport("import_cycle", resolver_import_cycle_mod);
     bench_mod.addImport("resolve_bodies", resolver_resolve_bodies_mod);
     bench_mod.addImport("validator_run_project", validator_run_project_mod);
+    bench_mod.addImport("diagnostics", validator_diagnostics_mod);
     bench_mod.addImport("ir_types", ir_types_mod);
     bench_mod.addImport("full_serializer", topology_full_serializer_mod);
     bench_mod.addImport("truth_table_builder", bench_truth_table_builder_mod);

@@ -30,6 +30,7 @@ const scan_imports = @import("scan_imports");
 const import_cycle = @import("import_cycle");
 const resolve_bodies = @import("resolve_bodies");
 const validator_run_project = @import("validator_run_project");
+const diagnostics = @import("diagnostics");
 const ir_types = @import("ir_types");
 const full_serializer = @import("full_serializer");
 const truth_table_builder = @import("truth_table_builder");
@@ -1271,12 +1272,18 @@ fn runFixture(
         }
     }
 
+    var resolver_diagnostics = diagnostics.initDiagnosticList();
+    defer resolver_diagnostics.deinit(allocator);
     const project = try resolve_bodies.resolveBodies(
         allocator,
         scan_result.file_paths,
         scan_result.import_table,
         cycle_result.topo_order,
+        &resolver_diagnostics,
     );
+    for (resolver_diagnostics.items) |d| {
+        if (d.level == .err) return error.ResolveFailed;
+    }
 
     var validator_diagnostics = try validator_run_project.run(allocator, &project);
     defer validator_diagnostics.deinit(allocator);

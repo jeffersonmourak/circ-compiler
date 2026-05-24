@@ -37,6 +37,40 @@ fn hasOutputPort(target: *const ir.Module, port: []const u8) bool {
     return false;
 }
 
+fn inputPortWidth(target: *const ir.Module, port: []const u8) ?u8 {
+    for (target.inputs) |input| {
+        if (std.mem.eql(u8, input.name, port)) return input.width;
+    }
+    return null;
+}
+
+fn outputPortWidth(target: *const ir.Module, port: []const u8) ?u8 {
+    for (target.outputs) |output| {
+        if (std.mem.eql(u8, output.name, port)) return output.width;
+    }
+    return null;
+}
+
+fn endpointWidth(
+    project: *const ir.Project,
+    module: *const ir.Module,
+    component: ir.Component,
+    port: []const u8,
+    side: enum { from, to },
+) ?u8 {
+    return switch (component.kind) {
+        .primitive => component.width,
+        .sub_circuit_ref => |ref| blk: {
+            const target = findTargetModule(project, module.file_id, ref.name) orelse break :blk null;
+            break :blk switch (side) {
+                .from => outputPortWidth(target, port),
+                .to => inputPortWidth(target, port),
+            };
+        },
+        .unresolved_name => null,
+    };
+}
+
 fn findComponent(module: *const ir.Module, id: ir.ComponentId) ?ir.Component {
     for (module.components) |c| {
         if (c.id.value == id.value) return c;
@@ -115,6 +149,28 @@ pub fn runForModule(
             d.message = message;
             try diagnostic_list.append(allocator, d);
         }
+    }
+
+    // E014: width mismatch on connections crossing a sub_circuit_ref boundary.
+    // In-module connections (both endpoints primitive) are handled by
+    // lib/validator/passes/port_validation.zig.
+    for (module.connections) |conn| {
+        const from_comp = findComponent(module, conn.from.component) orelse continue;
+        const to_comp = findComponent(module, conn.to.component) orelse continue;
+        if (from_comp.kind != .sub_circuit_ref and to_comp.kind != .sub_circuit_ref) continue;
+
+        const from_width = endpointWidth(project, module, from_comp, conn.from.port, .from) orelse continue;
+        const to_width = endpointWidth(project, module, to_comp, conn.to.port, .to) orelse continue;
+        if (from_width == to_width) continue;
+
+        const message = try std.fmt.allocPrint(
+            allocator,
+            "width mismatch: source width {d}, destination expects {d}",
+            .{ from_width, to_width },
+        );
+        var d = diagnostics.makeDiagnostic(.E014, toDiagnosticSpan(conn.span));
+        d.message = message;
+        try diagnostic_list.append(allocator, d);
     }
 
     // W002: sub-circuit output never read by parent

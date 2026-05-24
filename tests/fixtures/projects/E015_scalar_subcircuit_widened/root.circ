@@ -1,0 +1,4 @@
+import mygate "scalar_lib.circ"
+input a, b
+mygate inst[4](a=a, b=b)
+output r(in=inst.r)

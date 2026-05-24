@@ -98,12 +98,15 @@ fn runValidateOnly(fixture: Fixture, allocator: std.mem.Allocator) !void {
     );
     if (hasHardErrors(cycle_result.diagnostics.items)) return error.CycleFailed;
 
+    var resolver_diagnostics = diagnostics.initDiagnosticList();
     const project = try resolve_bodies.resolveBodies(
         allocator,
         scan_result.file_paths,
         scan_result.import_table,
         cycle_result.topo_order,
+        &resolver_diagnostics,
     );
+    if (hasHardErrors(resolver_diagnostics.items)) return error.UnexpectedResolverDiagnostics;
 
     var diags = try validator_run_project.run(allocator, &project);
     defer diags.deinit(allocator);
@@ -157,12 +160,15 @@ fn runFixture(fixture: Fixture, allocator: std.mem.Allocator) !void {
     );
     if (hasHardErrors(cycle_result.diagnostics.items)) return error.CycleFailed;
 
+    var resolver_diagnostics = diagnostics.initDiagnosticList();
     const project = try resolve_bodies.resolveBodies(
         allocator,
         scan_result.file_paths,
         scan_result.import_table,
         cycle_result.topo_order,
+        &resolver_diagnostics,
     );
+    if (hasHardErrors(resolver_diagnostics.items)) return error.UnexpectedResolverDiagnostics;
 
     var diags = try validator_run_project.run(allocator, &project);
     defer diags.deinit(allocator);

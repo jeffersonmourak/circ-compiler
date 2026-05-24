@@ -71,5 +71,22 @@ pub fn run(
             diagnostic.message = message;
             try diagnostic_list.append(allocator, diagnostic);
         }
+
+        // E014: width mismatch on connections where both endpoints are primitive
+        // components in this module. Cross-boundary cases involving sub_circuit_ref
+        // are handled by lib/validator/passes/sub_circuit_validation.zig, which has
+        // the project context to look up the target module's pin widths.
+        if (from_component.kind == .primitive and to_component.kind == .primitive) {
+            if (from_component.width != to_component.width) {
+                const message = try std.fmt.allocPrint(
+                    allocator,
+                    "width mismatch: source width {d}, destination expects {d}",
+                    .{ from_component.width, to_component.width },
+                );
+                var diagnostic = diagnostics.makeDiagnostic(.E014, toDiagnosticSpan(connection.span));
+                diagnostic.message = message;
+                try diagnostic_list.append(allocator, diagnostic);
+            }
+        }
     }
 }

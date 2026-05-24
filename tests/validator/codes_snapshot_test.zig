@@ -184,12 +184,16 @@ fn runProject(allocator: std.mem.Allocator, root_path: []const u8) ![]const u8 {
         try merged.appendSlice(allocator, cycle.diagnostics.items);
 
         if (!hasHardErrors(cycle.diagnostics.items)) {
+            var resolver_diagnostics = diagnostics.initDiagnosticList();
+            defer resolver_diagnostics.deinit(allocator);
             const project = try resolve_bodies.resolveBodies(
                 allocator,
                 scan.file_paths,
                 scan.import_table,
                 cycle.topo_order,
+                &resolver_diagnostics,
             );
+            try merged.appendSlice(allocator, resolver_diagnostics.items);
             var val_list = try validator_run_project.run(allocator, &project);
             defer val_list.deinit(allocator);
             try merged.appendSlice(allocator, val_list.items);
@@ -211,6 +215,7 @@ const single_fixtures = [_]Single{
     .{ .path = "tests/fixtures/circuits/E006_shadows_builtin.circ", .golden = "tests/fixtures/expected-diagnostics/E006_shadows_builtin.txt" },
     .{ .path = "tests/fixtures/circuits/E007_unassigned_output.circ", .golden = "tests/fixtures/expected-diagnostics/E007_unassigned_output.txt" },
     .{ .path = "tests/fixtures/circuits/E008_simple_loop.circ", .golden = "tests/fixtures/expected-diagnostics/E008_simple_loop.txt" },
+    .{ .path = "tests/fixtures/circuits/E014_width_mismatch.circ", .golden = "tests/fixtures/expected-diagnostics/E014_width_mismatch.txt" },
     .{ .path = "tests/fixtures/circuits/W001_unused_input.circ", .golden = "tests/fixtures/expected-diagnostics/W001_unused_input.txt" },
     .{ .path = "tests/fixtures/circuits/W002_dangling_output.circ", .golden = "tests/fixtures/expected-diagnostics/W002_dangling_output.txt" },
     .{ .path = "tests/fixtures/circuits/W003_unused_import.circ", .golden = "tests/fixtures/expected-diagnostics/W003_unused_import.txt" },
@@ -224,6 +229,7 @@ const project_fixtures = [_]Project{
     .{ .root = "tests/fixtures/projects/macro_import_collision/root.circ", .golden = "tests/fixtures/expected-diagnostics/E011_macro_import_collision.txt" },
     .{ .root = "tests/fixtures/projects/E012_unknown_port/root.circ", .golden = "tests/fixtures/expected-diagnostics/E012_unknown_port.txt" },
     .{ .root = "tests/fixtures/projects/E013_missing_input/root.circ", .golden = "tests/fixtures/expected-diagnostics/E013_missing_input.txt" },
+    .{ .root = "tests/fixtures/projects/E015_scalar_subcircuit_widened/root.circ", .golden = "tests/fixtures/expected-diagnostics/E015_scalar_subcircuit_widened.txt" },
     .{ .root = "tests/fixtures/projects/W002_dangling_subcircuit_output/root.circ", .golden = "tests/fixtures/expected-diagnostics/W002_dangling_subcircuit_output.txt" },
 };
 

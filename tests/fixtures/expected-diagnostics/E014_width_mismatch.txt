@@ -1,0 +1,2 @@
+tests/fixtures/circuits/E014_width_mismatch.circ:2:10: error: E014: width mismatch: source width 4, destination expects 8
+tests/fixtures/circuits/E014_width_mismatch.circ:2:15: error: E014: width mismatch: source width 4, destination expects 8

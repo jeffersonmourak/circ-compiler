@@ -1,0 +1,2 @@
+tests/fixtures/projects/E015_scalar_subcircuit_widened/root.circ:3:1: error: E015: sub-circuit 'mygate' is not parametric; supplied [4] widths
+  note: tests/fixtures/projects/E015_scalar_subcircuit_widened/scalar_lib.circ:1:1: add '<W>' before the input names in 'mygate' to make it parametric

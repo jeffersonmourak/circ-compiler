@@ -212,20 +212,24 @@ pub fn run(
             if (counts_cycle.errors > 0) return 1;
         }
 
+        diagnostic_list = diagnostics.initDiagnosticList();
         const project = resolve_bodies.resolveBodies(
             allocator,
             scan_result.file_paths,
             scan_result.import_table,
             cycle_result.topo_order,
+            &diagnostic_list,
         ) catch |err| {
             try stderr_writer.print("body resolution failed: {s}\n", .{@errorName(err)});
             return 1;
         };
         maybe_project = project;
-        diagnostic_list = validator_run_project.run(allocator, &project) catch |err| {
+        var validator_diagnostics_list = validator_run_project.run(allocator, &project) catch |err| {
             try stderr_writer.print("project validation failed: {s}\n", .{@errorName(err)});
             return 1;
         };
+        defer validator_diagnostics_list.deinit(allocator);
+        try diagnostic_list.appendSlice(allocator, validator_diagnostics_list.items);
     } else {
         diagnostic_list = validator_run.run(allocator, &ir_module) catch |err| {
             try stderr_writer.print("validation failed: {s}\n", .{@errorName(err)});

@@ -79,12 +79,15 @@ test "phase0_full_pipeline_roundtrip: and_pair fixture carries both sections wit
     if (hasHardErrors(scan_result.diagnostics.items)) return error.ScanFailed;
     const cycle_result = try import_cycle.analyzeImports(arena_alloc, scan_result.file_paths, scan_result.import_table);
     if (hasHardErrors(cycle_result.diagnostics.items)) return error.CycleFailed;
+    var resolver_diagnostics = diagnostics.initDiagnosticList();
     const project = try resolve_bodies.resolveBodies(
         arena_alloc,
         scan_result.file_paths,
         scan_result.import_table,
         cycle_result.topo_order,
+        &resolver_diagnostics,
     );
+    if (hasHardErrors(resolver_diagnostics.items)) return error.UnexpectedResolverDiagnostics;
     var diag_list = try validator_run_project.run(arena_alloc, &project);
     defer diag_list.deinit(arena_alloc);
     if (hasHardErrors(diag_list.items)) return error.UnexpectedDiagnostics;
@@ -168,12 +171,15 @@ test "multibit_import: widths flow through the import boundary into the min payl
     if (hasHardErrors(scan_result.diagnostics.items)) return error.ScanFailed;
     const cycle_result = try import_cycle.analyzeImports(arena_alloc, scan_result.file_paths, scan_result.import_table);
     if (hasHardErrors(cycle_result.diagnostics.items)) return error.CycleFailed;
+    var resolver_diagnostics = diagnostics.initDiagnosticList();
     const project = try resolve_bodies.resolveBodies(
         arena_alloc,
         scan_result.file_paths,
         scan_result.import_table,
         cycle_result.topo_order,
+        &resolver_diagnostics,
     );
+    if (hasHardErrors(resolver_diagnostics.items)) return error.UnexpectedResolverDiagnostics;
     var diag_list = try validator_run_project.run(arena_alloc, &project);
     defer diag_list.deinit(arena_alloc);
     if (hasHardErrors(diag_list.items)) return error.UnexpectedDiagnostics;
