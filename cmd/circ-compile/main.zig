@@ -79,7 +79,14 @@ fn scanStrict(table: truth_table_builder.Table, stderr_writer: anytype) !bool {
     var found = false;
     for (table.rows, 0..) |row, row_idx| {
         for (row.outputs, 0..) |out_state, col_idx| {
-            if (out_state == .undef) {
+            // Multi-bit outputs are flagged when ANY bit is undefined,
+            // matching the scalar contract: `--strict` should reject
+            // any partially-undriven output value.
+            const fully_defined_mask: u64 = if (out_state.width >= 64)
+                std.math.maxInt(u64)
+            else
+                (@as(u64, 1) << @intCast(out_state.width)) - 1;
+            if (out_state.defined != fully_defined_mask) {
                 found = true;
                 try stderr_writer.print(
                     "truth-table: undefined output at row {d}, output '{s}'\n",
@@ -98,6 +105,7 @@ fn parseErrorMessage(err: anyerror) []const u8 {
         error.UnknownFlag => "unknown flag",
         error.ConflictingModes => "cannot combine --emit-zig and --inspect",
         error.InvalidFlagValue => "invalid flag value",
+        error.TruthTableCapTooLarge => "--truth-table-cap value exceeds maximum of 24",
         else => "invalid arguments",
     };
 }
@@ -381,16 +389,46 @@ pub fn run(
                 };
             defer topology.deinit(allocator);
 
-            var table = truth_table_builder.build(allocator, topology, .{}) catch |err| {
+            // Pre-flight the cap so users get a specific bit-count
+            // message ("X exceeds cap of Y") instead of a generic
+            // TooManyInputs error from the builder.
+            const total_input_bits = truth_table_builder.countInputBits(topology);
+            if (total_input_bits > args.truth_table_cap) {
+                try stderr_writer.print(
+                    "truth table requires {d} input bits, exceeds cap of {d} (raise with --truth-table-cap, max {d})\n",
+                    .{ total_input_bits, args.truth_table_cap, cli_args.truth_table_cap_max },
+                );
+                return 1;
+            }
+
+            var table = truth_table_builder.build(allocator, topology, .{
+                .max_input_bits = args.truth_table_cap,
+            }) catch |err| {
                 try stderr_writer.print("truth-table build failed: {s}\n", .{@errorName(err)});
                 return 1;
             };
             defer table.deinit();
 
+            const value_format = switch (args.truth_table_value_format) {
+                .binary => truth_table_markdown.ValueFormat.binary,
+                .hex => truth_table_markdown.ValueFormat.hex,
+                .decimal => truth_table_markdown.ValueFormat.decimal,
+            };
+            const csv_format = switch (args.truth_table_value_format) {
+                .binary => truth_table_csv.ValueFormat.binary,
+                .hex => truth_table_csv.ValueFormat.hex,
+                .decimal => truth_table_csv.ValueFormat.decimal,
+            };
+            const json_format = switch (args.truth_table_value_format) {
+                .binary => truth_table_json.ValueFormat.binary,
+                .hex => truth_table_json.ValueFormat.hex,
+                .decimal => truth_table_json.ValueFormat.decimal,
+            };
+
             (switch (args.truth_table_format) {
-                .markdown => truth_table_markdown.render(stdout_writer, table),
-                .csv => truth_table_csv.render(stdout_writer, table),
-                .json => truth_table_json.render(stdout_writer, table),
+                .markdown => truth_table_markdown.render(stdout_writer, table, value_format),
+                .csv => truth_table_csv.render(stdout_writer, table, csv_format),
+                .json => truth_table_json.render(stdout_writer, table, json_format),
             }) catch |err| {
                 try stderr_writer.print("render failed: {s}\n", .{@errorName(err)});
                 return 1;
@@ -1351,20 +1389,25 @@ fn synthTableForStrict(
 ) !truth_table_builder.Table {
     const a = arena.allocator();
     const inputs = try a.alloc(truth_table_builder.PinRef, 1);
-    inputs[0] = .{ .name = "a", .component_id = 0 };
+    inputs[0] = .{ .name = "a", .component_id = 0, .width = 1 };
     const outputs = try a.alloc(truth_table_builder.PinRef, 1);
-    outputs[0] = .{ .name = "out", .component_id = 1 };
+    outputs[0] = .{ .name = "out", .component_id = 1, .width = 1 };
 
     const rows = try a.alloc(truth_table_builder.Row, output_states.len);
     for (output_states, 0..) |state, i| {
-        const cell = try a.alloc(truth_table_builder.State, 1);
-        cell[0] = state;
+        const cell = try a.alloc(truth_table_builder.BitVecState, 1);
+        cell[0] = switch (state) {
+            .low => truth_table_builder.BitVecState.low(1),
+            .high => truth_table_builder.BitVecState.high(1),
+            .undef => truth_table_builder.BitVecState.undefined_(1),
+        };
         rows[i] = .{ .input_bits = i, .outputs = cell };
     }
     return .{
         .arena = arena.*,
         .header = .{ .inputs = inputs, .outputs = outputs },
         .rows = rows,
+        .total_input_bits = 1,
     };
 }
 
@@ -1421,4 +1464,205 @@ test "truth_table_strict_passes_on_xor" {
             try std.testing.expect(false);
         }
     }
+}
+
+// ============================================================================
+// S10: multi-bit truth-table fixtures across value formats, plus cap-related
+// error paths. Goldens live alongside the existing scalar truth-table goldens.
+// ============================================================================
+
+fn runTruthTableWithArgs(
+    allocator: std.mem.Allocator,
+    fixture_path: []const u8,
+    extra_flags: []const []const u8,
+    stdout_buf: *std.ArrayList(u8),
+    stderr_buf: *std.ArrayList(u8),
+) !u8 {
+    var argv: std.ArrayList([]const u8) = .{};
+    defer argv.deinit(allocator);
+    try argv.append(allocator, "circ-compile");
+    try argv.append(allocator, fixture_path);
+    try argv.append(allocator, "--truth-table");
+    for (extra_flags) |flag| try argv.append(allocator, flag);
+    return run(allocator, argv.items, stdout_buf.writer(allocator), stderr_buf.writer(allocator));
+}
+
+test "truth_table_and_4bit_binary_markdown" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const exit_code = try runTruthTableWithArgs(
+        allocator,
+        "tests/fixtures/circuits/and_4bit_truth.circ",
+        &.{"--truth-table-format=binary"},
+        &stdout_buf,
+        &stderr_buf,
+    );
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/truth_table/and_4bit_truth.binary.md.golden");
+}
+
+test "truth_table_and_4bit_hex_markdown" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const exit_code = try runTruthTableWithArgs(
+        allocator,
+        "tests/fixtures/circuits/and_4bit_truth.circ",
+        &.{"--truth-table-format=hex"},
+        &stdout_buf,
+        &stderr_buf,
+    );
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/truth_table/and_4bit_truth.hex.md.golden");
+}
+
+test "truth_table_and_4bit_decimal_markdown" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const exit_code = try runTruthTableWithArgs(
+        allocator,
+        "tests/fixtures/circuits/and_4bit_truth.circ",
+        &.{"--truth-table-format=decimal"},
+        &stdout_buf,
+        &stderr_buf,
+    );
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/truth_table/and_4bit_truth.decimal.md.golden");
+}
+
+test "truth_table_and_4bit_hex_csv" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const exit_code = try runTruthTableWithArgs(
+        allocator,
+        "tests/fixtures/circuits/and_4bit_truth.circ",
+        &.{ "--format=csv", "--truth-table-format=hex" },
+        &stdout_buf,
+        &stderr_buf,
+    );
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/truth_table/and_4bit_truth.hex.csv.golden");
+}
+
+test "truth_table_and_4bit_hex_json" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const exit_code = try runTruthTableWithArgs(
+        allocator,
+        "tests/fixtures/circuits/and_4bit_truth.circ",
+        &.{ "--format=json", "--truth-table-format=hex" },
+        &stdout_buf,
+        &stderr_buf,
+    );
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/truth_table/and_4bit_truth.hex.json.golden");
+}
+
+test "truth_table_cap_exceeded_reports_bit_count" {
+    // and_4bit_truth.circ has 8 input bits (two 4-bit pins). Running with
+    // --truth-table-cap=4 forces the pre-flight check to fire and emit the
+    // spec'd stderr message; exit code is 1, stdout stays empty.
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const exit_code = try runTruthTableWithArgs(
+        allocator,
+        "tests/fixtures/circuits/and_4bit_truth.circ",
+        &.{"--truth-table-cap=4"},
+        &stdout_buf,
+        &stderr_buf,
+    );
+    try std.testing.expectEqual(@as(u8, 1), exit_code);
+    try std.testing.expectEqual(@as(usize, 0), stdout_buf.items.len);
+    try std.testing.expect(std.mem.indexOf(u8, stderr_buf.items, "truth table requires 8 input bits") != null);
+    try std.testing.expect(std.mem.indexOf(u8, stderr_buf.items, "exceeds cap of 4") != null);
+    try std.testing.expect(std.mem.indexOf(u8, stderr_buf.items, "--truth-table-cap") != null);
+}
+
+test "truth_table_cap_above_max_yields_usage_error" {
+    // --truth-table-cap=100 trips the arg parser, not the builder. Exit 2
+    // (usage error), stderr carries the cap-too-large message.
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const argv = [_][]const u8{
+        "circ-compile",
+        "tests/fixtures/circuits/builtin_xor.circ",
+        "--truth-table",
+        "--truth-table-cap=100",
+    };
+    const exit_code = try run(allocator, &argv, stdout_buf.writer(allocator), stderr_buf.writer(allocator));
+    try std.testing.expectEqual(@as(u8, 2), exit_code);
+    try std.testing.expectEqual(@as(usize, 0), stdout_buf.items.len);
+    try std.testing.expect(std.mem.indexOf(u8, stderr_buf.items, "maximum of 24") != null);
+}
+
+test "truth_table_cap_24_admits_8_input_bits" {
+    // Sanity check: with cap raised to 24, the and_4bit (8 bits) table
+    // builds and produces non-empty stdout. We don't snapshot the full
+    // 256-row table here — the markdown/csv/json fixtures above lock that.
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const exit_code = try runTruthTableWithArgs(
+        allocator,
+        "tests/fixtures/circuits/and_4bit_truth.circ",
+        &.{"--truth-table-cap=24"},
+        &stdout_buf,
+        &stderr_buf,
+    );
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try std.testing.expect(stdout_buf.items.len > 0);
 }

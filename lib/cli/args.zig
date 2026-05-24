@@ -17,6 +17,27 @@ pub const TruthTableFormat = enum {
     json,
 };
 
+/// Per-cell value format for `--truth-table`. Scalar (width=1) cells
+/// look identical across all three formats, so existing scalar fixtures
+/// stay byte-identical regardless of the selected value format. Wider
+/// bit-vectors render differently per format (binary digits, hex
+/// nibbles, or a decimal integer).
+pub const TruthTableValueFormat = enum {
+    binary,
+    hex,
+    decimal,
+};
+
+/// Hard ceiling on the `--truth-table-cap` value. A 24-bit table is
+/// roughly 16 million rows; beyond that the renderer would take long
+/// enough that the cap is doing its job.
+pub const truth_table_cap_max: u8 = 24;
+
+/// Default cap on total input bits. Matches the conservative target
+/// (65k-row markdown is around the edge of "still reviewable"); users
+/// who need wider can opt in with `--truth-table-cap` up to 24.
+pub const truth_table_cap_default: u8 = 16;
+
 pub const Args = struct {
     input_path: []const u8,
     mode: Mode,
@@ -25,8 +46,10 @@ pub const Args = struct {
     expand_macros: bool = false,
     color: ColorMode = .auto,
     truth_table_format: TruthTableFormat = .markdown,
+    truth_table_value_format: TruthTableValueFormat = .binary,
     truth_table_strict: bool = false,
     truth_table_verbose: bool = false,
+    truth_table_cap: u8 = truth_table_cap_default,
 };
 
 pub const ParseError = error{
@@ -35,6 +58,7 @@ pub const ParseError = error{
     UnknownFlag,
     ConflictingModes,
     InvalidFlagValue,
+    TruthTableCapTooLarge,
     HelpRequested,
 };
 
@@ -64,6 +88,12 @@ pub const help_text =
     \\  Truth-table-only:
     \\    --format=markdown|csv|json      Output format. Default 'markdown'. CSV uses 0/1/? cells;
     \\                                    JSON encodes undefined cells as null.
+    \\    --truth-table-format=binary|hex|decimal
+    \\                                    Per-cell value format for multi-bit pins (default 'binary').
+    \\                                    Scalar (width-1) cells render identically across formats.
+    \\    --truth-table-cap=N             Cap on total input bits (default 16, max 24). Truth tables
+    \\                                    grow as 2^N rows; raise this only if you really want a wide
+    \\                                    table. Cap exceeded yields a stderr error and non-zero exit.
     \\    --strict                        Exit 1 on any undefined ('?') output cell, with one
     \\                                    diagnostic line per offending row on stderr.
     \\    --verbose                       Print per-vector engine simulation traces on stderr
@@ -172,6 +202,29 @@ pub fn parse(argv: []const []const u8) ParseError!Args {
             }
             continue;
         }
+        if (std.mem.startsWith(u8, token, "--truth-table-format=")) {
+            const value = token["--truth-table-format=".len..];
+            if (std.mem.eql(u8, value, "binary")) {
+                args.truth_table_value_format = .binary;
+            } else if (std.mem.eql(u8, value, "hex")) {
+                args.truth_table_value_format = .hex;
+            } else if (std.mem.eql(u8, value, "decimal")) {
+                args.truth_table_value_format = .decimal;
+            } else {
+                return error.InvalidFlagValue;
+            }
+            continue;
+        }
+        if (std.mem.startsWith(u8, token, "--truth-table-cap=")) {
+            const value = token["--truth-table-cap=".len..];
+            const parsed_cap = std.fmt.parseInt(u32, value, 10) catch return error.InvalidFlagValue;
+            // Reject values past the documented ceiling rather than
+            // silently clamping. The CLI dispatches on this error to
+            // print the spec'd diagnostic message.
+            if (parsed_cap > truth_table_cap_max) return error.TruthTableCapTooLarge;
+            args.truth_table_cap = @intCast(parsed_cap);
+            continue;
+        }
         if (std.mem.eql(u8, token, "-o")) {
             if (i + 1 >= argv.len) return error.InvalidFlagValue;
             i += 1;
@@ -193,8 +246,10 @@ pub fn parse(argv: []const []const u8) ParseError!Args {
     if (args.mode == .truth_table and args.output_path != null) return error.InvalidFlagValue;
     if (args.expand_macros and args.mode != .preview) return error.InvalidFlagValue;
     if (args.truth_table_format != .markdown and args.mode != .truth_table) return error.InvalidFlagValue;
+    if (args.truth_table_value_format != .binary and args.mode != .truth_table) return error.InvalidFlagValue;
     if (args.truth_table_strict and args.mode != .truth_table) return error.InvalidFlagValue;
     if (args.truth_table_verbose and args.mode != .truth_table) return error.InvalidFlagValue;
+    if (args.truth_table_cap != truth_table_cap_default and args.mode != .truth_table) return error.InvalidFlagValue;
 
     return args;
 }
@@ -410,9 +465,80 @@ test "cli_args_help_text_mentions_every_mode_and_flag" {
         "--emit-zig",   "--inspect",     "--preview",          "--truth-table",
         "-o",           "--help",        "-h",                 "--warnings-as-errors",
         "-Werror",      "--expand-macros", "--color=",        "--format=",
-        "--strict",     "--verbose",
+        "--strict",     "--verbose",      "--truth-table-format=", "--truth-table-cap=",
     };
     inline for (needles) |needle| {
         try std.testing.expect(std.mem.indexOf(u8, help_text, needle) != null);
     }
+}
+
+test "cli_args_value_format_default_is_binary" {
+    const parsed = try parse(&.{ "circ-compile", "in.circ", "--truth-table" });
+    try std.testing.expectEqual(TruthTableValueFormat.binary, parsed.truth_table_value_format);
+}
+
+test "cli_args_parse_value_format_binary_hex_decimal" {
+    const bin = try parse(&.{ "circ-compile", "in.circ", "--truth-table", "--truth-table-format=binary" });
+    try std.testing.expectEqual(TruthTableValueFormat.binary, bin.truth_table_value_format);
+
+    const hex = try parse(&.{ "circ-compile", "in.circ", "--truth-table", "--truth-table-format=hex" });
+    try std.testing.expectEqual(TruthTableValueFormat.hex, hex.truth_table_value_format);
+
+    const dec = try parse(&.{ "circ-compile", "in.circ", "--truth-table", "--truth-table-format=decimal" });
+    try std.testing.expectEqual(TruthTableValueFormat.decimal, dec.truth_table_value_format);
+}
+
+test "cli_args_value_format_rejects_invalid_value" {
+    try std.testing.expectError(
+        error.InvalidFlagValue,
+        parse(&.{ "circ-compile", "in.circ", "--truth-table", "--truth-table-format=octal" }),
+    );
+}
+
+test "cli_args_value_format_rejects_outside_truth_table" {
+    try std.testing.expectError(
+        error.InvalidFlagValue,
+        parse(&.{ "circ-compile", "in.circ", "--preview", "--truth-table-format=hex" }),
+    );
+}
+
+test "cli_args_cap_default_is_16" {
+    const parsed = try parse(&.{ "circ-compile", "in.circ", "--truth-table" });
+    try std.testing.expectEqual(@as(u8, 16), parsed.truth_table_cap);
+}
+
+test "cli_args_parse_cap_accepts_values_up_to_24" {
+    const at_default = try parse(&.{ "circ-compile", "in.circ", "--truth-table", "--truth-table-cap=16" });
+    try std.testing.expectEqual(@as(u8, 16), at_default.truth_table_cap);
+
+    const at_max = try parse(&.{ "circ-compile", "in.circ", "--truth-table", "--truth-table-cap=24" });
+    try std.testing.expectEqual(@as(u8, 24), at_max.truth_table_cap);
+
+    const low = try parse(&.{ "circ-compile", "in.circ", "--truth-table", "--truth-table-cap=1" });
+    try std.testing.expectEqual(@as(u8, 1), low.truth_table_cap);
+}
+
+test "cli_args_cap_above_24_returns_TruthTableCapTooLarge" {
+    try std.testing.expectError(
+        error.TruthTableCapTooLarge,
+        parse(&.{ "circ-compile", "in.circ", "--truth-table", "--truth-table-cap=25" }),
+    );
+    try std.testing.expectError(
+        error.TruthTableCapTooLarge,
+        parse(&.{ "circ-compile", "in.circ", "--truth-table", "--truth-table-cap=100" }),
+    );
+}
+
+test "cli_args_cap_non_numeric_returns_InvalidFlagValue" {
+    try std.testing.expectError(
+        error.InvalidFlagValue,
+        parse(&.{ "circ-compile", "in.circ", "--truth-table", "--truth-table-cap=many" }),
+    );
+}
+
+test "cli_args_cap_rejects_outside_truth_table" {
+    try std.testing.expectError(
+        error.InvalidFlagValue,
+        parse(&.{ "circ-compile", "in.circ", "--preview", "--truth-table-cap=20" }),
+    );
 }
