@@ -148,6 +148,22 @@ const SpecResult = struct {
     sources: std.ArrayList([]const u8),
 };
 
+fn buildSpecializationKey(
+    allocator: std.mem.Allocator,
+    target_file_id: u32,
+    bindings: []const single_resolver.WidthBinding,
+) ![]u8 {
+    var buf: std.ArrayList(u8) = .{};
+    errdefer buf.deinit(allocator);
+    const writer = buf.writer(allocator);
+    try writer.print("{d}@", .{target_file_id});
+    for (bindings, 0..) |b, idx| {
+        if (idx > 0) try buf.append(allocator, ',');
+        try writer.print("{d}", .{b.value});
+    }
+    return buf.toOwnedSlice(allocator);
+}
+
 fn specializeCallSites(
     allocator: std.mem.Allocator,
     modules_list: *std.ArrayList(ir.Module),
@@ -157,6 +173,17 @@ fn specializeCallSites(
     spec: *SpecResult,
     diagnostic_list: *diagnostics.DiagnosticList,
 ) !void {
+    // Cache keyed by "{target_file_id}@{w0},{w1},...". Two call sites with
+    // the same target and the same width-binding tuple share one specialized
+    // module instead of duplicating the body. Keys are owned by the cache
+    // and freed on scope exit.
+    var spec_cache = std.StringHashMap(u32).init(allocator);
+    defer {
+        var it = spec_cache.iterator();
+        while (it.next()) |entry| allocator.free(entry.key_ptr.*);
+        spec_cache.deinit();
+    }
+
     const original_file_count = file_paths.len;
     for (asts, 0..) |maybe_caller_ast, caller_file_id_usize| {
         if (caller_file_id_usize >= original_file_count) break;
@@ -229,6 +256,13 @@ fn specializeCallSites(
                 if (!ok) continue;
             }
 
+            const cache_key = try buildSpecializationKey(allocator, target_file_id, bindings.items);
+            if (spec_cache.get(cache_key)) |cached_file_id| {
+                allocator.free(cache_key);
+                ir_comp.kind.sub_circuit_ref.specialized_target_file = .{ .value = cached_file_id };
+                continue;
+            }
+
             const spec_file_id: u32 = @intCast(modules_list.items.len);
             const specialized = single_resolver.resolveWithBindings(
                 allocator,
@@ -236,6 +270,7 @@ fn specializeCallSites(
                 spec_file_id,
                 bindings.items,
             ) catch |err| {
+                allocator.free(cache_key);
                 std.debug.print("specialization failed for '{s}': {s}\n", .{ ast_inst.type_name.text, @errorName(err) });
                 continue;
             };
@@ -248,6 +283,8 @@ fn specializeCallSites(
             );
             try spec.paths.append(allocator, synthetic_path);
             try spec.sources.append(allocator, "");
+
+            try spec_cache.put(cache_key, spec_file_id);
 
             ir_comp.kind.sub_circuit_ref.specialized_target_file = .{ .value = spec_file_id };
         }
