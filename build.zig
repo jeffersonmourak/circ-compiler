@@ -1146,6 +1146,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     truth_table_markdown_mod.addImport("builder", truth_table_builder_mod);
+    truth_table_markdown_mod.addImport("circuit", circuit_mod);
     circ_compile_mod.addImport("truth_table_markdown", truth_table_markdown_mod);
     const truth_table_markdown_tests = b.addTest(.{
         .root_module = truth_table_markdown_mod,
@@ -1159,6 +1160,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     truth_table_csv_mod.addImport("builder", truth_table_builder_mod);
+    truth_table_csv_mod.addImport("circuit", circuit_mod);
     circ_compile_mod.addImport("truth_table_csv", truth_table_csv_mod);
     const truth_table_csv_tests = b.addTest(.{
         .root_module = truth_table_csv_mod,
@@ -1172,6 +1174,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     truth_table_json_mod.addImport("builder", truth_table_builder_mod);
+    truth_table_json_mod.addImport("circuit", circuit_mod);
     circ_compile_mod.addImport("truth_table_json", truth_table_json_mod);
     const truth_table_json_tests = b.addTest(.{
         .root_module = truth_table_json_mod,

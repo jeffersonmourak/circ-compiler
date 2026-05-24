@@ -1,0 +1,6 @@
+// Native multi-bit 4-bit AND for the S10 truth-table tests. Two width-4
+// inputs feed a width-4 AND gate, driving a width-4 output pin. 256-row
+// truth table exercises the per-format rendering paths.
+input[4] a, b
+and[4] g(a=a, b=b)
+output[4] r(in=g.out)
