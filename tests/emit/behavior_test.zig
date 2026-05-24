@@ -109,7 +109,13 @@ fn buildScriptAndExpected(
         var first = true;
         for (step.outputs) |output| {
             const id = outputId(module, output.name) orelse return error.UnknownOutputName;
-            try script_writer.print("outParts{d}.push(\"{s}=\" + wasm.getOutputState({d}));\n", .{ idx, output.name, id });
+            // Read back via the paired getters and project to the legacy
+            // int encoding (0=low, 1=high, 2=undefined) so existing scalar
+            // .txt fixtures don't need to change.
+            try script_writer.print(
+                "outParts{d}.push(\"{s}=\" + ((wasm.getOutputDefined({d}) === 0n) ? 2 : (wasm.getOutputValue({d}) === 0n ? 0 : 1)));\n",
+                .{ idx, output.name, id, id },
+            );
             if (!first) try expected_writer.writeAll(" ");
             first = false;
             try expected_writer.print("{s}={d}", .{ output.name, output.value });

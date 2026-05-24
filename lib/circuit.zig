@@ -1482,6 +1482,40 @@ test "Circuit: allocateStateSlot returns a tier=width handle and round-trips" {
     try std.testing.expect(circuit.readState(h2).equals(BitVecState.low(1)));
 }
 
+test "Circuit: setPin/getOutput round-trip mirrors paired BigInt exports at multi-bit widths" {
+    // Stand-in for the WASM setPin/getOutputValue/getOutputDefined exports.
+    // setPin_impl in templates/main.zig builds a BitVecState via fromRaw and
+    // calls propagateEvent; getOutputValue_impl / getOutputDefined_impl call
+    // readState and return BitVecState.value / .defined as i64. This test
+    // exercises that exact path natively at widths 4 and 8 to verify the
+    // (value, defined) pair survives the propagation cycle bit-for-bit.
+    inline for (.{ 4, 8 }) |w| {
+        var circuit = try Circuit.init();
+        defer circuit.deinit();
+
+        const comp = try circuit.createComponent(.{ .input_pin_gate = .{} }, w);
+
+        // Fully-defined non-trivial pattern.
+        const all_defined = BitVecState.fromRaw(0b10101010, widthMask(w), w);
+        try circuit.propagateEvent(comp, all_defined);
+        try circuit.propagate();
+        const read_all = circuit.readState(comp.state_handle);
+        try std.testing.expect(read_all.equals(all_defined));
+
+        // Partial-defined pattern: bit 0 undefined, rest defined.
+        const partial_mask = widthMask(w) & ~@as(u64, 1);
+        const partial = BitVecState.fromRaw(0b01010101, partial_mask, w);
+        try circuit.propagateEvent(comp, partial);
+        try circuit.propagate();
+        const read_partial = circuit.readState(comp.state_handle);
+        try std.testing.expectEqual(partial.defined, read_partial.defined);
+        // Equality under BitVecState.equals masks value by defined, so bit-0
+        // payload differences don't matter — that's the canonical undefined
+        // semantics the exports inherit.
+        try std.testing.expect(read_partial.equals(partial));
+    }
+}
+
 test "Circuit: createComponent at widths 4, 8, 64 lands in the matching tier" {
     inline for (.{ 4, 8, 64 }) |w| {
         var circuit = try Circuit.init();

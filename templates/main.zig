@@ -53,13 +53,22 @@ fn setPin_impl(component_id: i32, value: i64, defined: i64) callconv(.c) void {
     runtime_circuit.propagateEvent(comp, state) catch return;
 }
 
-fn getOutputState_impl(component_id: i32) callconv(.c) i32 {
-    if (!runtime_initialized or component_id < 0) return 2; // 2 = undefined state
+fn getOutputValue_impl(component_id: i32) callconv(.c) i64 {
+    if (!runtime_initialized or component_id < 0) return 0;
     const id: u32 = @intCast(component_id);
-    if (id >= runtime_circuit.nodes.items.len) return 2;
+    if (id >= runtime_circuit.nodes.items.len) return 0;
 
     const comp = runtime_circuit.nodes.items[id];
-    return runtime_circuit.readState(comp.state_handle).toInt();
+    return @bitCast(runtime_circuit.readState(comp.state_handle).value);
+}
+
+fn getOutputDefined_impl(component_id: i32) callconv(.c) i64 {
+    if (!runtime_initialized or component_id < 0) return 0;
+    const id: u32 = @intCast(component_id);
+    if (id >= runtime_circuit.nodes.items.len) return 0;
+
+    const comp = runtime_circuit.nodes.items[id];
+    return @bitCast(runtime_circuit.readState(comp.state_handle).defined);
 }
 
 comptime {
@@ -68,7 +77,8 @@ comptime {
         @export(&init_impl, .{ .name = "init", .linkage = .strong });
         @export(&run_impl, .{ .name = "run", .linkage = .strong });
         @export(&setPin_impl, .{ .name = "setPin", .linkage = .strong });
-        @export(&getOutputState_impl, .{ .name = "getOutputState", .linkage = .strong });
+        @export(&getOutputValue_impl, .{ .name = "getOutputValue", .linkage = .strong });
+        @export(&getOutputDefined_impl, .{ .name = "getOutputDefined", .linkage = .strong });
     } else {
         // Old pipeline: compiled.zig defines the exports, so we just force its analysis.
         _ = compiled;

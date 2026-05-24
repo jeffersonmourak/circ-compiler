@@ -226,7 +226,10 @@ fn runFixture(fixture: Fixture, allocator: std.mem.Allocator) !void {
                 std.debug.print("Unknown output pin '{s}' in fixture {s}\n", .{ out.name, fixture.root_path });
                 return error.UnknownOutputPin;
             };
-            try w.print("    p{d}.push('{s}=' + instance.exports.getOutputState({d}));\n", .{ idx, out.name, id });
+            try w.print(
+                "    p{d}.push('{s}=' + ((instance.exports.getOutputDefined({d}) === 0n) ? 2 : (instance.exports.getOutputValue({d}) === 0n ? 0 : 1)));\n",
+                .{ idx, out.name, id, id },
+            );
             if (!first) try ew.writeAll(" ");
             first = false;
             try ew.print("{s}={d}", .{ out.name, out.value });
