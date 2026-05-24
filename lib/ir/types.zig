@@ -26,6 +26,13 @@ pub const PrimitiveKind = enum {
 pub const UnresolvedRef = struct {
     name: []const u8,
     span: Span,
+    /// Set by the project resolver when the call site targets a
+    /// parametric sub-circuit (one declared with `<W>` introductions).
+    /// When non-null, downstream stages (topology serializer, validator)
+    /// follow this directly instead of looking up the alias in the
+    /// project's import_table. Each call site gets its own specialized
+    /// file id, even when the bindings collide; S7.3 will fold duplicates.
+    specialized_target_file: ?FileId = null,
 };
 
 pub const Slice = struct {

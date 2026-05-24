@@ -230,6 +230,8 @@ const project_fixtures = [_]Project{
     .{ .root = "tests/fixtures/projects/E012_unknown_port/root.circ", .golden = "tests/fixtures/expected-diagnostics/E012_unknown_port.txt" },
     .{ .root = "tests/fixtures/projects/E013_missing_input/root.circ", .golden = "tests/fixtures/expected-diagnostics/E013_missing_input.txt" },
     .{ .root = "tests/fixtures/projects/E015_scalar_subcircuit_widened/root.circ", .golden = "tests/fixtures/expected-diagnostics/E015_scalar_subcircuit_widened.txt" },
+    .{ .root = "tests/fixtures/projects/E016_arity_over/root.circ", .golden = "tests/fixtures/expected-diagnostics/E016_arity_over.txt" },
+    .{ .root = "tests/fixtures/projects/E016_arity_under/root.circ", .golden = "tests/fixtures/expected-diagnostics/E016_arity_under.txt" },
     .{ .root = "tests/fixtures/projects/W002_dangling_subcircuit_output/root.circ", .golden = "tests/fixtures/expected-diagnostics/W002_dangling_subcircuit_output.txt" },
 };
 

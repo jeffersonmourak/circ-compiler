@@ -1,0 +1,4 @@
+import wide_not "wide_not.circ"
+input x
+wide_not inst[1](a=x)
+output y(in=inst.o)
