@@ -61,6 +61,7 @@ pub fn initFromTopology(circuit: *engine.Circuit, payload: []const u8) !void {
                     width,
                 );
             },
+            .concat => try circuit.createComponent(.{ .concat = .{} }, width),
         };
         comp.id = id;
         comp_map.putAssumeCapacity(id, comp);
@@ -77,8 +78,17 @@ pub fn initFromTopology(circuit: *engine.Circuit, payload: []const u8) !void {
         const from_comp = comp_map.get(from_id) orelse return error.UnknownComponentId;
         const to_comp = comp_map.get(to_id) orelse return error.UnknownComponentId;
 
-        const port_str = try portNameStr(port_val);
-        try circuit.connect(.{ from_comp, "out" }, .{ to_comp, port_str });
+        // Concat ports are operand indices, not PortName values. Format
+        // the byte as `operand_<idx>` so the engine's `connect()` knows
+        // to slot the operand into the right position.
+        if (to_comp.kind == .concat) {
+            var port_buf: [16]u8 = undefined;
+            const port_str = try std.fmt.bufPrint(&port_buf, "operand_{d}", .{port_val});
+            try circuit.connect(.{ from_comp, "out" }, .{ to_comp, port_str });
+        } else {
+            const port_str = try portNameStr(port_val);
+            try circuit.connect(.{ from_comp, "out" }, .{ to_comp, port_str });
+        }
     }
 }
 

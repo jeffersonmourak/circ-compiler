@@ -76,6 +76,21 @@ const fixtures = [_]Fixture{
         .source_path = "tests/fixtures/circuits/bit_index_a2.circ",
         .expected_ir_path = "tests/fixtures/expected-ir/bit_index_a2.txt",
     },
+    .{
+        .name = "concat-four-bits-into-4-bit-bus",
+        .source_path = "tests/fixtures/circuits/concat_four_bits.circ",
+        .expected_ir_path = "tests/fixtures/expected-ir/concat_four_bits.txt",
+    },
+    .{
+        .name = "concat-nested-preserves-tree-shape",
+        .source_path = "tests/fixtures/circuits/concat_nested.circ",
+        .expected_ir_path = "tests/fixtures/expected-ir/concat_nested.txt",
+    },
+    .{
+        .name = "slice-then-concat-round-trip",
+        .source_path = "tests/fixtures/circuits/slice_then_concat.circ",
+        .expected_ir_path = "tests/fixtures/expected-ir/slice_then_concat.txt",
+    },
 };
 
 test "resolve ast to ir fixtures" {

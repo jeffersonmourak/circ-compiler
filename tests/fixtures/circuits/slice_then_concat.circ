@@ -1,0 +1,2 @@
+input[4] a
+output[4] o(in={a[0..2], a[2..4]})

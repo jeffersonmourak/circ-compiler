@@ -121,6 +121,7 @@ fn dumpComponentKind(writer: anytype, kind: anytype) !void {
         .sub_circuit_ref => |sub_ref| try writer.print("sub_circuit_ref:{s}", .{sub_ref.name}),
         .unresolved_name => |name| try writer.print("unresolved_name:{s}", .{name}),
         .slice => |s| try writer.print("slice:[{d}..{d})", .{ s.lo, s.hi }),
+        .concat => try writer.writeAll("concat"),
     }
 }
 

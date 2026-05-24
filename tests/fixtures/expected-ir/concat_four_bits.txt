@@ -1,0 +1,22 @@
+Module file_id=0
+Imports (0)
+Inputs (4)
+  id=0 name=a component=0 width=1
+  id=1 name=b component=1 width=1
+  id=2 name=c component=2 width=1
+  id=3 name=d component=3 width=1
+Outputs (1)
+  id=0 name=o driver=5.out width=4
+Components (6)
+  id=0 name=a kind=primitive:input_pin width=1
+  id=1 name=b kind=primitive:input_pin width=1
+  id=2 name=c kind=primitive:input_pin width=1
+  id=3 name=d kind=primitive:input_pin width=1
+  id=4 name=o kind=primitive:output_pin width=4
+  id=5 name=<none> kind=concat width=4
+Connections (5)
+  0.out -> 5.operand_0
+  1.out -> 5.operand_1
+  2.out -> 5.operand_2
+  3.out -> 5.operand_3
+  5.out -> 4.in

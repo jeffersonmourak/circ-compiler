@@ -29,6 +29,10 @@ fn isValidInputPort(component: ir.Component, port: []const u8) bool {
         .sub_circuit_ref => true,
         .unresolved_name => true,
         .slice => std.mem.eql(u8, port, "in"),
+        // Concat operand ports are unbounded: any `operand_<idx>` is a
+        // valid input. The resolver always emits well-formed names, so
+        // we just check the prefix here.
+        .concat => std.mem.startsWith(u8, port, "operand_"),
     };
 }
 
@@ -41,6 +45,7 @@ fn isValidOutputPort(component: ir.Component, port: []const u8) bool {
         .sub_circuit_ref => true,
         .unresolved_name => true,
         .slice => std.mem.eql(u8, port, "out"),
+        .concat => std.mem.eql(u8, port, "out"),
     };
 }
 
@@ -115,6 +120,39 @@ pub fn run(
                 allocator,
                 "slice range [{d}..{d}) exceeds source width {d}",
                 .{ slice.lo, slice.hi, source.width },
+            );
+            var diagnostic = diagnostics.makeDiagnostic(.E002, toDiagnosticSpan(comp.span));
+            diagnostic.message = message;
+            try diagnostic_list.append(allocator, diagnostic);
+        }
+    }
+
+    // Concat width-sum validation. The resolver sets `concat.width` to
+    // the sum of operand widths at synthesis time, so the check here is
+    // "does the concat's output width equal the destination's expected
+    // input width?". Any mismatch surfaces as the user-visible "sum
+    // doesn't fit" diagnostic. E002 stands in for the dedicated
+    // E014 width-mismatch code planned for S6.
+    for (module.components) |comp| {
+        if (comp.kind != .concat) continue;
+        var operand_count: u8 = 0;
+        for (module.connections) |connection| {
+            if (connection.to.component.value == comp.id.value and
+                std.mem.startsWith(u8, connection.to.port, "operand_"))
+            {
+                operand_count += 1;
+            }
+        }
+        // Find the connection feeding concat.out into its destination.
+        for (module.connections) |connection| {
+            if (connection.from.component.value != comp.id.value) continue;
+            if (!std.mem.eql(u8, connection.from.port, "out")) continue;
+            const dest = findComponent(module, connection.to.component) orelse continue;
+            if (dest.width == comp.width) continue;
+            const message = try std.fmt.allocPrint(
+                allocator,
+                "concat width {d} from {d} operand(s) does not match destination width {d}",
+                .{ comp.width, operand_count, dest.width },
             );
             var diagnostic = diagnostics.makeDiagnostic(.E002, toDiagnosticSpan(comp.span));
             diagnostic.message = message;

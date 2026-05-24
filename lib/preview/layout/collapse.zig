@@ -242,10 +242,10 @@ fn isPassthrough(
     expand: bool,
 ) bool {
     const k = kind_of.get(id) orelse return false;
-    // Slice acts as a passthrough at the preview layer: it has no glyph
-    // and downstream consumers see the upstream source directly. Bit-
-    // range semantics aren't rendered today.
-    if (k == .wire or k == .slice) return true;
+    // Slice and concat act as passthroughs at the preview layer: they
+    // have no glyph and downstream consumers see their upstream sources
+    // directly. Bit-range and concat semantics aren't rendered today.
+    if (k == .wire or k == .slice or k == .concat) return true;
     if (!expand) return false;
     return is_inner_pin.contains(id);
 }

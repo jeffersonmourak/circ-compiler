@@ -1,0 +1,2 @@
+input a, b
+output[3] o(in={a, b})

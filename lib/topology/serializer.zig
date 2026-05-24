@@ -28,6 +28,7 @@ pub fn serializeModule(
                 aux_hi = s.hi;
                 break :blk .slice;
             },
+            .concat => .concat,
             else => return error.SubCircuitInFlatModule,
         };
         try components.append(allocator, .{
@@ -43,7 +44,7 @@ pub fn serializeModule(
         try connections.append(allocator, .{
             .from_id = conn.from.component.value,
             .to_id = conn.to.component.value,
-            .port = @intFromEnum(try parsePortName(conn.to.port)),
+            .port = try portByteForConnection(conn.to.port),
         });
     }
 
@@ -193,6 +194,17 @@ fn expandModule(
                     .aux_hi = s.hi,
                 });
             },
+            .concat => {
+                const global_id = state.next_global_id;
+                state.next_global_id += 1;
+                try local_to_global.put(comp.id.value, global_id);
+
+                try state.components.append(state.allocator, .{
+                    .id = global_id,
+                    .kind = @intFromEnum(format.ComponentKind.concat),
+                    .width = comp.width,
+                });
+            },
             .sub_circuit_ref => |ref| {
                 var child_module: ?*const ir.Module = null;
                 for (state.project.import_table) |imp| {
@@ -220,11 +232,11 @@ fn expandModule(
         }
     }
 
-    // 2. Second pass: Handle module-level connections (rewiring primitives and slices)
+    // 2. Second pass: Handle module-level connections (rewiring primitives, slices, concats)
     for (module.connections) |conn| {
         const to_comp = findComponent(module, conn.to.component) orelse return error.ComponentNotFound;
         switch (to_comp.kind) {
-            .primitive, .slice => {},
+            .primitive, .slice, .concat => {},
             else => continue,
         }
 
@@ -234,7 +246,7 @@ fn expandModule(
         try state.connections.append(state.allocator, .{
             .from_id = from_global_id,
             .to_id = to_global_id,
-            .port = @intFromEnum(try parsePortName(conn.to.port)),
+            .port = try portByteForConnection(conn.to.port),
         });
     }
 
@@ -287,7 +299,7 @@ fn resolveSignalGlobalId(
 ) !u32 {
     const comp = findComponent(module, endpoint.component) orelse return error.ComponentNotFound;
     switch (comp.kind) {
-        .primitive, .slice => {
+        .primitive, .slice, .concat => {
             return local_to_global.get(endpoint.component.value) orelse error.InternalError;
         },
         .sub_circuit_ref => {
@@ -311,6 +323,19 @@ fn parsePortName(name: []const u8) !format.PortName {
     if (std.mem.eql(u8, name, "b")) return .b;
     if (std.mem.eql(u8, name, "out")) return .out;
     return error.UnknownPortName;
+}
+
+/// Returns the port byte for a connection's destination port. Standard
+/// port names (`in`/`a`/`b`/`out`) map through `parsePortName`; concat
+/// operand ports (`operand_<idx>`) round-trip as the raw operand index.
+/// Disambiguation at decode time is by `to_comp.kind` — concat
+/// destinations interpret the byte as an index; everything else uses
+/// `PortName`.
+fn portByteForConnection(name: []const u8) !u8 {
+    if (std.mem.startsWith(u8, name, "operand_")) {
+        return std.fmt.parseInt(u8, name["operand_".len..], 10) catch error.UnknownPortName;
+    }
+    return @intFromEnum(try parsePortName(name));
 }
 
 fn encodePayload(
