@@ -1,0 +1,11 @@
+import mux "mux_lib.circ"
+input[4] x1
+input[2] s1
+input[2] x2
+input[4] s2
+mux inst_a[4, 2](data=x1, select=s1)
+mux inst_b[2, 4](data=x2, select=s2)
+output[4] a_data(in=inst_a.data_out)
+output[2] a_sel(in=inst_a.sel_out)
+output[2] b_data(in=inst_b.data_out)
+output[4] b_sel(in=inst_b.sel_out)

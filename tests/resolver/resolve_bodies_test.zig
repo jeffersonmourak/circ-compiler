@@ -226,3 +226,74 @@ test "parameter binding order follows source declaration, not reference" {
     try std.testing.expectEqual(@as(u8, 4), lookupPinWidth(spec, "data_out", .output).?);
     try std.testing.expectEqual(@as(u8, 8), lookupPinWidth(spec, "aux_out", .output).?);
 }
+
+fn countSpecializations(project: @import("ir_types").Project) usize {
+    var count: usize = 0;
+    for (project.file_paths) |path| {
+        if (std.mem.startsWith(u8, path, "<specialization:")) count += 1;
+    }
+    return count;
+}
+
+fn countCallSitesTargeting(project: @import("ir_types").Project, expected_target_file_id_min: u32) usize {
+    // Count caller-side sub_circuit_ref components whose specialized_target_file
+    // points at some appended specialization (file_id >= original_file_count).
+    var count: usize = 0;
+    for (project.files) |module| {
+        for (module.components) |comp| {
+            switch (comp.kind) {
+                .sub_circuit_ref => |ref| {
+                    if (ref.specialized_target_file) |target| {
+                        if (target.value >= expected_target_file_id_min) count += 1;
+                    }
+                },
+                else => {},
+            }
+        }
+    }
+    return count;
+}
+
+test "cache: identical bindings share one specialization" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    // Two call sites at width 4 → cache produces exactly one specialization
+    // module despite two sub_circuit_ref components pointing into it.
+    const project = try resolveProject(allocator, fixtureRoot("shared_spec"));
+    try std.testing.expectEqual(@as(usize, 1), countSpecializations(project));
+    try std.testing.expectEqual(@as(usize, 2), countCallSitesTargeting(project, @intCast(project.file_paths.len - 1)));
+}
+
+test "cache: distinct bindings produce separate specializations" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    // Call sites at width 4 and width 8 → cache misses on the second key
+    // and produces two distinct specialization modules.
+    const project = try resolveProject(allocator, fixtureRoot("distinct_bindings"));
+    try std.testing.expectEqual(@as(usize, 2), countSpecializations(project));
+}
+
+test "cache: multi-param identical bindings share one specialization" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    // Two call sites at (W=4, S=2) → one shared specialization.
+    const project = try resolveProject(allocator, fixtureRoot("multi_param_shared"));
+    try std.testing.expectEqual(@as(usize, 1), countSpecializations(project));
+}
+
+test "cache: multi-param distinct binding tuples are not shared" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    // (4, 2) vs (2, 4) are distinct cache keys even though they share the
+    // same width values — order matters.
+    const project = try resolveProject(allocator, fixtureRoot("multi_param_distinct"));
+    try std.testing.expectEqual(@as(usize, 2), countSpecializations(project));
+}
