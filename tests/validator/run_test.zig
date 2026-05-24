@@ -47,6 +47,11 @@ const fixtures = [_]Fixture{
         .source_path = "tests/fixtures/circuits/slice_inverted.circ",
         .expected_path = "tests/fixtures/expected-diagnostics/slice_inverted.txt",
     },
+    .{
+        .name = "concat width sum mismatch",
+        .source_path = "tests/fixtures/circuits/concat_width_sum_mismatch.circ",
+        .expected_path = "tests/fixtures/expected-diagnostics/concat_width_sum_mismatch.txt",
+    },
 };
 
 fn lessByLocation(_: void, lhs: diagnostics.Diagnostic, rhs: diagnostics.Diagnostic) bool {

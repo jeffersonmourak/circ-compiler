@@ -113,6 +113,11 @@ fn parsePortByte(name: []const u8) !u8 {
     if (std.mem.eql(u8, name, "a")) return @intFromEnum(full_format.PortName.a);
     if (std.mem.eql(u8, name, "b")) return @intFromEnum(full_format.PortName.b);
     if (std.mem.eql(u8, name, "out")) return @intFromEnum(full_format.PortName.out);
+    // Concat operand ports round-trip as the raw operand index; the
+    // decoder disambiguates by `to_comp.kind == concat`.
+    if (std.mem.startsWith(u8, name, "operand_")) {
+        return std.fmt.parseInt(u8, name["operand_".len..], 10) catch error.UnknownPortName;
+    }
     return error.UnknownPortName;
 }
 
@@ -142,7 +147,7 @@ fn resolveSignalGlobalId(
 ) !u32 {
     const comp = findComponent(module, endpoint.component) orelse return error.ComponentNotFound;
     switch (comp.kind) {
-        .primitive, .slice => return local_to_global.get(endpoint.component.value) orelse error.InternalError,
+        .primitive, .slice, .concat => return local_to_global.get(endpoint.component.value) orelse error.InternalError,
         .sub_circuit_ref => {
             const outputs = sub_output_map.get(endpoint.component.value) orelse return error.InternalError;
             return outputs.get(endpoint.port) orelse return error.UnknownPortName;
@@ -221,6 +226,31 @@ fn expandModule(
                     .aux = .{ .slice = .{ .lo = s.lo, .hi = s.hi } },
                 });
             },
+            .concat => {
+                const global_id = state.next_global_id;
+                state.next_global_id += 1;
+                try local_to_global.put(comp.id.value, global_id);
+
+                const name_src = comp.instance_name orelse "";
+                const name_copy = try state.allocator.dupe(u8, name_src);
+                errdefer state.allocator.free(name_copy);
+                const origin_copy = try dupOrigin(state.allocator, origin_stack.items);
+                errdefer {
+                    for (origin_copy) |frame| {
+                        state.allocator.free(frame.alias);
+                        state.allocator.free(frame.subcircuit);
+                    }
+                    state.allocator.free(origin_copy);
+                }
+
+                try state.components.append(state.allocator, .{
+                    .id = global_id,
+                    .kind = .concat,
+                    .width = comp.width,
+                    .name = name_copy,
+                    .origin = origin_copy,
+                });
+            },
             .sub_circuit_ref => |ref| {
                 var child_module: ?*const ir.Module = null;
                 var target_file_id: u32 = 0;
@@ -261,11 +291,11 @@ fn expandModule(
         }
     }
 
-    // Pass 2: emit module-level connections targeting primitives or slices in this module.
+    // Pass 2: emit module-level connections targeting primitives, slices, or concats in this module.
     for (module.connections) |conn| {
         const to_comp = findComponent(module, conn.to.component) orelse return error.ComponentNotFound;
         switch (to_comp.kind) {
-            .primitive, .slice => {},
+            .primitive, .slice, .concat => {},
             else => continue,
         }
 
@@ -376,6 +406,19 @@ pub fn buildFromModule(allocator: std.mem.Allocator, module: *const ir.Module) !
                     .name = name_copy,
                     .origin = empty_origin,
                     .aux = .{ .slice = .{ .lo = s.lo, .hi = s.hi } },
+                });
+            },
+            .concat => {
+                const name_src = comp.instance_name orelse "";
+                const name_copy = try allocator.dupe(u8, name_src);
+                errdefer allocator.free(name_copy);
+                const empty_origin = try allocator.alloc(OriginFrame, 0);
+                try components.append(allocator, .{
+                    .id = comp.id.value,
+                    .kind = .concat,
+                    .width = comp.width,
+                    .name = name_copy,
+                    .origin = empty_origin,
                 });
             },
             .sub_circuit_ref => return error.SubCircuitInFlatModule,

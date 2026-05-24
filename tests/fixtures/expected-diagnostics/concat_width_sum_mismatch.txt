@@ -1,0 +1,1 @@
+tests/fixtures/circuits/concat_width_sum_mismatch.circ:2:16: error: E002: concat width 2 from 2 operand(s) does not match destination width 3

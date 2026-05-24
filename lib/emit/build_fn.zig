@@ -81,6 +81,10 @@ pub fn emitBuildFunction(allocator: std.mem.Allocator, module: *const ir.Module)
                 "const {s} = try circuit.createComponent(.{{ .slice = .{{ .lo = {d}, .hi = {d} }} }}, {d});",
                 .{ var_name, s.lo, s.hi, component.width },
             ),
+            .concat => try writer.writeLineFmt(
+                "const {s} = try circuit.createComponent(.{{ .concat = .{{}} }}, {d});",
+                .{ var_name, component.width },
+            ),
             .sub_circuit_ref => return error.UnsupportedSubCircuitInPhase4,
             .unresolved_name => return error.UnresolvedComponentName,
         }

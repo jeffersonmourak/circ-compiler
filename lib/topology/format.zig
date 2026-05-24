@@ -17,6 +17,13 @@ pub const ComponentKind = enum(u8) {
     // record — but the only reader of this format is the embedded
     // runtime interpreter, which is bumped in lockstep.
     slice = 6,
+    // S5.2: N-input bit concatenation. Concat itself adds no trailing
+    // bytes to the `ComponentRecord`; its operand connectivity rides on
+    // the existing connections table, where the port byte is the operand
+    // index (0..N) instead of a `PortName` value. Disambiguation is
+    // context-dependent: the interpreter checks `to_comp.kind == concat`
+    // before treating the port byte as an operand index.
+    concat = 7,
 };
 
 pub const PortName = enum(u8) {
@@ -52,6 +59,7 @@ test "format: ComponentKind values are stable" {
     try std.testing.expectEqual(@as(u8, 4), @intFromEnum(ComponentKind.led));
     try std.testing.expectEqual(@as(u8, 5), @intFromEnum(ComponentKind.output_pin));
     try std.testing.expectEqual(@as(u8, 6), @intFromEnum(ComponentKind.slice));
+    try std.testing.expectEqual(@as(u8, 7), @intFromEnum(ComponentKind.concat));
 }
 
 test "format: PortName values are stable" {

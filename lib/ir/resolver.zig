@@ -139,6 +139,58 @@ fn synthesizeSlice(
     return .{ .component = slice_id, .port = "out" };
 }
 
+fn lookupComponentWidth(ctx: *ResolveContext, id: ir.ComponentId) u8 {
+    // Component lists grow as the resolver walks; for a freshly
+    // synthesized operand the entry is already in `ctx.components` by
+    // the time we look it up here. Falling back to 1 keeps the
+    // arithmetic well-defined when the lookup misses (an unresolved
+    // reference, caught by a separate pass).
+    for (ctx.components.items) |comp| {
+        if (comp.id.value == id.value) return comp.width;
+    }
+    return 1;
+}
+
+fn synthesizeConcat(
+    ctx: *ResolveContext,
+    parts: []const ast.SignalSource,
+    span: ast.Span,
+) anyerror!ir.SignalEndpoint {
+    var operand_endpoints: std.ArrayList(ir.SignalEndpoint) = .{};
+    defer operand_endpoints.deinit(ctx.allocator);
+    for (parts) |part| {
+        const ep = try resolveSource(ctx, part);
+        try operand_endpoints.append(ctx.allocator, ep);
+    }
+
+    var total_width: u8 = 0;
+    for (operand_endpoints.items) |ep| {
+        if (isValidEndpoint(ep)) total_width += lookupComponentWidth(ctx, ep.component);
+    }
+    if (total_width == 0) total_width = 1;
+
+    const concat_id = nextComponentId(ctx);
+    try ctx.components.append(ctx.allocator, .{
+        .id = concat_id,
+        .kind = .concat,
+        .instance_name = null,
+        .span = toIrSpan(span),
+        .width = total_width,
+    });
+
+    for (operand_endpoints.items, 0..) |ep, idx| {
+        if (!isValidEndpoint(ep)) continue;
+        const port_name = try std.fmt.allocPrint(ctx.allocator, "operand_{d}", .{idx});
+        try ctx.connections.append(ctx.allocator, .{
+            .from = ep,
+            .to = .{ .component = concat_id, .port = port_name },
+            .span = toIrSpan(span),
+        });
+    }
+
+    return .{ .component = concat_id, .port = "out" };
+}
+
 fn resolveSource(ctx: *ResolveContext, source: ast.SignalSource) anyerror!ir.SignalEndpoint {
     return switch (source) {
         .named => |named| try ensureNamedReference(ctx, named),
@@ -153,7 +205,7 @@ fn resolveSource(ctx: *ResolveContext, source: ast.SignalSource) anyerror!ir.Sig
         // collapses both AST shapes onto the same IR engine kind.
         .indexed => |idx| try synthesizeSlice(ctx, idx.source.*, idx.bit, idx.bit + 1, idx.span),
         .sliced => |s| try synthesizeSlice(ctx, s.source.*, s.lo, s.hi, s.span),
-        .concat => return error.UnsupportedSignalSource,
+        .concat => |c| try synthesizeConcat(ctx, c.parts, c.span),
     };
 }
 

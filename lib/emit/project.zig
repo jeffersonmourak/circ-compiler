@@ -133,20 +133,26 @@ fn walkFile(
 
                 try walkFile(ctx, target_file_id, child_prefix, &inner_inputs, &inner_outputs);
             },
-            .slice => {
-                // Slice components are synthesized by the resolver for
-                // bit-range extraction. They behave like primitives at
-                // the project-layout layer: get a global id, append an
-                // entry under the current path prefix. They are never
-                // input/output pins, so neither the input nor output map
-                // gets updated for them.
+            .slice, .concat => {
+                // Slice and concat components are synthesized by the
+                // resolver for bit-range and concatenation lowering.
+                // They behave like primitives at the project-layout
+                // layer: get a global id, append an entry under the
+                // current path prefix. They are never input/output
+                // pins, so neither the input nor output map gets
+                // updated for them.
                 const global_id = ctx.next_global_id;
                 ctx.next_global_id += 1;
 
+                const fallback_prefix: []const u8 = switch (component.kind) {
+                    .slice => "slice",
+                    .concat => "concat",
+                    else => "synthetic",
+                };
                 const leaf = if (component.instance_name) |name|
                     try ctx.allocator.dupe(u8, name)
                 else
-                    try std.fmt.allocPrint(ctx.allocator, "slice_{d}", .{component.id.value});
+                    try std.fmt.allocPrint(ctx.allocator, "{s}_{d}", .{ fallback_prefix, component.id.value });
                 defer ctx.allocator.free(leaf);
 
                 const segments = try dupeSegments(ctx.allocator, path_prefix, leaf);
@@ -361,6 +367,14 @@ fn emitFileBuildFunction(
                 try writer.writeLineFmt(
                     "const {s} = try circuit.createComponent(.{{ .slice = .{{ .lo = {d}, .hi = {d} }} }}, {d});",
                     .{ var_name, s.lo, s.hi, component.width },
+                );
+            },
+            .concat => {
+                const var_name = try componentVarName(allocator, writer, component);
+                defer allocator.free(var_name);
+                try writer.writeLineFmt(
+                    "const {s} = try circuit.createComponent(.{{ .concat = .{{}} }}, {d});",
+                    .{ var_name, component.width },
                 );
             },
             .sub_circuit_ref => |sub_ref| {

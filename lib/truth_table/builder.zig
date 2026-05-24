@@ -128,12 +128,13 @@ pub fn build(
             .wire => circuit.createComponent(.{ .wire = .{} }, 1),
             .led => circuit.createComponent(.{ .led = .{} }, 1),
             .output_pin => circuit.createComponent(.{ .output_pin = .{} }, 1),
-            // Multi-bit truth tables (including slice fixtures) land in
-            // S10 once the builder iterates over multi-bit inputs. For
-            // now, reject any topology that includes a slice via the
-            // generic invalid-topology error so the hardcoded width=1
-            // path stays internally consistent.
-            .slice => return error.InvalidTopology,
+            // Multi-bit truth tables (including slice / concat
+            // fixtures) land in S10 once the builder iterates over
+            // multi-bit inputs. For now, reject any topology that
+            // includes a slice or concat via the generic
+            // invalid-topology error so the hardcoded width=1 path
+            // stays internally consistent.
+            .slice, .concat => return error.InvalidTopology,
         } catch return error.InvalidTopology;
         node.id = comp.id;
         id_to_node.putAssumeCapacity(comp.id, node);

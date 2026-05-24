@@ -121,6 +121,28 @@ fn recalculateAndReschedule(
                 };
             }
         },
+        .concat => |c| {
+            // Concat ORs each operand's (defined-masked) state into
+            // position by left-shifting by the running prefix sum of
+            // operand widths. Per decision #4 the first operand occupies
+            // the low bits, so iteration order is significant.
+            var value: u64 = 0;
+            var defined: u64 = 0;
+            var prefix: u8 = 0;
+            for (c.operands.items) |op| {
+                const op_state = circuit.readState(op.state_handle);
+                const shift: u6 = @intCast(prefix);
+                value |= (op_state.value & widthMask(op_state.width)) << shift;
+                defined |= (op_state.defined & widthMask(op_state.width)) << shift;
+                prefix += op_state.width;
+            }
+            const m = widthMask(width);
+            calculated_state = .{
+                .value = value & m,
+                .defined = defined & m,
+                .width = width,
+            };
+        },
     }
 
     const current_state = circuit.readState(component.state_handle);
@@ -130,7 +152,7 @@ fn recalculateAndReschedule(
         }
 
         const delay = switch (component.kind) {
-            .wire, .output_pin, .led, .slice => WIRE_PROPAGATION_DELAY,
+            .wire, .output_pin, .led, .slice, .concat => WIRE_PROPAGATION_DELAY,
             else => PROPAGATION_DELAY,
         };
 
@@ -317,7 +339,7 @@ pub const Event = struct {
     }
 };
 
-pub const ComponentType = enum { input_pin_gate, not_gate, led, and_gate, wire, output_pin, slice };
+pub const ComponentType = enum { input_pin_gate, not_gate, led, and_gate, wire, output_pin, slice, concat };
 
 pub fn toKind(kind: u8) !Component.Kind {
     return switch (kind) {
@@ -328,6 +350,7 @@ pub fn toKind(kind: u8) !Component.Kind {
         4 => .wire,
         5 => .output_pin,
         6 => .{ .slice = .{} },
+        7 => .{ .concat = .{} },
         else => return error.InvalidComponentKind,
     };
 }
@@ -367,6 +390,12 @@ pub const Component = struct {
         /// allocates the slice's state slot in tier (hi - lo). `from` is
         /// populated by `Circuit.connect` once the source is wired in.
         slice: struct { from: ?*Component = null, lo: u8 = 0, hi: u8 = 0 },
+        /// N-input bit concatenation. `operands[i]`'s state contributes
+        /// bits `[prefix..prefix + operands[i].width)` of the output,
+        /// where `prefix` is the running sum of preceding operand widths.
+        /// Wired through `Circuit.connect` with `to_port = "operand_<i>"`;
+        /// the engine ensures the slot is set at the right index.
+        concat: struct { operands: std.ArrayList(*Component) = .{} },
     };
 
     pub fn init(id: u32, kind: Kind) !*Component {
@@ -388,6 +417,7 @@ pub const Component = struct {
             .output_pin => |*g| g.inputs.deinit(memory.allocator),
             .input_pin_gate => |*g| g.inputs.deinit(memory.allocator),
             .slice => {},
+            .concat => |*c| c.operands.deinit(memory.allocator),
         }
         memory.allocator.destroy(self);
     }
@@ -668,6 +698,18 @@ pub const Circuit = struct {
             .slice => |*s| {
                 if (!std.mem.eql(u8, toPort, IN_PORT_NAME)) return error.InvalidInputPort;
                 s.from = fromComponent;
+            },
+            .concat => |*c| {
+                // Concat operand ports are named `operand_<index>`. The
+                // index identifies the slot in the prefix-sum so the
+                // evaluator can shift each operand into the right
+                // position. The slot is filled in-place; gaps stay null.
+                if (!std.mem.startsWith(u8, toPort, "operand_")) return error.InvalidInputPort;
+                const idx = std.fmt.parseInt(usize, toPort["operand_".len..], 10) catch return error.InvalidInputPort;
+                while (c.operands.items.len <= idx) {
+                    try c.operands.append(memory.allocator, fromComponent);
+                }
+                c.operands.items[idx] = fromComponent;
             },
         }
     }
@@ -1842,4 +1884,96 @@ test "engine: slice [0..2) of a width-4 source covers the low nibble" {
     const result = circuit.readState(out.state_handle);
     try std.testing.expectEqual(@as(u64, 0b01), result.value);
     try std.testing.expectEqual(@as(u64, 0b11), result.defined);
+}
+
+// ============================================================================
+// Concat evaluator tests. Exercise the per-operand shift-and-OR semantics
+// added in S5.2 across mixed widths and undefined inputs.
+// ============================================================================
+
+test "engine: concat of four 1-bit inputs assembles a 4-bit bus" {
+    // Mirrors concat_four_bits.circ: {a, b, c, d} where each input is
+    // width=1. The low bit of the result comes from `a`, the high bit
+    // from `d`.
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    const a = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const b = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const c = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const d = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const cat = try circuit.createComponent(.{ .concat = .{} }, 4);
+    const out = try circuit.createComponent(.{ .output_pin = .{} }, 4);
+    try circuit.connect(a.port(OUT_PORT_NAME), .{ cat, "operand_0" });
+    try circuit.connect(b.port(OUT_PORT_NAME), .{ cat, "operand_1" });
+    try circuit.connect(c.port(OUT_PORT_NAME), .{ cat, "operand_2" });
+    try circuit.connect(d.port(OUT_PORT_NAME), .{ cat, "operand_3" });
+    try circuit.connect(cat.port(OUT_PORT_NAME), out.port(OUTPUT_PIN_IN_PORT_NAME));
+
+    // a=1, b=0, c=1, d=1 → result value=0b1101, defined=0b1111.
+    try circuit.propagateEvent(a, BitVecState.high(1));
+    try circuit.propagateEvent(b, BitVecState.low(1));
+    try circuit.propagateEvent(c, BitVecState.high(1));
+    try circuit.propagateEvent(d, BitVecState.high(1));
+    var result = circuit.readState(out.state_handle);
+    try std.testing.expectEqual(@as(u64, 0b1101), result.value);
+    try std.testing.expectEqual(@as(u64, 0b1111), result.defined);
+
+    // All low → all zero, fully defined.
+    try circuit.propagateEvent(a, BitVecState.low(1));
+    try circuit.propagateEvent(c, BitVecState.low(1));
+    try circuit.propagateEvent(d, BitVecState.low(1));
+    result = circuit.readState(out.state_handle);
+    try std.testing.expect(result.equals(BitVecState.low(4)));
+}
+
+test "engine: concat propagates undefined operand bits as undefined output bits" {
+    // Operand `b` is undefined; the output bit corresponding to b's
+    // position must read undefined regardless of the other operands.
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    const a = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const b = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const c = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const d = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const cat = try circuit.createComponent(.{ .concat = .{} }, 4);
+    const out = try circuit.createComponent(.{ .output_pin = .{} }, 4);
+    try circuit.connect(a.port(OUT_PORT_NAME), .{ cat, "operand_0" });
+    try circuit.connect(b.port(OUT_PORT_NAME), .{ cat, "operand_1" });
+    try circuit.connect(c.port(OUT_PORT_NAME), .{ cat, "operand_2" });
+    try circuit.connect(d.port(OUT_PORT_NAME), .{ cat, "operand_3" });
+    try circuit.connect(cat.port(OUT_PORT_NAME), out.port(OUTPUT_PIN_IN_PORT_NAME));
+
+    try circuit.propagateEvent(a, BitVecState.high(1));
+    try circuit.propagateEvent(b, BitVecState.undefined_(1));
+    try circuit.propagateEvent(c, BitVecState.high(1));
+    try circuit.propagateEvent(d, BitVecState.low(1));
+    const result = circuit.readState(out.state_handle);
+    // bit 0 = hi (a=1), bit 1 = undef (b), bit 2 = hi (c=1), bit 3 = lo (d=0)
+    try std.testing.expectEqual(@as(u64, 0b0101), result.value & result.defined);
+    try std.testing.expectEqual(@as(u64, 0b1101), result.defined);
+}
+
+test "engine: concat of mixed-width operands sums widths into output position" {
+    // Operands: a (width 2), b (width 1). Output width = 3.
+    // The low 2 bits of the output come from a; bit 2 comes from b.
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    const a = try circuit.createComponent(.{ .input_pin_gate = .{} }, 2);
+    const b = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const cat = try circuit.createComponent(.{ .concat = .{} }, 3);
+    const out = try circuit.createComponent(.{ .output_pin = .{} }, 3);
+    try circuit.connect(a.port(OUT_PORT_NAME), .{ cat, "operand_0" });
+    try circuit.connect(b.port(OUT_PORT_NAME), .{ cat, "operand_1" });
+    try circuit.connect(cat.port(OUT_PORT_NAME), out.port(OUTPUT_PIN_IN_PORT_NAME));
+
+    // a = 0b10 (high bit set), b = 1 (high). Result should be 0b110.
+    try circuit.propagateEvent(a, BitVecState{ .value = 0b10, .defined = 0b11, .width = 2 });
+    try circuit.propagateEvent(b, BitVecState.high(1));
+    const result = circuit.readState(out.state_handle);
+    try std.testing.expectEqual(@as(u64, 0b110), result.value);
+    try std.testing.expectEqual(@as(u64, 0b111), result.defined);
+    try std.testing.expectEqual(@as(u8, 3), result.width);
 }

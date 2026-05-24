@@ -44,6 +44,12 @@ pub const ComponentKind = union(enum) {
     /// Connection (`source.out -> slice.in`), so name resolution and
     /// loop detection see slice components like any other primitive.
     slice: Slice,
+    /// Bit concatenation synthesized by the resolver when lowering an
+    /// AST `.concat` SignalSource. Operand inputs flow through regular
+    /// IR Connections with port names `"operand_<i>"`; the destination
+    /// width on `Component.width` is the sum of operand widths. The
+    /// arity is implicit in how many connections target this concat.
+    concat,
 };
 
 pub const Component = struct {
