@@ -182,13 +182,16 @@ export fn stop() void {
     // v0 no-op; retained for forward-compatible runtime API shape.
 }
 
-export fn setPin(component_id: i32, state: i32) void {
+export fn setPin(component_id: i32, value: i64, defined: i64) void {
     if (!runtime_initialized) return;
     if (component_id < 0) return;
     const id: u32 = @intCast(component_id);
     if (id >= component_table.len) return;
     if (!containsId(input_component_ids, id)) return;
-    runtime_circuit.propagateEvent(component_table[id], engine.BitVecState.fromInt(state, 1)) catch return;
+    const comp = component_table[id];
+    const width = comp.state_handle.tier;
+    const state = engine.BitVecState.fromRaw(@bitCast(value), @bitCast(defined), width);
+    runtime_circuit.propagateEvent(comp, state) catch return;
 }
 
 export fn getOutputState(component_id: i32) i32 {

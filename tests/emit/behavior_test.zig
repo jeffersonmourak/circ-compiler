@@ -96,7 +96,13 @@ fn buildScriptAndExpected(
     for (steps, 0..) |step, idx| {
         for (step.inputs) |input| {
             const id = inputId(module, input.name) orelse return error.UnknownInputName;
-            try script_writer.print("wasm.setPin({d}, {d});\n", .{ id, input.value });
+            // Translate the legacy scalar int encoding (0=low, 1=high, 2=undef)
+            // into the post-S9.1 (value, defined) BigInt pair: low → (0, 1),
+            // high → (1, 1), undefined → (0, 0). Widths >1 will need a wider
+            // input-value shape; not in this slice's scope.
+            const value: u64 = if (input.value == 1) 1 else 0;
+            const defined: u64 = if (input.value == 2) 0 else 1;
+            try script_writer.print("wasm.setPin({d}, {d}n, {d}n);\n", .{ id, value, defined });
         }
         try script_writer.writeAll("wasm.run();\n");
         try script_writer.print("const outParts{d} = [];\n", .{idx});

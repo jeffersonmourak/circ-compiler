@@ -39,11 +39,11 @@ new Uint8Array(w.memory.buffer).set(topoBytes, ptr);
 
 w.init();
 
-w.setPin(0, 0);
+w.setPin(0, 0n, 1n);
 w.run();
 const hi0 = w.getOutputState(1);
 
-w.setPin(0, 1);
+w.setPin(0, 1n, 1n);
 w.run();
 const hi1 = w.getOutputState(1);
 

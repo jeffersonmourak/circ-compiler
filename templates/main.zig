@@ -40,15 +40,17 @@ fn run_impl() callconv(.c) void {
     runtime_circuit.propagate() catch return;
 }
 
-fn setPin_impl(component_id: i32, state: i32) callconv(.c) void {
+fn setPin_impl(component_id: i32, value: i64, defined: i64) callconv(.c) void {
     if (!runtime_initialized or component_id < 0) return;
     const id: u32 = @intCast(component_id);
     if (id >= runtime_circuit.nodes.items.len) return;
-    
+
     const comp = runtime_circuit.nodes.items[id];
     if (comp.kind != .input_pin_gate) return;
-    
-    runtime_circuit.propagateEvent(comp, engine.BitVecState.fromInt(state, 1)) catch return;
+
+    const width = comp.state_handle.tier;
+    const state = engine.BitVecState.fromRaw(@bitCast(value), @bitCast(defined), width);
+    runtime_circuit.propagateEvent(comp, state) catch return;
 }
 
 fn getOutputState_impl(component_id: i32) callconv(.c) i32 {

@@ -195,7 +195,9 @@ fn runFixture(fixture: Fixture) !void {
                 std.debug.print("Unknown input pin '{s}' in fixture {s}\n", .{ inp.name, fixture.root_path });
                 return error.UnknownInputPin;
             };
-            try w.print("    instance.exports.setPin({d}, {d});\n", .{ id, inp.value });
+            const value: u64 = if (inp.value == 1) 1 else 0;
+            const defined: u64 = if (inp.value == 2) 0 else 1;
+            try w.print("    instance.exports.setPin({d}, {d}n, {d}n);\n", .{ id, value, defined });
         }
         try w.writeAll("    instance.exports.run();\n");
         try w.print("    const p{d} = [];\n", .{idx});
