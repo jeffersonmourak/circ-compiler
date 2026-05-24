@@ -25,12 +25,29 @@ pub const primitive_sizing = std.EnumArray(full_format.ComponentKind, PrimitiveS
     .concat = .{ .width = 0, .height = 0 },
 });
 
+/// Decimal-digit count of `n` for label-length math (e.g. 1 -> 1, 64 -> 2).
+fn digitsOf(n: u8) usize {
+    var v: u32 = n;
+    var d: usize = 1;
+    while (v >= 10) : (v /= 10) d += 1;
+    return d;
+}
+
+/// Width-annotation suffix length for the given signal width: `[N]` for
+/// widths > 1, empty for scalar pins.
+pub fn widthAnnotationLen(signal_width: u8) usize {
+    if (signal_width <= 1) return 0;
+    return 2 + digitsOf(signal_width); // '[' + N + ']'
+}
+
 /// Pin (input or output) box size. Width grows with the pin name to keep the
 /// label centered with at least one cell of padding on each side; floor at 5
 /// so isolated short-name pins still look box-shaped (`╭───╮ │ a │ ╰───╯`).
-pub fn pinSize(name_len: usize) PrimitiveSize {
+/// Multi-bit pins get extra room for the trailing `[N]` annotation.
+pub fn pinSize(name_len: usize, signal_width: u8) PrimitiveSize {
     const min_width: u32 = 5;
-    const padded = @max(min_width, @as(u32, @intCast(name_len)) + 4);
+    const annot = widthAnnotationLen(signal_width);
+    const padded = @max(min_width, @as(u32, @intCast(name_len + annot)) + 4);
     return .{ .width = padded, .height = 3 };
 }
 
@@ -58,11 +75,20 @@ test "sizing: primitive table values match locked spec" {
 }
 
 test "sizing: pinSize floors at 5 wide and grows with name length" {
-    try std.testing.expectEqual(@as(u32, 5), pinSize(0).width);
-    try std.testing.expectEqual(@as(u32, 5), pinSize(1).width);
-    try std.testing.expectEqual(@as(u32, 7), pinSize(3).width);
-    try std.testing.expectEqual(@as(u32, 14), pinSize(10).width);
-    try std.testing.expectEqual(@as(u32, 3), pinSize(0).height);
+    try std.testing.expectEqual(@as(u32, 5), pinSize(0, 1).width);
+    try std.testing.expectEqual(@as(u32, 5), pinSize(1, 1).width);
+    try std.testing.expectEqual(@as(u32, 7), pinSize(3, 1).width);
+    try std.testing.expectEqual(@as(u32, 14), pinSize(10, 1).width);
+    try std.testing.expectEqual(@as(u32, 3), pinSize(0, 1).height);
+}
+
+test "sizing: pinSize accounts for [N] annotation at width > 1" {
+    // Single-digit widths add "[N]" = 3 chars; double-digit "[NN]" = 4.
+    try std.testing.expectEqual(@as(u32, 8), pinSize(1, 4).width); // "a[4]" → 1 + 3 = 4 chars + 4 padding
+    try std.testing.expectEqual(@as(u32, 9), pinSize(2, 4).width); // "ab[4]"
+    try std.testing.expectEqual(@as(u32, 9), pinSize(1, 64).width); // "a[64]" → 5 chars + 4 padding
+    // Width 1 stays as-is — no annotation.
+    try std.testing.expectEqual(@as(u32, 5), pinSize(1, 1).width);
 }
 
 test "sizing: macroSize floors width at 8 and scales height with input count" {

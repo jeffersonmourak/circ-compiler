@@ -27,6 +27,17 @@ pub const PlacedComponent = struct {
     height: u32,
     in_ports: []const PortSlot,
     out_port: PortCoord,
+    /// Signal bit-width carried by this component, threaded from the
+    /// topology's per-component width byte. Renderers append a `[N]`
+    /// annotation to the pin label when this is > 1. Default 1 so
+    /// scalar test fixtures don't need to set the field explicitly.
+    signal_width: u8 = 1,
+    /// Pre-composed display label, arena-owned, used by pin renderers.
+    /// Equals `name` for scalar pins and `name[N]` for multi-bit pins.
+    /// The canvas stores slice pointers (not copies), so the label
+    /// memory must live at least as long as the canvas. Setting this
+    /// at placement time guarantees that lifetime.
+    display_label: []const u8 = "",
 };
 
 pub const Segment = struct {
@@ -74,7 +85,7 @@ test "layout: public types compile and have expected fields" {
         std.debug.assert(port_coord_info.fields.len == 2);
 
         const placed_info = @typeInfo(PlacedComponent).@"struct";
-        std.debug.assert(placed_info.fields.len == 10);
+        std.debug.assert(placed_info.fields.len == 12);
 
         const layout_grid_info = @typeInfo(LayoutGrid).@"struct";
         std.debug.assert(layout_grid_info.fields.len == 4);

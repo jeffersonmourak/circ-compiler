@@ -1,0 +1,5 @@
+input scalar_in
+input[4] wide_in
+not[4] inv(in=wide_in)
+output scalar_out(in=scalar_in)
+output[4] wide_out(in=inv.out)
