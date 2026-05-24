@@ -358,10 +358,31 @@ pub fn run(
                 };
             defer topology.deinit(allocator);
 
-            const grid = layout_orchestrator.build(allocator, topology, .{ .expand_macros = args.expand_macros }) catch |err| {
+            const grid = layout_orchestrator.build(allocator, topology, .{
+                .expand_macros = args.expand_macros,
+                .expand_display = args.expand_display,
+            }) catch |err| {
                 try stderr_writer.print("layout build failed: {s}\n", .{@errorName(err)});
                 return 1;
             };
+
+            // Emit one stderr warning per LED that requested --expand-display
+            // but lies above the indicator-mode cap (width >=8). The render
+            // itself silently falls back to the numeric display; the warning
+            // explains why a user-visible flag isn't honored.
+            if (args.expand_display) {
+                for (grid.components) |placed| {
+                    switch (placed.kind) {
+                        .primitive => |p| if (p == .led and placed.signal_width >= 8) {
+                            try stderr_writer.print(
+                                "warning: --expand-display ignored for led width {d} (max 7)\n",
+                                .{placed.signal_width},
+                            );
+                        },
+                        else => {},
+                    }
+                }
+            }
 
             const no_color = std.process.getEnvVarOwned(allocator, "NO_COLOR") catch null;
             const stdout_handle = std.fs.File.stdout().handle;
@@ -369,6 +390,7 @@ pub fn run(
                 .color = args.color,
                 .stdout_handle = stdout_handle,
                 .no_color_value = no_color,
+                .expand_display = args.expand_display,
             }) catch |err| {
                 try stderr_writer.print("render failed: {s}\n", .{@errorName(err)});
                 return 1;
@@ -656,6 +678,65 @@ test "preview: mixed scalar and multi-bit pins" {
     const exit_code = try runPreview(allocator, "tests/fixtures/circuits/mixed_width_preview.circ", &stdout_buf, &stderr_buf);
     try std.testing.expectEqual(@as(u8, 0), exit_code);
     try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/mixed_width_preview.render.golden");
+}
+
+test "preview: 4-bit led default shows 0x? numeric" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+    const exit_code = try runPreview(allocator, "tests/fixtures/circuits/led_4bit_default.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/led_4bit_default.render.golden");
+    try std.testing.expectEqualStrings("", stderr_buf.items);
+}
+
+test "preview: 4-bit led with --expand-display shows indicator row" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+    const exit_code = try runPreviewWithFlags(allocator, "tests/fixtures/circuits/led_4bit_default.circ", &.{"--expand-display"}, &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/led_4bit_expand.render.golden");
+    try std.testing.expectEqualStrings("", stderr_buf.items);
+}
+
+test "preview: 7-bit led with --expand-display still indicator (boundary)" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+    const exit_code = try runPreviewWithFlags(allocator, "tests/fixtures/circuits/led_7bit_default.circ", &.{"--expand-display"}, &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/led_7bit_expand.render.golden");
+    try std.testing.expectEqualStrings("", stderr_buf.items);
+}
+
+test "preview: 8-bit led with --expand-display falls back to numeric + warns" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+    const exit_code = try runPreviewWithFlags(allocator, "tests/fixtures/circuits/led_8bit_default.circ", &.{"--expand-display"}, &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/led_8bit_expand_warns.render.golden");
+    try std.testing.expectEqualStrings(
+        "warning: --expand-display ignored for led width 8 (max 7)\n",
+        stderr_buf.items,
+    );
 }
 
 test "phase3_render_fan_out" {

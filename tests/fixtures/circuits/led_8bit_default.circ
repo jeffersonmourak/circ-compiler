@@ -1,0 +1,2 @@
+input[8] a
+led[8] disp(in=a)

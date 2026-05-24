@@ -40,12 +40,13 @@ pub fn place(
     graph: VirtualGraph,
     columns: ColumnAssignment,
     rows: RowAssignment,
+    opts: layout.LayoutOptions,
 ) ![]PlacedComponent {
     const n = graph.nodes.len;
 
     // 1. Compute every node's cell size up front.
     const sizes = try arena.alloc(sizing.PrimitiveSize, n);
-    for (graph.nodes, 0..) |node, i| sizes[i] = sizeOf(node);
+    for (graph.nodes, 0..) |node, i| sizes[i] = sizeOf(node, opts);
 
     // 2. Per-column max width and per-row max height.
     const col_widths = try arena.alloc(u32, columns.num_columns);
@@ -90,10 +91,7 @@ pub fn place(
 
         const ports = try resolvePortCoords(arena, node, x, y, w, h);
 
-        const display_label = if (node.signal_width > 1)
-            try std.fmt.allocPrint(arena, "{s}[{d}]", .{ node.name, node.signal_width })
-        else
-            node.name;
+        const display_label = try composeDisplayLabel(arena, node, opts);
 
         placed[i] = .{
             .id = node.id,
@@ -114,10 +112,61 @@ pub fn place(
     return placed;
 }
 
-fn sizeOf(node: VirtualNode) sizing.PrimitiveSize {
+/// Pre-compose the displayed label for a node so its memory is arena-owned
+/// (the canvas stores slice pointers, not copies — see the canvas note in
+/// glyphs.zig). Pins gain a `name[N]` suffix at multi-bit widths; LEDs gain
+/// a `0x???...` hex or `·` row display per S11.2 decision #12; everything
+/// else falls back to its bare name.
+fn composeDisplayLabel(
+    arena: std.mem.Allocator,
+    node: VirtualNode,
+    opts: layout.LayoutOptions,
+) ![]const u8 {
+    return switch (node.kind) {
+        .primitive => |p| switch (p) {
+            .input_pin, .output_pin => if (node.signal_width > 1)
+                try std.fmt.allocPrint(arena, "{s}[{d}]", .{ node.name, node.signal_width })
+            else
+                node.name,
+            .led => try composeLedLabel(arena, node.signal_width, opts.expand_display),
+            else => node.name,
+        },
+        .subcircuit => node.name,
+    };
+}
+
+/// LED display label for a static preview (no runtime state — all bits
+/// undefined). Width 1 keeps the literal "LED" tag. Width 2..7 with
+/// expand_display becomes a row of `·` indicators (LSB on the left).
+/// Anything else, including width >=8 with expand_display, becomes a hex
+/// numeric display `0x?...?` with one `?` per nibble.
+fn composeLedLabel(arena: std.mem.Allocator, width: u8, expand_display: bool) ![]const u8 {
+    if (width <= 1) return "LED";
+    if (expand_display and width < 8) {
+        const buf = try arena.alloc(u8, @as(usize, width) * "·".len);
+        var idx: usize = 0;
+        var i: u8 = 0;
+        while (i < width) : (i += 1) {
+            @memcpy(buf[idx .. idx + "·".len], "·");
+            idx += "·".len;
+        }
+        return buf;
+    }
+    // Numeric: one '?' per nibble of the value.
+    const nibbles = (@as(usize, width) + 3) / 4;
+    const buf = try arena.alloc(u8, 2 + nibbles); // "0x" + N '?'
+    buf[0] = '0';
+    buf[1] = 'x';
+    var k: usize = 0;
+    while (k < nibbles) : (k += 1) buf[2 + k] = '?';
+    return buf;
+}
+
+fn sizeOf(node: VirtualNode, opts: layout.LayoutOptions) sizing.PrimitiveSize {
     return switch (node.kind) {
         .primitive => |p| switch (p) {
             .input_pin, .output_pin => sizing.pinSize(node.name.len, node.signal_width),
+            .led => sizing.ledSize(node.signal_width, opts.expand_display),
             // Slice and concat are collapsed in stage 1; the layer
             // should never ask for their size. Return the sentinel
             // zero so a stray call doesn't crash.
@@ -263,7 +312,7 @@ test "place_cell_sizing: not_gate at column 1 row 0" {
     const cols = ColumnAssignment{ .column_of = &[_]u32{ 0, 1 }, .num_columns = 2 };
     const rows = RowAssignment{ .row_of = &[_]u32{ 0, 0 }, .num_rows = 1 };
 
-    const placed = try place(a, graph, cols, rows);
+    const placed = try place(a, graph, cols, rows, .{});
     try std.testing.expectEqual(@as(usize, 2), placed.len);
 
     // not at col 1 row 0:
@@ -298,7 +347,7 @@ test "place_port_coords_and_gate: a, b, out at expected offsets" {
     const cols = ColumnAssignment{ .column_of = &[_]u32{ 0, 0, 1 }, .num_columns = 2 };
     const rows = RowAssignment{ .row_of = &[_]u32{ 0, 1, 0 }, .num_rows = 2 };
 
-    const placed = try place(a_alloc, graph, cols, rows);
+    const placed = try place(a_alloc, graph, cols, rows, .{});
 
     // and_gate: col_x[1] = 5 + 5 = 10, row_y[0] = 0 → (10, 0). width=5, height=5
     // (5×5 box: ports on rows 1, 3 with output centered on row 2).
@@ -336,7 +385,7 @@ test "place_macro_label_width: long subcircuit alias widens the box" {
     const cols = ColumnAssignment{ .column_of = &[_]u32{0}, .num_columns = 1 };
     const rows = RowAssignment{ .row_of = &[_]u32{0}, .num_rows = 1 };
 
-    const placed = try place(a, graph, cols, rows);
+    const placed = try place(a, graph, cols, rows, .{});
     try std.testing.expectEqual(@as(u32, 23), placed[0].width);
     // Subcircuit has 0 inputs in this test → height stays at the 3-row floor.
     try std.testing.expectEqual(@as(u32, 3), placed[0].height);
