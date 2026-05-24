@@ -23,6 +23,11 @@ fn findTargetModule(project: *const ir.Project, importing_file: ir.FileId, alias
     return null;
 }
 
+fn targetForRef(project: *const ir.Project, importing_file: ir.FileId, ref: ir.UnresolvedRef) ?*const ir.Module {
+    if (ref.specialized_target_file) |spec| return &project.files[spec.value];
+    return findTargetModule(project, importing_file, ref.name);
+}
+
 fn hasInputPort(target: *const ir.Module, port: []const u8) bool {
     for (target.inputs) |input| {
         if (std.mem.eql(u8, input.name, port)) return true;
@@ -61,13 +66,13 @@ fn endpointWidth(
     return switch (component.kind) {
         .primitive => component.width,
         .sub_circuit_ref => |ref| blk: {
-            const target = findTargetModule(project, module.file_id, ref.name) orelse break :blk null;
+            const target = targetForRef(project, module.file_id, ref) orelse break :blk null;
             break :blk switch (side) {
                 .from => outputPortWidth(target, port),
                 .to => inputPortWidth(target, port),
             };
         },
-        .unresolved_name => null,
+        .slice, .concat, .unresolved_name => null,
     };
 }
 
@@ -96,13 +101,13 @@ pub fn runForModule(
         // Check destination port (input side of target)
         if (findComponent(module, conn.to.component)) |to_comp| {
             if (to_comp.kind == .sub_circuit_ref) {
-                const alias = to_comp.kind.sub_circuit_ref.name;
-                if (findTargetModule(project, module.file_id, alias)) |target| {
+                const ref = to_comp.kind.sub_circuit_ref;
+                if (targetForRef(project, module.file_id, ref)) |target| {
                     if (!hasInputPort(target, conn.to.port)) {
                         const message = try std.fmt.allocPrint(
                             allocator,
                             "sub-circuit '{s}' has no input port '{s}'",
-                            .{ alias, conn.to.port },
+                            .{ ref.name, conn.to.port },
                         );
                         var d = diagnostics.makeDiagnostic(.E012, toDiagnosticSpan(conn.span));
                         d.message = message;
@@ -115,13 +120,13 @@ pub fn runForModule(
         // Check source port (output side of target)
         if (findComponent(module, conn.from.component)) |from_comp| {
             if (from_comp.kind == .sub_circuit_ref) {
-                const alias = from_comp.kind.sub_circuit_ref.name;
-                if (findTargetModule(project, module.file_id, alias)) |target| {
+                const ref = from_comp.kind.sub_circuit_ref;
+                if (targetForRef(project, module.file_id, ref)) |target| {
                     if (!hasOutputPort(target, conn.from.port)) {
                         const message = try std.fmt.allocPrint(
                             allocator,
                             "sub-circuit '{s}' has no output port '{s}'",
-                            .{ alias, conn.from.port },
+                            .{ ref.name, conn.from.port },
                         );
                         var d = diagnostics.makeDiagnostic(.E012, toDiagnosticSpan(conn.span));
                         d.message = message;
@@ -135,8 +140,9 @@ pub fn runForModule(
     // E013: sub-circuit arity — required inputs not connected
     for (module.components) |component| {
         if (component.kind != .sub_circuit_ref) continue;
-        const alias = component.kind.sub_circuit_ref.name;
-        const target = findTargetModule(project, module.file_id, alias) orelse continue;
+        const ref = component.kind.sub_circuit_ref;
+        const target = targetForRef(project, module.file_id, ref) orelse continue;
+        const alias = ref.name;
 
         for (target.inputs) |target_input| {
             if (hasDriver(module, component.id, target_input.name)) continue;
@@ -176,8 +182,9 @@ pub fn runForModule(
     // W002: sub-circuit output never read by parent
     for (module.components) |component| {
         if (component.kind != .sub_circuit_ref) continue;
-        const alias = component.kind.sub_circuit_ref.name;
-        const target = findTargetModule(project, module.file_id, alias) orelse continue;
+        const ref = component.kind.sub_circuit_ref;
+        const target = targetForRef(project, module.file_id, ref) orelse continue;
+        const alias = ref.name;
 
         for (target.outputs) |target_output| {
             var used = false;

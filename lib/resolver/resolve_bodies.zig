@@ -108,6 +108,152 @@ fn checkParametricCalls(
     }
 }
 
+fn stubModule(file_id: u32) ir.Module {
+    return .{
+        .file_id = .{ .value = file_id },
+        .inputs = &.{},
+        .outputs = &.{},
+        .components = &.{},
+        .connections = &.{},
+        .imports = &.{},
+    };
+}
+
+fn countInputPins(file: ast.File) u32 {
+    var total: u32 = 0;
+    for (file.inputs) |decl| total += @intCast(decl.names.len);
+    return total;
+}
+
+fn collectParameters(allocator: std.mem.Allocator, file: ast.File) ![]const []const u8 {
+    var names: std.ArrayList([]const u8) = .{};
+    errdefer names.deinit(allocator);
+    for (file.inputs) |input_decl| {
+        for (input_decl.parameters) |param| {
+            var seen = false;
+            for (names.items) |existing| {
+                if (std.mem.eql(u8, existing, param.text)) {
+                    seen = true;
+                    break;
+                }
+            }
+            if (!seen) try names.append(allocator, param.text);
+        }
+    }
+    return names.toOwnedSlice(allocator);
+}
+
+const SpecResult = struct {
+    paths: std.ArrayList([]const u8),
+    sources: std.ArrayList([]const u8),
+};
+
+fn specializeCallSites(
+    allocator: std.mem.Allocator,
+    modules_list: *std.ArrayList(ir.Module),
+    file_paths: []const []const u8,
+    import_table: []const scan_imports.ResolvedImport,
+    asts: []const ?ast.File,
+    spec: *SpecResult,
+    diagnostic_list: *diagnostics.DiagnosticList,
+) !void {
+    const original_file_count = file_paths.len;
+    for (asts, 0..) |maybe_caller_ast, caller_file_id_usize| {
+        if (caller_file_id_usize >= original_file_count) break;
+        const caller_ast = maybe_caller_ast orelse continue;
+        const caller_file_id: u32 = @intCast(caller_file_id_usize);
+
+        const input_pin_count = countInputPins(caller_ast);
+        const caller_module = &modules_list.items[caller_file_id];
+        const caller_components = @constCast(caller_module.components);
+
+        for (caller_ast.components, 0..) |ast_inst, ast_idx| {
+            const ir_comp_idx = input_pin_count + @as(u32, @intCast(ast_idx));
+            if (ir_comp_idx >= caller_components.len) continue;
+            const ir_comp = &caller_components[ir_comp_idx];
+            if (ir_comp.kind != .sub_circuit_ref) continue;
+
+            const target_file_id_opt: ?u32 = blk: {
+                for (import_table) |entry| {
+                    if (entry.importing_file != caller_file_id) continue;
+                    if (!std.mem.eql(u8, entry.alias, ast_inst.type_name.text)) continue;
+                    break :blk entry.target_file;
+                }
+                break :blk null;
+            };
+            const target_file_id = target_file_id_opt orelse continue;
+            const target_ast = asts[target_file_id] orelse continue;
+            if (!fileIsParametric(target_ast)) continue;
+
+            const declared_params = try collectParameters(allocator, target_ast);
+            defer allocator.free(declared_params);
+            const supplied = ast_inst.width_args;
+
+            if (supplied.len != 0 and supplied.len != declared_params.len) {
+                const message = try std.fmt.allocPrint(
+                    allocator,
+                    "parameter count mismatch: sub-circuit '{s}' declares {d} parameter(s), call site supplies {d}",
+                    .{ ast_inst.type_name.text, declared_params.len, supplied.len },
+                );
+                var d = diagnostics.makeDiagnostic(.E016, diagnosticSpan(ast_inst.span));
+                d.message = message;
+                try diagnostic_list.append(allocator, d);
+                continue;
+            }
+
+            var bindings: std.ArrayList(single_resolver.WidthBinding) = .{};
+            defer bindings.deinit(allocator);
+            if (supplied.len == 0) {
+                for (declared_params) |name| {
+                    try bindings.append(allocator, .{ .name = name, .value = 1 });
+                }
+            } else {
+                var ok = true;
+                for (declared_params, supplied) |name, spec_arg| {
+                    switch (spec_arg) {
+                        .literal => |n| try bindings.append(allocator, .{ .name = name, .value = n }),
+                        .parameter => |passed_name| {
+                            const message = try std.fmt.allocPrint(
+                                allocator,
+                                "parameter pass-through is not yet supported; call site supplies parameter '{s}'",
+                                .{passed_name},
+                            );
+                            var d = diagnostics.makeDiagnostic(.E016, diagnosticSpan(ast_inst.span));
+                            d.message = message;
+                            try diagnostic_list.append(allocator, d);
+                            ok = false;
+                            break;
+                        },
+                    }
+                }
+                if (!ok) continue;
+            }
+
+            const spec_file_id: u32 = @intCast(modules_list.items.len);
+            const specialized = single_resolver.resolveWithBindings(
+                allocator,
+                target_ast,
+                spec_file_id,
+                bindings.items,
+            ) catch |err| {
+                std.debug.print("specialization failed for '{s}': {s}\n", .{ ast_inst.type_name.text, @errorName(err) });
+                continue;
+            };
+
+            try modules_list.append(allocator, specialized);
+            const synthetic_path = try std.fmt.allocPrint(
+                allocator,
+                "<specialization:{s}@{s}>",
+                .{ ast_inst.type_name.text, file_paths[target_file_id] },
+            );
+            try spec.paths.append(allocator, synthetic_path);
+            try spec.sources.append(allocator, "");
+
+            ir_comp.kind.sub_circuit_ref.specialized_target_file = .{ .value = spec_file_id };
+        }
+    }
+}
+
 pub fn resolveBodies(
     allocator: std.mem.Allocator,
     file_paths: []const []const u8,
@@ -115,25 +261,39 @@ pub fn resolveBodies(
     topo_order: []const scan_imports.FileId,
     diagnostic_list: *diagnostics.DiagnosticList,
 ) !ir.Project {
-    var modules = try allocator.alloc(ir.Module, file_paths.len);
-    errdefer allocator.free(modules);
-    var sources = try allocator.alloc([]const u8, file_paths.len);
-    errdefer allocator.free(sources);
+    var modules_list: std.ArrayList(ir.Module) = .{};
+    errdefer modules_list.deinit(allocator);
+    try modules_list.resize(allocator, file_paths.len);
+    var sources_list: std.ArrayList([]const u8) = .{};
+    errdefer sources_list.deinit(allocator);
+    try sources_list.resize(allocator, file_paths.len);
+    @memset(sources_list.items, "");
     var resolved_modules = try allocator.alloc(bool, file_paths.len);
     defer allocator.free(resolved_modules);
     var asts = try allocator.alloc(?ast.File, file_paths.len);
     defer allocator.free(asts);
-    @memset(sources, "");
     @memset(resolved_modules, false);
     @memset(asts, null);
 
     for (topo_order) |file_id| {
         const loaded = try file_loader.loadFile(allocator, file_paths[file_id]);
         allocator.free(loaded.absolute_path);
-        sources[file_id] = loaded.source;
+        sources_list.items[file_id] = loaded.source;
 
-        const ast_file = try translate.parseSource(allocator, file_id, sources[file_id]);
+        const ast_file = try translate.parseSource(allocator, file_id, sources_list.items[file_id]);
         asts[file_id] = ast_file;
+
+        if (fileIsParametric(ast_file)) {
+            // Parametric callees never materialize as a standalone IR module;
+            // every call site re-resolves the AST with concrete width bindings,
+            // producing a specialized module appended after the original-file
+            // range. The stub here keeps modules_list[file_id] structurally
+            // valid for code that iterates project.files unconditionally.
+            modules_list.items[file_id] = stubModule(file_id);
+            resolved_modules[file_id] = true;
+            continue;
+        }
+
         const module = try single_resolver.resolve(allocator, ast_file, file_id);
 
         const components = @constCast(module.components);
@@ -175,7 +335,7 @@ pub fn resolveBodies(
             });
         }
 
-        modules[file_id] = ir.Module{
+        modules_list.items[file_id] = ir.Module{
             .file_id = module.file_id,
             .inputs = module.inputs,
             .outputs = module.outputs,
@@ -192,6 +352,17 @@ pub fn resolveBodies(
 
     try checkParametricCalls(allocator, asts, import_table, diagnostic_list);
 
+    var spec_result = SpecResult{
+        .paths = .{},
+        .sources = .{},
+    };
+    errdefer {
+        spec_result.paths.deinit(allocator);
+        spec_result.sources.deinit(allocator);
+    }
+
+    try specializeCallSites(allocator, &modules_list, file_paths, import_table, asts, &spec_result, diagnostic_list);
+
     var project_imports = try allocator.alloc(ir.ResolvedImport, import_table.len);
     for (import_table, 0..) |entry, idx| {
         project_imports[idx] = .{
@@ -202,16 +373,20 @@ pub fn resolveBodies(
         };
     }
 
-    var project_paths = try allocator.alloc([]const u8, file_paths.len);
-    for (file_paths, 0..) |path, idx| {
-        project_paths[idx] = try allocator.dupe(u8, path);
-    }
+    var project_paths_list: std.ArrayList([]const u8) = .{};
+    errdefer project_paths_list.deinit(allocator);
+    for (file_paths) |path| try project_paths_list.append(allocator, try allocator.dupe(u8, path));
+    try project_paths_list.appendSlice(allocator, spec_result.paths.items);
+    spec_result.paths.deinit(allocator);
+
+    try sources_list.appendSlice(allocator, spec_result.sources.items);
+    spec_result.sources.deinit(allocator);
 
     return .{
-        .files = modules,
+        .files = try modules_list.toOwnedSlice(allocator),
         .root_file_id = .{ .value = 0 },
         .import_table = project_imports,
-        .file_paths = project_paths,
-        .source_blobs = sources,
+        .file_paths = try project_paths_list.toOwnedSlice(allocator),
+        .source_blobs = try sources_list.toOwnedSlice(allocator),
     };
 }

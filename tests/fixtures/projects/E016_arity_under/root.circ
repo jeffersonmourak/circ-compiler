@@ -1,0 +1,4 @@
+import wide_pair "wide_pair.circ"
+input[4] x
+wide_pair inst[4](a=x)
+output[4] y(in=inst.o)

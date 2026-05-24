@@ -1,0 +1,3 @@
+tests/fixtures/projects/E016_arity_over/root.circ:3:1: error: E016: parameter count mismatch: sub-circuit 'wide_not' declares 1 parameter(s), call site supplies 2
+tests/fixtures/projects/E016_arity_over/root.circ:3:21: error: E012: sub-circuit 'wide_not' has no input port 'a'
+tests/fixtures/projects/E016_arity_over/root.circ:4:1: error: E012: sub-circuit 'wide_not' has no output port 'o'

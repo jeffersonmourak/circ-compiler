@@ -254,11 +254,16 @@ fn expandModule(
             .sub_circuit_ref => |ref| {
                 var child_module: ?*const ir.Module = null;
                 var target_file_id: u32 = 0;
-                for (state.project.import_table) |imp| {
-                    if (imp.importing_file.value == module.file_id.value and std.mem.eql(u8, imp.alias, ref.name)) {
-                        child_module = &state.project.files[imp.target_file.value];
-                        target_file_id = imp.target_file.value;
-                        break;
+                if (ref.specialized_target_file) |spec| {
+                    child_module = &state.project.files[spec.value];
+                    target_file_id = spec.value;
+                } else {
+                    for (state.project.import_table) |imp| {
+                        if (imp.importing_file.value == module.file_id.value and std.mem.eql(u8, imp.alias, ref.name)) {
+                            child_module = &state.project.files[imp.target_file.value];
+                            target_file_id = imp.target_file.value;
+                            break;
+                        }
                     }
                 }
                 if (child_module == null) return error.ModuleNotFound;

@@ -2,6 +2,16 @@ const std = @import("std");
 const ast = @import("translate").Ast;
 const ir = @import("ir_types");
 
+/// Concrete binding of a parametric width name (e.g. `W` in `input<W> a`)
+/// to a literal width. The single-file resolver consults this table when
+/// it encounters a `WidthSpec.parameter` reference; without a matching
+/// entry the resolver returns `error.UnboundParameter`. Empty bindings
+/// preserve pre-S7 behavior for non-parametric calls.
+pub const WidthBinding = struct {
+    name: []const u8,
+    value: u8,
+};
+
 const PendingPorts = struct {
     component_id: ir.ComponentId,
     ports: []const ast.PortConnection,
@@ -19,6 +29,7 @@ const ResolveContext = struct {
     name_to_component: std.StringHashMap(ir.ComponentId),
     import_aliases: std.StringHashMap(void),
     next_component_id: u32,
+    width_bindings: []const WidthBinding,
 };
 
 fn toIrSpan(span: anytype) ir.Span {
@@ -31,11 +42,16 @@ fn toIrSpan(span: anytype) ir.Span {
     };
 }
 
-fn widthFromSpec(spec: ?ast.WidthSpec) !u8 {
+fn widthFromSpec(ctx: *const ResolveContext, spec: ?ast.WidthSpec) !u8 {
     const w = spec orelse return 1;
     return switch (w) {
         .literal => |n| n,
-        .parameter => error.ParametricWidthNotImplemented,
+        .parameter => |name| blk: {
+            for (ctx.width_bindings) |binding| {
+                if (std.mem.eql(u8, binding.name, name)) break :blk binding.value;
+            }
+            break :blk error.UnboundParameter;
+        },
     };
 }
 
@@ -86,7 +102,7 @@ fn addComponent(
     else
         ir.ComponentKind{ .unresolved_name = component_ast.type_name.text };
 
-    const width = try widthFromSpec(component_ast.type_name.width);
+    const width = try widthFromSpec(ctx, component_ast.type_name.width);
 
     try ctx.components.append(ctx.allocator, .{
         .id = id,
@@ -233,6 +249,15 @@ fn resolvePendingPorts(ctx: *ResolveContext) anyerror!void {
 }
 
 pub fn resolve(allocator: std.mem.Allocator, file: ast.File, file_id: u32) anyerror!ir.Module {
+    return resolveWithBindings(allocator, file, file_id, &.{});
+}
+
+pub fn resolveWithBindings(
+    allocator: std.mem.Allocator,
+    file: ast.File,
+    file_id: u32,
+    width_bindings: []const WidthBinding,
+) anyerror!ir.Module {
     var ctx = ResolveContext{
         .allocator = allocator,
         .file = file,
@@ -245,6 +270,7 @@ pub fn resolve(allocator: std.mem.Allocator, file: ast.File, file_id: u32) anyer
         .name_to_component = std.StringHashMap(ir.ComponentId).init(allocator),
         .import_aliases = std.StringHashMap(void).init(allocator),
         .next_component_id = 0,
+        .width_bindings = width_bindings,
     };
 
     for (file.imports) |import_decl| {
@@ -258,7 +284,7 @@ pub fn resolve(allocator: std.mem.Allocator, file: ast.File, file_id: u32) anyer
 
     for (file.inputs) |input_decl| {
         for (input_decl.names) |name| {
-            const width = try widthFromSpec(name.width);
+            const width = try widthFromSpec(&ctx, name.width);
             const component_id = nextComponentId(&ctx);
             try ctx.components.append(allocator, .{
                 .id = component_id,
@@ -285,7 +311,7 @@ pub fn resolve(allocator: std.mem.Allocator, file: ast.File, file_id: u32) anyer
     try resolvePendingPorts(&ctx);
 
     for (file.outputs) |output_decl| {
-        const width = try widthFromSpec(output_decl.name.width);
+        const width = try widthFromSpec(&ctx, output_decl.name.width);
         const output_component_id = nextComponentId(&ctx);
         try ctx.components.append(allocator, .{
             .id = output_component_id,

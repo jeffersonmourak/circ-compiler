@@ -1,0 +1,3 @@
+input<W>[W] a
+not[W] inv(in=a)
+output[W] o(in=inv.out)
