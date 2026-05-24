@@ -123,7 +123,7 @@ test "parameter width without introduction is a placeholder error" {
     );
     const ast_file = try translate.parseSource(allocator, 0, source);
     try std.testing.expectError(
-        error.ParametricWidthNotImplemented,
+        error.UnboundParameter,
         resolver.resolve(allocator, ast_file, 0),
     );
 }
