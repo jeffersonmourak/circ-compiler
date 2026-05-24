@@ -312,7 +312,7 @@ test "place_cell_sizing: not_gate at column 1 row 0" {
     const cols = ColumnAssignment{ .column_of = &[_]u32{ 0, 1 }, .num_columns = 2 };
     const rows = RowAssignment{ .row_of = &[_]u32{ 0, 0 }, .num_rows = 1 };
 
-    const placed = try place(a, graph, cols, rows);
+    const placed = try place(a, graph, cols, rows, .{});
     try std.testing.expectEqual(@as(usize, 2), placed.len);
 
     // not at col 1 row 0:
@@ -347,7 +347,7 @@ test "place_port_coords_and_gate: a, b, out at expected offsets" {
     const cols = ColumnAssignment{ .column_of = &[_]u32{ 0, 0, 1 }, .num_columns = 2 };
     const rows = RowAssignment{ .row_of = &[_]u32{ 0, 1, 0 }, .num_rows = 2 };
 
-    const placed = try place(a_alloc, graph, cols, rows);
+    const placed = try place(a_alloc, graph, cols, rows, .{});
 
     // and_gate: col_x[1] = 5 + 5 = 10, row_y[0] = 0 → (10, 0). width=5, height=5
     // (5×5 box: ports on rows 1, 3 with output centered on row 2).
@@ -385,7 +385,7 @@ test "place_macro_label_width: long subcircuit alias widens the box" {
     const cols = ColumnAssignment{ .column_of = &[_]u32{0}, .num_columns = 1 };
     const rows = RowAssignment{ .row_of = &[_]u32{0}, .num_rows = 1 };
 
-    const placed = try place(a, graph, cols, rows);
+    const placed = try place(a, graph, cols, rows, .{});
     try std.testing.expectEqual(@as(u32, 23), placed[0].width);
     // Subcircuit has 0 inputs in this test → height stays at the 3-row floor.
     try std.testing.expectEqual(@as(u32, 3), placed[0].height);
