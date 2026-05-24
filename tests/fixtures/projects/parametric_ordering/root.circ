@@ -1,0 +1,6 @@
+import lib "lib.circ"
+input[4] x
+input[8] y
+lib inst[4, 8](data=x, aux=y)
+output[4] dout(in=inst.data_out)
+output[8] aout(in=inst.aux_out)

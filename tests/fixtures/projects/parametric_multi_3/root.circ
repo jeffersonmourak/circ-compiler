@@ -1,0 +1,8 @@
+import triple "triple_lib.circ"
+input[4] p
+input[2] q
+input[8] r
+triple inst[4, 2, 8](a=p, b=q, c=r)
+output[4] x(in=inst.a_out)
+output[2] y(in=inst.b_out)
+output[8] z(in=inst.c_out)

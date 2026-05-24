@@ -1,0 +1,6 @@
+input<W, X>[X] aux
+input<W, X>[W] data
+not[W] data_inv(in=data)
+not[X] aux_inv(in=aux)
+output[W] data_out(in=data_inv.out)
+output[X] aux_out(in=aux_inv.out)

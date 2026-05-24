@@ -1,0 +1,6 @@
+input<W, S>[W] data
+input<W, S>[S] select
+not[W] data_inv(in=data)
+not[S] sel_inv(in=select)
+output[W] data_out(in=data_inv.out)
+output[S] sel_out(in=sel_inv.out)

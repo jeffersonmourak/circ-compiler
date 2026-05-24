@@ -142,3 +142,87 @@ test "resolve bodies propagates widths through imported sub-circuits" {
     }
     try std.testing.expect(linked_sub_ref);
 }
+
+fn lookupPinWidth(module: @import("ir_types").Module, name: []const u8, comptime kind: enum { input, output }) ?u8 {
+    return switch (kind) {
+        .input => blk: {
+            for (module.inputs) |p| {
+                if (std.mem.eql(u8, p.name, name)) break :blk p.width;
+            }
+            break :blk null;
+        },
+        .output => blk: {
+            for (module.outputs) |p| {
+                if (std.mem.eql(u8, p.name, name)) break :blk p.width;
+            }
+            break :blk null;
+        },
+    };
+}
+
+fn findSpecializedModule(project: @import("ir_types").Project, original_path_suffix: []const u8) ?@import("ir_types").Module {
+    // Synthetic spec paths are formatted "<specialization:alias@<original-path>>"
+    for (project.files, project.file_paths) |module, path| {
+        if (!std.mem.startsWith(u8, path, "<specialization:")) continue;
+        if (std.mem.indexOf(u8, path, original_path_suffix) == null) continue;
+        return module;
+    }
+    return null;
+}
+
+test "multi-parameter specialization binds widths positionally" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const project = try resolveProject(allocator, fixtureRoot("parametric_multi"));
+    const spec = findSpecializedModule(project, "mux_lib.circ") orelse return error.SpecializationMissing;
+
+    try std.testing.expectEqual(@as(u8, 4), lookupPinWidth(spec, "data", .input).?);
+    try std.testing.expectEqual(@as(u8, 2), lookupPinWidth(spec, "select", .input).?);
+    try std.testing.expectEqual(@as(u8, 4), lookupPinWidth(spec, "data_out", .output).?);
+    try std.testing.expectEqual(@as(u8, 2), lookupPinWidth(spec, "sel_out", .output).?);
+}
+
+test "three-parameter specialization extends to arity 3" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const project = try resolveProject(allocator, fixtureRoot("parametric_multi_3"));
+    const spec = findSpecializedModule(project, "triple_lib.circ") orelse return error.SpecializationMissing;
+
+    try std.testing.expectEqual(@as(u8, 4), lookupPinWidth(spec, "a", .input).?);
+    try std.testing.expectEqual(@as(u8, 2), lookupPinWidth(spec, "b", .input).?);
+    try std.testing.expectEqual(@as(u8, 8), lookupPinWidth(spec, "c", .input).?);
+}
+
+test "default-to-1 applies to all parameters when no call-site widths" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const project = try resolveProject(allocator, fixtureRoot("parametric_multi_default"));
+    const spec = findSpecializedModule(project, "mux_lib.circ") orelse return error.SpecializationMissing;
+
+    try std.testing.expectEqual(@as(u8, 1), lookupPinWidth(spec, "data", .input).?);
+    try std.testing.expectEqual(@as(u8, 1), lookupPinWidth(spec, "select", .input).?);
+    try std.testing.expectEqual(@as(u8, 1), lookupPinWidth(spec, "data_out", .output).?);
+    try std.testing.expectEqual(@as(u8, 1), lookupPinWidth(spec, "sel_out", .output).?);
+}
+
+test "parameter binding order follows source declaration, not reference" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    // lib.circ declares <W, X> but uses X first then W in input declarations.
+    // root.circ calls with [4, 8]. Per decision #9, W=4 (first declared) and X=8.
+    const project = try resolveProject(allocator, fixtureRoot("parametric_ordering"));
+    const spec = findSpecializedModule(project, "lib.circ") orelse return error.SpecializationMissing;
+
+    try std.testing.expectEqual(@as(u8, 4), lookupPinWidth(spec, "data", .input).?);
+    try std.testing.expectEqual(@as(u8, 8), lookupPinWidth(spec, "aux", .input).?);
+    try std.testing.expectEqual(@as(u8, 4), lookupPinWidth(spec, "data_out", .output).?);
+    try std.testing.expectEqual(@as(u8, 8), lookupPinWidth(spec, "aux_out", .output).?);
+}

@@ -1,0 +1,6 @@
+import mux "mux_lib.circ"
+input x
+input sel
+mux inst(data=x, select=sel)
+output y(in=inst.data_out)
+output s(in=inst.sel_out)
