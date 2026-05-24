@@ -120,6 +120,16 @@ pub const Module = struct {
     components: []const Component,
     connections: []const Connection,
     imports: []const UnresolvedImport,
+    /// File id of the AST this module was resolved from. For original
+    /// files, equals `file_id`. For specializations, points at the
+    /// parametric callee's original file id so import_table lookups and
+    /// origin-frame tracking can resolve against the user-written source
+    /// instead of the synthetic specialization path.
+    source_file_id: ?FileId = null,
+
+    pub fn effectiveSourceFileId(self: Module) FileId {
+        return self.source_file_id orelse self.file_id;
+    }
 };
 
 pub const Project = struct {

@@ -254,17 +254,28 @@ fn expandModule(
             .sub_circuit_ref => |ref| {
                 var child_module: ?*const ir.Module = null;
                 var target_file_id: u32 = 0;
+                // The import_table lookup resolves the alias to the source
+                // file the user wrote the import for (e.g. or.circ for `or`).
+                // That is the file id we want in the OriginFrame so tooling
+                // sees real source paths in stack traces. The specialized
+                // child_module, when present, is the post-substitution body
+                // the topology walks; it lives at a synthetic file id that
+                // wouldn't make sense for diagnostics.
+                //
+                // The lookup uses `effectiveSourceFileId` so that nested call
+                // sites inside a specialization match against the original
+                // callee's imports rather than the spec's synthetic file id
+                // (the import_table only has entries for original file ids).
+                const lookup_file_id = module.effectiveSourceFileId();
+                for (state.project.import_table) |imp| {
+                    if (imp.importing_file.value == lookup_file_id.value and std.mem.eql(u8, imp.alias, ref.name)) {
+                        target_file_id = imp.target_file.value;
+                        child_module = &state.project.files[imp.target_file.value];
+                        break;
+                    }
+                }
                 if (ref.specialized_target_file) |spec| {
                     child_module = &state.project.files[spec.value];
-                    target_file_id = spec.value;
-                } else {
-                    for (state.project.import_table) |imp| {
-                        if (imp.importing_file.value == module.file_id.value and std.mem.eql(u8, imp.alias, ref.name)) {
-                            child_module = &state.project.files[imp.target_file.value];
-                            target_file_id = imp.target_file.value;
-                            break;
-                        }
-                    }
                 }
                 if (child_module == null) return error.ModuleNotFound;
 

@@ -56,6 +56,11 @@ fn lookupTargetFile(project: *const ir.Project, importing_file: u32, alias: []co
     return null;
 }
 
+fn resolveSubCircuitTarget(project: *const ir.Project, module: *const ir.Module, sub_ref: ir.UnresolvedRef) ?u32 {
+    if (sub_ref.specialized_target_file) |spec| return spec.value;
+    return lookupTargetFile(project, module.effectiveSourceFileId().value, sub_ref.name);
+}
+
 fn dupeSegments(allocator: std.mem.Allocator, prefix: PathSegments, leaf: []const u8) ![][]const u8 {
     const out = try allocator.alloc([]const u8, prefix.len + 1);
     var idx: usize = 0;
@@ -111,7 +116,7 @@ fn walkFile(
                 }
             },
             .sub_circuit_ref => |sub_ref| {
-                const target_file_id = lookupTargetFile(ctx.project, file_id, sub_ref.name) orelse return error.UnresolvedSubCircuitTarget;
+                const target_file_id = resolveSubCircuitTarget(ctx.project, module, sub_ref) orelse return error.UnresolvedSubCircuitTarget;
 
                 const instance_leaf = if (component.instance_name) |name|
                     try ctx.allocator.dupe(u8, name)
@@ -436,7 +441,7 @@ threadlocal var current_project: ?*const ir.Project = null;
 
 fn lookupSubCircuitTargetForModule(module: *const ir.Module, sub_ref: ir.UnresolvedRef) ?u32 {
     const project = current_project orelse return null;
-    return lookupTargetFile(project, module.file_id.value, sub_ref.name);
+    return resolveSubCircuitTarget(project, module, sub_ref);
 }
 
 fn emitDebugPathsBlock(
@@ -770,6 +775,13 @@ pub fn emitProjectSource(
     defer current_project = previous_project;
 
     for (project.files) |*module| {
+        // Skip parametric-callee stubs: their slot in project.files holds an
+        // empty module that is never referenced (callers redirect through
+        // specialized_target_file). Emitting an empty buildFile_N with an
+        // unused `circuit` parameter would fail Zig's unused-parameter check.
+        if (module.components.len == 0 and module.inputs.len == 0 and module.outputs.len == 0) {
+            continue;
+        }
         try emitFileBuildFunction(allocator, &writer, module);
         try writer.writeLine("");
     }

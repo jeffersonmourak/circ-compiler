@@ -297,3 +297,72 @@ test "cache: multi-param distinct binding tuples are not shared" {
     const project = try resolveProject(allocator, fixtureRoot("multi_param_distinct"));
     try std.testing.expectEqual(@as(usize, 2), countSpecializations(project));
 }
+
+fn macroSpecForWidth(project: @import("ir_types").Project, macro_name: []const u8, expected_width: u8) ?@import("ir_types").Module {
+    for (project.files, project.file_paths) |module, path| {
+        if (!std.mem.startsWith(u8, path, "<specialization:")) continue;
+        if (std.mem.indexOf(u8, path, macro_name) == null) continue;
+        const a_width = lookupPinWidth(module, "a", .input) orelse continue;
+        if (a_width == expected_width) return module;
+    }
+    return null;
+}
+
+test "macro or specializes to width 4" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const project = try resolveProject(allocator, "tests/fixtures/circuits/or_4bit_macro.circ");
+    const spec = macroSpecForWidth(project, "or.circ", 4) orelse return error.MissingOrSpec;
+    try std.testing.expectEqual(@as(u8, 4), lookupPinWidth(spec, "a", .input).?);
+    try std.testing.expectEqual(@as(u8, 4), lookupPinWidth(spec, "b", .input).?);
+    try std.testing.expectEqual(@as(u8, 4), lookupPinWidth(spec, "out", .output).?);
+}
+
+test "macro xor specializes to width 8" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const project = try resolveProject(allocator, "tests/fixtures/circuits/xor_8bit_macro.circ");
+    const spec = macroSpecForWidth(project, "xor.circ", 8) orelse return error.MissingXorSpec;
+    try std.testing.expectEqual(@as(u8, 8), lookupPinWidth(spec, "out", .output).?);
+}
+
+test "macro nand specializes to width 4" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const project = try resolveProject(allocator, "tests/fixtures/circuits/nand_4bit_macro.circ");
+    const spec = macroSpecForWidth(project, "nand.circ", 4) orelse return error.MissingNandSpec;
+    try std.testing.expectEqual(@as(u8, 4), lookupPinWidth(spec, "out", .output).?);
+}
+
+test "macro nor at width 8 propagates W through internal or call" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const project = try resolveProject(allocator, "tests/fixtures/circuits/nor_8bit_macro.circ");
+    // The outer nor specializes at W=8.
+    const nor_spec = macroSpecForWidth(project, "nor.circ", 8) orelse return error.MissingNorSpec;
+    try std.testing.expectEqual(@as(u8, 8), lookupPinWidth(nor_spec, "out", .output).?);
+    // The internal `or inner[W]` propagates W=8 through to a nested or specialization.
+    // Without parameter pass-through support, this would either fail or default to W=1.
+    const or_spec = macroSpecForWidth(project, "or.circ", 8) orelse return error.MissingNestedOrSpec;
+    try std.testing.expectEqual(@as(u8, 8), lookupPinWidth(or_spec, "out", .output).?);
+}
+
+test "macro xnor at width 4 propagates W through internal xor call" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const project = try resolveProject(allocator, "tests/fixtures/circuits/xnor_4bit_macro.circ");
+    const xnor_spec = macroSpecForWidth(project, "xnor.circ", 4) orelse return error.MissingXnorSpec;
+    try std.testing.expectEqual(@as(u8, 4), lookupPinWidth(xnor_spec, "out", .output).?);
+    const xor_spec = macroSpecForWidth(project, "xor.circ", 4) orelse return error.MissingNestedXorSpec;
+    try std.testing.expectEqual(@as(u8, 4), lookupPinWidth(xor_spec, "out", .output).?);
+}

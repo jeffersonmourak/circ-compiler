@@ -164,6 +164,32 @@ fn buildSpecializationKey(
     return buf.toOwnedSlice(allocator);
 }
 
+// One unit of specialization work. Original-file callers enter with empty
+// bindings; each specialization enters with the bindings that produced it
+// and the original-AST file_id it was specialized from (for import lookups
+// and to find the same AST the resolver was driven by).
+const SpecWorkItem = struct {
+    module_file_id: u32,
+    ast_source_file_id: u32,
+    ast_file: ast.File,
+    bindings: []single_resolver.WidthBinding,
+};
+
+fn resolveWidthArg(
+    spec_arg: ast.WidthSpec,
+    caller_bindings: []const single_resolver.WidthBinding,
+) ?u8 {
+    return switch (spec_arg) {
+        .literal => |n| n,
+        .parameter => |name| blk: {
+            for (caller_bindings) |b| {
+                if (std.mem.eql(u8, b.name, name)) break :blk b.value;
+            }
+            break :blk null;
+        },
+    };
+}
+
 fn specializeCallSites(
     allocator: std.mem.Allocator,
     modules_list: *std.ArrayList(ir.Module),
@@ -185,24 +211,49 @@ fn specializeCallSites(
     }
 
     const original_file_count = file_paths.len;
-    for (asts, 0..) |maybe_caller_ast, caller_file_id_usize| {
-        if (caller_file_id_usize >= original_file_count) break;
-        const caller_ast = maybe_caller_ast orelse continue;
-        const caller_file_id: u32 = @intCast(caller_file_id_usize);
+    var worklist: std.ArrayList(SpecWorkItem) = .{};
+    defer {
+        for (worklist.items) |item| {
+            if (item.bindings.len > 0) allocator.free(item.bindings);
+        }
+        worklist.deinit(allocator);
+    }
 
-        const input_pin_count = countInputPins(caller_ast);
-        const caller_module = &modules_list.items[caller_file_id];
+    // Seed the worklist with non-parametric original callers; parametric
+    // callees are never directly resolved (the stub module fills their slot
+    // and downstream lookups follow specialized_target_file instead).
+    for (asts, 0..) |maybe_caller_ast, file_id_usize| {
+        if (file_id_usize >= original_file_count) break;
+        const caller_ast = maybe_caller_ast orelse continue;
+        if (fileIsParametric(caller_ast)) continue;
+        try worklist.append(allocator, .{
+            .module_file_id = @intCast(file_id_usize),
+            .ast_source_file_id = @intCast(file_id_usize),
+            .ast_file = caller_ast,
+            .bindings = &.{},
+        });
+    }
+
+    while (worklist.items.len > 0) {
+        const item = worklist.orderedRemove(0);
+        defer if (item.bindings.len > 0) allocator.free(item.bindings);
+
+        const input_pin_count = countInputPins(item.ast_file);
+        const caller_module = &modules_list.items[item.module_file_id];
         const caller_components = @constCast(caller_module.components);
 
-        for (caller_ast.components, 0..) |ast_inst, ast_idx| {
+        for (item.ast_file.components, 0..) |ast_inst, ast_idx| {
             const ir_comp_idx = input_pin_count + @as(u32, @intCast(ast_idx));
             if (ir_comp_idx >= caller_components.len) continue;
             const ir_comp = &caller_components[ir_comp_idx];
             if (ir_comp.kind != .sub_circuit_ref) continue;
 
+            // Import lookup uses the ORIGINAL file_id the AST came from, not
+            // the spec's synthetic module_file_id (which the import_table
+            // doesn't know about).
             const target_file_id_opt: ?u32 = blk: {
                 for (import_table) |entry| {
-                    if (entry.importing_file != caller_file_id) continue;
+                    if (entry.importing_file != item.ast_source_file_id) continue;
                     if (!std.mem.eql(u8, entry.alias, ast_inst.type_name.text)) continue;
                     break :blk entry.target_file;
                 }
@@ -237,21 +288,23 @@ fn specializeCallSites(
             } else {
                 var ok = true;
                 for (declared_params, supplied) |name, spec_arg| {
-                    switch (spec_arg) {
-                        .literal => |n| try bindings.append(allocator, .{ .name = name, .value = n }),
-                        .parameter => |passed_name| {
-                            const message = try std.fmt.allocPrint(
-                                allocator,
-                                "parameter pass-through is not yet supported; call site supplies parameter '{s}'",
-                                .{passed_name},
-                            );
-                            var d = diagnostics.makeDiagnostic(.E016, diagnosticSpan(ast_inst.span));
-                            d.message = message;
-                            try diagnostic_list.append(allocator, d);
-                            ok = false;
-                            break;
-                        },
-                    }
+                    const value = resolveWidthArg(spec_arg, item.bindings) orelse {
+                        const passed_name = switch (spec_arg) {
+                            .parameter => |n| n,
+                            else => "?",
+                        };
+                        const message = try std.fmt.allocPrint(
+                            allocator,
+                            "unbound parameter '{s}' at call site of '{s}'",
+                            .{ passed_name, ast_inst.type_name.text },
+                        );
+                        var d = diagnostics.makeDiagnostic(.E016, diagnosticSpan(ast_inst.span));
+                        d.message = message;
+                        try diagnostic_list.append(allocator, d);
+                        ok = false;
+                        break;
+                    };
+                    try bindings.append(allocator, .{ .name = name, .value = value });
                 }
                 if (!ok) continue;
             }
@@ -264,7 +317,7 @@ fn specializeCallSites(
             }
 
             const spec_file_id: u32 = @intCast(modules_list.items.len);
-            const specialized = single_resolver.resolveWithBindings(
+            var specialized = single_resolver.resolveWithBindings(
                 allocator,
                 target_ast,
                 spec_file_id,
@@ -274,6 +327,32 @@ fn specializeCallSites(
                 std.debug.print("specialization failed for '{s}': {s}\n", .{ ast_inst.type_name.text, @errorName(err) });
                 continue;
             };
+            // Record the original AST source so downstream lookups
+            // (topology origin frames, project-level import resolution)
+            // can resolve against the user-written file path rather than
+            // the spec's synthetic file id.
+            specialized.source_file_id = .{ .value = target_file_id };
+
+            // Apply the same alias rewrite the topo loop performs on original
+            // file resolutions: any component whose kind is .unresolved_name
+            // and whose name matches an import alias for the spec's source
+            // file becomes a sub_circuit_ref. Without this, nested call sites
+            // inside a spec (e.g. `or inner[W]` in nor.circ) would stay
+            // unresolved and trip E001.
+            const spec_components = @constCast(specialized.components);
+            for (spec_components) |*c| {
+                for (import_table) |entry| {
+                    if (entry.importing_file != target_file_id) continue;
+                    if (!componentMatchesAlias(c.*, entry.alias)) continue;
+                    c.kind = .{
+                        .sub_circuit_ref = .{
+                            .name = entry.alias,
+                            .span = c.span,
+                        },
+                    };
+                    break;
+                }
+            }
 
             try modules_list.append(allocator, specialized);
             const synthetic_path = try std.fmt.allocPrint(
@@ -287,6 +366,17 @@ fn specializeCallSites(
             try spec_cache.put(cache_key, spec_file_id);
 
             ir_comp.kind.sub_circuit_ref.specialized_target_file = .{ .value = spec_file_id };
+
+            // Enqueue the new spec for recursive specialization of any call
+            // sites in its body. Duplicate the bindings into the worklist
+            // entry so the original `bindings` ArrayList can be reused/freed.
+            const owned_bindings = try allocator.dupe(single_resolver.WidthBinding, bindings.items);
+            try worklist.append(allocator, .{
+                .module_file_id = spec_file_id,
+                .ast_source_file_id = target_file_id,
+                .ast_file = target_ast,
+                .bindings = owned_bindings,
+            });
         }
     }
 }
