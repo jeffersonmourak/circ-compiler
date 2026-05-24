@@ -14,11 +14,13 @@ fn resolveProject(allocator: std.mem.Allocator, root_path: []const u8) !@import(
     defer scan.deinit(allocator);
     var cycle = try import_cycle.analyzeImports(allocator, scan.file_paths, scan.import_table);
     defer cycle.deinit(allocator);
+    var resolver_diagnostics = diagnostics.initDiagnosticList();
     return try resolve_bodies.resolveBodies(
         allocator,
         scan.file_paths,
         scan.import_table,
         cycle.topo_order,
+        &resolver_diagnostics,
     );
 }
 

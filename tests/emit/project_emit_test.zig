@@ -72,12 +72,15 @@ test "project emitter fixture files" {
         const cycle_result = try import_cycle.analyzeImports(allocator, scan_result.file_paths, scan_result.import_table);
         if (hasHardErrors(cycle_result.diagnostics.items)) return error.InvalidFixtureCycle;
 
+        var resolver_diagnostics = diagnostics.initDiagnosticList();
         const project = try resolve_bodies.resolveBodies(
             allocator,
             scan_result.file_paths,
             scan_result.import_table,
             cycle_result.topo_order,
+            &resolver_diagnostics,
         );
+        if (hasHardErrors(resolver_diagnostics.items)) return error.InvalidFixtureResolve;
 
         var diags = try validator_run_project.run(allocator, &project);
         defer diags.deinit(allocator);

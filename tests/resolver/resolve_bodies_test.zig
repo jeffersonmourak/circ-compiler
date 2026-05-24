@@ -2,6 +2,7 @@ const std = @import("std");
 const scan_imports = @import("scan_imports");
 const import_cycle = @import("import_cycle");
 const resolve_bodies = @import("resolve_bodies");
+const diagnostics = @import("diagnostics");
 
 fn fixtureRoot(comptime project_name: []const u8) []const u8 {
     return "tests/fixtures/projects/" ++ project_name ++ "/root.circ";
@@ -17,11 +18,13 @@ fn resolveProject(allocator: std.mem.Allocator, root_path: []const u8) !@import(
     try std.testing.expectEqual(@as(usize, 0), scan.diagnostics.items.len);
     try std.testing.expectEqual(@as(usize, 0), cycle.diagnostics.items.len);
 
+    var resolver_diagnostics = diagnostics.initDiagnosticList();
     return try resolve_bodies.resolveBodies(
         allocator,
         scan.file_paths,
         scan.import_table,
         cycle.topo_order,
+        &resolver_diagnostics,
     );
 }
 
