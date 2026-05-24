@@ -1,0 +1,9 @@
+input<W, X, Y>[W] a
+input<W, X, Y>[X] b
+input<W, X, Y>[Y] c
+not[W] a_inv(in=a)
+not[X] b_inv(in=b)
+not[Y] c_inv(in=c)
+output[W] a_out(in=a_inv.out)
+output[X] b_out(in=b_inv.out)
+output[Y] c_out(in=c_inv.out)
