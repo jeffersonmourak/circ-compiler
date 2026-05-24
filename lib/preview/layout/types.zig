@@ -23,6 +23,10 @@ pub const VirtualNode = struct {
     origin: []const full_format.OriginFrame,
     inputs: []const InputEdge,
     outputs: []const OutputEdge,
+    /// The signal width of this component, copied from the topology's
+    /// per-component width byte. Default 1 so test fixtures that build
+    /// `VirtualNode` literals without setting this stay scalar.
+    signal_width: u8 = 1,
 };
 
 pub const VirtualGraph = struct {
@@ -42,7 +46,7 @@ pub const RowAssignment = struct {
 
 test "types: pipeline structs compile" {
     comptime {
-        std.debug.assert(@typeInfo(VirtualNode).@"struct".fields.len == 6);
+        std.debug.assert(@typeInfo(VirtualNode).@"struct".fields.len == 7);
         std.debug.assert(@typeInfo(VirtualGraph).@"struct".fields.len == 2);
         std.debug.assert(@typeInfo(ColumnAssignment).@"struct".fields.len == 2);
         std.debug.assert(@typeInfo(RowAssignment).@"struct".fields.len == 2);

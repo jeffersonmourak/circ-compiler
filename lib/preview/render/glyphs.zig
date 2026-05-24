@@ -71,15 +71,25 @@ fn colorTagFor(kind: layout.NodeKind) ColorTag {
     };
 }
 
+/// Display label for a pin: placement composes `name[N]` for multi-bit
+/// signals into arena memory; tests that build PlacedComponent literals
+/// without setting display_label fall back to the raw name.
+fn pinDisplayLabel(placed: PlacedComponent) []const u8 {
+    if (placed.display_label.len > 0) return placed.display_label;
+    return placed.name;
+}
+
 /// Input pin: labeled rectangle showing the variable name. Output port lives
-/// at the middle-right border cell (y+1 of a 3-tall box).
+/// at the middle-right border cell (y+1 of a 3-tall box). The displayed label
+/// is composed at placement time (arena-owned) so its memory outlives this
+/// draw call — the canvas stores slice pointers, not copies.
 pub fn drawInputPin(canvas: *Canvas, placed: PlacedComponent) void {
-    drawLabeledBox(canvas, placed.x, placed.y, placed.width, placed.height, placed.name, .input_pin);
+    drawLabeledBox(canvas, placed.x, placed.y, placed.width, placed.height, pinDisplayLabel(placed), .input_pin);
 }
 
 /// Output pin: labeled rectangle. Input port at middle-left border cell.
 pub fn drawOutputPin(canvas: *Canvas, placed: PlacedComponent) void {
-    drawLabeledBox(canvas, placed.x, placed.y, placed.width, placed.height, placed.name, .input_pin);
+    drawLabeledBox(canvas, placed.x, placed.y, placed.width, placed.height, pinDisplayLabel(placed), .input_pin);
 }
 
 /// NOT gate: 5×3 labeled `NOT` box. Single input on left middle row, output on right.

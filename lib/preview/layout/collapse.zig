@@ -201,6 +201,7 @@ pub fn collapse(arena: std.mem.Allocator, topology: FullTopology, opts: layout.L
             .origin = comp.origin,
             .inputs = inputs_list.items,
             .outputs = outputs_list.items,
+            .signal_width = comp.width,
         });
     }
 

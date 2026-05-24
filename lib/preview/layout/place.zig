@@ -90,6 +90,11 @@ pub fn place(
 
         const ports = try resolvePortCoords(arena, node, x, y, w, h);
 
+        const display_label = if (node.signal_width > 1)
+            try std.fmt.allocPrint(arena, "{s}[{d}]", .{ node.name, node.signal_width })
+        else
+            node.name;
+
         placed[i] = .{
             .id = node.id,
             .kind = node.kind,
@@ -101,6 +106,8 @@ pub fn place(
             .height = h,
             .in_ports = ports.in_ports,
             .out_port = ports.out_port,
+            .signal_width = node.signal_width,
+            .display_label = display_label,
         };
     }
 
@@ -110,7 +117,7 @@ pub fn place(
 fn sizeOf(node: VirtualNode) sizing.PrimitiveSize {
     return switch (node.kind) {
         .primitive => |p| switch (p) {
-            .input_pin, .output_pin => sizing.pinSize(node.name.len),
+            .input_pin, .output_pin => sizing.pinSize(node.name.len, node.signal_width),
             // Slice and concat are collapsed in stage 1; the layer
             // should never ask for their size. Return the sentinel
             // zero so a stray call doesn't crash.
