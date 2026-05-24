@@ -194,13 +194,22 @@ export fn setPin(component_id: i32, value: i64, defined: i64) void {
     runtime_circuit.propagateEvent(comp, state) catch return;
 }
 
-export fn getOutputState(component_id: i32) i32 {
-    if (!runtime_initialized) return 2;
-    if (component_id < 0) return 2;
+export fn getOutputValue(component_id: i32) i64 {
+    if (!runtime_initialized) return 0;
+    if (component_id < 0) return 0;
     const id: u32 = @intCast(component_id);
-    if (id >= component_table.len) return 2;
-    if (!containsId(output_component_ids, id)) return 2;
-    return runtime_circuit.readState(component_table[id].state_handle).toInt();
+    if (id >= component_table.len) return 0;
+    if (!containsId(output_component_ids, id)) return 0;
+    return @bitCast(runtime_circuit.readState(component_table[id].state_handle).value);
+}
+
+export fn getOutputDefined(component_id: i32) i64 {
+    if (!runtime_initialized) return 0;
+    if (component_id < 0) return 0;
+    const id: u32 = @intCast(component_id);
+    if (id >= component_table.len) return 0;
+    if (!containsId(output_component_ids, id)) return 0;
+    return @bitCast(runtime_circuit.readState(component_table[id].state_handle).defined);
 }
 
 export fn getStateSnapshot() callconv(.c) PtrLen {

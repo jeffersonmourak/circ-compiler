@@ -39,13 +39,19 @@ new Uint8Array(w.memory.buffer).set(topoBytes, ptr);
 
 w.init();
 
+// Per-pin reads return the BitVecState as a (value, defined) BigInt pair.
+// A defined === 0n bit means "undefined"; otherwise a value === 0n is low
+// and any non-zero value is high (within the component's declared width).
+const readScalar = (id) =>
+  w.getOutputDefined(id) === 0n ? 2 : w.getOutputValue(id) === 0n ? 0 : 1;
+
 w.setPin(0, 0n, 1n);
 w.run();
-const hi0 = w.getOutputState(1);
+const hi0 = readScalar(1);
 
 w.setPin(0, 1n, 1n);
 w.run();
-const hi1 = w.getOutputState(1);
+const hi1 = readScalar(1);
 
 console.log("a=0 -> NOT a =", hi0);
 console.log("a=1 -> NOT a =", hi1);

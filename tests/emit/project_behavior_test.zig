@@ -111,7 +111,10 @@ fn buildScript(
         var first = true;
         for (step.outputs) |output| {
             const id = rootOutputGlobalId(root_module, layout, output.name) orelse return error.UnknownOutputName;
-            try sw.print("outParts{d}.push(\"{s}=\" + wasm.getOutputState({d}));\n", .{ idx, output.name, id });
+            try sw.print(
+                "outParts{d}.push(\"{s}=\" + ((wasm.getOutputDefined({d}) === 0n) ? 2 : (wasm.getOutputValue({d}) === 0n ? 0 : 1)));\n",
+                .{ idx, output.name, id, id },
+            );
             if (!first) try ew.writeAll(" ");
             first = false;
             try ew.print("{s}={d}", .{ output.name, output.value });
