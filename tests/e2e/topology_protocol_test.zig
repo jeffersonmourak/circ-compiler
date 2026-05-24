@@ -118,12 +118,12 @@ test "topology host protocol: inverter round-trip via Node" {
         \\        new Uint8Array(instance.exports.memory.buffer).set(topoBytes, ptr);
         \\        instance.exports.init();
         \\        const initialOut = instance.exports.getOutputState(1);
-        \\        instance.exports.setPin(0, 0);
+        \\        instance.exports.setPin(0, 0n, 1n);
         \\        const afterSetLow = instance.exports.getOutputState(1);
         \\        instance.exports.run();
         \\        const out0 = instance.exports.getOutputState(1);
         \\        if (out0 !== 1) throw new Error("Expected 1 (low->high via NOT), got " + out0 + " | initial=" + initialOut + " | after_setPin(0,0)=" + afterSetLow);
-        \\        instance.exports.setPin(0, 1);
+        \\        instance.exports.setPin(0, 1n, 1n);
         \\        instance.exports.run();
         \\        const out1 = instance.exports.getOutputState(1);
         \\        if (out1 !== 0) throw new Error("Expected 0 (high->low via NOT), got " + out1);

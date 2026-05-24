@@ -102,7 +102,9 @@ fn buildScript(
     for (steps, 0..) |step, idx| {
         for (step.inputs) |input| {
             const id = rootInputGlobalId(root_module, layout, input.name) orelse return error.UnknownInputName;
-            try sw.print("wasm.setPin({d}, {d});\n", .{ id, input.value });
+            const value: u64 = if (input.value == 1) 1 else 0;
+            const defined: u64 = if (input.value == 2) 0 else 1;
+            try sw.print("wasm.setPin({d}, {d}n, {d}n);\n", .{ id, value, defined });
         }
         try sw.writeAll("wasm.run();\n");
         try sw.print("const outParts{d} = [];\n", .{idx});

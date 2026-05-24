@@ -55,10 +55,10 @@ test "cli: circ-compile inverter end-to-end" {
         \\    const ptr = inst.exports.topology_alloc(topo.length);
         \\    new Uint8Array(inst.exports.memory.buffer).set(topo, ptr);
         \\    inst.exports.init();
-        \\    inst.exports.setPin(0, 0); inst.exports.run();
+        \\    inst.exports.setPin(0, 0n, 1n); inst.exports.run();
         \\    const out0 = inst.exports.getOutputState(1);
         \\    if (out0 !== 1) throw new Error('a=0: expected 1, got ' + out0);
-        \\    inst.exports.setPin(0, 1); inst.exports.run();
+        \\    inst.exports.setPin(0, 1n, 1n); inst.exports.run();
         \\    const out1 = inst.exports.getOutputState(1);
         \\    if (out1 !== 0) throw new Error('a=1: expected 0, got ' + out1);
         \\    console.log('PASS');

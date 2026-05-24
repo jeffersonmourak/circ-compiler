@@ -288,6 +288,15 @@ pub const BitVecState = struct {
         return 2;
     }
 
+    /// Build a BitVecState from raw `(value, defined)` pair as supplied
+    /// by the WASM host. Both inputs are masked to the active width so
+    /// hosts cannot smuggle bits past `width` (per S9.1 decision: mask
+    /// silently rather than trap).
+    pub fn fromRaw(value: u64, defined: u64, width: u8) BitVecState {
+        const m = widthMask(width);
+        return .{ .value = value & m, .defined = defined & m, .width = width };
+    }
+
     /// Width=1 mirror of `State.fromInt`: 0→low, 1→high, else→undefined.
     /// Used by the truth-table driver, which today calls `State.fromInt`
     /// per input vector bit.
@@ -1231,6 +1240,45 @@ test "BitVecState: fromInt / toInt round-trip mirrors State" {
     try std.testing.expectEqual(@as(i32, 0), BitVecState.low(1).toInt());
     try std.testing.expectEqual(@as(i32, 1), BitVecState.high(1).toInt());
     try std.testing.expectEqual(@as(i32, 2), BitVecState.undefined_(1).toInt());
+}
+
+test "BitVecState: fromRaw width-1 mirrors low/high/undefined" {
+    try std.testing.expect(BitVecState.fromRaw(0, 1, 1).equals(BitVecState.low(1)));
+    try std.testing.expect(BitVecState.fromRaw(1, 1, 1).equals(BitVecState.high(1)));
+    try std.testing.expect(BitVecState.fromRaw(0, 0, 1).equals(BitVecState.undefined_(1)));
+}
+
+test "BitVecState: fromRaw preserves arbitrary patterns within width" {
+    const s4 = BitVecState.fromRaw(0b1010, 0b1111, 4);
+    try std.testing.expectEqual(@as(u64, 0b1010), s4.value);
+    try std.testing.expectEqual(@as(u64, 0b1111), s4.defined);
+    try std.testing.expectEqual(@as(u8, 4), s4.width);
+
+    const s8 = BitVecState.fromRaw(0b10101010, 0b11111111, 8);
+    try std.testing.expectEqual(@as(u64, 0b10101010), s8.value);
+    try std.testing.expectEqual(@as(u64, 0b11111111), s8.defined);
+
+    // Partial-defined: bit positions with defined=0 are tracked as undefined.
+    const partial = BitVecState.fromRaw(0b0101, 0b1110, 4);
+    try std.testing.expectEqual(@as(u64, 0b0101), partial.value);
+    try std.testing.expectEqual(@as(u64, 0b1110), partial.defined);
+}
+
+test "BitVecState: fromRaw silently masks bits beyond width" {
+    // S9.1 decision: bits set in value or defined beyond `width` are masked,
+    // not trapped. Hosts are trusted; out-of-range bits are ignored.
+    const masked = BitVecState.fromRaw(0b11111, 0b11111, 4);
+    try std.testing.expectEqual(@as(u64, 0b1111), masked.value);
+    try std.testing.expectEqual(@as(u64, 0b1111), masked.defined);
+
+    const masked8 = BitVecState.fromRaw(0xFFFFFFFF, 0xFFFFFFFF, 8);
+    try std.testing.expectEqual(@as(u64, 0xFF), masked8.value);
+    try std.testing.expectEqual(@as(u64, 0xFF), masked8.defined);
+
+    // Width=64 keeps everything.
+    const full = BitVecState.fromRaw(0xDEADBEEF_CAFE_BABE, 0xFFFFFFFF_FFFFFFFF, 64);
+    try std.testing.expectEqual(@as(u64, 0xDEADBEEF_CAFE_BABE), full.value);
+    try std.testing.expectEqual(@as(u64, 0xFFFFFFFF_FFFFFFFF), full.defined);
 }
 
 test "Pool: width=1 round-trip" {
