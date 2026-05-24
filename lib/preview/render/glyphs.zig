@@ -104,9 +104,15 @@ pub fn drawAndGate(canvas: *Canvas, placed: PlacedComponent) void {
     drawLabeledBox(canvas, placed.x, placed.y, placed.width, placed.height, "AND", .and_gate);
 }
 
-/// LED: 5×3 labeled `LED` box. Single input on left middle row.
+/// LED: labeled box. Width-1 keeps the legacy 5×3 box with the "LED" tag.
+/// Width >1 carries a placement-composed display label — `0x???...?` for
+/// the numeric default (one `?` per nibble, all undefined in static preview)
+/// or, with --expand-display in widths 2..7, a row of `·` indicators.
+/// The label string is arena-owned; tests that build PlacedComponent
+/// literals without setting display_label fall back to the "LED" tag.
 pub fn drawLed(canvas: *Canvas, placed: PlacedComponent) void {
-    drawLabeledBox(canvas, placed.x, placed.y, placed.width, placed.height, "LED", .led);
+    const label = if (placed.display_label.len > 0) placed.display_label else "LED";
+    drawLabeledBox(canvas, placed.x, placed.y, placed.width, placed.height, label, .led);
 }
 
 /// Macro box: variable W × H (height grows with input count). Border uses
@@ -173,19 +179,31 @@ fn drawLabeledBox(
     }
 
     // Center the label on the middle row, truncating if it wouldn't fit
-    // between the side borders.
+    // between the side borders. Iteration is per Unicode codepoint, not
+    // per byte, since labels may contain multi-byte UTF-8 (e.g. `·` in the
+    // LED indicator mode).
     const mid_y = y + h / 2;
     const inner: i64 = @as(i64, w) - 2;
     if (inner <= 0) return;
-    const max_label: usize = @intCast(inner);
-    const label_len: usize = @min(label.len, max_label);
     const inner_u: u32 = @intCast(inner);
-    const label_u: u32 = @intCast(label_len);
-    const pad: u32 = (inner_u - label_u) / 2;
-    var i: usize = 0;
-    while (i < label_len) : (i += 1) {
-        canvas.setCell(x + 1 + pad + @as(u32, @intCast(i)), mid_y, label[i .. i + 1], tag);
+
+    const cp_count = countCodepoints(label);
+    const cp_to_draw: u32 = @intCast(@min(cp_count, inner_u));
+    const pad: u32 = (inner_u - cp_to_draw) / 2;
+
+    var view = std.unicode.Utf8Iterator{ .bytes = label, .i = 0 };
+    var drawn: u32 = 0;
+    while (drawn < cp_to_draw) : (drawn += 1) {
+        const cp_bytes = view.nextCodepointSlice() orelse break;
+        canvas.setCell(x + 1 + pad + drawn, mid_y, cp_bytes, tag);
     }
+}
+
+fn countCodepoints(s: []const u8) usize {
+    var view = std.unicode.Utf8Iterator{ .bytes = s, .i = 0 };
+    var n: usize = 0;
+    while (view.nextCodepointSlice()) |_| n += 1;
+    return n;
 }
 
 fn drawBoxBorder(canvas: *Canvas, x: u32, y: u32, w: u32, h: u32, tag: ColorTag) void {

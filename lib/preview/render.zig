@@ -17,6 +17,11 @@ pub const RenderOptions = struct {
     color: ColorMode = .auto,
     stdout_handle: ?std.fs.File.Handle = null,
     no_color_value: ?[]const u8 = null,
+    /// When --expand-display is set, the orchestrator may have laid out an
+    /// LED at width >=8 (above the indicator-mode cap). The render pass
+    /// notes those instances by writing one warning line per such LED to
+    /// this writer. Pass null in tests that don't care about warnings.
+    expand_display: bool = false,
 };
 
 /// Render orchestrator. Composes Canvas + glyph drawing + wire rendering +

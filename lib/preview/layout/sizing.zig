@@ -40,6 +40,21 @@ pub fn widthAnnotationLen(signal_width: u8) usize {
     return 2 + digitsOf(signal_width); // '[' + N + ']'
 }
 
+/// LED box size. Width-1 keeps the legacy 5×3 dimensions so existing scalar
+/// goldens are byte-identical. Wider LEDs need room for their display label:
+/// numeric mode is "0x" + ceil(width/4) `?` chars; indicator mode (widths
+/// 2..7 with --expand-display) is one `·` per bit.
+pub fn ledSize(signal_width: u8, expand_display: bool) PrimitiveSize {
+    if (signal_width <= 1) return primitive_sizing.get(.led);
+    const label_len: usize = if (expand_display and signal_width < 8)
+        signal_width // one '·' per bit
+    else
+        2 + (@as(usize, signal_width) + 3) / 4; // "0x" + nibbles
+    const min_width: u32 = 5;
+    const padded = @max(min_width, @as(u32, @intCast(label_len)) + 4);
+    return .{ .width = padded, .height = 3 };
+}
+
 /// Pin (input or output) box size. Width grows with the pin name to keep the
 /// label centered with at least one cell of padding on each side; floor at 5
 /// so isolated short-name pins still look box-shaped (`╭───╮ │ a │ ╰───╯`).

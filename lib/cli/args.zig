@@ -44,6 +44,7 @@ pub const Args = struct {
     output_path: ?[]const u8 = null,
     warnings_as_errors: bool = false,
     expand_macros: bool = false,
+    expand_display: bool = false,
     color: ColorMode = .auto,
     truth_table_format: TruthTableFormat = .markdown,
     truth_table_value_format: TruthTableValueFormat = .binary,
@@ -82,6 +83,9 @@ pub const help_text =
     \\
     \\  Preview-only:
     \\    --expand-macros                 Render builtin macros (xor, nand, …) as expanded primitives.
+    \\    --expand-display                Render multi-bit LEDs as a row of indicator glyphs
+    \\                                    (LSB on the left) instead of a single hex display.
+    \\                                    Honored for widths 2..7; widths >=8 fall back to hex.
     \\    --color=auto|always|never       ANSI styling. Default 'auto' (on when stdout is a TTY;
     \\                                    the NO_COLOR environment variable also disables colour).
     \\
@@ -168,6 +172,10 @@ pub fn parse(argv: []const []const u8) ParseError!Args {
             args.expand_macros = true;
             continue;
         }
+        if (std.mem.eql(u8, token, "--expand-display")) {
+            args.expand_display = true;
+            continue;
+        }
         if (std.mem.eql(u8, token, "--strict")) {
             args.truth_table_strict = true;
             continue;
@@ -245,6 +253,7 @@ pub fn parse(argv: []const []const u8) ParseError!Args {
     if (args.mode == .preview and args.output_path != null) return error.InvalidFlagValue;
     if (args.mode == .truth_table and args.output_path != null) return error.InvalidFlagValue;
     if (args.expand_macros and args.mode != .preview) return error.InvalidFlagValue;
+    if (args.expand_display and args.mode != .preview) return error.InvalidFlagValue;
     if (args.truth_table_format != .markdown and args.mode != .truth_table) return error.InvalidFlagValue;
     if (args.truth_table_value_format != .binary and args.mode != .truth_table) return error.InvalidFlagValue;
     if (args.truth_table_strict and args.mode != .truth_table) return error.InvalidFlagValue;

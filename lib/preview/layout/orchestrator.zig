@@ -19,7 +19,7 @@ pub fn build(
     const graph = try collapse_stage.collapse(arena, topology, opts);
     const cols = try columns_stage.assignColumns(arena, graph);
     const rows = try rows_stage.assignRows(arena, graph, cols);
-    const placed = try place_stage.place(arena, graph, cols, rows);
+    const placed = try place_stage.place(arena, graph, cols, rows, opts);
     const route_result = try route_stage.route(arena, graph, placed);
     return .{
         .width = route_result.width,

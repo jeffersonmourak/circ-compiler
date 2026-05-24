@@ -63,6 +63,11 @@ pub const LayoutGrid = struct {
 
 pub const LayoutOptions = struct {
     expand_macros: bool = false,
+    /// Honor `--expand-display`: render multi-bit LEDs (widths 2..7) as a
+    /// row of indicator glyphs instead of a single hex display. Widths >=8
+    /// silently fall back to numeric — the render pass emits a warning to
+    /// stderr the first time it draws such an LED.
+    expand_display: bool = false,
 };
 
 /// Slice 1 stub. The five-stage pipeline (collapse → columns → rows → place → route)
