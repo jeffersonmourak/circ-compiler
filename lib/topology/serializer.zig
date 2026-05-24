@@ -210,8 +210,9 @@ fn expandModule(
                 if (ref.specialized_target_file) |spec| {
                     child_module = &state.project.files[spec.value];
                 } else {
+                    const lookup_file_id = module.effectiveSourceFileId();
                     for (state.project.import_table) |imp| {
-                        if (imp.importing_file.value == module.file_id.value and std.mem.eql(u8, imp.alias, ref.name)) {
+                        if (imp.importing_file.value == lookup_file_id.value and std.mem.eql(u8, imp.alias, ref.name)) {
                             child_module = &state.project.files[imp.target_file.value];
                             break;
                         }
