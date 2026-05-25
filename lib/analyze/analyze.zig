@@ -131,14 +131,31 @@ fn lineColToOffset(source: []const u8, line: u32, col: u32) usize {
     return source.len;
 }
 
-/// The parser succeeds-with-truncation on malformed input (see
-/// DOCS/plan-lsp.md). Detect it by comparing the parse tree's consumed
-/// extent against the file's content length; emit one synthetic syntax
-/// diagnostic at the stall point. Returns null for clean or empty files.
+/// Emit a syntax diagnostic for a file the parser rejects. A hard parse
+/// failure carries a labeled ParsingError (position + message) surfaced by
+/// the shim, so the diagnostic lands at the precise stall point. A rare
+/// success-with-truncation is caught by the consumed-extent check below.
+/// Returns null for clean or empty files.
 fn truncationDiag(allocator: std.mem.Allocator, file_id: u32, source: []const u8) !?Diagnostic {
     if (std.mem.trim(u8, source, " \t\r\n").len == 0) return null;
 
-    const file = translate.parseSource(allocator, file_id, source) catch {
+    var failure = translate.ParseFailure{ .start_line = 0, .start_col = 0, .end_line = 0, .end_col = 0, .message = "" };
+    const file = translate.parseSourceCapturing(allocator, file_id, source, &failure) catch {
+        // start_line stays 0 only when no located error was produced (a
+        // post-parse translate failure); fall back to a generic message.
+        if (failure.start_line != 0) {
+            // Guarantee a non-empty range so the editor highlights a span.
+            var end_col = failure.end_col;
+            if (failure.end_line == failure.start_line and end_col <= failure.start_col) end_col = failure.start_col + 1;
+            return Diagnostic{
+                .file_id = file_id,
+                .severity = "error",
+                .code = "syntax",
+                .range = .{ .start_line = failure.start_line, .start_col = failure.start_col, .end_line = failure.end_line, .end_col = end_col },
+                .message = if (failure.message.len > 0) failure.message else "syntax error",
+                .related = &.{},
+            };
+        }
         return Diagnostic{
             .file_id = file_id,
             .severity = "error",
@@ -534,4 +551,26 @@ test "analyze: empty input resolves cleanly" {
     for (result.diagnostics) |d| {
         try std.testing.expect(!std.mem.eql(u8, d.severity, "error"));
     }
+}
+
+test "analyze: syntax diagnostic carries a located message" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    var overlay = Overlay{};
+    try overlay.put(a, "/virtual/trunc.circ", "input a\nand g(a=");
+
+    const result = try analyze(a, "/virtual/trunc.circ", overlay);
+    var found = false;
+    for (result.diagnostics) |d| {
+        if (std.mem.eql(u8, d.code, "syntax")) {
+            // The labeled ParsingError gives a precise message and a
+            // location beyond line 1, not the generic fallback at 1:1.
+            try std.testing.expect(std.mem.indexOf(u8, d.message, "expected") != null);
+            try std.testing.expect(d.range.start_line >= 2);
+            found = true;
+        }
+    }
+    try std.testing.expect(found);
 }

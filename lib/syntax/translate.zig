@@ -707,11 +707,50 @@ pub fn translate(allocator: std.mem.Allocator, handle: @TypeOf(C_Parser.ParserNe
     return translateTree(&ctx);
 }
 
+pub const ParseFailure = struct {
+    start_line: u32,
+    start_col: u32,
+    end_line: u32,
+    end_col: u32,
+    message: []const u8,
+};
+
 pub fn parseSource(allocator: std.mem.Allocator, file_id: u32, source: []const u8) !ast.File {
+    return parseSourceCapturing(allocator, file_id, source, null);
+}
+
+/// Like parseSource, but on a parse failure fills `failure_out` (when
+/// given) with the labeled ParsingError's position and message surfaced
+/// by the parser shim. The --analyze surface uses this to emit a located
+/// syntax diagnostic instead of a generic one.
+pub fn parseSourceCapturing(
+    allocator: std.mem.Allocator,
+    file_id: u32,
+    source: []const u8,
+    failure_out: ?*ParseFailure,
+) !ast.File {
     const handle = C_Parser.ParserNew();
     defer C_Parser.ParserDelete(handle);
 
     if (!C_Parser.ParserParse(handle, @ptrCast(@constCast(source.ptr)), @intCast(source.len))) {
+        if (failure_out) |out| {
+            const start: usize = @intCast(@max(C_Parser.ParserErrorStart(handle), 0));
+            const end: usize = @intCast(@max(C_Parser.ParserErrorEnd(handle), 0));
+            const start_lc = offsetToLineCol(source, start);
+            const end_lc = offsetToLineCol(source, end);
+            const msg_ptr = C_Parser.ParserErrorMessage(handle);
+            const message = if (msg_ptr != null)
+                try allocator.dupe(u8, std.mem.span(msg_ptr))
+            else
+                "";
+            out.* = .{
+                .start_line = start_lc.line,
+                .start_col = start_lc.col,
+                .end_line = end_lc.line,
+                .end_col = end_lc.col,
+                .message = message,
+            };
+        }
         return error.ParsingFailed;
     }
 

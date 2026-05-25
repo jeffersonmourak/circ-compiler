@@ -29,6 +29,12 @@ type handle struct {
 	// across calls. Keyed by string identity (not NodeID) because the
 	// same name (e.g. "Identifier") appears on many nodes.
 	nameCache map[string]*C.char
+
+	// Last parse error captured on a failed Parse, exposed to Zig via the
+	// ParserError* accessors. errMsg is an owned C string freed on delete.
+	errStart C.int
+	errEnd   C.int
+	errMsg   *C.char
 }
 
 //export ParserNew
@@ -57,6 +63,28 @@ func ParserParse(hid C.uintptr_t, source *C.char, length C.int) C.bool {
 	p.SetInput(src)
 	tree, err := p.Parse()
 	if err != nil {
+		h.errStart, h.errEnd = 0, 0
+		var msg string
+		switch pe := err.(type) {
+		case parser.ParsingError:
+			h.errStart, h.errEnd = C.int(pe.Start), C.int(pe.End)
+			msg = pe.Message
+			if msg == "" {
+				msg = pe.Error()
+			}
+		case *parser.ParsingError:
+			h.errStart, h.errEnd = C.int(pe.Start), C.int(pe.End)
+			msg = pe.Message
+			if msg == "" {
+				msg = pe.Error()
+			}
+		default:
+			msg = err.Error()
+		}
+		if h.errMsg != nil {
+			C.free(unsafe.Pointer(h.errMsg))
+		}
+		h.errMsg = C.CString(msg)
 		return false
 	}
 	h.tree = tree
@@ -65,11 +93,29 @@ func ParserParse(hid C.uintptr_t, source *C.char, length C.int) C.bool {
 	return true
 }
 
+//export ParserErrorStart
+func ParserErrorStart(hid C.uintptr_t) C.int {
+	return cgo.Handle(hid).Value().(*handle).errStart
+}
+
+//export ParserErrorEnd
+func ParserErrorEnd(hid C.uintptr_t) C.int {
+	return cgo.Handle(hid).Value().(*handle).errEnd
+}
+
+//export ParserErrorMessage
+func ParserErrorMessage(hid C.uintptr_t) *C.char {
+	return cgo.Handle(hid).Value().(*handle).errMsg
+}
+
 //export ParserDelete
 func ParserDelete(hid C.uintptr_t) {
 	h := cgo.Handle(hid).Value().(*handle)
 	for _, p := range h.nameCache {
 		C.free(unsafe.Pointer(p))
+	}
+	if h.errMsg != nil {
+		C.free(unsafe.Pointer(h.errMsg))
 	}
 	cgo.Handle(hid).Delete()
 }
