@@ -9,3 +9,4 @@ Each file is a highlight view. The full plan prompt, every phase plan, and every
 | [plan-test-speed.md](plan-test-speed.md) | Test-suite speed-up plan (highlights; full bundle in git history) |
 | [plan-zig-free-cli.md](plan-zig-free-cli.md) | Self-contained `circ-compile`: no Zig at user runtime (highlights; full bundle in git history) |
 | [plan-cli-preview.md](plan-cli-preview.md) | `circ-compile <file> --preview`: ASCII circuit schematic rendering with opaque/expanded macro modes and ANSI color (highlights; full bundle in git history) |
+| [plan-multi-bit-language.md](plan-multi-bit-language.md) | Multi-bit wires language extension (literal widths, slice / bit-index / concat, parametric sub-circuits, topology format v02). Landed across stages S1–S12. |

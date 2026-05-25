@@ -13,7 +13,7 @@ Wire state used to live inline on every `Component` as a single-bit `State` enum
 - A **value type**, `BitVecState`, that carries `(value, defined, width)` and is the currency of every event, dedup check, gate evaluation, and listener callback.
 - A **width-tiered Structure-of-Arrays pool** owned by `Circuit`, addressed by an opaque `PoolHandle`. Components carry a `state_handle` instead of an inline state field; reads and writes go through `Circuit.readState` / `Circuit.writeState`.
 
-Today only width=1 is wired (tier 0); the rest of the value/handle machinery is in place so wider widths can land without re-touching propagation. Most callers only need `readState` / `writeState` plus the `BitVecState` constructors and predicates; `Pool` is exposed but rarely used directly.
+Widths 1 through 64 are all wired today; the engine allocates a pool tier on demand the first time a component of that width is created. Lazy tier init keeps single-bit circuits at one allocated pool instead of 64. Most callers only need `readState` / `writeState` plus the `BitVecState` constructors and predicates; `Pool` is exposed but rarely used directly.
 
 ## Types
 
@@ -59,7 +59,7 @@ Note that `toInt` and `toTransportByte` use **different** encodings. `toInt` is 
 
 ```zig
 pub const ComponentType = enum {
-    input_pin_gate, not_gate, led, and_gate, wire, output_pin,
+    input_pin_gate, not_gate, led, and_gate, wire, output_pin, slice, concat,
 };
 
 const Kind = union(ComponentType) {
@@ -72,10 +72,17 @@ const Kind = union(ComponentType) {
     },
     wire:           struct { inputs: std.ArrayList(*Component) = .{} },
     output_pin:     struct { inputs: std.ArrayList(*Component) = .{} },
+    slice:          struct { from: *Component, lo: u8, hi: u8 },
+    concat:         struct { operands: []const *Component },
 };
 ```
 
-Backward edges are flat `std.ArrayList(*Component)` lists. `and_gate` is the only kind with two distinct input ports; it splits into `inputs_a` and `inputs_b`, selected positionally by the `"a"` / `"b"` port name in `connect`. Every other kind has a single `inputs` list keyed by `"in"`. `output_pin` is the sub-circuit/root output primitive: it appears in the IR for every `output …` declaration and acts as a wire-with-a-name.
+Backward edges are flat `std.ArrayList(*Component)` lists for the eight-input gates (`and_gate` uses `inputs_a` / `inputs_b`; every other "input-based" kind uses a single `inputs` list keyed by `"in"`). `output_pin` is the sub-circuit/root output primitive: it appears in the IR for every `output …` declaration and acts as a wire-with-a-name.
+
+`slice` and `concat` are bit-shape kinds, not user-written primitives. The resolver lowers the language-level `a[lo..hi]`, `a[i]`, and `{a, b, ...}` signal sources into these kinds; users never write them directly.
+
+- A `slice` reads `from`'s current state, masks to bits `[lo, hi)`, and shifts right by `lo`. The output's width is `hi - lo`. Bit-index `a[i]` lowers to a slice with `hi = lo + 1`.
+- A `concat` ORs each operand into a running bit-position. Operands listed low-on-left: bits `[0, op0.width)` come from `op0`, bits `[op0.width, op0.width + op1.width)` from `op1`, and so on. The output's width is the sum of operand widths.
 
 The integer encoding used by the topology format (`lib/topology/`) and `Component.Kind` constructor is:
 
@@ -88,6 +95,8 @@ pub fn toKind(kind: u8) !Component.Kind {
         3 => .and_gate,
         4 => .wire,
         5 => .output_pin,
+        6 => .slice,
+        7 => .concat,
         else => return error.InvalidComponentKind,
     };
 }
@@ -95,14 +104,16 @@ pub fn toKind(kind: u8) !Component.Kind {
 
 Per-kind port names:
 
-| Kind             | Input ports               | Output port |
-|------------------|---------------------------|-------------|
-| `input_pin_gate` | `"in"` (sub-circuit only) | `"out"`     |
-| `not_gate`       | `"in"`                    | `"out"`     |
-| `and_gate`       | `"a"`, `"b"`              | `"out"`     |
-| `wire`           | `"in"`                    | `"out"`     |
-| `output_pin`     | `"in"`                    | `"out"`     |
-| `led`            | `"in"`                    | `"out"`     |
+| Kind             | Input ports                                | Output port |
+|------------------|--------------------------------------------|-------------|
+| `input_pin_gate` | `"in"` (sub-circuit only)                  | `"out"`     |
+| `not_gate`       | `"in"`                                     | `"out"`     |
+| `and_gate`       | `"a"`, `"b"`                               | `"out"`     |
+| `wire`           | `"in"`                                     | `"out"`     |
+| `output_pin`     | `"in"`                                     | `"out"`     |
+| `led`            | `"in"`                                     | `"out"`     |
+| `slice`          | `"in"`                                     | `"out"`     |
+| `concat`         | `"operand_0"`, `"operand_1"`, … one per op | `"out"`     |
 
 ### `Component`
 
@@ -168,7 +179,7 @@ pub const Pool = struct {
 
 The pool packs 64 slots per `u64` word across two parallel buffers (one for value bits, one for defined bits). The two buffers grow together; `allocateSlot` is the only growth site and always appends to both, so length-mismatch is structurally impossible.
 
-`PoolHandle.tier` selects which pool to dispatch to. Today only width=1 (tier 0) is exercised; wider widths trap with a pointer back to the follow-up issue inside `tierIndexForWidth`. Width is recovered from the pool, not stored on the handle, so handles stay 8 bytes.
+`PoolHandle.tier` selects which pool to dispatch to. The convention is `tier == width`; tier 0 is unused and tiers 1..64 each carry their own pool, lazily allocated the first time a component of that width is created. Width is recovered from the handle's tier, not stored on the handle's body, so handles stay 8 bytes.
 
 You rarely construct `Pool` or `PoolHandle` directly; `Circuit.createComponent` allocates a slot and stamps the handle onto the new component.
 
@@ -184,10 +195,10 @@ pub const Circuit = struct {
     /// Scratch buffer reused across propagate() calls so the first append in
     /// each propagation does not reallocate from zero capacity.
     changed_at_step: std.ArrayList(*Component) = .{},
-    /// Width-tiered SoA pool for wire state. Single field today because only
-    /// tier 0 (width=1) has storage; widens to an array indexed by tier
-    /// once multi-bit widths land.
-    tier1: Pool = Pool.init(1),
+    /// Width-tiered SoA pool for wire state. Each entry is `?Pool`, lazily
+    /// allocated the first time a component of that width is created.
+    /// Indexed by tier where `tier == width`; tier 0 is unused.
+    tiers: [MAX_WIDTH + 1]?Pool,
     /// Benchmark counters. Zero-sized (`void`) outside the bench build, so
     /// shipping and test builds carry zero bytes and zero instructions on
     /// the metrics path.
@@ -234,7 +245,7 @@ pub fn readState(self: *const Circuit, handle: PoolHandle) BitVecState;
 pub fn writeState(self: *Circuit, handle: PoolHandle, state: BitVecState) void;
 ```
 
-Tier dispatch happens exactly once per read/write, so every layer above these three functions sees only the value type. Today only width=1 is legal; wider widths trap via the dispatcher.
+Tier dispatch happens exactly once per read/write, so every layer above these three functions sees only the value type. Any width in `[1, 64]` is legal; out-of-range widths trap via the dispatcher.
 
 You normally do not call `allocateStateSlot` yourself: `Circuit.createComponent` does it as part of publishing a new component.
 
@@ -359,4 +370,4 @@ Used by every multi-driver port read:
 - Otherwise returns the last seen state during the scan (the loop unconditionally overwrites `dominant_state` on each iteration, so the final iteration wins among the non-`high` drivers).
 - Returns `undefined` if every driver is `undefined`.
 
-The width=1 helpers (`isHigh`, `isLow`) are the comparison currency here; the dominant rule is width-1 today and will widen alongside the pool tiers.
+The width=1 helpers (`isHigh`, `isLow`) are the comparison currency on scalar buses (the most common case). Multi-bit fan-in works the same way per bit: any `defined` bit set to high across the drivers wins; the dominant state is computed bit-parallel against the BitVecState `value` and `defined` fields.
