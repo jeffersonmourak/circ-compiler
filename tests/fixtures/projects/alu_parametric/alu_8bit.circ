@@ -1,0 +1,83 @@
+// 8-bit instantiation of the parametric Hack ALU in alu.circ.
+// Total inputs: 6 control + 8 (x) + 8 (y) = 22 bits → 4,194,304 vectors,
+// well over the default --truth-table cap; truth-table exhaustion is
+// impractical for this width — the .wasm runtime is the appropriate
+// driver. The file still compiles to a self-contained .wasm normally.
+
+import alu "alu.circ"
+
+input zx, nx, zy, ny, f, no
+input[8] x, y
+
+// ----- broadcast scalar controls to width 8 ----------------------------
+wire[8] zx_b(in={zx, zx, zx, zx, zx, zx, zx, zx})
+wire[8] nx_b(in={nx, nx, nx, nx, nx, nx, nx, nx})
+wire[8] zy_b(in={zy, zy, zy, zy, zy, zy, zy, zy})
+wire[8] ny_b(in={ny, ny, ny, ny, ny, ny, ny, ny})
+wire[8] f_b (in={f,  f,  f,  f,  f,  f,  f,  f })
+wire[8] no_b(in={no, no, no, no, no, no, no, no})
+
+// ----- 8-bit adder over inst.xn_out and inst.yn_out --------------------
+// Hand-expanded XOR for the bit-parallel propagate (primitives only).
+not[8] xn_inv(in=inst.xn_out)
+not[8] yn_inv(in=inst.yn_out)
+and[8] p1(a=inst.xn_out, b=yn_inv.out)
+and[8] p2(a=xn_inv.out, b=inst.yn_out)
+not[8] p1_inv(in=p1.out)
+not[8] p2_inv(in=p2.out)
+and[8] p_nor(a=p1_inv.out, b=p2_inv.out)
+not[8] add_p(in=p_nor.out)
+and[8] add_g(a=inst.xn_out, b=inst.yn_out)
+
+// Wire-buffer slices.
+wire add_p0(in=add_p.out[0])
+wire add_p1(in=add_p.out[1])
+wire add_p2(in=add_p.out[2])
+wire add_p3(in=add_p.out[3])
+wire add_p4(in=add_p.out[4])
+wire add_p5(in=add_p.out[5])
+wire add_p6(in=add_p.out[6])
+wire add_p7(in=add_p.out[7])
+wire add_g0(in=add_g.out[0])
+wire add_g1(in=add_g.out[1])
+wire add_g2(in=add_g.out[2])
+wire add_g3(in=add_g.out[3])
+wire add_g4(in=add_g.out[4])
+wire add_g5(in=add_g.out[5])
+wire add_g6(in=add_g.out[6])
+
+// Per-bit carry chain (bits 1..6 are full adders; bit 7 is sum only).
+xor add1_sum(a=add_p1.out, b=add_g0.out)
+and add1_pcy(a=add_p1.out, b=add_g0.out)
+or  add1_cy (a=add_g1.out, b=add1_pcy.out)
+xor add2_sum(a=add_p2.out, b=add1_cy.out)
+and add2_pcy(a=add_p2.out, b=add1_cy.out)
+or  add2_cy (a=add_g2.out, b=add2_pcy.out)
+xor add3_sum(a=add_p3.out, b=add2_cy.out)
+and add3_pcy(a=add_p3.out, b=add2_cy.out)
+or  add3_cy (a=add_g3.out, b=add3_pcy.out)
+xor add4_sum(a=add_p4.out, b=add3_cy.out)
+and add4_pcy(a=add_p4.out, b=add3_cy.out)
+or  add4_cy (a=add_g4.out, b=add4_pcy.out)
+xor add5_sum(a=add_p5.out, b=add4_cy.out)
+and add5_pcy(a=add_p5.out, b=add4_cy.out)
+or  add5_cy (a=add_g5.out, b=add5_pcy.out)
+xor add6_sum(a=add_p6.out, b=add5_cy.out)
+and add6_pcy(a=add_p6.out, b=add5_cy.out)
+or  add6_cy (a=add_g6.out, b=add6_pcy.out)
+xor add7_sum(a=add_p7.out, b=add6_cy.out)
+
+wire[8] adder_result(in={
+  add_p0.out,
+  add1_sum.out, add2_sum.out, add3_sum.out,
+  add4_sum.out, add5_sum.out, add6_sum.out, add7_sum.out
+})
+
+alu inst[8](
+  zx_b=zx_b.out, nx_b=nx_b.out, zy_b=zy_b.out, ny_b=ny_b.out,
+  f_b=f_b.out,   no_b=no_b.out,
+  x=x, y=y,
+  add_in=adder_result.out
+)
+
+output[8] out(in=inst.out)

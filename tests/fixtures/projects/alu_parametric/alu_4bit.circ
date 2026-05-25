@@ -1,0 +1,75 @@
+// 4-bit instantiation of the parametric Hack ALU in alu.circ.
+//
+// This root file wires up the per-width pieces the parametric core can't
+// express on its own:
+//   - 6 scalar controls broadcast to width-4 buses
+//   - 4-bit ripple-carry adder built from primitives over alu.xn_out and
+//     alu.yn_out (must use only primitives in the feedback path back to
+//     alu.add_in, see alu.circ's CAVEAT block)
+//
+// Total inputs: 6 control + 4 (x) + 4 (y) = 14 bits → 16,384 vectors.
+
+import alu "alu.circ"
+
+input zx, nx, zy, ny, f, no
+input[4] x, y
+
+// ----- broadcast scalar controls to width 4 ----------------------------
+wire[4] zx_b(in={zx, zx, zx, zx})
+wire[4] nx_b(in={nx, nx, nx, nx})
+wire[4] zy_b(in={zy, zy, zy, zy})
+wire[4] ny_b(in={ny, ny, ny, ny})
+wire[4] f_b (in={f,  f,  f,  f })
+wire[4] no_b(in={no, no, no, no})
+
+// ----- 4-bit adder over inst.xn_out and inst.yn_out --------------------
+// Hand-expanded XOR for the bit-parallel propagate. Pure primitives so
+// the feedback chain back into inst.add_in doesn't trip the topology
+// builder (xor[W] macros and sub-circuit instances in this path break).
+// Logic: xor(a, b) = NOT(AND(NOT(AND(a, NOT b)), NOT(AND(NOT a, b))))
+not[4] xn_inv(in=inst.xn_out)
+not[4] yn_inv(in=inst.yn_out)
+and[4] p1(a=inst.xn_out, b=yn_inv.out)
+and[4] p2(a=xn_inv.out, b=inst.yn_out)
+not[4] p1_inv(in=p1.out)
+not[4] p2_inv(in=p2.out)
+and[4] p_nor(a=p1_inv.out, b=p2_inv.out)
+not[4] add_p(in=p_nor.out)
+
+// Generate: bitwise AND of xn and yn (primitive, no expansion needed).
+and[4] add_g(a=inst.xn_out, b=inst.yn_out)
+
+// Wire-buffer each slice that feeds a scalar macro (slice-into-scalar-
+// macro is a separate validator/topology papercut).
+wire add_p0(in=add_p.out[0])
+wire add_p1(in=add_p.out[1])
+wire add_p2(in=add_p.out[2])
+wire add_p3(in=add_p.out[3])
+wire add_g0(in=add_g.out[0])
+wire add_g1(in=add_g.out[1])
+wire add_g2(in=add_g.out[2])
+
+// Per-bit carry chain. Bit 0 is "free" — sum is add_p[0], carry is
+// add_g[0]. Bits 1..2 are full adders; bit 3 is sum only (final carry
+// dropped per ALU spec).
+xor add1_sum(a=add_p1.out, b=add_g0.out)
+and add1_pcy(a=add_p1.out, b=add_g0.out)
+or  add1_cy (a=add_g1.out, b=add1_pcy.out)
+xor add2_sum(a=add_p2.out, b=add1_cy.out)
+and add2_pcy(a=add_p2.out, b=add1_cy.out)
+or  add2_cy (a=add_g2.out, b=add2_pcy.out)
+xor add3_sum(a=add_p3.out, b=add2_cy.out)
+
+// Pack the 4 sum bits (low-on-left) into a width-4 bus.
+wire[4] adder_result(in={add_p0.out, add1_sum.out, add2_sum.out, add3_sum.out})
+
+// Instantiate the parametric ALU at W=4. Declared last so the topology
+// builder doesn't see a forward chain through the instance.
+alu inst[4](
+  zx_b=zx_b.out, nx_b=nx_b.out, zy_b=zy_b.out, ny_b=ny_b.out,
+  f_b=f_b.out,   no_b=no_b.out,
+  x=x, y=y,
+  add_in=adder_result.out
+)
+
+output[4] out(in=inst.out)
