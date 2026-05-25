@@ -72,7 +72,17 @@ fn endpointWidth(
                 .to => inputPortWidth(target, port),
             };
         },
-        .slice, .concat, .unresolved_name => null,
+        // Slice and concat have a single, well-defined output width on
+        // their `out` port (set by the resolver to `hi - lo` and the sum
+        // of operand widths respectively). Their input ports vary by
+        // operand and don't carry a single port-width contract, so the
+        // `.to` side stays null and any mismatch surfaces at the
+        // upstream gate's port instead.
+        .slice, .concat => switch (side) {
+            .from => component.width,
+            .to => null,
+        },
+        .unresolved_name => null,
     };
 }
 

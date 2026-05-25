@@ -172,8 +172,16 @@ fn expandModule(
         sub_output_map.deinit();
     }
 
-    // Pass 1: emit primitives, recurse into subcircuits.
+    // Pass 1a: emit in-module primitives, slices, and concats and register
+    //          their global IDs. Sub-circuit instances are handled in
+    //          Pass 1b so their recursion sees every sibling already in
+    //          `local_to_global` regardless of declaration order.
     for (module.components) |comp| {
+        switch (comp.kind) {
+            .sub_circuit_ref => continue,
+            .unresolved_name => return error.UnresolvedComponent,
+            else => {},
+        }
         switch (comp.kind) {
             .primitive => |p| {
                 const global_id = state.next_global_id;
@@ -251,6 +259,16 @@ fn expandModule(
                     .origin = origin_copy,
                 });
             },
+            .sub_circuit_ref, .unresolved_name => unreachable,
+        }
+    }
+
+    // Pass 1b: recurse into sub-circuit instances. All in-module primitives,
+    //          slices, and concats are registered in `local_to_global` by
+    //          now, so each instance's input bindings resolve regardless of
+    //          declaration order.
+    for (module.components) |comp| {
+        switch (comp.kind) {
             .sub_circuit_ref => |ref| {
                 var child_module: ?*const ir.Module = null;
                 var target_file_id: u32 = 0;
@@ -303,7 +321,7 @@ fn expandModule(
                 _ = origin_stack.pop();
                 try sub_output_map.put(comp.id.value, child_outputs);
             },
-            .unresolved_name => return error.UnresolvedComponent,
+            else => {},
         }
     }
 
@@ -521,6 +539,13 @@ test "full_encode: single component with no origin emits expected layout" {
 
 const span_zero = ir.Span{ .file_id = 0, .start_line = 0, .start_col = 0, .end_line = 0, .end_col = 0 };
 
+fn findByName(components: []const FullComponentRecord, name: []const u8) ?FullComponentRecord {
+    for (components) |comp| {
+        if (std.mem.eql(u8, comp.name, name)) return comp;
+    }
+    return null;
+}
+
 test "full_walk_primitives_have_empty_origin" {
     const allocator = std.testing.allocator;
 
@@ -617,19 +642,25 @@ test "full_walk_one_subcircuit_records_origin" {
     defer topo.deinit(allocator);
 
     // Three primitives total: input_pin (root), not_gate (from sub), output_pin (root).
+    // The serializer emits all in-module primitives before recursing into
+    // sub-circuit children, so the not_gate lands after the root primitives.
+    // Look components up by name rather than asserting a fixed index — emit
+    // order is internal and shouldn't be locked in here.
     try std.testing.expectEqual(@as(usize, 3), topo.components.len);
+
+    const i1_comp = findByName(topo.components, "i1") orelse return error.MissingI1;
+    const o1_comp = findByName(topo.components, "o1") orelse return error.MissingO1;
+    const n1_comp = findByName(topo.components, "n1") orelse return error.MissingN1;
+
     // Root primitives: empty origin.
-    try std.testing.expectEqual(@as(usize, 0), topo.components[0].origin.len);
-    try std.testing.expectEqualStrings("i1", topo.components[0].name);
-    try std.testing.expectEqual(@as(usize, 0), topo.components[2].origin.len);
-    try std.testing.expectEqualStrings("o1", topo.components[2].name);
+    try std.testing.expectEqual(@as(usize, 0), i1_comp.origin.len);
+    try std.testing.expectEqual(@as(usize, 0), o1_comp.origin.len);
 
     // Sub primitive: one-frame origin chain.
-    try std.testing.expectEqual(@as(usize, 1), topo.components[1].origin.len);
-    try std.testing.expectEqualStrings("combine", topo.components[1].origin[0].alias);
-    try std.testing.expectEqualStrings("MyNot", topo.components[1].origin[0].subcircuit);
-    try std.testing.expectEqual(@as(u32, 1), topo.components[1].origin[0].target_file);
-    try std.testing.expectEqualStrings("n1", topo.components[1].name);
+    try std.testing.expectEqual(@as(usize, 1), n1_comp.origin.len);
+    try std.testing.expectEqualStrings("combine", n1_comp.origin[0].alias);
+    try std.testing.expectEqualStrings("MyNot", n1_comp.origin[0].subcircuit);
+    try std.testing.expectEqual(@as(u32, 1), n1_comp.origin[0].target_file);
 }
 
 test "full_walk_nested_subcircuits" {
