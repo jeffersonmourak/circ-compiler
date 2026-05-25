@@ -1,101 +1,70 @@
 # Runtime API
 
-The compiled `.wasm` artifact exposes a fixed runtime API for hosts (browsers, Node, any WASM runtime). Consumers can simulate, query state, and introspect — but cannot extend the circuit at runtime.
+The compiled `.wasm` artifact exposes a fixed runtime API for hosts (browsers, Node, any WASM runtime). Consumers can drive pins, settle the circuit, and read outputs — but cannot extend the circuit at runtime. For the full signature reference see [`../wasm-api.md`](../wasm-api.md); this file captures the load-bearing decisions behind that surface.
 
 ### Settle-only `run()`
 
-**Decision.** `run()` drains the event queue synchronously and returns when the circuit has settled. There is no continuous-time mode and no host-driven tick loop in v0.
+**Decision.** `run()` drains the event queue synchronously and returns when the circuit has settled. There is no continuous-time mode and no host-driven tick loop.
 
 **Rationale.** Settle-only matches the existing engine in `lib/circuit.zig` exactly — one `propagate()` call advances the circuit until quiescent. It's the simplest mental model for hosts: "I changed a pin, I want the circuit to react, then I read the result." Clocked simulation and free-running modes can be added later without breaking this API; they are additive.
 
-**Alternatives.** Tick-based `run(ticks)` for clocked circuits and free-running modes were considered. Both require either a clock primitive in the engine or host-driven ticking, neither of which is in v0 scope. Adding them now would commit to a more complex API surface before the use case is concrete.
+**Alternatives.** Tick-based `run(ticks)` for clocked circuits and free-running modes were considered. Both require either a clock primitive in the engine or host-driven ticking, neither of which is in scope today. Adding them now would commit to a more complex API surface before the use case is concrete.
 
-### Cold-start `reset()`
+### Initial state is implicitly `undefined`; `init()` does not pre-settle
 
-**Decision.** `reset()` returns the circuit to its post-`init()`-but-pre-settle state: every component's `output_state` is `undefined`, the event queue is empty, and `current_time` is zero. The host must drive pins again before any meaningful simulation, and call `run()` to settle.
+**Decision.** After `init()` runs, every component's stored state is the `BitVecState.undefined_(width)` value that `Circuit.allocateStateSlot` populates (`defined = 0`, `value = 0`). The host must drive pins via `setPin` and call `run()` before any output read is meaningful.
 
-**Rationale.** "All-undefined" is the most honest representation of "nothing has happened yet" — it doesn't pretend any pin has a value the host hasn't supplied. It mirrors what a real circuit looks like before power-on: indeterminate. Hosts that want a defined starting state can do `reset()` then drive their preferred pin values then `run()`.
+**Rationale.** "All-undefined" is the most honest representation of "nothing has happened yet" — it doesn't pretend any pin has a value the host hasn't supplied. It mirrors what a real circuit looks like before power-on: indeterminate. Hosts that want a defined starting state drive their preferred pin values and call `run()`.
 
-**Alternatives.** Pins-low-then-settle (always lands in a defined state, easier for tests) and post-initial-settle (replays the boot sequence). Both bake host-policy into the runtime; cold-start lets the host decide.
-
-### `stop()` retained as future-proofing no-op
-
-**Decision.** `stop()` is exported but is a no-op in v0. Hosts can call it for symmetry with `run()`. Future engine modes (clocked, free-running) may give it real semantics.
-
-**Rationale.** Adding the export now means hosts can write code that targets the long-term API shape today; removing or changing it later would be a breaking change. The cost of a no-op export is one line of glue.
-
-**Alternatives.** Drop `stop()` entirely (leaner API today, breaking change later) or repurpose it as "abort propagation early" (adds a flag check to the propagation loop with no concrete use case). The no-op keeps the door open without paying for it.
-
-### Introspection: snapshot, topology, pending events as separate exports
-
-**Decision.** Three independent exports — `getStateSnapshot()`, `getTopology()`, `getPendingEvents()` — each returning a `(ptr, len)` tuple into WASM linear memory. Hosts call only what they need and call `freeBuffer(ptr, len)` afterwards.
-
-**Rationale.** Different consumers have different needs: a UI just needs current state, a debugger needs the topology to render the graph, an event-stepper needs the pending queue. Separating the exports keeps the per-call payload small and makes the cost of each query explicit. Topology is mostly static — most consumers fetch it once at startup and cache it.
-
-**Alternatives.** A single `getRawState()` returning everything bundled. Simpler API at the cost of always paying for what you don't use, and forcing the host to parse a richer schema for trivial state queries.
-
-### File info as static Zig constants
-
-**Decision.** Source-file metadata (file name, named input pins, named output pins, named sub-circuit instances, compile timestamp, compiler version) is emitted as Zig constants in the IR file and exposed via a `getFileInfo() → (ptr, len)` export that returns a pointer into a static data section.
-
-**Rationale.** This data is immutable for the life of the artifact. Putting it in `.rodata` (via Zig constants) means zero runtime cost — no allocation, no marshalling, just a pointer. The compiler already needs to know all this metadata to emit the IR; surfacing it as constants is a one-line emission step per field.
-
-**Alternatives.** A JSON blob in WASM memory, parsed by JS. More flexible for schema evolution but adds a JSON parse step on every consumer, and JSON isn't free to encode either. Schema evolution can be handled with a version field in the static struct just as well.
+**Alternatives.** A separate `reset()` export that re-establishes this state mid-life was considered and dropped: hosts that want to "restart" the circuit can re-instantiate the WASM module, which is what every host already does between simulation runs. Pins-low-then-settle (always lands in a defined state, easier for tests) and post-initial-settle inside `init()` (replays a boot sequence) bake host-policy into the runtime; the all-undefined start lets the host decide.
 
 ### Pin identification by component ID
 
-**Decision.** `setPin(component_id, state)` and `getOutputState(component_id)` accept the component ID returned in `getFileInfo()`'s pin lists. There is no separate pin-index space.
+**Decision.** `setPin(component_id, value, defined)` accepts the **input pin's** component ID. The paired `getOutputValue(component_id)` / `getOutputDefined(component_id)` getters accept the **driver** component ID — that is, the ID of the component whose `out` port feeds the `output` declaration, not the `output_pin`'s own ID. There is no separate pin-index space.
 
-**Rationale.** One identifier scheme is simpler than two. Component IDs are stable for the life of a compiled artifact (the IR fixes them at emission time), so they're as stable as a separate pin index would be. The host always has the component ID from `getFileInfo()` before it ever calls a pin function, so there's no ergonomic loss.
+**Rationale.** One identifier scheme is simpler than two. Component IDs are dense `0..nodes.len` integers assigned by `Circuit.createComponent` and stable for the life of a compiled artifact (the topology serializer fixes them at emission time), so they're as stable as a separate pin index would be. The mapping from declaration name to component ID is printed under each module's `Inputs (...)` / `Outputs (...)` block by `circ-compile --inspect`, and the same information is encoded in the `circ.topology.v0.full` custom section for programmatic readers.
 
-**Alternatives.** A separate pin index (0..N for inputs, 0..M for outputs). Decouples the pin API from internal IDs, but in this design the IDs are stable anyway, and the abstraction adds a translation table for no clear benefit.
+**Alternatives.** A separate pin index (`0..N` for inputs, `0..M` for outputs) decouples the host API from internal IDs, but in this design the IDs are already stable; the abstraction would add a translation table for no clear benefit.
 
-### Full WASM export list (v0)
+### Paired BigInt exports for outputs
 
-**Decision.** The compiled artifact exports exactly these functions:
+**Decision.** Output state crosses the WASM boundary as two `i64` (`BigInt`) calls — `getOutputValue(id)` returns the `BitVecState.value` bits, `getOutputDefined(id)` returns the `BitVecState.defined` mask. Hosts combine them however they want; the convention is `defined === 0n` ⇒ undefined, otherwise read `value`.
 
-```
-Lifecycle:
-  init()           → void
-  deinit()         → void
-  reset()          → void
+**Rationale.** Two simple calls returning JavaScript-native `BigInt`s avoid the alternatives' costs: no buffer allocation, no pointer arithmetic, no in-band encoding for endianness or alignment, no sentinel value for undefined. Each call carries up to 64 bits of state, enough for any legal `BitVecState` width (1–64). For typical hosts that read once per settle, the 2× call overhead is irrelevant; a future `getOutputStateBatch(ids_ptr, out_ptr, count)` could be added without breaking this API.
 
-Simulation:
-  run()            → void
-  stop()           → void          # no-op in v0
+**Alternatives.** A single `getOutputState(id, out_ptr: i32)` that writes a 16-byte `BitVecState` into linear memory at `out_ptr`. Tighter on the wire but forces every host to allocate a scratch buffer and parse it; the paired-export shape is friendlier for the dominant "read one output after settle" use case. A scalar `getOutputState(id) -> i32` returning `0`/`1`/`2` predates multi-bit and can't represent bit-width-`N` state without information loss.
 
-Pin I/O:
-  setPin(component_id: i32, state: i32)         → void
-  getOutputState(component_id: i32)             → i32
+### `setPin` is symmetric with the output getters
 
-Introspection:
-  getStateSnapshot()    → (ptr, len)
-  getTopology()         → (ptr, len)
-  getPendingEvents()    → (ptr, len)
+**Decision.** `setPin(component_id: i32, value: i64, defined: i64) -> void`. The host writes the same `(value, defined)` shape it reads. Bits beyond the input pin's declared width are silently masked.
 
-Metadata:
-  getFileInfo()         → (ptr, len)
+**Rationale.** Treating input and output state as the same data shape keeps host code symmetric ("read state, mutate state, write state"). Silent masking on input is consistent with the engine's existing behaviour for over-wide writes via `Pool.write`. Passing the ID of a non-input or out-of-range component is a no-op rather than a trap, which matches `getOutputValue`/`getOutputDefined`'s silent-zero behaviour and means hosts can scan ID ranges defensively.
 
-Memory:
-  freeBuffer(ptr, len)  → void
-```
+**Alternatives.** A separate `setInputBit(id, bit_index, state)` for sparse updates was considered; rejected because the bit-parallel form covers the same cases, and the bit-by-bit form would require the host to read-modify-write (or for the engine to do it internally, adding allocations).
 
-**Rationale.** This list covers every concrete need surfaced during design: lifecycle (init/deinit), simulation control (run/stop/reset), pin manipulation, debugging introspection, source metadata, and memory cleanup. Nothing is included speculatively except `stop()` (justified above as future-proofing).
+### Pull-based with no host callbacks beyond logging
 
-**Alternatives.** A richer API with per-component event injection or runtime topology mutation. Both are explicit non-goals — the artifact is fixed at compile time for performance, and richer APIs can be added without breaking the v0 contract.
+**Decision.** The compiled artifact is purely pull-based — after `run()` returns, the host polls outputs via the paired getters. There is no `onStateChange` import, no event queue exposed to the host, and no listener registration. The only host imports are `debugEnabled` (returns whether log emission is wanted) and `onDebugLog` (receives UTF-8 log buffers).
 
-### Initial settle on `init()`
+**Rationale.** Removing the FFI callback keeps the WASM module self-contained — every required import is stub-able with two no-op JS functions, so instantiation works in any environment that supports WebAssembly. Change-notifications, debouncing, diffing — every flavour of "tell me when X changed" — belongs in host code, where the host can pick its own strategy without the WASM boundary in the way.
 
-**Decision.** `init()` runs `propagate()` after constructing the circuit so that wires and gates with no host input have settled to their natural state before the host calls anything.
+**Alternatives.** The original `lib/wasm.zig` prototype installed an `onStateChange` callback. That worked for the dynamic API but created an instantiation prerequisite that complicated non-browser hosts. The native engine still exposes a `listener` callback for in-process test harnesses; it's intentionally not surfaced through the WASM boundary.
 
-**Rationale.** Circuits with constant sub-graphs (e.g. a wire driven by another wire) should reach their settled value without the host having to call `run()` first. The cost is one `propagate()` call at startup; the alternative is making every host remember to settle before reading.
+### Topology section copied into linear memory at startup
 
-**Alternatives.** Lazy settle on first `getOutputState()` call. Adds a flag check to every read for a one-time saving. Not worth it.
+**Decision.** The compiled `.wasm` carries the circuit topology as a `circ.topology.v0.min` custom section, not in linear memory. The host reads the section via `WebAssembly.Module.customSections`, calls `topology_alloc(byteLength)` to reserve a buffer in linear memory, copies the bytes, then calls `init()`. `init()` parses the buffer and constructs the circuit. The section name still starts with `v0` for backwards-compatible host code; the version byte inside (`0x02`) is the format axis that evolves.
 
-### Pull-based with host-side event layer
+**Rationale.** WASM custom sections are opaque to the module itself — there is no in-module API to read them. The three-call protocol (`topology_alloc` → `memcpy` → `init`) is the smallest portable bridge any JS host can implement without an SDK. Hosts that don't need rendering metadata can ignore the parallel `circ.topology.v0.full` section, which carries the same structural data plus per-component names and macro provenance.
 
-**Decision.** The compiled artifact is purely pull-based — it does not call back into the host on state changes. The TypeScript SDK will provide an event layer on top by polling state after `run()` returns and emitting JS events for changed components.
+**Alternatives.** Passing topology bytes through WASM imports at instantiation (rejected: `WebAssembly.instantiate` takes imports, not arbitrary data; topology can be hundreds of KB). Encoding topology in the module's data section so `init()` can read it directly (rejected: requires modifying the WASM binary structure, not just appending; the section-then-copy protocol works against the appended-section pipeline today).
 
-**Rationale.** Removing the FFI callback keeps the WASM module self-contained — no host imports required to instantiate it, simpler embedding in environments that can't easily expose function tables. The TS SDK is the natural place for ergonomic event APIs because it can decide its own change-detection strategy without the WASM boundary in the way.
+### Things deliberately *not* exported
 
-**Alternatives.** The existing `lib/wasm.zig` model with `onStateChange` callbacks. Works for the dynamic API but creates an instantiation prerequisite that complicates non-browser hosts.
+The artifact intentionally omits several exports that earlier drafts considered:
+
+- `deinit()`, `reset()`, `stop()` — lifecycle controls. Re-instantiating the module covers every use case for `reset`/`deinit`; `stop` would only matter for non-settle-only run modes that don't exist.
+- `getStateSnapshot()`, `getTopology()`, `getPendingEvents()` — bulk introspection returning `(ptr, len)` buffers. The paired getters cover the per-component state case; topology lives in custom sections that the host already has direct access to.
+- `getFileInfo()` — pin-name / source-path metadata. Same information lives in the `circ.topology.v0.full` custom section and in `circ-compile --inspect` output.
+- `freeBuffer()` — companion to the introspection exports above; not needed because no export currently returns an owned buffer.
+
+A richer surface (`getStateSnapshot`, `getFileInfo`, `freeBuffer`, …) still exists in `lib/emit/runtime.zig`, the experimental `--emit-zig` pipeline. That path is not on the default compile and its export contract is not stable.

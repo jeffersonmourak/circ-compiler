@@ -9,9 +9,10 @@
         │
         ▼
    ┌───────────────────────────────────────────────────────────┐
-   │  Front-end (lib/syntax/, lib/parser.{c,h}, lib/grammar/)  │
-   │  PEG parser (vendored C, generated from proto-circ.peg)   │
-   │  → Zig AST (lib/syntax/ast.zig, translate.zig)            │
+   │  Front-end (lib/syntax/, lib/parser/, lib/grammar/)       │
+   │  PEG parser (langlang Go output + CGo c-archive shim,     │
+   │  generated from proto-circ.peg) → Zig AST                 │
+   │  (lib/syntax/ast.zig, translate.zig)                      │
    └───────────────────────────────────────────────────────────┘
         │
         ▼
@@ -25,7 +26,7 @@
         ▼
    ┌───────────────────────────────────────────────────────────┐
    │  Validator (lib/validator/)                               │
-   │  Stable diagnostic codes E001–E013, W001–W003             │
+   │  Stable diagnostic codes E001–E016, W001–W003             │
    │  Hard errors block emission; --warnings-as-errors promotes│
    └───────────────────────────────────────────────────────────┘
         │
@@ -56,16 +57,18 @@ The engine is pure Zig and oblivious to WebAssembly, JSON, or topology. It model
 
 ### Component kinds
 
-There are six kinds (`ComponentType` in `lib/circuit.zig`):
+There are eight kinds (`ComponentType` in `lib/circuit.zig`):
 
-| Kind             | Inputs                  | Output port | Notes                                                              |
-|------------------|-------------------------|-------------|---------------------------------------------------------------------|
-| `input_pin_gate` | `"in"` (sub-circuit only) | `"out"`     | Top-level input pins are driven by the host via `setPin`.          |
-| `not_gate`       | `"in"`                  | `"out"`     | Output is `flip(dominant("in"))`.                                  |
-| `and_gate`       | `"a"`, `"b"`            | `"out"`     | `low` if either input is `low`; `undefined` if either is undefined.|
-| `wire`           | `"in"`                  | `"out"`     | Relays the dominant defined input.                                 |
-| `output_pin`     | `"in"`                  | `"out"`     | Sub-circuit output: passes input through, exposed to the parent.   |
-| `led`            | `"in"`                  | `"out"`     | Visualisation primitive; tracks input state.                       |
+| Kind             | Inputs                                  | Output port | Notes                                                              |
+|------------------|-----------------------------------------|-------------|---------------------------------------------------------------------|
+| `input_pin_gate` | `"in"` (sub-circuit only)               | `"out"`     | Top-level input pins are driven by the host via `setPin`.          |
+| `not_gate`       | `"in"`                                  | `"out"`     | Output is `flip(dominant("in"))`.                                  |
+| `and_gate`       | `"a"`, `"b"`                            | `"out"`     | `low` if either input is `low`; `undefined` if either is undefined.|
+| `wire`           | `"in"`                                  | `"out"`     | Relays the dominant defined input.                                 |
+| `output_pin`     | `"in"`                                  | `"out"`     | Sub-circuit output: passes input through, exposed to the parent.   |
+| `led`            | `"in"`                                  | `"out"`     | Visualisation primitive; tracks input state.                       |
+| `slice`          | `"in"`                                  | `"out"`     | Bit-shape kind: masks bits `[lo, hi)` of `from`. Output width is `hi - lo`. Lowered from `a[lo..hi]` and `a[i]`; users never write it directly. |
+| `concat`         | `"operand_0"`, `"operand_1"`, … per op  | `"out"`     | Bit-shape kind: ORs each operand into its bit-position slot. Output width is the sum of operand widths. Lowered from `{a, b, ...}`. |
 
 ### Event-driven propagation
 
@@ -101,7 +104,7 @@ Delays are compile-time constants (`PROPAGATION_DELAY = 5`, `WIRE_PROPAGATION_DE
 
 ### Memory
 
-Allocations route through `memory.allocator` from `lib/memory.zig`. In the WASM target this is `std.heap.wasm_allocator`; on native (`zig build test`) it's a `GeneralPurposeAllocator`. The engine owns its components; `Circuit.deinit()` walks `nodes` and frees each, then tears down the per-circuit `tier1` state pool and the propagation scratch buffer.
+Allocations route through `memory.allocator` from `lib/memory.zig`. In the WASM target this is `std.heap.wasm_allocator`; on native (`zig build test`) it's a `GeneralPurposeAllocator`. The engine owns its components; `Circuit.deinit()` walks `nodes` and frees each, releases the propagation scratch buffer, and iterates the `tiers: [MAX_WIDTH + 1]?Pool` array tearing down every lazily-allocated tier.
 
 ### State storage layout
 
@@ -115,8 +118,8 @@ The runtime template is the WASM shell that ships embedded inside every compiled
 
 The template:
 
-- Exports a fixed runtime API to JavaScript: `topology_alloc`, `init`, `run`, `setPin`, `getOutputState` (see [wasm-api.md](wasm-api.md) for full signatures).
-- Imports two log callbacks from the host (`debugEnabled`, `onDebugLog`) — that's it. There is no `onStateChange`; hosts poll `getOutputState` after `run()`.
+- Exports a fixed runtime API to JavaScript: `topology_alloc`, `init`, `run`, `setPin(id, value, defined)`, `getOutputValue(id)`, `getOutputDefined(id)` (see [wasm-api.md](wasm-api.md) for full signatures). The two getters return paired `BitVecState` halves crossed as `i64` / `BigInt`.
+- Imports two log callbacks from the host (`debugEnabled`, `onDebugLog`) — that's it. There is no `onStateChange`; hosts poll `getOutputValue` / `getOutputDefined` after `run()`.
 - Reads the per-circuit topology from the buffer the host loaded via `topology_alloc`, then calls `interpreter.initFromTopology` to materialise the circuit using the engine in `lib/circuit.zig`.
 
 `section_writer.combineTwo` (in `lib/topology/`) appends two custom sections — `circ.topology.v0.min` (runtime-readable) and `circ.topology.v0.full` (tooling-readable) — to the embedded runtime blob. No re-link, no `zig` subprocess on the user's machine.

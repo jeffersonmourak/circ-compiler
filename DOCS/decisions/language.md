@@ -26,13 +26,13 @@ The surface syntax of `.circ` is documented in [../circuit-format.md](../circuit
 
 **Alternatives.** Implementing the full standard set as engine primitives. Higher engine surface, more test obligations, and circuit-equivalent results. Or restricting the surface language to engine primitives only — leaks the implementation detail into user code.
 
-### Import statement: `import name from "./file.circ"`
+### Import statement: `import name "path"`
 
-**Decision.** Sub-circuit imports use the form `import <alias> from "./<path>.circ"`. The alias becomes the gate-kind identifier in the importing file. Paths are resolved relative to the importing file. Built-in gates (`and`, `or`, `nand`, ...) require no import and live in a global namespace.
+**Decision.** Sub-circuit imports use the form `import <alias> "<path>"`. The alias becomes the gate-kind identifier in the importing file. Paths are resolved relative to the importing file. Built-in gates (`and`, `not`, `wire`, `led`, `output`, `input`) require no import and live in a global namespace; the auto-imported macro family (`or`, `nand`, `nor`, `xor`, `xnor`) is materialised under the virtual `<builtin>/<name>.circ` path and is treated as if `import <name> "<builtin>/<name>.circ"` were written when the file participates in a project.
 
-**Rationale.** The explicit-alias form mirrors JavaScript and Python and gives users a way to rename on import to resolve collisions. Relative paths make `.circ` files portable as a directory tree. A built-in global namespace means simple circuits don't pay an import-statement tax for `and` and `not`.
+**Rationale.** The explicit-alias form gives users a way to rename on import to resolve collisions. Relative paths make `.circ` files portable as a directory tree. A built-in global namespace means simple circuits don't pay an import-statement tax for `and` and `not`. The earlier draft of this decision included a `from` keyword (`import name from "path"`); the keyword was dropped from the grammar because the trailing string already unambiguously identifies the import path, and shaving a keyword keeps the surface lean.
 
-**Alternatives.** Implicit naming (`import "./half_adder.circ"` exposes `half_adder`) is shorter but offers no rename escape hatch. Multi-export brace form (`import { a, b } from "./file.circ"`) is more flexible but premature — the v0 model is one sub-circuit per file.
+**Alternatives.** Implicit naming (`import "./half_adder.circ"` exposes `half_adder`) is shorter but offers no rename escape hatch. Multi-export brace form (`import { a, b } from "./file.circ"`) is more flexible but premature — the model is one sub-circuit per file.
 
 ### No circular imports
 

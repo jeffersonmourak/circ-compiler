@@ -2,7 +2,7 @@
 
 `.circ` files describe a digital circuit as a set of named components and their connections. The format is a simple declarative DSL designed to map directly onto the simulation engine's component and connection model.
 
-> **Status**: Parsing, semantic validation, and compilation to Zig/WASM exist for the supported surface below (`zig build`-produced WASM per sub-circuit and built-in macros).
+> **Status**: Parsing, semantic validation, and compilation to WASM exist for the supported surface below. A single root `.circ` (plus any sibling files it imports) produces one self-contained `.wasm` artifact via the in-process topology-splice pipeline; the runtime is prebuilt and embedded.
 
 ## Syntax Overview
 
@@ -125,7 +125,7 @@ led result (
 
 This circuit computes `pin1 AND (NOT pin2)` and displays the result on an LED.
 
-The compiled `.wasm` does not expose a programmatic graph-construction API — the topology is baked into the artifact as a custom section and materialised by the embedded runtime at `init()`. Hosts only see the fixed export surface (`setPin`, `run`, `getOutputState`, …) described in [`wasm-api.md`](wasm-api.md); the component IDs they need are emitted by `circ-compile --inspect` under each module's `Inputs (...)` / `Outputs (...)` block.
+The compiled `.wasm` does not expose a programmatic graph-construction API — the topology is baked into the artifact as a custom section and materialised by the embedded runtime at `init()`. Hosts only see the fixed export surface (`setPin`, `run`, paired `getOutputValue` / `getOutputDefined`, …) described in [`wasm-api.md`](wasm-api.md); the component IDs they need are emitted by `circ-compile --inspect` under each module's `Inputs (...)` / `Outputs (...)` block.
 
 ## Grammar
 

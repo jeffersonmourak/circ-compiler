@@ -1,28 +1,34 @@
 # CLI Design
 
-### Four invocation modes
+### Five invocation modes
 
-**Decision.** The CLI supports four modes, selected by mutually-exclusive flags:
+**Decision.** The CLI supports five modes, selected by mutually-exclusive flags:
 
 ```
 circ-compile <input.circ> -o <output.wasm>           # produce WASM (default)
-circ-compile <input.circ> --emit-zig -o <output.zig> # emit IR Zig source only
+circ-compile <input.circ> --emit-zig -o <output.zig> # standalone Zig source (experimental)
 circ-compile <input.circ> --inspect                  # dump parse tree / IR to stdout
 circ-compile <input.circ> --preview                  # render ASCII schematic to stdout
+circ-compile <input.circ> --truth-table              # enumerate input combinations to stdout
 ```
 
-**Rationale.** The default produces the only artifact most users care about. `--emit-zig` exposes the IR step for users who want to inspect, hand-edit, or integrate the emitted source into a larger Zig project — and it falls out of the pipeline for free. `--inspect` is the debugging mode for the compiler itself: it prints the parse tree and resolved IR without invoking the build, useful when a `.circ` file produces unexpected emission. `--preview` is the visualisation mode: it lays out the resolved circuit on a character grid and emits a styled ASCII schematic with line-art glyphs, useful for code review, documentation, and teaching. See [`preview.md`](../preview.md) for the rendering reference.
+**Rationale.** The default produces the only artifact most users care about. `--emit-zig` exposes the experimental emit pipeline for users who want a richer (but unstable) export surface in standalone Zig source. `--inspect` is the debugging mode for the compiler itself: it prints the parse tree and resolved IR without invoking the build, useful when a `.circ` file produces unexpected emission. `--preview` is the visualisation mode: it lays out the resolved circuit on a character grid and emits a styled ASCII schematic with line-art glyphs, useful for code review, documentation, and teaching. `--truth-table` enumerates every input combination against the simulated circuit and prints a table, used both as a debugging aid for small circuits and as the bench fixture driver. See [`preview.md`](../preview.md) and [`circuit-format.md`](../circuit-format.md) for the per-mode rendering / format references.
 
 **Alternatives.** A single mode with everything controlled by output extension. Concise but magical; users have to know that `.zig` extensions trigger different behaviour. Explicit flags are clearer.
 
-### Preview mode flags
+### Mode-specific flags are gated at parse time
 
-**Decision.** `--preview` accepts two extra flags that are meaningless in other modes:
+**Decision.** Flags that only make sense for a single mode are accepted there and rejected (or silently stored) elsewhere. The flags carved out today:
 
-- `--expand-macros` — expand subcircuits into their constituent primitives instead of rendering them as labeled opaque boxes. Rejected at parse time outside `--preview`.
-- `--color=auto|always|never` — control ANSI color output. Defaults to `auto` (color when stdout is a TTY *and* `NO_COLOR` is unset). `always` overrides `NO_COLOR` per the convention used by `git`/`ls`/`grep`. Stored but harmlessly ignored in non-preview modes — those don't render anything.
+- `--expand-macros` — `--preview` only. Expand subcircuits into their constituent primitives instead of rendering them as labeled opaque boxes.
+- `--expand-display` — `--preview` only. Render an `led[N]` (`N > 1`) as `N` single-bit LED cells wired to explicit bit-index slices, instead of the default numeric display box.
+- `--color=auto|always|never` — `--preview` only in effect, accepted in all modes. Defaults to `auto` (color when stdout is a TTY *and* `NO_COLOR` is unset). `always` overrides `NO_COLOR` per the convention used by `git`/`ls`/`grep`.
+- `--format=markdown|csv|json` — `--truth-table` only. Defaults to `markdown`. CSV uses `0`/`1`/`?` cells; JSON encodes undefined cells as `null`.
+- `--truth-table-format=binary|hex|decimal` — `--truth-table` only. Selects the per-cell rendering of multi-bit pin values. Defaults to `binary`.
+- `--truth-table-cap=<N>` — `--truth-table` only. Raises the default 16-input-bit cap up to a hard ceiling of 24 (`2^24 ≈ 16M` rows). Beyond that, the `.wasm` runtime is the appropriate driver.
+- `--strict` — `--truth-table` only. Promotes any `?` (undefined) output cell into a hard exit-1 with one diagnostic line per offending row on stderr. The table itself still renders.
 
-**Rationale.** Macro expansion is a *display* choice, not a compilation one — the same artifact can be rendered both ways. Surfacing it as a flag avoids forking the topology format. `--color` follows the standard tri-state convention so users don't need to learn a project-specific colour discipline.
+**Rationale.** Each flag is a *display* or *format* choice attached to its mode, not a compilation one — the same `.circ` artifact can be rendered every way. Surfacing them as flags avoids forking topology formats or running the same input through the CLI multiple times. `--color` follows the standard tri-state convention so users don't need to learn a project-specific colour discipline. The `--truth-table-cap` ceiling is a UX call: a glance-readable truth table tops out around 16 input bits, but small power-users may legitimately want 18 – 24; beyond that, almost certainly user error.
 
 **Alternatives.** Always render macros expanded (loses the schematic-style abstraction by default) or always render them opaque (hides what the macro actually does). The flag-controlled split serves both audiences without picking one as canonical.
 
@@ -34,10 +40,10 @@ circ-compile <input.circ> --preview                  # render ASCII schematic to
 
 **Alternatives.** Including `.d.ts` from the start. Worthwhile polish but expands scope before the core pipeline is proven.
 
-### Build-directory override
+### No build directory, no intermediate Zig subprocess
 
-**Decision.** A `--build-dir <path>` flag overrides the default temp directory for the intermediate Zig build. When supplied, the directory is preserved on success; without the flag the default is `/tmp/circ-compile-<random>/` and is cleaned on success but preserved on failure.
+**Decision.** Default compile does not spawn `zig` and does not write to any intermediate directory. The pipeline runs entirely in-process: parser → resolver → validator → topology serializers → `section_writer.combineTwo` splices both topology blobs into the prebuilt runtime WASM that `cmd/circ-compile/main.zig` `@embedFile`s. The single output is the path passed to `-o`.
 
-**Rationale.** Reuses the same orchestration as the default path; the flag just changes the directory choice and the cleanup policy. Users who want to inspect successful builds, integrate with their own tooling, or commit emitted Zig get a first-class way to do so without resorting to `--emit-zig` and rebuilding by hand.
+**Rationale.** Earlier drafts of this decision document carried a `--build-dir <path>` override for the now-removed temp-directory dance. The Zig-free pipeline collapsed that path away entirely: there is nothing to override because there is no intermediate state to preserve. `--emit-zig` covers the "I want to inspect the Zig" use case directly.
 
-**Alternatives.** Always using a temp dir or always preserving. Either extreme inconveniences a real audience; the flag-controlled split serves both.
+**Alternatives.** Re-introducing an intermediate directory would only matter if a future build mode produced multiple artifacts that needed coordination — not in scope today.

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this project is
 
-`circ-compiler` is a one-shot compiler. It takes a `.circ` digital-logic source (plus any siblings it imports) and emits a self-contained `.wasm` artifact whose exports simulate that exact circuit. The compiler is pure Zig (the parser is a langlang-generated Go CGo c-archive linked in); there is no runtime SDK, no rendering layer, and no JavaScript in the build. Every compiled `.wasm` carries a vendored prebuilt runtime plus two custom sections (`circ.topology.v0.min`, `circ.topology.v0.full`) and exposes a fixed pull-based API: `topology_alloc`, `init`, `run`, `setPin`, `getOutputState`.
+`circ-compiler` is a one-shot compiler. It takes a `.circ` digital-logic source (plus any siblings it imports) and emits a self-contained `.wasm` artifact whose exports simulate that exact circuit. The compiler is pure Zig (the parser is a langlang-generated Go CGo c-archive linked in); there is no runtime SDK, no rendering layer, and no JavaScript in the build. Every compiled `.wasm` carries a vendored prebuilt runtime plus two custom sections (`circ.topology.v0.min`, `circ.topology.v0.full`) and exposes a fixed pull-based API: `topology_alloc`, `init`, `run`, `setPin(id, value, defined)`, `getOutputValue(id)`, `getOutputDefined(id)`. The two getters return paired `BitVecState` halves crossed as `i64`/`BigInt`.
 
 ## Toolchain prerequisites
 
@@ -65,7 +65,7 @@ Hard errors block emission; partial or "best-effort" artifacts are never produce
 [lib/ir]                    Resolved IR (Module, Project, Component, Pin).
      │
      ▼
-[lib/validator]             Stable diagnostic codes E001-E013, W001-W003.
+[lib/validator]             Stable diagnostic codes E001-E016, W001-W003.
                             Single-module: run.zig. Whole-project: run_project.zig.
      │
      ▼
@@ -90,13 +90,13 @@ Two invariants the rest of the codebase leans on:
 
 The engine is pure Zig, oblivious to WebAssembly, JSON, or the topology format. It models a circuit as a directed graph of `Component`s and advances time with a min-heap event queue. The compiled `.wasm` runtime and the unit tests are both clients of the same `Circuit` API.
 
-Six component kinds (`ComponentType`): `input_pin_gate`, `not_gate`, `and_gate`, `wire`, `output_pin`, `led`. Their integer encoding in the topology format is fixed: `input_pin_gate=0`, `not_gate=1`, `led=2`, `and_gate=3`, `wire=4`, `output_pin=5`. Do not renumber.
+Eight component kinds (`ComponentType`): `input_pin_gate`, `not_gate`, `and_gate`, `wire`, `output_pin`, `led`, `slice`, `concat`. Their integer encoding in the topology format is fixed: `input_pin_gate=0`, `not_gate=1`, `led=2`, `and_gate=3`, `wire=4`, `output_pin=5`, `slice=6`, `concat=7`. Do not renumber. `slice` and `concat` are bit-shape kinds — the resolver lowers `a[lo..hi]`, `a[i]`, and `{a, b, ...}` into them; users never write them directly.
 
 Facts that materially shape edits:
 
 1. **State storage is not inline on `Component`.** Each component carries an opaque `PoolHandle { tier, slot }` into a width-tiered Structure-of-Arrays pool owned by `Circuit`. Reads and writes go through `Circuit.readState` / `Circuit.writeState`, which dispatch on `PoolHandle.tier` once and then perform a direct bitmap op against the pool's `(values, defined)` u64 buffers. The width=1 tier packs 64 slots per word.
 2. **The value currency is `BitVecState` (`value`, `defined`, `width`).** Two `BitVecState` are equal iff `(a.defined == b.defined) AND ((a.value & a.defined) == (b.value & b.defined))`. That preserves the rule that two undefined slots compare equal regardless of `value` bits; the Phase-1 dedup in `propagate()` relies on it.
-3. **`toInt` and `toTransportByte` use different encodings.** `toInt` is the WASM API contract (`low=0, high=1, undefined=2`). `toTransportByte` is the legacy `@intFromEnum(State)` mapping (`undefined=0, low=1, high=2`) used by `lib/transport.zig`. Do not confuse them when threading state across the boundary.
+3. **The WASM boundary uses `BitVecState` directly, not the scalar `toInt` encoding.** `setPin(id, value, defined)` and the paired `getOutputValue`/`getOutputDefined` exports cross `(value, defined)` as `i64`/`BigInt`. The legacy width-1 helpers (`toInt`: `low=0, high=1, undefined=2`; `toTransportByte`: enum order `undefined=0, low=1, high=2`) still exist as convenience mirrors for tests and `lib/transport.zig`, but neither is on the host-facing API path anymore.
 4. **Propagation is per-timestamp batched.** `propagate()` drains every event at the current timestamp `T` in Phase 1 (commit state, collect changed), then in Phase 2 walks the outputs of changed components, recalculating and rescheduling. Without that batching, a downstream gate with multiple upstream events at the same `T` can read partial state, dedup the corrective re-enqueue, and stick on the wrong final value. See `DOCS/simulation-engine.md` for the full rationale.
 5. **Delays are compile-time constants:** `PROPAGATION_DELAY = 5`, `WIRE_PROPAGATION_DELAY = 1`. `wire`, `output_pin`, and `led` use the wire delay; everything else uses the gate delay.
 6. **The allocator is global, not parameterised.** Allocations route through `memory.allocator` from `lib/memory.zig`. On WASM that is `std.heap.wasm_allocator`; on native (test builds) it is a `GeneralPurposeAllocator`. Do not add an allocator parameter to engine functions.
@@ -123,6 +123,9 @@ Facts that materially shape edits:
 | E011 | import alias collision |
 | E012 | unknown sub-circuit port |
 | E013 | sub-circuit arity mismatch |
+| E014 | width mismatch between driver and the port it feeds |
+| E015 | sub-circuit is not parametric (caller passed `[N]` to a scalar callee) |
+| E016 | parametric arity mismatch at the call site |
 | W001 | unused input declaration |
 | W002 | dangling output declaration |
 | W003 | unused import declaration |

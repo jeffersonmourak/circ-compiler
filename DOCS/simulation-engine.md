@@ -53,7 +53,7 @@ pub const MAX_WIDTH: u8 = 64;
 
 That preserves the old `State.undefined == State.undefined` rule, which the Phase-1 dedup in `propagate()` relies on (see the [Simulation step](#simulation-step) section below).
 
-Note that `toInt` and `toTransportByte` use **different** encodings. `toInt` is the WASM boundary contract (`low=0, high=1, undefined=2`, matches the `(setPin, getOutputState)` API). `toTransportByte` is byte-identical to the old `@intFromEnum(State)` mapping (`undefined=0, low=1, high=2`) and is used by `lib/transport.zig` so the topology snapshot format does not have to learn new bytes.
+Note that `toInt` and `toTransportByte` use **different** encodings. Neither is on the host-facing WASM API path anymore: the boundary now crosses `BitVecState` halves directly via `setPin(id, value, defined)` and the paired `getOutputValue(id)` / `getOutputDefined(id)` getters. `toInt` (`low=0, high=1, undefined=2`) survives as a width-1 convenience mirror of the historical `State` enum, used only by tests. `toTransportByte` is byte-identical to the old `@intFromEnum(State)` mapping (`undefined=0, low=1, high=2`) and is used by `lib/transport.zig` so the topology snapshot format does not have to learn new bytes.
 
 ### `ComponentType` and `Component.Kind`
 
@@ -206,7 +206,7 @@ pub const Circuit = struct {
 };
 ```
 
-`listener` is an optional callback fired by `notifyStateChange` once per Phase-2 visit of a downstream component during propagation, regardless of whether the visit actually flipped the component's stored state. The compiled WASM runtime does **not** install one; hosts poll `getOutputState` instead. The callback is intended for native test harnesses and tooling.
+`listener` is an optional callback fired by `notifyStateChange` once per Phase-2 visit of a downstream component during propagation, regardless of whether the visit actually flipped the component's stored state. The compiled WASM runtime does **not** install one; hosts poll `getOutputValue` / `getOutputDefined` after `run()` returns. The callback is intended for native test harnesses and tooling.
 
 ### `Metrics`
 
@@ -235,7 +235,7 @@ pub fn init() !Circuit;            // no allocator parameter; uses memory.alloca
 pub fn deinit(self: *Circuit) void;
 ```
 
-`deinit` walks `nodes` and calls `Component.deinit` on each (which frees its input lists), drops the event queue, releases the `changed_at_step` scratch buffer, and tears down the `tier1` pool.
+`deinit` walks `nodes` and calls `Component.deinit` on each (which frees its input lists), drops the event queue, releases the `changed_at_step` scratch buffer, and iterates the `tiers: [MAX_WIDTH + 1]?Pool` array tearing down every lazily-allocated tier in place.
 
 ### State storage
 

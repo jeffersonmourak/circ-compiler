@@ -1,6 +1,6 @@
 # circ-compiler
 
-`circ-compiler` compiles `.circ` digital-logic source files into self-contained WebAssembly modules. Each compiled `.wasm` embeds the simulation engine plus circuit-specific construction code and exposes a fixed pull-based runtime API (`init`, `run`, `setPin`, `getOutputState`, …) usable from any host that supports WebAssembly. The compiler is written in Zig and ships as a single CLI: `circ-compile`.
+`circ-compiler` compiles `.circ` digital-logic source files into self-contained WebAssembly modules. Each compiled `.wasm` embeds the simulation engine plus circuit-specific construction code and exposes a fixed pull-based runtime API (`init`, `run`, `setPin`, paired `getOutputValue` / `getOutputDefined`, …) usable from any host that supports WebAssembly. The compiler is written in Zig and ships as a single CLI: `circ-compile`.
 
 ## What it does
 
@@ -12,7 +12,7 @@ not inv(in=a)
 output out(in=inv.out)
 ```
 
-`circ-compile inverter.circ -o inverter.wasm` produces a `.wasm` whose exported `setPin` / `run` / `getOutputState` functions simulate that exact circuit. Multi-file projects work the same way — the root file imports siblings and the compiler flattens every sub-circuit into a single ordered topology before serializing it into the `.wasm`:
+`circ-compile inverter.circ -o inverter.wasm` produces a `.wasm` whose exported `setPin` / `run` / `getOutputValue` / `getOutputDefined` functions simulate that exact circuit. The two getters return paired `BitVecState` halves (value bits + defined-bits) crossed as `i64` / `BigInt`. Multi-file projects work the same way — the root file imports siblings and the compiler flattens every sub-circuit into a single ordered topology before serializing it into the `.wasm`:
 
 ```text
 // half_adder.circ
@@ -76,7 +76,7 @@ Additional flags:
 - `--format=markdown|csv|json` — only valid with `--truth-table`; selects the output format. Default is `markdown`. CSV uses `0`/`1`/`?` cells; JSON encodes undefined cells as `null` so consumers can branch on type.
 - `--strict` — only valid with `--truth-table`; promotes any `?` (undefined) output cell into a hard exit-1 with one diagnostic line per offending row on stderr. The table itself still renders. Useful as a CI gate — a regression that introduces a dangling output now fails the build instead of silently producing `?` rows.
 
-Hard errors block emission — partial or "best-effort" artifacts are never produced. Diagnostics use stable codes (`E001`–`E013`, `W001`–`W003`) so downstream tooling can match on them.
+Hard errors block emission — partial or "best-effort" artifacts are never produced. Diagnostics use stable codes (`E001`–`E016`, `W001`–`W003`) so downstream tooling can match on them.
 
 ## Documentation
 

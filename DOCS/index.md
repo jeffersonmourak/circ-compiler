@@ -1,6 +1,6 @@
 # circ-compiler Documentation
 
-`circ-compiler` is a Zig CLI that compiles `.circ` digital-logic source files into self-contained WebAssembly modules. Each compiled `.wasm` embeds a prebuilt simulation runtime plus the circuit's topology (as custom sections) and exposes a small fixed API — `init`, `run`, `setPin`, `getOutputState` — usable from any host that supports WebAssembly.
+`circ-compiler` is a Zig CLI that compiles `.circ` digital-logic source files into self-contained WebAssembly modules. Each compiled `.wasm` embeds a prebuilt simulation runtime plus the circuit's topology (as custom sections) and exposes a small fixed API — `init`, `run`, `setPin(id, value, defined)`, and the paired `getOutputValue(id)` / `getOutputDefined(id)` getters — usable from any host that supports WebAssembly.
 
 ## What it does
 
@@ -60,9 +60,11 @@ const ptr = w.topology_alloc(topo.byteLength);
 new Uint8Array(w.memory.buffer).set(new Uint8Array(topo), ptr);
 
 w.init();
-w.setPin(0, 1);                    // drive input pin (id=0) high
+w.setPin(0, 1n, 1n);               // drive input pin (id=0) high (value=1, defined=1)
 w.run();
-console.log(w.getOutputState(1));  // 0 = low (NOT of high)
+const value   = w.getOutputValue(1);
+const defined = w.getOutputDefined(1);
+console.log(defined === 0n ? "undefined" : value === 0n ? "low" : "high");  // "low" (NOT of high)
 ```
 
 See [wasm-api.md](wasm-api.md) for the full export contract.
@@ -78,12 +80,13 @@ lib/
   log.zig                  Conditional logging bridge (extern → host onDebugLog)
   memory.zig               Allocator wrapper (wasm_allocator on WASM, GPA on native)
   transport.zig            State serialisation helpers
-  parser.{c,h}             Vendored generated PEG parser (langlang output)
+  parser/                  Vendored langlang-generated Go parser + CGo shim
+                           (parser.go, shim/shim.go → parser.a + parser.h)
   grammar/proto-circ.peg   Source grammar for the .circ language
-  syntax/                  Parse tree → AST translation, FFI to the C parser
+  syntax/                  Parse tree → AST translation, FFI to the c-archive
   resolver/                scan_imports, import_cycle, resolve_bodies, builtins
   ir/                      Resolved IR (types, single-module resolver)
-  validator/               Diagnostic codes (E001–E013, W001–W003) and passes
+  validator/               Diagnostic codes (E001–E016, W001–W003) and passes
   topology/                Compact + full topology serializers, custom-section writer
   emit/                    Experimental --emit-zig path (standalone Zig output)
   preview/                 ASCII schematic layout + renderer for --preview
