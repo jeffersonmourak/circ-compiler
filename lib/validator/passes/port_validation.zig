@@ -148,8 +148,16 @@ pub fn run(
     // the sum of operand widths at synthesis time, so the check here is
     // "does the concat's output width equal the destination's expected
     // input width?". Any mismatch surfaces as the user-visible "sum
-    // doesn't fit" diagnostic. E002 stands in for the dedicated
-    // E014 width-mismatch code planned for S6.
+    // doesn't fit" diagnostic.
+    //
+    // Sub-circuit destinations are deliberately skipped here: the
+    // per-call port widths aren't on `Component.width` (that field
+    // captures the call-site `[N]` for type-position widths only; the
+    // instance-position `[N]` is parsed into `width_args` and consumed
+    // by the project resolver during specialization). The cross-boundary
+    // width check in lib/validator/passes/sub_circuit_validation.zig
+    // has the project context to look up the specialized target's input
+    // port width and reports the mismatch as E014.
     for (module.components) |comp| {
         if (comp.kind != .concat) continue;
         var operand_count: u8 = 0;
@@ -165,6 +173,7 @@ pub fn run(
             if (connection.from.component.value != comp.id.value) continue;
             if (!std.mem.eql(u8, connection.from.port, "out")) continue;
             const dest = findComponent(module, connection.to.component) orelse continue;
+            if (dest.kind == .sub_circuit_ref) continue;
             if (dest.width == comp.width) continue;
             const message = try std.fmt.allocPrint(
                 allocator,

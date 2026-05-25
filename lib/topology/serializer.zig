@@ -159,8 +159,17 @@ fn expandModule(
         sub_output_map.deinit();
     }
 
-    // 1. First pass: Assign global IDs to all primitives and recursively expand sub-circuits.
+    // 1. First pass: Assign global IDs to all in-module primitives, slices,
+    //    and concats. Sub-circuit instances are deferred to Pass 1b so the
+    //    recursion into a child module starts with every sibling already
+    //    in `local_to_global` — otherwise an instance whose input concat or
+    //    slice is declared after it in source order fails to resolve.
     for (module.components) |comp| {
+        switch (comp.kind) {
+            .sub_circuit_ref => continue,
+            .unresolved_name => return error.UnresolvedComponent,
+            else => {},
+        }
         switch (comp.kind) {
             .primitive => |p| {
                 const global_id = state.next_global_id;
@@ -205,6 +214,16 @@ fn expandModule(
                     .width = comp.width,
                 });
             },
+            .sub_circuit_ref, .unresolved_name => unreachable,
+        }
+    }
+
+    // 1b. Sub-circuit recursion. Runs after every in-module primitive,
+    //     slice, and concat has been registered in `local_to_global`, so
+    //     each child module's parent_input_bindings can resolve any
+    //     sibling source — regardless of declaration order in the parent.
+    for (module.components) |comp| {
+        switch (comp.kind) {
             .sub_circuit_ref => |ref| {
                 var child_module: ?*const ir.Module = null;
                 if (ref.specialized_target_file) |spec| {
@@ -233,7 +252,7 @@ fn expandModule(
                 try sub_output_map.put(comp.id.value, child_outputs);
                 input_bindings.deinit();
             },
-            .unresolved_name => return error.UnresolvedComponent,
+            else => {},
         }
     }
 
