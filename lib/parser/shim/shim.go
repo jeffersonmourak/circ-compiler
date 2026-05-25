@@ -37,11 +37,23 @@ func ParserNew() C.uintptr_t {
 	return C.uintptr_t(cgo.NewHandle(h))
 }
 
+// circLabelMessages maps the grammar's failure labels (proto-circ.peg) to
+// human-readable diagnostics. Attached to every parser so a thrown label
+// carries its message on the ParsingError.
+var circLabelMessages = map[string]string{
+	"trailing":  "unexpected input; expected a declaration, input, output, or import",
+	"busname":   "expected a port name",
+	"busassign": "expected '=' after the port name",
+	"busvalue":  "expected a signal reference after '='",
+	"busclose":  "expected ')' to close the connection list",
+}
+
 //export ParserParse
 func ParserParse(hid C.uintptr_t, source *C.char, length C.int) C.bool {
 	h := cgo.Handle(hid).Value().(*handle)
 	src := unsafe.Slice((*byte)(unsafe.Pointer(source)), int(length))
 	p := parser.NewParser()
+	p.SetLabelMessages(parser.LabelMessagesForParser(circLabelMessages))
 	p.SetInput(src)
 	tree, err := p.Parse()
 	if err != nil {
