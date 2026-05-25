@@ -1,0 +1,56 @@
+// Parametric Hack-style ALU, generic over width W.
+//
+// Implements the bit-parallel parts of the Nand2Tetris (Hack) ALU at any
+// width W:
+//   1. pre-set x: if zx then x := 0;  if nx then x := !x
+//   2. pre-set y: if zy then y := 0;  if ny then y := !y
+//   3. compute:   if f  then out := x + y  else out := x & y
+//   4. post-set:  if no then out := !out
+//
+// The ripple-carry adder for stage 3 is intrinsically serial and can't be
+// expressed parametrically (the language has no way to iterate over bit
+// positions), so the adder is *external*: the caller computes x+y at
+// width W and feeds the result in via `add_in`. To support this, the ALU
+// exposes the pre-set operands `xn_out` and `yn_out` so the caller's
+// adder has the right inputs.
+//
+// The six scalar control bits also can't be broadcast from inside this
+// file (no replicate operator), so the caller pre-broadcasts each scalar
+// `c` to a width-W bus `c_b` (typically via `wire[W] c_b(in={c, c, ...})`)
+// and passes the buses in here.
+//
+// CAVEAT — feedback path: the caller's adder consumes xn_out/yn_out and
+// feeds the result back to add_in. The current topology builder rejects
+// such feedback when the chain contains any macro at width > 1 or any
+// sub-circuit instance, so the caller's adder must use only primitives
+// (and / not / wire) on the bit-parallel paths. See alu_<W>bit.circ for
+// the hand-expanded XOR pattern this implies.
+
+input<W>[W] zx_b, nx_b, zy_b, ny_b, f_b, no_b
+input<W>[W] x, y, add_in
+
+// ----- pre-set x: x' = (NOT zx) AND x;  x'' = nx XOR x' ----------------
+not[W] zx_inv(in=zx_b)
+and[W] xz(a=zx_inv.out, b=x)
+xor    xn[W](a=nx_b, b=xz.out)
+
+// ----- pre-set y: same shape -------------------------------------------
+not[W] zy_inv(in=zy_b)
+and[W] yz(a=zy_inv.out, b=y)
+xor    yn[W](a=ny_b, b=yz.out)
+
+// ----- compute AND: bitwise across all W bits --------------------------
+and[W] and_result(a=xn.out, b=yn.out)
+
+// ----- mux per bit: out = (f AND add_in) OR ((NOT f) AND and_result) ---
+not[W] f_inv(in=f_b)
+and[W] mux_l(a=f_b, b=add_in)
+and[W] mux_r(a=f_inv.out, b=and_result.out)
+or     mux[W](a=mux_l.out, b=mux_r.out)
+
+// ----- post-set: if no then out := NOT out -----------------------------
+xor    result[W](a=no_b, b=mux.out)
+
+output[W] xn_out(in=xn.out)
+output[W] yn_out(in=yn.out)
+output[W] out(in=result.out)

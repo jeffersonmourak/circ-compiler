@@ -1,0 +1,47 @@
+// 2-bit instantiation of the parametric Hack ALU in alu.circ.
+// Total inputs: 6 control + 2 (x) + 2 (y) = 10 bits → 1024 vectors.
+
+import alu "alu.circ"
+
+input zx, nx, zy, ny, f, no
+input[2] x, y
+
+// ----- broadcast scalar controls to width 2 ----------------------------
+wire[2] zx_b(in={zx, zx})
+wire[2] nx_b(in={nx, nx})
+wire[2] zy_b(in={zy, zy})
+wire[2] ny_b(in={ny, ny})
+wire[2] f_b (in={f,  f })
+wire[2] no_b(in={no, no})
+
+// ----- 2-bit adder over inst.xn_out and inst.yn_out --------------------
+// Hand-expanded XOR for the bit-parallel propagate (primitives only).
+not[2] xn_inv(in=inst.xn_out)
+not[2] yn_inv(in=inst.yn_out)
+and[2] p1(a=inst.xn_out, b=yn_inv.out)
+and[2] p2(a=xn_inv.out, b=inst.yn_out)
+not[2] p1_inv(in=p1.out)
+not[2] p2_inv(in=p2.out)
+and[2] p_nor(a=p1_inv.out, b=p2_inv.out)
+not[2] add_p(in=p_nor.out)
+and[2] add_g(a=inst.xn_out, b=inst.yn_out)
+
+// Wire-buffer each slice that feeds a scalar macro.
+wire add_p0(in=add_p.out[0])
+wire add_p1(in=add_p.out[1])
+wire add_g0(in=add_g.out[0])
+
+// Per-bit carry chain. Bit 0 sum = add_p[0]; bit 1 = add_p[1] XOR add_g[0]
+// (final carry dropped).
+xor add1_sum(a=add_p1.out, b=add_g0.out)
+
+wire[2] adder_result(in={add_p0.out, add1_sum.out})
+
+alu inst[2](
+  zx_b=zx_b.out, nx_b=nx_b.out, zy_b=zy_b.out, ny_b=ny_b.out,
+  f_b=f_b.out,   no_b=no_b.out,
+  x=x, y=y,
+  add_in=adder_result.out
+)
+
+output[2] out(in=inst.out)
