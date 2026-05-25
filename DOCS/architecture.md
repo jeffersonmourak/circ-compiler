@@ -107,7 +107,7 @@ Allocations route through `memory.allocator` from `lib/memory.zig`. In the WASM 
 
 Wire state does **not** live inline on `Component`. Each component carries an opaque `PoolHandle` into a width-tiered Structure-of-Arrays pool owned by `Circuit`. Reads and writes flow through `Circuit.readState` / `Circuit.writeState`, which dispatch on `PoolHandle.tier` exactly once and then perform a direct bitmap operation against the pool's `(values, defined)` u64 buffers. The width=1 tier packs 64 slots per word.
 
-The value currency above the pool is `BitVecState` (`value`, `defined`, `width`). It is what events carry, what gates evaluate, and what listeners receive. The split exists so wider wires (4/8/32-bit busses) can be added by introducing a new pool tier without re-touching the propagator. Today only width=1 (tier 0) is wired; wider widths trap. See `DOCS/simulation-engine.md` for the full surface.
+The value currency above the pool is `BitVecState` (`value`, `defined`, `width`). It is what events carry, what gates evaluate, and what listeners receive. The split lets every legal width (1 through 64) live in its own lazily-allocated pool tier, with the propagator untouched — each tier indexes by `tier == width` (tier 0 is unused). The width=1 tier packs 64 slots per word; wider tiers store one u64 per slot. Widths > 64 trap at allocation time. See `DOCS/simulation-engine.md` for the full surface.
 
 ## Layer 2 — Prebuilt runtime template (`templates/`)
 

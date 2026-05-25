@@ -11,11 +11,14 @@ This document is the language reference. For an end-to-end tutorial see
 [`getting-started.md`](getting-started.md); for the runtime API exposed by the
 compiled artifact see [`wasm-api.md`](wasm-api.md).
 
-> **Status.** This reference covers the v0 surface: imports, input/output pins,
-> primitive components (`and`, `not`, `led`, `wire`), the auto-imported macro
-> family (`or`, `nand`, `nor`, `xor`, `xnor`), anonymous nested components, and
-> sub-circuit instantiation. Anything not mentioned here is not part of the
-> language yet.
+> **Status.** This reference covers the surface as of the multi-bit-wires
+> release: imports, input/output pins, primitive components (`and`, `not`,
+> `led`, `wire`), the auto-imported macro family (`or`, `nand`, `nor`, `xor`,
+> `xnor`), anonymous nested components, sub-circuit instantiation, and width
+> annotations on every signal-carrying declaration (`[N]` for literal widths,
+> `<W>` for parametric ones). Slice (`a[lo..hi]`), bit-index (`a[i]`), and
+> concatenation (`{a, b}`) signal expressions are also part of the language.
+> Anything not mentioned here is not part of the language yet.
 
 ---
 
@@ -119,65 +122,91 @@ Paths are resolved relative to the directory of the file containing the import.
 ## 3. Declarations
 
 A `circ` program is a sequence of declarations. The four kinds are described
-below.
+below. Every declaration that carries a signal may optionally name its width
+in bits with a `[N]` annotation; a missing `[N]` means width 1, which is what
+makes pre-multi-bit `.circ` files legal as-is.
 
 ### 3.1 Input Pins
 
 ```
 input a
 input clk, reset
+input[4] addr, data            // 4-bit buses
 ```
 
 `input` declares one or more externally driven pins. An input pin has no input
 ports of its own; its single output is referenced as **`<name>`** or
 equivalently **`<name>.out`** elsewhere in the program. Input pins are driven
-from the host via `setPin(component_id, value)` after compilation.
+from the host via `setPin(component_id, value, defined)` after compilation
+(see [`wasm-api.md`](wasm-api.md) for the BigInt-pair convention).
+
+The `[N]` annotation between the keyword and the names sets the width for
+every name in that `input` line. To declare pins at different widths, write
+separate `input` lines.
+
+A sub-circuit becomes parametric by introducing a parameter with `<W>` on its
+`input` lines (covered fully in §6):
+
+```
+input<W>[W] a, b               // a, b inherit the parameter W as their width
+```
 
 ### 3.2 Output Pins
 
 ```
 output sum(in = adder.out)
+output[4] result(in = alu.out)
 ```
 
 `output` declares a named externally observable pin and binds its single port
-`in` to a signal. Output pins are read from the host via
-`getOutputState(driver_id)` (note: the driver's id, not the output pin's own
-id; see [`wasm-api.md`](wasm-api.md)).
+`in` to a signal. Multi-bit outputs use the same `[N]` annotation. Output pins
+are read from the host via two paired exports: `getOutputValue(driver_id)`
+returns the `BitVecState.value` field as a BigInt, `getOutputDefined(driver_id)`
+returns `BitVecState.defined`. Both take the **driver** component id, not the
+output pin's own id; see [`wasm-api.md`](wasm-api.md).
 
 ### 3.3 Component Instances
 
-A component is instantiated by writing its **type**, an instance **name**, and
-a parenthesised list of **port bindings**:
+A component is instantiated by writing its **type**, an optional `[N]` width,
+an instance **name**, and a parenthesised list of **port bindings**:
 
 ```
 and gate1(a = pin1, b = pin2)
-not inv (in = clk.out)
+not inv  (in = clk.out)
+and[4] adder(a = x, b = y)     // 4-bit AND
 ```
 
 The available primitive types are:
 
-| Type   | Input ports | Output | Notes                                  |
-| ------ | ----------- | ------ | -------------------------------------- |
-| `and`  | `a`, `b`    | `out`  | 2-input AND gate.                      |
-| `not`  | `in`        | `out`  | Inverter.                              |
-| `led`  | `in`        | —      | Visualisation sink. No `.out`.         |
-| `wire` | `in`        | `out`  | Pass-through. See §5.                  |
+| Type   | Input ports | Output | Notes                                                                  |
+| ------ | ----------- | ------ | ---------------------------------------------------------------------- |
+| `and`  | `a`, `b`    | `out`  | Bitwise AND. Width controlled by `[N]`; defaults to 1.                 |
+| `not`  | `in`        | `out`  | Bitwise inverter. Width controlled by `[N]`; defaults to 1.            |
+| `led`  | `in`        | —      | Visualisation sink. Multi-bit form renders per `--preview` flags.      |
+| `wire` | `in`        | `out`  | Pass-through. See §5.                                                  |
 
-The auto-imported macro family expands at compile time to nested `and`/`not`
-gates. They share a common port shape:
+The auto-imported macro family is parametric in width; the default-missing-`[N]`
+rule keeps every existing scalar caller working unchanged.
 
-| Type   | Input ports | Output | Expansion                          |
+| Type   | Input ports | Output | Expansion (per width slot)         |
 | ------ | ----------- | ------ | ---------------------------------- |
 | `or`   | `a`, `b`    | `out`  | `not(and(not a, not b))`           |
 | `nand` | `a`, `b`    | `out`  | `not(and a b)`                     |
-| `nor`  | `a`, `b`    | `out`  | `not(or a b)`                      |
-| `xor`  | `a`, `b`    | `out`  | `or(and a !b, and !a b)`           |
-| `xnor` | `a`, `b`    | `out`  | `not(xor a b)`                     |
+| `nor`  | `a`, `b`    | `out`  | `not(or[W] a b)` — `or` propagates width |
+| `xor`  | `a`, `b`    | `out`  | `and(or a b, nand a b)`            |
+| `xnor` | `a`, `b`    | `out`  | `not(xor[W] a b)` — `xor` propagates width |
 
 A user-defined sub-circuit is referenced by the alias bound in its `import`
 declaration. Its ports are exactly the names declared as `input`/`output` in
-the imported file (e.g. the `half_adder` sub-circuit exposes input ports `a`,
-`b` and output ports `sum`, `carry`).
+the imported file. If the imported sub-circuit is parametric (declares one or
+more `<W>` parameters), the caller binds widths positionally with the
+`name[N, M, ...]` form at the instance name:
+
+```
+mux inst[4, 2](data = x, select = sel)   // mux<W, S> instantiated at W=4, S=2
+```
+
+Omitting the `[N, ...]` defaults all parameters to 1.
 
 ### 3.4 Imports
 
@@ -201,8 +230,8 @@ import xor "<builtin>/xor.circ"
 ## 4. Signals and Wiring
 
 A *signal* is whatever you place on the right-hand side of a port binding. It
-identifies the source of the bit that drives the port. Signals come in three
-forms.
+identifies the source of the bit(s) that drive the port. Signals come in six
+forms:
 
 **Reference to an input pin:**
 
@@ -220,6 +249,38 @@ and g  (a  = n1.out, b = pin2)
 The `.out` suffix is the implicit output port of any single-output primitive.
 For sub-circuit instances, use the explicit output port name from the imported
 file: `ha.sum`, `ha.carry`, etc.
+
+**Bit index (`name[i]` or `name.port[i]`).** Picks a single bit out of a
+multi-bit signal:
+
+```
+input[4] bus
+and g(a = bus[0], b = bus[3])    // bit 0 AND bit 3
+```
+
+Bit 0 is the LSB. The result is a width-1 signal.
+
+**Slice (`name[lo..hi]` or `name.port[lo..hi]`).** Picks a contiguous range of
+bits, half-open:
+
+```
+input[8] bus
+and[4] low_half(a = bus[0..4], b = some_other_4bit_signal)
+```
+
+`bus[0..4]` covers bits 0, 1, 2, 3 — a 4-bit signal. The width of a slice is
+`hi - lo`. An out-of-range or inverted slice is `E002`.
+
+**Concatenation (`{low, high, ...}`).** Joins two or more signals into a wider
+one, low-on-left:
+
+```
+input a, b, c, d
+and[4] combine(a = {a, b, c, d}, b = ...)
+// bits: [0]=a, [1]=b, [2]=c, [3]=d
+```
+
+The output width is the sum of operand widths.
 
 **Anonymous nested components.** A component may be instantiated inline as the
 value of a port. The nested instance has no name; its `.out` is wired
@@ -239,7 +300,7 @@ rules as a named one.
 ### 4.1 Validation Rules
 
 The compiler enforces a small set of rules on the resulting graph; violations
-produce diagnostics with stable codes (`E001`–`E013`, `W001`–`W003`, see
+produce diagnostics with stable codes (`E001`–`E016`, `W001`–`W003`, see
 `circuit-format.md` for the full catalogue):
 
 * Every signal reference must resolve to a declared name (`E001`).
@@ -252,6 +313,12 @@ produce diagnostics with stable codes (`E001`–`E013`, `W001`–`W003`, see
   not shadow primitive type names (`E006`).
 * The induced signal graph must be acyclic (`E008`). See §5 for the role
   `wire` plays in cycle detection.
+* Connection widths must agree on both ends. A connection from a width-4
+  source to a width-8 destination is `E014` (width mismatch).
+* Passing `[N]` widths to a scalar (non-parametric) sub-circuit is `E015`; the
+  diagnostic suggests adding `<W>` to the callee.
+* Parametric arity mismatch (caller writes `[N, M]` but the callee declares
+  one parameter, or vice versa) is `E016`.
 
 ---
 
@@ -319,15 +386,138 @@ wire w2(in = n2.out)   // closes the chain — but the chain has length 4 and
 (In this snippet `w2.out` is forward-referenced; the validator resolves names
 globally, so order in source is irrelevant for binding.)
 
-### 5.3 What wires are *not*
+### 5.3 Multi-bit wires
 
-A `wire` is not a multi-bit bus, not a tri-state line, and not a clocked
-register. It is a value-preserving pass-through over a single bit. If you find
-yourself wanting any of those things, the language does not yet model them.
+A `wire` also takes the `[N]` annotation when it carries a multi-bit signal:
+
+```
+input[4] bus
+wire[4] buffered_bus(in = bus)
+and[4] g(a = buffered_bus.out, b = some_4bit_signal)
+```
+
+The wire's input width must match the source's output width, and its output
+width is the same `N`. Mismatches surface as `E014`.
+
+### 5.4 What wires are *not*
+
+A `wire` is not a tri-state line and not a clocked register. It is a
+value-preserving pass-through over a fixed-width signal. If you find yourself
+wanting either of those things, the language does not yet model them.
 
 ---
 
-## 6. A Worked Example
+## 6. Multi-bit Wires
+
+`circ` programs may carry signals wider than one bit. Every signal-carrying
+declaration accepts an optional `[N]` annotation; a missing `[N]` means width
+1. Sub-circuits may take their widths as parameters with the `<W>` form. The
+authoritative decision record lives in
+[`decisions/language.md`](decisions/language.md); this section is the user-
+facing reference.
+
+### 6.1 Literal widths
+
+The simplest form annotates a fixed width on a declaration:
+
+```
+input[4] a, b
+and[4] g(a = a, b = b)
+output[4] r(in = g.out)
+```
+
+`a`, `b`, the `and` gate `g`, and the output `r` are all width-4. The
+validator checks that every connection's source width matches its destination
+width.
+
+`a[0]` is the LSB. Bit `i` has weight `2^i`. This matches the
+`BitVecState.value` bit layout the engine uses internally; there is no
+conversion between the user-visible numbering and the runtime numbering.
+
+### 6.2 Slice, bit-index, and concatenation
+
+See §4 for the signal-expression syntax. A slice or bit-index produces a
+narrower signal; a brace concat produces a wider one. The resolver lowers
+each to an engine-level component, so users never write `slice(...)` or
+`concat(...)` directly — the syntactic forms are the only way to invoke
+them.
+
+```
+input[8] bus
+and[4] g(a = bus[0..4], b = bus[4..8])   // AND the two halves
+and    bit_eq(a = bus[0], b = bus[7])    // compare LSB to MSB
+
+input a, b
+input[2] tail
+output[4] out(in = {a, b, tail})         // out = a | (b << 1) | (tail << 2)
+```
+
+### 6.3 Parametric sub-circuits
+
+A sub-circuit becomes parametric by introducing parameters with `<W>` on its
+`input` declarations. Use sites inside the file reference the parameter as
+`[W]`:
+
+```
+// wide_not.circ
+input<W>[W] a
+not[W] inv(in = a)
+output[W] o(in = inv.out)
+```
+
+Callers bind widths positionally with `name[N, ...]` at the instance name:
+
+```
+import wide_not "wide_not.circ"
+
+input[4] x
+wide_not inst[4](a = x)
+output[4] r(in = inst.o)
+```
+
+Multiple parameters are allowed and ordered by source-position of first
+introduction:
+
+```
+// mux_lib.circ
+input<W, S>[W] data
+input<W, S>[S] select
+// ... body uses [W] and [S] independently
+```
+
+The caller binds positionally: `mux inst[4, 2](data = ..., select = ...)`
+maps `[W]` to 4 and `[S]` to 2.
+
+Two rules to remember:
+
+* **Missing `[N]` at the call site defaults all parameters to 1.** This is
+  what keeps every existing scalar caller of the built-in macros working
+  unchanged.
+* **Angle brackets only on the introducing line.** A parametric sub-circuit
+  marks its parameter once, on `input<W>`. Internal references use `[W]`,
+  not `<W>`.
+
+Width-mismatch on connections involving a sub-circuit boundary, missing
+`<W>` introductions, and arity mismatches at call sites surface as `E014`,
+`E015`, and `E016` respectively.
+
+### 6.4 The built-in macros are parametric
+
+`or`, `xor`, `nand`, `nor`, `xnor` ship with `<W>` declarations. Scalar
+callers (no `[N]`) default `W` to 1, which produces byte-identical IR and
+topology to the pre-multibit form. Wider callers get the natural multi-bit
+gate. `nor` and `xnor` propagate width through their internal `or` / `xor`
+calls.
+
+```
+input[8] x, y
+nor[8] n(a = x, b = y)         // bitwise NOR across all 8 bits
+output[8] z(in = n.out)
+```
+
+---
+
+## 7. A Worked Example
 
 The program below builds a half-adder out of primitives and exposes its sum
 and carry as outputs. It exercises every construct in the language: imports,
@@ -379,7 +569,7 @@ The `--preview` flag prints an ASCII schematic of the resolved circuit; see
 
 ---
 
-## 7. Where to Go Next
+## 8. Where to Go Next
 
 * [`getting-started.md`](getting-started.md) — install the compiler, write your
   first circuit, drive it from Node.
