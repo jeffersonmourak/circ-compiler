@@ -14,7 +14,18 @@ pub const LoadedFile = struct {
     source: []u8,
 };
 
+/// In-memory source overlay for editor integration. Maps an absolute file
+/// path to the unsaved buffer the editor currently holds. The analyzer
+/// consults it before reading disk so it sees the document being edited,
+/// not the last-saved bytes. Keyed by absolute path because that is the
+/// stable identity the resolver threads through `file_paths`.
+pub const Overlay = std.StringHashMapUnmanaged([]const u8);
+
 pub fn loadFile(allocator: std.mem.Allocator, path: []const u8) !LoadedFile {
+    return loadFileWithOverlay(allocator, path, null);
+}
+
+pub fn loadFileWithOverlay(allocator: std.mem.Allocator, path: []const u8, overlay: ?Overlay) !LoadedFile {
     if (std.mem.startsWith(u8, path, builtin_path_prefix)) {
         const suffix = path[builtin_path_prefix.len..];
         const embedded = builtins.sourceForPathSuffix(suffix) orelse return error.BuiltinNotFound;
@@ -27,8 +38,22 @@ pub fn loadFile(allocator: std.mem.Allocator, path: []const u8) !LoadedFile {
         };
     }
 
-    const absolute_path = try std.fs.realpathAlloc(allocator, path);
+    // Resolve to an absolute path so the overlay (keyed by absolute path)
+    // matches. A never-saved buffer fails realpath; fall back to the given
+    // path so an absolute overlay key still resolves for new documents.
+    const absolute_path = std.fs.realpathAlloc(allocator, path) catch |err| blk: {
+        if (err == error.FileNotFound) break :blk try allocator.dupe(u8, path);
+        return err;
+    };
     errdefer allocator.free(absolute_path);
+
+    if (overlay) |ov| {
+        if (ov.get(absolute_path)) |buffer| {
+            const source = try allocator.dupe(u8, buffer);
+            return .{ .absolute_path = absolute_path, .source = source };
+        }
+    }
+
     const source = try readAbsoluteFileAlloc(allocator, absolute_path);
     errdefer allocator.free(source);
     return .{
