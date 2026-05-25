@@ -503,3 +503,35 @@ test "analyze: emits symbols and reference links" {
     try std.testing.expect(has_gate_g);
     try std.testing.expect(result.references.len >= 3);
 }
+
+test "analyze: garbage input yields a syntax diagnostic, not a failure" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    var overlay = Overlay{};
+    try overlay.put(a, "/virtual/garbage.circ", "%%% not circ at all %%%");
+
+    // Must return a result (not an error): a hard parse failure is reported
+    // as a diagnostic, it does not abort the analysis.
+    const result = try analyze(a, "/virtual/garbage.circ", overlay);
+    var found_syntax = false;
+    for (result.diagnostics) |d| {
+        if (std.mem.eql(u8, d.code, "syntax")) found_syntax = true;
+    }
+    try std.testing.expect(found_syntax);
+}
+
+test "analyze: empty input resolves cleanly" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    var overlay = Overlay{};
+    try overlay.put(a, "/virtual/empty.circ", "");
+
+    const result = try analyze(a, "/virtual/empty.circ", overlay);
+    for (result.diagnostics) |d| {
+        try std.testing.expect(!std.mem.eql(u8, d.severity, "error"));
+    }
+}
