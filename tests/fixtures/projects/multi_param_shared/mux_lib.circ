@@ -1,5 +1,5 @@
-input<W, S>[W] data
-input<W, S>[S] select
+input<W>[W] data
+input<S>[S] select
 not[W] data_inv(in=data)
 not[S] sel_inv(in=select)
 output[W] data_out(in=data_inv.out)

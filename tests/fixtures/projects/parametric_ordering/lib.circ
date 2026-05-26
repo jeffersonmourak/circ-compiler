@@ -1,5 +1,5 @@
 input<W, X>[X] aux
-input<W, X>[W] data
+input[W] data
 not[W] data_inv(in=data)
 not[X] aux_inv(in=aux)
 output[W] data_out(in=data_inv.out)
