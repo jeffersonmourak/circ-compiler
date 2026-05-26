@@ -480,8 +480,8 @@ introduction:
 
 ```
 // mux_lib.circ
-input<W, S>[W] data
-input<W, S>[S] select
+input<W>[W] data
+input<S>[S] select
 // ... body uses [W] and [S] independently
 ```
 
