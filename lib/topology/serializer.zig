@@ -71,6 +71,7 @@ const BoundInput = struct {
 pub const PinMapping = struct {
     name: []const u8,
     global_id: u32,
+    width: u8,
 };
 
 pub const ProjectTopology = struct {
@@ -110,14 +111,14 @@ pub fn serializeProjectFull(
     errdefer input_ids_list.deinit(allocator);
     for (root_module.inputs) |input| {
         const global_id = root_local_to_global.get(input.component.value) orelse continue;
-        try input_ids_list.append(allocator, .{ .name = input.name, .global_id = global_id });
+        try input_ids_list.append(allocator, .{ .name = input.name, .global_id = global_id, .width = input.width });
     }
 
     var output_ids_list: std.ArrayList(PinMapping) = .{};
     errdefer output_ids_list.deinit(allocator);
     for (root_module.outputs) |output| {
         const global_id = output_map.get(output.name) orelse continue;
-        try output_ids_list.append(allocator, .{ .name = output.name, .global_id = global_id });
+        try output_ids_list.append(allocator, .{ .name = output.name, .global_id = global_id, .width = output.width });
     }
 
     const payload = try encodePayload(allocator, state.components.items, state.connections.items);

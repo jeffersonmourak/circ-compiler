@@ -1,0 +1,8 @@
+# Slice through the real artifact: o = a[0..2], the low two bits of a 4-bit
+# input. This drives a multi-bit value across setPin and reads a multi-bit
+# value back, exercising the bit-string codec end to end. State tokens are
+# MSB-first (the leftmost character is the high bit).
+a=1010 => o=10
+a=0111 => o=11
+a=0100 => o=00
+a=0001 => o=01
