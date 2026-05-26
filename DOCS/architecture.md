@@ -49,7 +49,7 @@
    final .wasm  ← hands to host (Node, browser, etc.)
 ```
 
-The CLI driver is `cmd/circ-compile/main.zig`. The compiler runs five mutually exclusive modes (`--inspect`, `--preview`, `--emit-zig`, `--truth-table`, default compile) — only the default mode produces a `.wasm`; see `cmd/circ-compile/main.zig`'s `run()` for the dispatch.
+The CLI driver is `cmd/circ-compile/main.zig`. The compiler runs five mutually exclusive modes (`--inspect`, `--preview`, `--emit-zig`, `--truth-table`, default compile); only the default mode produces a `.wasm`. See `cmd/circ-compile/main.zig`'s `run()` for the dispatch. A sixth invocation, `--analyze`, is handled in `main()` ahead of `run()`: it reads a JSON request on stdin (rather than a file path) and emits structured diagnostics, symbols, and references for editor tooling such as the external circ-lsp server. See [analyze-api.md](analyze-api.md).
 
 ## Layer 1 — Simulation engine (`lib/circuit.zig`)
 

@@ -29,6 +29,10 @@ pub const BitVecState = struct {
     pub fn low(width: u8)        BitVecState;
     pub fn high(width: u8)       BitVecState;
 
+    /// General constructor used at the WASM host boundary (`setPin`); each
+    /// bit of `defined` says whether the matching `value` bit is meaningful.
+    pub fn fromRaw(value: u64, defined: u64, width: u8) BitVecState;
+
     pub fn equals(self: BitVecState, other: BitVecState) bool;
     pub fn flip(self: BitVecState) BitVecState;
 
@@ -72,8 +76,8 @@ const Kind = union(ComponentType) {
     },
     wire:           struct { inputs: std.ArrayList(*Component) = .{} },
     output_pin:     struct { inputs: std.ArrayList(*Component) = .{} },
-    slice:          struct { from: *Component, lo: u8, hi: u8 },
-    concat:         struct { operands: []const *Component },
+    slice:          struct { from: ?*Component = null, lo: u8 = 0, hi: u8 = 0 },
+    concat:         struct { operands: std.ArrayList(*Component) = .{} },
 };
 ```
 
@@ -95,8 +99,8 @@ pub fn toKind(kind: u8) !Component.Kind {
         3 => .and_gate,
         4 => .wire,
         5 => .output_pin,
-        6 => .slice,
-        7 => .concat,
+        6 => .{ .slice = .{} },
+        7 => .{ .concat = .{} },
         else => return error.InvalidComponentKind,
     };
 }
@@ -252,10 +256,10 @@ You normally do not call `allocateStateSlot` yourself: `Circuit.createComponent`
 ### Component creation
 
 ```zig
-pub fn createComponent(self: *Circuit, kind: Component.Kind) !*Component;
+pub fn createComponent(self: *Circuit, kind: Component.Kind, width: u8) !*Component;
 ```
 
-Allocates a `Component`, assigns a monotonically increasing `id`, allocates its state slot via `allocateStateSlot(1)`, stamps the handle onto the component, and appends it to `self.nodes`. The IDs are dense integers `0..nodes.len`, which is what the topology format and the compiled WASM runtime use.
+Allocates a `Component`, assigns a monotonically increasing `id`, allocates its state slot via `allocateStateSlot(width)` (tier `width`), stamps the handle onto the component, and appends it to `self.nodes`. The IDs are dense integers `0..nodes.len`, which is what the topology format and the compiled WASM runtime use.
 
 ### Connections
 
@@ -361,6 +365,7 @@ Iterates `nodes` and logs `(id, kind, tagName)` for each via `lib/log.zig`. Diag
 fn calculateDominantState(
     circuit: *const Circuit,
     input_comp_list: std.ArrayList(*Component),
+    width: u8,
 ) BitVecState;
 ```
 

@@ -153,5 +153,5 @@ The stable validator surface (E001–E016, W001–W003) is enumerated in [`langu
 | Code | Meaning |
 | --- | --- |
 | E014 | width mismatch between a driver and the port it feeds |
-| E015 | width annotation `[N]` on a declaration whose declared type is scalar |
-| E016 | sub-circuit call-site arity mismatch (wrong number of `<...>` parameters) |
+| E015 | sub-circuit is not parametric (caller passed `[N]` call-widths to a scalar callee) |
+| E016 | parameter count mismatch (wrong number of `[w0, w1, ...]` call-widths at the call site) |
