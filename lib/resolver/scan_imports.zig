@@ -89,6 +89,14 @@ fn appendImportNotFoundDiagnostic(
 }
 
 pub fn scanProjectImports(allocator: std.mem.Allocator, root_path: []const u8) !ScanResult {
+    return scanProjectImportsWithOverlay(allocator, root_path, null);
+}
+
+pub fn scanProjectImportsWithOverlay(
+    allocator: std.mem.Allocator,
+    root_path: []const u8,
+    overlay: ?file_loader.Overlay,
+) !ScanResult {
     var file_paths: std.ArrayList([]const u8) = .{};
     errdefer {
         for (file_paths.items) |path| allocator.free(path);
@@ -109,7 +117,7 @@ pub fn scanProjectImports(allocator: std.mem.Allocator, root_path: []const u8) !
     var queue: std.ArrayList(FileId) = .{};
     defer queue.deinit(allocator);
 
-    const root_loaded = try file_loader.loadFile(allocator, root_path);
+    const root_loaded = try file_loader.loadFileWithOverlay(allocator, root_path, overlay);
     const root_file_id: FileId = 0;
     try file_paths.append(allocator, root_loaded.absolute_path);
     try path_to_id.put(root_loaded.absolute_path, root_file_id);
@@ -198,7 +206,7 @@ pub fn scanProjectImports(allocator: std.mem.Allocator, root_path: []const u8) !
                 const new_id: FileId = @intCast(file_paths.items.len);
                 try path_to_id.put(resolved_path, new_id);
                 try file_paths.append(allocator, resolved_path);
-                const loaded = try file_loader.loadFile(allocator, resolved_path);
+                const loaded = try file_loader.loadFileWithOverlay(allocator, resolved_path, overlay);
                 allocator.free(loaded.absolute_path);
                 try sources.append(allocator, loaded.source);
                 try queue.append(allocator, new_id);
@@ -240,7 +248,7 @@ pub fn scanProjectImports(allocator: std.mem.Allocator, root_path: []const u8) !
                 errdefer allocator.free(path_owned);
                 try path_to_id.put(path_owned, new_id);
                 try file_paths.append(allocator, path_owned);
-                const loaded = try file_loader.loadFile(allocator, path_owned);
+                const loaded = try file_loader.loadFileWithOverlay(allocator, path_owned, overlay);
                 allocator.free(loaded.absolute_path);
                 try sources.append(allocator, loaded.source);
                 try queue.append(allocator, new_id);

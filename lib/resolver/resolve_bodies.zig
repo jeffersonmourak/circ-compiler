@@ -388,6 +388,17 @@ pub fn resolveBodies(
     topo_order: []const scan_imports.FileId,
     diagnostic_list: *diagnostics.DiagnosticList,
 ) !ir.Project {
+    return resolveBodiesWithOverlay(allocator, file_paths, import_table, topo_order, diagnostic_list, null);
+}
+
+pub fn resolveBodiesWithOverlay(
+    allocator: std.mem.Allocator,
+    file_paths: []const []const u8,
+    import_table: []const scan_imports.ResolvedImport,
+    topo_order: []const scan_imports.FileId,
+    diagnostic_list: *diagnostics.DiagnosticList,
+    overlay: ?file_loader.Overlay,
+) !ir.Project {
     var modules_list: std.ArrayList(ir.Module) = .{};
     errdefer modules_list.deinit(allocator);
     try modules_list.resize(allocator, file_paths.len);
@@ -403,11 +414,28 @@ pub fn resolveBodies(
     @memset(asts, null);
 
     for (topo_order) |file_id| {
-        const loaded = try file_loader.loadFile(allocator, file_paths[file_id]);
+        const loaded = try file_loader.loadFileWithOverlay(allocator, file_paths[file_id], overlay);
         allocator.free(loaded.absolute_path);
         sources_list.items[file_id] = loaded.source;
 
-        const ast_file = try translate.parseSource(allocator, file_id, sources_list.items[file_id]);
+        // A file that fails to parse (empty, or syntactically broken beyond
+        // the parser's silent-truncation tolerance) must not abort the whole
+        // project resolution: editor tooling relies on getting results for
+        // every other file. Substitute an empty module and let the caller
+        // (e.g. the --analyze surface) report the syntax error separately.
+        const ast_file = translate.parseSource(allocator, file_id, sources_list.items[file_id]) catch ast.File{
+            .imports = &.{},
+            .inputs = &.{},
+            .outputs = &.{},
+            .components = &.{},
+            .span = .{
+                .file_id = file_id,
+                .start_line = 1,
+                .start_col = 1,
+                .end_line = 1,
+                .end_col = 1,
+            },
+        };
         asts[file_id] = ast_file;
 
         if (fileIsParametric(ast_file)) {

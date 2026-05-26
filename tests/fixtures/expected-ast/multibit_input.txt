@@ -1,4 +1,4 @@
-File [f0:1:1-1:14]
+File [f0:1:1-2:1]
 Imports (0)
 Inputs (1)
   Input a width=[4], b width=[4] [f0:1:1-1:14]

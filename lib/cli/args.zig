@@ -61,6 +61,7 @@ pub const ParseError = error{
     InvalidFlagValue,
     TruthTableCapTooLarge,
     HelpRequested,
+    VersionRequested,
 };
 
 pub const help_text =
@@ -79,6 +80,7 @@ pub const help_text =
     \\OPTIONS:
     \\    -o <path>                       Output file. Required by compile and --emit-zig modes.
     \\    -h, --help                      Show this help text and exit.
+    \\    --version, -v                   Print version and HEAD revision, then exit.
     \\    --warnings-as-errors, -Werror   Treat warnings (W001–W003) as errors.
     \\
     \\  Preview-only:
@@ -120,6 +122,9 @@ pub fn parse(argv: []const []const u8) ParseError!Args {
     for (argv[@min(argv.len, 1)..]) |token| {
         if (std.mem.eql(u8, token, "--help") or std.mem.eql(u8, token, "-h")) {
             return error.HelpRequested;
+        }
+        if (std.mem.eql(u8, token, "--version") or std.mem.eql(u8, token, "-v")) {
+            return error.VersionRequested;
         }
     }
 
@@ -454,6 +459,13 @@ test "cli_args_help_long_returns_help_requested" {
     try std.testing.expectError(error.HelpRequested, parse(&.{ "circ-compile", "--help" }));
 }
 
+test "cli_args_version_long_and_short_return_VersionRequested" {
+    try std.testing.expectError(error.VersionRequested, parse(&.{ "circ-compile", "--version" }));
+    try std.testing.expectError(error.VersionRequested, parse(&.{ "circ-compile", "-v" }));
+    // version, like help, short-circuits other validation (no input required)
+    try std.testing.expectError(error.VersionRequested, parse(&.{ "circ-compile", "in.circ", "--inspect", "--version" }));
+}
+
 test "cli_args_help_short_returns_help_requested" {
     try std.testing.expectError(error.HelpRequested, parse(&.{ "circ-compile", "-h" }));
 }
@@ -475,6 +487,7 @@ test "cli_args_help_text_mentions_every_mode_and_flag" {
         "-o",           "--help",        "-h",                 "--warnings-as-errors",
         "-Werror",      "--expand-macros", "--color=",        "--format=",
         "--strict",     "--verbose",      "--truth-table-format=", "--truth-table-cap=",
+        "--version",
     };
     inline for (needles) |needle| {
         try std.testing.expect(std.mem.indexOf(u8, help_text, needle) != null);

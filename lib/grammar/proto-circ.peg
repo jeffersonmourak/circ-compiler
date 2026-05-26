@@ -1,4 +1,6 @@
-Program     <- (Annotation / ImportDecl / InputDecl / Declaration / Connection)*
+Program     <- (Annotation / ImportDecl / InputDecl / Declaration / Connection / RecoverLine)* EndOfInput
+EndOfInput  <- (!.)^trailing
+RecoverLine <- (![\n] .)+
 Annotation  <- '//' (![\n] .)*
 
 ImportDecl  <- 'import' Identifier '"' (!["] .)* '"'
@@ -20,6 +22,16 @@ IndexedRef  <- BaseRef #Subscript?
 Subscript   <- '[' Integer '..' Integer ']' / '[' Integer ']'
 BaseRef     <- (AnonDecl '.' Identifier) / (Identifier ('.' Identifier)?)
 IdentList   <- Identifier (',' Identifier)*
-BusType     <- '(' Identifier '=' PortRef (',' Identifier '=' PortRef)* ')'
+BusType     <- '(' Identifier^busname '='^busassign PortRef^busvalue (',' Identifier^busname '='^busassign PortRef^busvalue)* ')'^busclose
 
 Connection  <- PortRef '<>' PortRef
+
+// Recovery rules: productions named after the throw labels above. When a
+// label fires, the parser runs the matching production to resync (skip to
+// the end of the line), emits an error node, and continues instead of
+// aborting. busclose recovers in place (the ')' is simply missing).
+trailing    <- (![\n] .)*
+busname     <- (![\n] .)*
+busassign   <- (![\n] .)*
+busvalue    <- (![\n] .)*
+busclose    <-

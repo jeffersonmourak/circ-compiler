@@ -1,5 +1,5 @@
 === Parse Tree ===
-File [f0:1:1-5:26]
+File [f0:1:1-6:1]
 Imports (1)
   Import alias=half_adder path=half_adder.circ [f0:1:1-1:36]
 Inputs (1)

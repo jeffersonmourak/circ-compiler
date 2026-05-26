@@ -1,12 +1,23 @@
 const std = @import("std");
 pub const Span = @import("span.zig").Span;
 
+/// A recovered syntax error: the span the parser stumbled on and a
+/// human message (from the thrown label, or a generic note for a
+/// wholly-unparseable line). Populated by error recovery; empty for a
+/// clean parse. Lets the --analyze surface report syntax errors while
+/// still handing back a partial AST for the valid declarations.
+pub const ErrorMark = struct {
+    span: Span,
+    message: []const u8,
+};
+
 pub const File = struct {
     imports: []const Import,
     inputs: []const InputDecl,
     outputs: []const OutputDecl,
     components: []const ComponentInstance,
     span: Span,
+    errors: []const ErrorMark = &.{},
 };
 
 pub const Import = struct {

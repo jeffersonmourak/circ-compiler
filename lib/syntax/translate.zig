@@ -635,6 +635,68 @@ fn parseDeclaration(
     return error.InvalidDeclaration;
 }
 
+/// Human message for a thrown grammar label (proto-circ.peg). Mirrors the
+/// shim's circLabelMessages so a recovered error node carries the same
+/// diagnostic the abort path would have surfaced.
+fn labelMessage(label: []const u8) []const u8 {
+    if (std.mem.eql(u8, label, "trailing")) return "unexpected input; expected a declaration";
+    if (std.mem.eql(u8, label, "busname")) return "expected a port name";
+    if (std.mem.eql(u8, label, "busassign")) return "expected '=' after the port name";
+    if (std.mem.eql(u8, label, "busvalue")) return "expected a signal reference after '='";
+    if (std.mem.eql(u8, label, "busclose")) return "expected ')' to close the connection list";
+    return "syntax error";
+}
+
+/// Walk the recovered parse tree collecting error markers: NodeType_Error
+/// nodes (a recovered label throw, named after the label) and RecoverLine
+/// nodes (a wholly-unparseable line). The --analyze surface turns these
+/// into syntax diagnostics while the valid declarations still resolve.
+fn collectErrorMarks(ctx: *TranslationContext, node_id: u32, marks: *std.ArrayList(ast.ErrorMark)) anyerror!void {
+    const t = nodeType(ctx, node_id);
+    if (t == NodeType_Error) {
+        try marks.append(ctx.allocator, .{ .span = nodeSpan(ctx, node_id), .message = labelMessage(nodeName(ctx, node_id)) });
+        return;
+    }
+    if (t == NodeType_Node and std.mem.eql(u8, nodeName(ctx, node_id), "RecoverLine")) {
+        try marks.append(ctx.allocator, .{ .span = nodeSpan(ctx, node_id), .message = "unexpected input; expected a declaration" });
+        return;
+    }
+    if (t == NodeType_Node or t == NodeType_Sequence) {
+        const len = childCount(ctx, node_id);
+        var i: usize = 0;
+        while (i < len) : (i += 1) {
+            const child = childAt(ctx, node_id, i) catch break;
+            try collectErrorMarks(ctx, child, marks);
+        }
+    }
+}
+
+/// Dispatch one top-level Program child. Parse failures are swallowed so a
+/// single mangled declaration never aborts the whole file (the syntax
+/// error is reported separately via collectErrorMarks); RecoverLine and
+/// other unrecognized nodes are skipped here.
+fn translateTopLevel(
+    ctx: *TranslationContext,
+    child: u32,
+    imports: *std.ArrayList(ast.Import),
+    inputs: *std.ArrayList(ast.InputDecl),
+    outputs: *std.ArrayList(ast.OutputDecl),
+    components: *std.ArrayList(ast.ComponentInstance),
+) !void {
+    const name = nodeName(ctx, child);
+    if (std.mem.eql(u8, name, "ImportDecl")) {
+        if (parseImportDecl(ctx, child)) |imp| {
+            try imports.append(ctx.allocator, imp);
+        } else |_| {}
+    } else if (std.mem.eql(u8, name, "InputDecl")) {
+        if (parseInputDeclNode(ctx, child)) |in| {
+            try inputs.append(ctx.allocator, in);
+        } else |_| {}
+    } else if (std.mem.eql(u8, name, "Declaration")) {
+        parseDeclaration(ctx, child, outputs, components) catch {};
+    }
+}
+
 fn translateTree(ctx: *TranslationContext) !ast.File {
     var root: u32 = undefined;
     if (!C_Parser.TreeRoot(ctx.handle, &root)) return error.ParsingFailed;
@@ -644,6 +706,8 @@ fn translateTree(ctx: *TranslationContext) !ast.File {
     var inputs: std.ArrayList(ast.InputDecl) = .{};
     var outputs: std.ArrayList(ast.OutputDecl) = .{};
     var components: std.ArrayList(ast.ComponentInstance) = .{};
+    var errors: std.ArrayList(ast.ErrorMark) = .{};
+
     const payload = try firstChild(ctx, root);
     if (nodeType(ctx, payload) == NodeType_Sequence) {
         const len = childCount(ctx, payload);
@@ -651,37 +715,15 @@ fn translateTree(ctx: *TranslationContext) !ast.File {
         while (i < len) : (i += 1) {
             const child = try childAt(ctx, payload, i);
             if (nodeType(ctx, child) != NodeType_Node) continue;
-            const name = nodeName(ctx, child);
-
-            if (std.mem.eql(u8, name, "ImportDecl")) {
-                try imports.append(ctx.allocator, try parseImportDecl(ctx, child));
-                continue;
-            }
-
-            if (std.mem.eql(u8, name, "InputDecl")) {
-                try inputs.append(ctx.allocator, try parseInputDeclNode(ctx, child));
-                continue;
-            }
-
-            if (std.mem.eql(u8, name, "Declaration")) {
-                try parseDeclaration(ctx, child, &outputs, &components);
-                continue;
-            }
+            try translateTopLevel(ctx, child, &imports, &inputs, &outputs, &components);
         }
     } else if (nodeType(ctx, payload) == NodeType_Node) {
-        const name = nodeName(ctx, payload);
-        if (std.mem.eql(u8, name, "ImportDecl")) {
-            try imports.append(ctx.allocator, try parseImportDecl(ctx, payload));
-        } else if (std.mem.eql(u8, name, "InputDecl")) {
-            try inputs.append(ctx.allocator, try parseInputDeclNode(ctx, payload));
-        } else if (std.mem.eql(u8, name, "Declaration")) {
-            try parseDeclaration(ctx, payload, &outputs, &components);
-        } else {
-            return error.InvalidProgram;
-        }
+        try translateTopLevel(ctx, payload, &imports, &inputs, &outputs, &components);
     } else {
         return error.InvalidProgram;
     }
+
+    try collectErrorMarks(ctx, root, &errors);
 
     return .{
         .imports = try imports.toOwnedSlice(ctx.allocator),
@@ -689,6 +731,7 @@ fn translateTree(ctx: *TranslationContext) !ast.File {
         .outputs = try outputs.toOwnedSlice(ctx.allocator),
         .components = try components.toOwnedSlice(ctx.allocator),
         .span = nodeSpan(ctx, root),
+        .errors = try errors.toOwnedSlice(ctx.allocator),
     };
 }
 
@@ -707,11 +750,50 @@ pub fn translate(allocator: std.mem.Allocator, handle: @TypeOf(C_Parser.ParserNe
     return translateTree(&ctx);
 }
 
+pub const ParseFailure = struct {
+    start_line: u32,
+    start_col: u32,
+    end_line: u32,
+    end_col: u32,
+    message: []const u8,
+};
+
 pub fn parseSource(allocator: std.mem.Allocator, file_id: u32, source: []const u8) !ast.File {
+    return parseSourceCapturing(allocator, file_id, source, null);
+}
+
+/// Like parseSource, but on a parse failure fills `failure_out` (when
+/// given) with the labeled ParsingError's position and message surfaced
+/// by the parser shim. The --analyze surface uses this to emit a located
+/// syntax diagnostic instead of a generic one.
+pub fn parseSourceCapturing(
+    allocator: std.mem.Allocator,
+    file_id: u32,
+    source: []const u8,
+    failure_out: ?*ParseFailure,
+) !ast.File {
     const handle = C_Parser.ParserNew();
     defer C_Parser.ParserDelete(handle);
 
     if (!C_Parser.ParserParse(handle, @ptrCast(@constCast(source.ptr)), @intCast(source.len))) {
+        if (failure_out) |out| {
+            const start: usize = @intCast(@max(C_Parser.ParserErrorStart(handle), 0));
+            const end: usize = @intCast(@max(C_Parser.ParserErrorEnd(handle), 0));
+            const start_lc = offsetToLineCol(source, start);
+            const end_lc = offsetToLineCol(source, end);
+            const msg_ptr = C_Parser.ParserErrorMessage(handle);
+            const message = if (msg_ptr != null)
+                try allocator.dupe(u8, std.mem.span(msg_ptr))
+            else
+                "";
+            out.* = .{
+                .start_line = start_lc.line,
+                .start_col = start_lc.col,
+                .end_line = end_lc.line,
+                .end_col = end_lc.col,
+                .message = message,
+            };
+        }
         return error.ParsingFailed;
     }
 

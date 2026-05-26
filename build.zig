@@ -833,6 +833,41 @@ pub fn build(b: *std.Build) void {
     const run_topology_protocol_tests = b.addRunArtifact(topology_protocol_tests);
     run_topology_protocol_tests.step.dependOn(&install_runtime.step);
 
+    const analyze_mod = b.createModule(.{
+        .root_source_file = b.path("lib/analyze/analyze.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    analyze_mod.addImport("scan_imports", resolver_scan_imports_mod);
+    analyze_mod.addImport("import_cycle", resolver_import_cycle_mod);
+    analyze_mod.addImport("resolve_bodies", resolver_resolve_bodies_mod);
+    analyze_mod.addImport("validator_run_project", validator_run_project_mod);
+    analyze_mod.addImport("diagnostics", validator_diagnostics_mod);
+    analyze_mod.addImport("ir_types", ir_types_mod);
+    analyze_mod.addImport("translate", translate_mod);
+    analyze_mod.addImport("file_loader", resolver_file_loader_mod);
+
+    // Version (from the VERSION file) and HEAD revision (git, at configure
+    // time) exposed to the CLI's --version flag. A missing file or git
+    // failure degrades to "unknown" rather than breaking the build.
+    const build_info = b.addOptions();
+    {
+        const version_raw = b.build_root.handle.readFileAlloc(b.allocator, "VERSION", 256) catch "unknown";
+        const version = std.mem.trim(u8, version_raw, " \t\r\n");
+        const revision = blk: {
+            const result = std.process.Child.run(.{
+                .allocator = b.allocator,
+                .argv = &.{ "git", "rev-parse", "--short", "HEAD" },
+                .cwd = b.build_root.path,
+            }) catch break :blk "unknown";
+            if (result.term != .Exited or result.term.Exited != 0) break :blk "unknown";
+            const trimmed = std.mem.trim(u8, result.stdout, " \t\r\n");
+            break :blk if (trimmed.len == 0) "unknown" else trimmed;
+        };
+        build_info.addOption([]const u8, "version", version);
+        build_info.addOption([]const u8, "revision", revision);
+    }
+
     const circ_compile_mod = b.createModule(.{
         .root_source_file = b.path("cmd/circ-compile/main.zig"),
         .target = target,
@@ -851,6 +886,8 @@ pub fn build(b: *std.Build) void {
     circ_compile_mod.addImport("resolve_bodies", resolver_resolve_bodies_mod);
     circ_compile_mod.addImport("ir_types", ir_types_mod);
     circ_compile_mod.addImport("runtime_embed", runtime_embed_mod);
+    circ_compile_mod.addImport("analyze", analyze_mod);
+    circ_compile_mod.addOptions("build_info", build_info);
     const circ_compile_exe = b.addExecutable(.{
         .name = "circ-compile",
         .root_module = circ_compile_mod,
@@ -873,6 +910,15 @@ pub fn build(b: *std.Build) void {
     circ_compile_tests.linkLibC();
     const run_circ_compile_tests = b.addRunArtifact(circ_compile_tests);
     run_circ_compile_tests.step.dependOn(&install_runtime.step);
+
+    const analyze_tests = b.addTest(.{
+        .root_module = analyze_mod,
+    });
+    analyze_tests.addIncludePath(b.path("."));
+    analyze_tests.addIncludePath(b.path("./lib"));
+    linkParserArchive(b, analyze_tests, build_archive_cmd);
+    analyze_tests.linkLibC();
+    const run_analyze_tests = b.addRunArtifact(analyze_tests);
     const validator_project_passes_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/validator/project_passes_test.zig"),
         .target = target,
@@ -929,6 +975,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_validator_loop_tests.step);
     test_step.dependOn(&run_validator_run_tests.step);
     test_step.dependOn(&run_validator_codes_snapshot_tests.step);
+    test_step.dependOn(&run_analyze_tests.step);
     test_step.dependOn(&run_emit_build_fn_tests.step);
     test_step.dependOn(&run_emit_metadata_tests.step);
     test_step.dependOn(&run_emit_full_tests.step);

@@ -47,6 +47,8 @@ const truth_table_builder = @import("truth_table_builder");
 const truth_table_markdown = @import("truth_table_markdown");
 const truth_table_csv = @import("truth_table_csv");
 const truth_table_json = @import("truth_table_json");
+const analyzer = @import("analyze");
+const build_info = @import("build_info");
 
 fn makePathAny(path: []const u8) !void {
     if (!std.fs.path.isAbsolute(path)) {
@@ -159,7 +161,12 @@ pub fn run(
 ) !u8 {
     const args = cli_args.parse(argv) catch |err| {
         if (err == error.HelpRequested) {
+            try stdout_writer.print("v{s} (rev:{s})\n\n", .{ build_info.version, build_info.revision });
             try stdout_writer.writeAll(cli_args.help_text);
+            return 0;
+        }
+        if (err == error.VersionRequested) {
+            try stdout_writer.print("v{s} (rev:{s})\n", .{ build_info.version, build_info.revision });
             return 0;
         }
         try stderr_writer.print("usage error: {s}\n", .{parseErrorMessage(err)});
@@ -477,8 +484,79 @@ pub fn main() !void {
     const stderr_writer = std.fs.File.stderr().deprecatedWriter();
     const stdout_writer = std.fs.File.stdout().deprecatedWriter();
 
+    // The LSP analysis surface takes a JSON request on stdin rather than a
+    // file-path argument, so it bypasses the standard mode parser entirely.
+    for (argv) |token| {
+        if (std.mem.eql(u8, token, "--analyze")) {
+            const code = try runAnalyze(allocator, stdout_writer, stderr_writer);
+            if (code != 0) std.process.exit(code);
+            return;
+        }
+    }
+
     const exit_code = try run(allocator, argv, stdout_writer, stderr_writer);
     if (exit_code != 0) std.process.exit(exit_code);
+}
+
+/// `circ-compile --analyze`: read a `{ root_path, overlays }` request from
+/// stdin, run the analysis pipeline against the in-memory overlay, and
+/// write the structured `{ files, diagnostics, symbols, references }` JSON
+/// the LSP server consumes to stdout.
+fn runAnalyze(allocator: std.mem.Allocator, stdout_writer: anytype, stderr_writer: anytype) !u8 {
+    const input = std.fs.File.stdin().readToEndAlloc(allocator, 64 * 1024 * 1024) catch |err| {
+        try stderr_writer.print("analyze: failed reading stdin: {s}\n", .{@errorName(err)});
+        return 2;
+    };
+
+    var parsed = std.json.parseFromSlice(std.json.Value, allocator, input, .{}) catch |err| {
+        try stderr_writer.print("analyze: invalid request JSON: {s}\n", .{@errorName(err)});
+        return 2;
+    };
+    defer parsed.deinit();
+
+    const obj = switch (parsed.value) {
+        .object => |o| o,
+        else => {
+            try stderr_writer.writeAll("analyze: request must be a JSON object\n");
+            return 2;
+        },
+    };
+
+    const root_path_val = obj.get("root_path") orelse {
+        try stderr_writer.writeAll("analyze: request missing 'root_path'\n");
+        return 2;
+    };
+    const root_path = switch (root_path_val) {
+        .string => |s| s,
+        else => {
+            try stderr_writer.writeAll("analyze: 'root_path' must be a string\n");
+            return 2;
+        },
+    };
+
+    var overlay = analyzer.Overlay{};
+    if (obj.get("overlays")) |ov| switch (ov) {
+        .object => |ov_obj| {
+            var it = ov_obj.iterator();
+            while (it.next()) |entry| switch (entry.value_ptr.*) {
+                .string => |s| try overlay.put(allocator, entry.key_ptr.*, s),
+                else => {},
+            };
+        },
+        else => {},
+    };
+
+    const analysis = analyzer.analyze(
+        allocator,
+        root_path,
+        if (overlay.count() > 0) overlay else null,
+    ) catch |err| {
+        try stderr_writer.print("analyze: {s}\n", .{@errorName(err)});
+        return 1;
+    };
+
+    try analyzer.renderJson(stdout_writer, analysis);
+    return 0;
 }
 
 test "run with --help writes help text to stdout and exits 0" {
@@ -502,6 +580,8 @@ test "run with --help writes help text to stdout and exits 0" {
     try std.testing.expectEqual(@as(usize, 0), stderr_buf.items.len);
     try std.testing.expect(std.mem.indexOf(u8, stdout_buf.items, "USAGE:") != null);
     try std.testing.expect(std.mem.indexOf(u8, stdout_buf.items, "--truth-table") != null);
+    // --help leads with the version header line (matches --version output).
+    try std.testing.expect(std.mem.indexOf(u8, stdout_buf.items, "rev:") != null);
 }
 
 test "run with --inspect on existing fixture" {
