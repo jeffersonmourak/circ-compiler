@@ -1,0 +1,65 @@
+---
+// A copyable shell snippet: the command rendered in a <pre>, plus a corner
+// "Copy" button. The button lives in a relative wrapper *outside* the <pre>
+// so it stays pinned when the command overflows and the <pre> scrolls.
+interface Props {
+  /** Exact command text to render and place on the clipboard. */
+  code: string;
+}
+const { code } = Astro.props;
+---
+<div class="install-snippet-wrap">
+  <pre class="install-snippet"><code>{code}</code></pre>
+  <button type="button" class="copy-btn" data-copy-btn aria-label="Copy command to clipboard">
+    <span class="copy-btn-text">Copy</span>
+  </button>
+</div>
+
+<script>
+  // Astro hoists this module script once no matter how many <CommandSnippet />
+  // instances the page renders, so — like ThemeToggle — we bind every button
+  // up front rather than picking one by id.
+  function snippetText(btn: Element): string {
+    const code = btn.closest('.install-snippet-wrap')?.querySelector('code');
+    return code?.textContent ?? '';
+  }
+
+  async function copyText(text: string): Promise<boolean> {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (_) {
+      // The async clipboard API needs a secure context; fall back to staging
+      // the text in an off-screen textarea and the legacy execCommand path.
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'absolute';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        return ok;
+      } catch (_) {
+        return false;
+      }
+    }
+  }
+
+  document.querySelectorAll<HTMLButtonElement>('.copy-btn').forEach((btn) => {
+    const label = btn.querySelector('.copy-btn-text');
+    let resetTimer: ReturnType<typeof setTimeout> | undefined;
+    btn.addEventListener('click', async () => {
+      const ok = await copyText(snippetText(btn));
+      if (label) label.textContent = ok ? 'Copied' : 'Failed';
+      btn.classList.toggle('is-copied', ok);
+      window.clearTimeout(resetTimer);
+      resetTimer = window.setTimeout(() => {
+        if (label) label.textContent = 'Copy';
+        btn.classList.remove('is-copied');
+      }, 1500);
+    });
+  });
+</script>

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Base from '../layouts/Base.astro';
+import CommandSnippet from '../components/CommandSnippet.astro';
 import { url, GITHUB_PUBLIC, GITHUB_REPO } from '../utils/url.ts';
 
 // Single source of truth: the VERSION file at the repo root. The CLI release
@@ -73,10 +74,10 @@ const downloads = platforms.map((p) => {
       <code>circ-compile</code> on your PATH.
     </p>
     <p><strong>macOS and Linux</strong></p>
-    <pre class="install-snippet"><code>curl -fsSL https://circ-lang.org/install.sh | sh</code></pre>
+    <CommandSnippet code="curl -fsSL https://circ-lang.org/install.sh | sh" />
     <br>
     <p><strong>Windows (PowerShell)</strong></p>
-    <pre class="install-snippet"><code>irm https://circ-lang.org/install.ps1 | iex</code></pre>
+    <CommandSnippet code="irm https://circ-lang.org/install.ps1 | iex" />
     <br>
     <p>
       Installs to <code>~/.local/bin</code> (macOS and Linux) or
@@ -131,10 +132,10 @@ const downloads = platforms.map((p) => {
         For Intel Macs, ARM Linux, ARM Windows, or any platform not listed above,
         build directly with <a href="https://ziglang.org/" rel="noreferrer noopener">Zig 0.15.x</a>:
       </p>
-      <pre class="install-snippet"><code>{`git clone ${GITHUB_REPO}
+      <CommandSnippet code={`git clone ${GITHUB_REPO}
 cd ${GITHUB_REPO.split('/').pop()}
 zig build circ-compile -Doptimize=ReleaseFast
-./zig-out/bin/circ-compile --help`}</code></pre>
+./zig-out/bin/circ-compile --help`} />
       <p>
         The full walkthrough — including writing your first <code>.circ</code> file
         and driving the compiled WASM from Node — lives in

@@ -847,5 +847,31 @@ a.install-line:hover {
   white-space: pre;
 }
 
+/* The copy button is anchored to this wrapper, not the <pre>: the <pre> is an
+   overflow-x scroll container, so a button inside it would slide away with a
+   long command. The wrapper is the fixed frame the button pins to, and the
+   <pre> reserves padding-right so text never slides under the button. */
+.install-snippet-wrap { position: relative; }
+.install-snippet-wrap .install-snippet { padding-right: 4.5rem; }
+.copy-btn {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  background: var(--pane-bg);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  border-radius: 4px;
+  padding: 0.2rem 0.55rem;
+  font-family: var(--font-prose);
+  font-size: 0.72rem;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.copy-btn:hover,
+.copy-btn.is-copied {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .download-source { max-width: var(--measure); }
 .download-source .install-snippet { margin: 1rem 0; }
