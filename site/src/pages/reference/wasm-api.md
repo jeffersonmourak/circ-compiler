@@ -22,21 +22,24 @@ If `debugEnabled` returns `0`, `onDebugLog` is never called, but **both imports 
 ## Exports (WASM → host)
 
 ```
-memory:          WebAssembly.Memory
-topology_alloc:  (len: i32) => i32     // host buffer for topology bytes; returns ptr (or -1 on OOM)
-init:            ()        => void    // construct circuit from the topology buffer
-run:             ()        => void    // drain the event queue until the circuit settles
-setPin:          (id: i32, state: i32) => void
-getOutputState:  (id: i32) => i32
+memory:             WebAssembly.Memory
+topology_alloc:     (len: i32) => i32                      // host buffer for topology bytes; returns ptr (or -1 on OOM)
+init:               ()        => void                       // construct circuit from the topology buffer
+run:                ()        => void                       // drain the event queue until the circuit settles
+setPin:             (id: i32, value: i64, defined: i64) => void
+getOutputValue:     (id: i32) => i64                        // BitVecState.value of the component's output
+getOutputDefined:   (id: i32) => i64                        // BitVecState.defined of the component's output
 ```
 
-`state` integer encoding (matches `engine.State.toInt`/`fromInt` in `lib/circuit.zig`):
+The i64 fields cross the JS↔WASM boundary as `BigInt`. A component's state is a `BitVecState`-shaped `(value, defined)` pair where each bit of `defined` says whether the corresponding bit of `value` is meaningful:
 
-| Integer | State        |
-|---------|--------------|
-| `0`     | low          |
-| `1`     | high         |
-| `2`     | undefined    |
+| `defined` bit | `value` bit | Interpretation |
+|---------------|-------------|----------------|
+| `1`           | `0`         | low            |
+| `1`           | `1`         | high           |
+| `0`           | (ignored)   | undefined      |
+
+For a width-`W` component, only the low `W` bits of each i64 are meaningful; bits beyond `W` are zero on read and silently dropped on write.
 
 ### `topology_alloc(len)` and `init()`
 
@@ -55,15 +58,24 @@ Drains the engine's event queue until empty. Settling delays are `5` time-units 
 
 `run()` is a no-op if `init()` has not run successfully.
 
-### `setPin(component_id, state)`
+### `setPin(component_id, value, defined)`
 
-Drives a top-level input pin. `component_id` is the global integer ID of an `input_pin_gate`; passing the ID of a non-input or out-of-range component is a silent no-op (it does not throw or trap).
+Drives a top-level input pin to the BitVecState `(value, defined)`. `component_id` is the global integer ID of an `input_pin_gate`; passing the ID of a non-input or out-of-range component is a silent no-op (it does not throw or trap).
+
+For width-1 inputs the usual encodings are `setPin(id, 0n, 1n)` for low, `setPin(id, 1n, 1n)` for high, and `setPin(id, 0n, 0n)` for undefined. For wider inputs each bit of `value` and `defined` corresponds to a bit position; bits set beyond the component's declared width are masked silently.
 
 `setPin` only enqueues the change — call `run()` after to propagate it.
 
-### `getOutputState(component_id)`
+### `getOutputValue(component_id)` and `getOutputDefined(component_id)`
 
-Returns the current `output_state` of the component with the given ID, encoded as the integer above. Returns `2` (undefined) if the runtime is not initialised or the ID is out of range. The argument is the **driver component ID**, not an output-pin index — for an `output out(in=inv.out)` declaration, you pass `inv`'s component ID, not `out`'s pin ID. The `--inspect` output of the compiler prints this mapping under its `Outputs (...)` block.
+Paired exports. Each call returns one of the two `BitVecState` fields of the component's current output. Returns `0n` for both if the runtime is not initialised or the ID is out of range — the host distinguishes "definitely low" from "undefined" by checking `getOutputDefined` first. The argument is the **driver component ID**, not an output-pin index — for an `output out(in=inv.out)` declaration, you pass `inv`'s component ID, not `out`'s pin ID. The `--inspect` output of the compiler prints this mapping under its `Outputs (...)` block.
+
+#### Why paired exports instead of one out-pointer call
+
+A previous draft considered a single-call shape: `getOutputState(id, out_ptr: i32)` that wrote a 16-byte `BitVecState` into linear memory at `out_ptr`. Two reasons the paired-export shape won:
+
+- **Simpler host code.** Two function calls return BigInts that the host combines directly. No buffer allocation, no pointer arithmetic, no in-band encoding to standardise (endianness, alignment, sentinel for undefined).
+- **The 2× call overhead is irrelevant in practice.** Hosts typically read once after settle, not in a hot loop. If a future use case needs batched reads, a sibling export (`getOutputStateBatch(ids_ptr, out_ptr, count)`) can be added without breaking the paired API.
 
 ## Custom sections
 
@@ -98,11 +110,34 @@ new Uint8Array(w.memory.buffer).set(topoBytes, ptr);
 
 // 2. Build the circuit and drive it.
 w.init();
-w.setPin(0, 1);                  // pin id=0 → high
+w.setPin(0, 1n, 1n);                            // pin id=0 → high (value=1, defined=1)
 w.run();
-console.log(w.getOutputState(1)); // 0 = low (NOT of high)
+const value   = w.getOutputValue(1);            // BigInt
+const defined = w.getOutputDefined(1);          // BigInt
+console.log(defined === 0n
+  ? "undefined"
+  : value === 0n ? "low" : "high");             // "low" (NOT of high)
+```
+
+For wider inputs, the helper pattern is:
+
+```js
+// Drive a width-4 input bus to the value 0b1010, all four bits defined.
+w.setPin(input_id, 0b1010n, 0b1111n);
+w.run();
+const v = w.getOutputValue(output_id);  // e.g. 0b1010n for a passthrough
+const d = w.getOutputDefined(output_id); // 0b1111n
+```
+
+To collapse a paired read back into the legacy 3-state encoding when integrating with code that still uses it:
+
+```js
+const readScalar = (id) =>
+  w.getOutputDefined(id) === 0n
+    ? 2                               // undefined
+    : w.getOutputValue(id) === 0n ? 0 : 1; // low / high
 ```
 
 ## Things that are *not* exports today
 
-Earlier drafts of this project anticipated additional exports — `deinit`, `reset`, `stop`, `getStateSnapshot`, `getTopology`, `getPendingEvents`, `getFileInfo`, `freeBuffer` — and a separate `onStateChange` import. None of these are present in the artifact produced by `circ-compile … -o out.wasm` today. They exist only in `lib/emit/runtime.zig`, the experimental `--emit-zig` pipeline, and may appear in a future runtime version. If your host needs change-notifications, poll `getOutputState` after each `run()`.
+Earlier drafts of this project anticipated additional exports — `deinit`, `reset`, `stop`, `getStateSnapshot`, `getTopology`, `getPendingEvents`, `getFileInfo`, `freeBuffer` — and a separate `onStateChange` import. None of these are present in the artifact produced by `circ-compile … -o out.wasm` today. The extra exports survive only in `lib/emit/runtime.zig`, the experimental `--emit-zig` pipeline; the `onStateChange` import was never wired into any pipeline and exists nowhere in the codebase. Either may appear in a future runtime version. If your host needs change-notifications, poll `getOutputValue` / `getOutputDefined` after each `run()`.

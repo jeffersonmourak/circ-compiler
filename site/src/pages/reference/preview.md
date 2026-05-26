@@ -48,6 +48,7 @@ The `[xor:g]` box represents the entire `xor g(...)` instance as a single labele
 |------|---------|
 | `--preview` | Selects preview mode. Mutually exclusive with `--emit-zig` and `--inspect`. `-o` is rejected at parse time. |
 | `--expand-macros` | Renders subcircuits as their full primitive expansion instead of as a single labeled box. Only valid with `--preview`. |
+| `--expand-display` | Renders an `led[N]` (width > 1) as a row of `N` single-bit LED cells with explicit `b0..bN-1` slice connections, instead of the default opaque multi-bit numeric display box. Only valid with `--preview`. |
 | `--color=auto\|always\|never` | Enables ANSI color (per-kind: input pins green, gates cyan, LEDs yellow, macros magenta, wires dim). Defaults to `auto` (color when stdout is a TTY *and* `NO_COLOR` is unset). `always` overrides `NO_COLOR` per the convention used by `git`/`ls`/`grep`. |
 
 The render path is fully in-memory: parse → resolve → translate → topology build → layout → render → stdout. No `.wasm` is written, no temp directory, no subprocess.
@@ -80,6 +81,30 @@ Names longer than the cell width are truncated; shorter names pad with spaces. T
 
 **Layout determinism.** Rendering uses a five-stage pipeline (collapse → columns → rows → place → route), followed by a junction-picker pass that resolves crossings into the right corner/T-glyph. Every decision uses ascending node id as the universal tie-breaker; hash-map iteration is forbidden as an ordering source. The same `.circ` source produces byte-identical output across runs and platforms.
 
+## Multi-bit pins
+
+A component declared with a width annotation (`input[4] a`, `led[4] disp`, `wire[8] bus`) renders with the width appended to its label as `[N]`:
+
+```
+╭──────╮     ╭────────────╮
+│ a[4] ├○───▶┤ [led:disp] │
+╰──────╯     ╰────────────╯
+```
+
+A scalar pin omits the suffix, so the label width-marker is the visual cue that distinguishes a 1-bit and an N-bit wire. The wire glyph itself is the same — there is no "bus" glyph.
+
+### LED rendering modes
+
+A multi-bit `led[N]` (width > 1) has three rendering modes:
+
+| Mode | Trigger | Cell content |
+|------|---------|--------------|
+| **Numeric** | width > 1, all bits `defined` | The unsigned integer value (`0`–`2^N-1`) inside the box. |
+| **Numeric + warning** | width > 1, some bits `defined`, others `undefined` | The integer value formed from the defined bits, with a warning marker (`?`) showing partial state. |
+| **Indicator** | width = 1 | The single-bit LED glyph: lit on `high`, dim on `low`, `?` on `undefined`. |
+
+With `--expand-display`, the multi-bit form decomposes into `N` scalar LEDs wired to explicit bit-index slices of the input signal, which is the right view when you need to debug per-bit drive state.
+
 ## Macro modes
 
 Built-in macros (`or`, `nand`, `nor`, `xor`, `xnor`) and user-imported subcircuits expand into primitive gates during compilation. The renderer can display them two ways:
@@ -93,8 +118,8 @@ The renderer reads from a versioned topology payload embedded in compiled `.wasm
 
 | Section | Contains |
 |---------|----------|
-| `circ.topology.v0.min` | Flat primitive components (id, kind) + connections. Magic `CIRC`, version `0x01`. The "lightweight" payload — what the runtime needs. |
-| `circ.topology.v0.full` | Adds per-component instance names + subcircuit-origin chains. Magic `CIRF`, version `0x01`. The "rich" payload — what the renderer (and any future inspection tooling) needs. |
+| `circ.topology.v0.min` | Flat primitive components (id, kind, `width: u8`) + connections. Magic `CIRC`, version `0x02`. The "lightweight" payload — what the runtime needs. |
+| `circ.topology.v0.full` | Adds per-component instance names + subcircuit-origin chains. Magic `CIRF`, version `0x02`. The "rich" payload — what the renderer (and any future inspection tooling) needs. |
 
 `--preview` builds the `full` payload in memory (skipping the `.wasm` write) and feeds it directly into the renderer. Tools that consume a `.wasm` artifact from disk can parse the same payload via `lib/topology/full_decoder.zig:decode`.
 
