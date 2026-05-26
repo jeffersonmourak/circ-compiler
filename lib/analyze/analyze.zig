@@ -131,56 +131,48 @@ fn lineColToOffset(source: []const u8, line: u32, col: u32) usize {
     return source.len;
 }
 
-/// Emit a syntax diagnostic for a file the parser rejects. A hard parse
-/// failure carries a labeled ParsingError (position + message) surfaced by
-/// the shim, so the diagnostic lands at the precise stall point. A rare
-/// success-with-truncation is caught by the consumed-extent check below.
-/// Returns null for clean or empty files.
-fn truncationDiag(allocator: std.mem.Allocator, file_id: u32, source: []const u8) !?Diagnostic {
-    if (std.mem.trim(u8, source, " \t\r\n").len == 0) return null;
+/// Append a syntax diagnostic for each recovered error in a file. With
+/// error recovery the parser returns a partial AST plus ErrorMarks (one
+/// per recovered label throw or unparseable line), so every syntax error
+/// is reported at its precise span while the valid declarations still
+/// resolve. The catch branch covers the rare case where recovery does not
+/// engage and parsing aborts; the located ParsingError from the shim is
+/// used when available.
+fn appendSyntaxDiags(allocator: std.mem.Allocator, file_id: u32, source: []const u8, diags: *std.ArrayList(Diagnostic)) !void {
+    if (std.mem.trim(u8, source, " \t\r\n").len == 0) return;
 
     var failure = translate.ParseFailure{ .start_line = 0, .start_col = 0, .end_line = 0, .end_col = 0, .message = "" };
     const file = translate.parseSourceCapturing(allocator, file_id, source, &failure) catch {
-        // start_line stays 0 only when no located error was produced (a
-        // post-parse translate failure); fall back to a generic message.
-        if (failure.start_line != 0) {
-            // Guarantee a non-empty range so the editor highlights a span.
+        // start_line stays 0 only when no located error was produced.
+        const range: Range = if (failure.start_line != 0) blk: {
             var end_col = failure.end_col;
             if (failure.end_line == failure.start_line and end_col <= failure.start_col) end_col = failure.start_col + 1;
-            return Diagnostic{
-                .file_id = file_id,
-                .severity = "error",
-                .code = "syntax",
-                .range = .{ .start_line = failure.start_line, .start_col = failure.start_col, .end_line = failure.end_line, .end_col = end_col },
-                .message = if (failure.message.len > 0) failure.message else "syntax error",
-                .related = &.{},
-            };
-        }
-        return Diagnostic{
+            break :blk .{ .start_line = failure.start_line, .start_col = failure.start_col, .end_line = failure.end_line, .end_col = end_col };
+        } else .{ .start_line = 1, .start_col = 1, .end_line = 1, .end_col = 2 };
+        try diags.append(allocator, .{
             .file_id = file_id,
             .severity = "error",
             .code = "syntax",
-            .range = .{ .start_line = 1, .start_col = 1, .end_line = 1, .end_col = 2 },
-            .message = "syntax error: unable to parse file",
+            .range = range,
+            .message = if (failure.message.len > 0) failure.message else "syntax error: unable to parse file",
             .related = &.{},
-        };
+        });
+        return;
     };
 
-    const end_line = file.span.end_line;
-    const end_col = file.span.end_col;
-    const ast_end = lineColToOffset(source, end_line, end_col);
-    const trimmed_len = std.mem.trimRight(u8, source, " \t\r\n").len;
-    if (ast_end < trimmed_len) {
-        return Diagnostic{
+    for (file.errors) |mark| {
+        // Guarantee a non-empty range so the editor highlights a span.
+        var end_col = mark.span.end_col;
+        if (mark.span.end_line == mark.span.start_line and end_col <= mark.span.start_col) end_col = mark.span.start_col + 1;
+        try diags.append(allocator, .{
             .file_id = file_id,
             .severity = "error",
             .code = "syntax",
-            .range = .{ .start_line = end_line, .start_col = end_col, .end_line = end_line, .end_col = end_col + 1 },
-            .message = "syntax error: unexpected input here (expected a declaration)",
+            .range = .{ .start_line = mark.span.start_line, .start_col = mark.span.start_col, .end_line = mark.span.end_line, .end_col = end_col },
+            .message = mark.message,
             .related = &.{},
-        };
+        });
     }
-    return null;
 }
 
 pub fn analyze(
@@ -226,9 +218,7 @@ pub fn analyze(
     for (scan_result.file_paths, 0..) |p, i| {
         if (std.mem.startsWith(u8, p, file_loader.builtin_path_prefix)) continue;
         const loaded = file_loader.loadFileWithOverlay(allocator, p, overlay) catch continue;
-        if (try truncationDiag(allocator, @intCast(i), loaded.source)) |td| {
-            try diags.append(allocator, td);
-        }
+        try appendSyntaxDiags(allocator, @intCast(i), loaded.source, &diags);
     }
 
     return .{
@@ -573,4 +563,32 @@ test "analyze: syntax diagnostic carries a located message" {
         }
     }
     try std.testing.expect(found);
+}
+
+test "analyze: recovers valid declarations around a junk line" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    var overlay = Overlay{};
+    // A garbage line sits between valid declarations; recovery must keep
+    // the declarations after it, and still flag the garbage.
+    try overlay.put(a, "/virtual/recover.circ", "input a\n%%% junk %%%\nand g(a=a, b=a)\noutput o(in=g.out)\n");
+
+    const result = try analyze(a, "/virtual/recover.circ", overlay);
+
+    var has_gate_g = false; // declared AFTER the junk line
+    var has_output_o = false;
+    for (result.symbols) |s| {
+        if (std.mem.eql(u8, s.name, "g") and std.mem.eql(u8, s.kind, "and")) has_gate_g = true;
+        if (std.mem.eql(u8, s.name, "o") and std.mem.eql(u8, s.kind, "output")) has_output_o = true;
+    }
+    try std.testing.expect(has_gate_g);
+    try std.testing.expect(has_output_o);
+
+    var found_syntax = false;
+    for (result.diagnostics) |d| {
+        if (std.mem.eql(u8, d.code, "syntax")) found_syntax = true;
+    }
+    try std.testing.expect(found_syntax);
 }
