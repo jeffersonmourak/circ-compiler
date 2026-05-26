@@ -57,6 +57,10 @@ build_one x86_64-linux-musl   circ-compile      linux-x86_64
 build_one aarch64-macos       circ-compile      macos-aarch64
 build_one x86_64-windows-gnu  circ-compile.exe  windows-x86_64
 
+# Plain-text "latest" pointer the install script (site/public/install.sh)
+# reads to resolve the current version, kept in lockstep with the archives.
+printf '%s\n' "$VERSION" > "$DOWNLOADS/latest"
+
 echo
 echo "Done. Archives in $DOWNLOADS:"
 ls -lh "$DOWNLOADS"
