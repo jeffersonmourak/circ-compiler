@@ -847,6 +847,27 @@ pub fn build(b: *std.Build) void {
     analyze_mod.addImport("translate", translate_mod);
     analyze_mod.addImport("file_loader", resolver_file_loader_mod);
 
+    // Version (from the VERSION file) and HEAD revision (git, at configure
+    // time) exposed to the CLI's --version flag. A missing file or git
+    // failure degrades to "unknown" rather than breaking the build.
+    const build_info = b.addOptions();
+    {
+        const version_raw = b.build_root.handle.readFileAlloc(b.allocator, "VERSION", 256) catch "unknown";
+        const version = std.mem.trim(u8, version_raw, " \t\r\n");
+        const revision = blk: {
+            const result = std.process.Child.run(.{
+                .allocator = b.allocator,
+                .argv = &.{ "git", "rev-parse", "--short", "HEAD" },
+                .cwd = b.build_root.path,
+            }) catch break :blk "unknown";
+            if (result.term != .Exited or result.term.Exited != 0) break :blk "unknown";
+            const trimmed = std.mem.trim(u8, result.stdout, " \t\r\n");
+            break :blk if (trimmed.len == 0) "unknown" else trimmed;
+        };
+        build_info.addOption([]const u8, "version", version);
+        build_info.addOption([]const u8, "revision", revision);
+    }
+
     const circ_compile_mod = b.createModule(.{
         .root_source_file = b.path("cmd/circ-compile/main.zig"),
         .target = target,
@@ -866,6 +887,7 @@ pub fn build(b: *std.Build) void {
     circ_compile_mod.addImport("ir_types", ir_types_mod);
     circ_compile_mod.addImport("runtime_embed", runtime_embed_mod);
     circ_compile_mod.addImport("analyze", analyze_mod);
+    circ_compile_mod.addOptions("build_info", build_info);
     const circ_compile_exe = b.addExecutable(.{
         .name = "circ-compile",
         .root_module = circ_compile_mod,

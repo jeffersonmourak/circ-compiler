@@ -48,6 +48,7 @@ const truth_table_markdown = @import("truth_table_markdown");
 const truth_table_csv = @import("truth_table_csv");
 const truth_table_json = @import("truth_table_json");
 const analyzer = @import("analyze");
+const build_info = @import("build_info");
 
 fn makePathAny(path: []const u8) !void {
     if (!std.fs.path.isAbsolute(path)) {
@@ -161,6 +162,10 @@ pub fn run(
     const args = cli_args.parse(argv) catch |err| {
         if (err == error.HelpRequested) {
             try stdout_writer.writeAll(cli_args.help_text);
+            return 0;
+        }
+        if (err == error.VersionRequested) {
+            try stdout_writer.print("v{s} (rev:{s})\n", .{ build_info.version, build_info.revision });
             return 0;
         }
         try stderr_writer.print("usage error: {s}\n", .{parseErrorMessage(err)});
