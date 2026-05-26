@@ -1,0 +1,4 @@
+# 4-bit XNOR macro through the real artifact (out = ~(a ^ b), per bit).
+a=1100 b=1010 => out=1001
+a=1111 b=1111 => out=1111
+a=1010 b=0101 => out=0000

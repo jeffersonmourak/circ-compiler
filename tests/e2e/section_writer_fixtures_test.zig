@@ -334,6 +334,20 @@ const circuit_fixtures = [_]Fixture{
     // both new paths in the fixture bit-string codec.
     .{ .root_path = "tests/fixtures/circuits/slice_basic.circ", .spec_path = "tests/fixtures/expected-wasm/slice_basic.txt" },
     .{ .root_path = "tests/fixtures/circuits/single_gate.circ", .spec_path = "tests/fixtures/expected-wasm/single_gate.txt" },
+    // Bus-width circuits across the artifact: slice / concat / bit-index value
+    // lowering, the multi-bit ALU (also parametric macros at width), and the
+    // wide built-in macro expansions. concat_four_bits also drives one bit
+    // undefined to check multi-bit undefined propagation.
+    .{ .root_path = "tests/fixtures/circuits/slice_high_bits.circ", .spec_path = "tests/fixtures/expected-wasm/slice_high_bits.txt" },
+    .{ .root_path = "tests/fixtures/circuits/slice_then_concat.circ", .spec_path = "tests/fixtures/expected-wasm/slice_then_concat.txt" },
+    .{ .root_path = "tests/fixtures/circuits/concat_four_bits.circ", .spec_path = "tests/fixtures/expected-wasm/concat_four_bits.txt" },
+    .{ .root_path = "tests/fixtures/circuits/bit_index_a2.circ", .spec_path = "tests/fixtures/expected-wasm/bit_index_a2.txt" },
+    .{ .root_path = "tests/fixtures/circuits/alu_4bit_multibit.circ", .spec_path = "tests/fixtures/expected-wasm/alu_4bit_multibit.txt" },
+    .{ .root_path = "tests/fixtures/circuits/nand_4bit_macro.circ", .spec_path = "tests/fixtures/expected-wasm/nand_4bit_macro.txt" },
+    .{ .root_path = "tests/fixtures/circuits/or_4bit_macro.circ", .spec_path = "tests/fixtures/expected-wasm/or_4bit_macro.txt" },
+    .{ .root_path = "tests/fixtures/circuits/xnor_4bit_macro.circ", .spec_path = "tests/fixtures/expected-wasm/xnor_4bit_macro.txt" },
+    .{ .root_path = "tests/fixtures/circuits/nor_8bit_macro.circ", .spec_path = "tests/fixtures/expected-wasm/nor_8bit_macro.txt" },
+    .{ .root_path = "tests/fixtures/circuits/xor_8bit_macro.circ", .spec_path = "tests/fixtures/expected-wasm/xor_8bit_macro.txt" },
 };
 
 const project_fixtures = [_]Fixture{

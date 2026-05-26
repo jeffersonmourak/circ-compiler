@@ -1,0 +1,5 @@
+# 8-bit NOR macro through the real artifact (out = ~(a | b), per bit).
+# The widest value to cross the artifact in the suite.
+a=11001010 b=01010101 => out=00100000
+a=00000000 b=00000000 => out=11111111
+a=11111111 b=00000000 => out=00000000

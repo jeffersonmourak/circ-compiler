@@ -1,0 +1,5 @@
+# 4-bit NAND macro through the real artifact (out = ~(a & b), per bit).
+# Exercises a built-in macro expanded at width 4 across the topology splice.
+a=1100 b=1010 => out=0111
+a=0000 b=1111 => out=1111
+a=1111 b=1111 => out=0000

@@ -1,0 +1,4 @@
+# 4-bit OR macro through the real artifact (out = a | b, per bit).
+a=1100 b=1010 => out=1110
+a=0000 b=0000 => out=0000
+a=1010 b=0101 => out=1111

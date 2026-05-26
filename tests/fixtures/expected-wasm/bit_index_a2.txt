@@ -1,0 +1,6 @@
+# Bit-index through the real artifact: o = a[2], a single bit selected out of
+# a 4-bit input (width-1 output). Verifies bit-index lowering end to end.
+a=0011 => o=0
+a=0100 => o=1
+a=1011 => o=0
+a=1111 => o=1

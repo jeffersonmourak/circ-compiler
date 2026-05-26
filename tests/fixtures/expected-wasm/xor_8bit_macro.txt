@@ -1,0 +1,4 @@
+# 8-bit XOR macro through the real artifact (out = a ^ b, per bit).
+a=11001010 b=01010101 => out=10011111
+a=11111111 b=00000000 => out=11111111
+a=10101010 b=10101010 => out=00000000
