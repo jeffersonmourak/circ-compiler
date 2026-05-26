@@ -106,7 +106,7 @@ Outputs (1)
   id=0 name=out driver=1.out
 ```
 
-`setPin` takes the **input pin's component id** (`0` for `a`). `getOutputState` takes the **driver component id** of the output (`1` here — the `not` gate that drives `out`), not the output_pin's own id.
+`setPin(id, value, defined)` takes the **input pin's component id** (`0` for `a`) along with a `(value, defined)` `BitVecState` pair. The paired output reads `getOutputValue(id)` and `getOutputDefined(id)` take the **driver component id** of the output (`1` here — the `not` gate that drives `out`), not the output_pin's own id.
 
 ## 4. Drive the compiled `.wasm` from Node
 
@@ -131,8 +131,14 @@ const ptr = w.topology_alloc(topoBytes.length);
 new Uint8Array(w.memory.buffer).set(topoBytes, ptr);
 
 w.init();
-w.setPin(0, 0); w.run(); console.log("a=0 -> NOT a =", w.getOutputState(1));
-w.setPin(0, 1); w.run(); console.log("a=1 -> NOT a =", w.getOutputState(1));
+
+const read = (id) =>
+  w.getOutputDefined(id) === 0n
+    ? "undefined"
+    : w.getOutputValue(id) === 0n ? "low" : "high";
+
+w.setPin(0, 0n, 1n); w.run(); console.log("a=0 -> NOT a =", read(1));
+w.setPin(0, 1n, 1n); w.run(); console.log("a=1 -> NOT a =", read(1));
 ```
 
 Run it:
@@ -144,11 +150,24 @@ node examples/run.mjs examples/inverter.wasm
 Expected:
 
 ```
-a=0 -> NOT a = 1
-a=1 -> NOT a = 0
+a=0 -> NOT a = high
+a=1 -> NOT a = low
 ```
 
-`0` means low, `1` means high, `2` means undefined. The full export list emitted by `circ-compile … -o out.wasm` today is exactly `topology_alloc`, `init`, `run`, `setPin`, `getOutputState` (plus `memory`); see [`DOCS/wasm-api.md`](/reference/wasm-api) for the full contract. The two `env` callbacks (`debugEnabled` and `onDebugLog`) are required imports — supply the no-op stubs above unless you want debug logging.
+The two i64 parameters cross the boundary as JavaScript `BigInt` values; `value` and `defined` each pack one bit per signal bit. A scalar pin uses `(0n, 1n)` for low, `(1n, 1n)` for high, and `(_, 0n)` for undefined. The full export list emitted by `circ-compile … -o out.wasm` today is exactly `topology_alloc`, `init`, `run`, `setPin`, `getOutputValue`, `getOutputDefined` (plus `memory`); see [`DOCS/wasm-api.md`](/reference/wasm-api) for the full contract. The two `env` callbacks (`debugEnabled` and `onDebugLog`) are required imports — supply the no-op stubs above unless you want debug logging.
+
+### Driving a multi-bit input
+
+For a wider input declared as `input[4] a`, both `value` and `defined` use one bit per signal bit. To drive a 4-bit bus to the value `0b1010` with every bit defined:
+
+```js
+w.setPin(input_id, 0b1010n, 0b1111n);
+w.run();
+const v = w.getOutputValue(output_id);   // BigInt, e.g. 0b1010n for a passthrough
+const d = w.getOutputDefined(output_id); // BigInt, 0b1111n
+```
+
+Bits set beyond the declared width are silently masked. See [`DOCS/wasm-api.md`](/reference/wasm-api) for the full `BitVecState` semantics.
 
 ## 5. Use a built-in macro (`xor`)
 
@@ -175,8 +194,9 @@ Once a file participates in the project pipeline, root-pin component IDs are ass
 
 ```js
 for (let i = 0; i < 64; i++) {
-  const v = w.getOutputState(i);
-  if (v !== 2) console.log(`id=${i} -> ${v}`);
+  if (w.getOutputDefined(i) !== 0n) {
+    console.log(`id=${i} -> value=${w.getOutputValue(i)} defined=${w.getOutputDefined(i)}`);
+  }
 }
 ```
 

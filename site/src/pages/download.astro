@@ -60,9 +60,29 @@ const downloads = platforms.map((p) => ({
     </p>
   </aside>
 
+  <section class="install-quick">
+    <h2>Quick install</h2>
+    <p>
+      One command fetches the latest build for your platform and puts
+      <code>circ-compile</code> on your PATH.
+    </p>
+    <p><strong>macOS and Linux</strong></p>
+    <pre class="install-snippet"><code>curl -fsSL https://circ-lang.org/install.sh | sh</code></pre>
+    <br>
+    <p><strong>Windows (PowerShell)</strong></p>
+    <pre class="install-snippet"><code>irm https://circ-lang.org/install.ps1 | iex</code></pre>
+    <br>
+    <p>
+      Installs to <code>~/.local/bin</code> (macOS and Linux) or
+      <code>%LOCALAPPDATA%\circ\bin</code> (Windows). Set
+      <code>CIRC_INSTALL_DIR</code> to change the location, or
+      <code>CIRC_VERSION</code> to pin a version.
+    </p>
+  </section>
+
   <p class="download-intro">
-    Pre-built binaries for the three major desktop platforms. Prefer to build
-    from source? See the <a href={url('/reference/getting-started')}>getting-started guide</a>.
+    Or grab a specific pre-built archive by hand. Prefer to build from source?
+    See the <a href={url('/reference/getting-started')}>getting-started guide</a>.
   </p>
 
   <table class="download-table">
