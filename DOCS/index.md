@@ -92,6 +92,7 @@ lib/
   emit/                    Experimental --emit-zig path (standalone Zig output)
   preview/                 ASCII schematic layout + renderer for --preview
   cli/                     Argument parsing, --inspect dump
+  analyze/                 --analyze JSON for editor tooling (the circ-lsp server)
 
 templates/                 The prebuilt runtime template — compiled once into
   main.zig                 zig-out/lib/circ-runtime.wasm and embedded in the CLI

@@ -35,7 +35,7 @@ There is no `-Dtest-filter` flag wired into `build.zig`. To run a single test mo
 
 ## CLI shape
 
-`circ-compile` has five mutually exclusive modes (dispatch lives in `cmd/circ-compile/main.zig`'s `run()`). Only the default mode writes a `.wasm`:
+`circ-compile` has five mutually exclusive modes (dispatch lives in `cmd/circ-compile/main.zig`'s `run()`), plus a sixth `--analyze` surface intercepted earlier in `main()` that takes a JSON request on stdin rather than a file path. Only the default mode writes a `.wasm`:
 
 | Invocation | Output |
 | --- | --- |
@@ -44,6 +44,7 @@ There is no `-Dtest-filter` flag wired into `build.zig`. To run a single test mo
 | `circ-compile in.circ --inspect` | Pretty-printed parse tree, resolved IR, diagnostics. |
 | `circ-compile in.circ --preview` | ASCII schematic of the resolved circuit. |
 | `circ-compile in.circ --truth-table` | Enumerated truth table. Pair with `--format=markdown\|csv\|json`. |
+| `echo '<json>' \| circ-compile --analyze` | JSON analysis (files, diagnostics, symbols, references) on stdout for editor tooling; see `DOCS/analyze-api.md`. |
 
 Hard errors block emission; partial or "best-effort" artifacts are never produced. `--warnings-as-errors` (alias `-Werror`) promotes warnings.
 
