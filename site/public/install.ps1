@@ -2,45 +2,48 @@
 #
 #   irm https://circ-lang.org/install.ps1 | iex
 #
-# Downloads a prebuilt circ-compile.exe from https://circ-lang.org/downloads
+# Downloads a prebuilt circ-compile.exe from the project's GitHub Releases
+# (published automatically for each version tag by the CLI release workflow)
 # and installs it. Environment overrides:
-#   $env:CIRC_VERSION       version to install (default: the latest published)
+#   $env:CIRC_VERSION       version/tag to install, e.g. 0.0.2 or v0.0.2
+#                           (default: the latest published release)
 #   $env:CIRC_INSTALL_DIR   install directory (default: %LOCALAPPDATA%\circ\bin)
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-$Downloads  = 'https://circ-lang.org/downloads'
 $Repo       = 'https://github.com/jeffersonmourak/circ-compiler'
+$Api        = 'https://api.github.com/repos/jeffersonmourak/circ-compiler'
 $Label      = 'windows-x86_64'   # the only Windows build; runs under emulation on ARM64
 $InstallDir = if ($env:CIRC_INSTALL_DIR) { $env:CIRC_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA 'circ\bin' }
 
 function Say($m) { Write-Host "circ-install: $m" }
 function Die($m) { throw "circ-install: $m" }
 
-# Resolve the version: explicit override, else the published "latest" pointer
-# (written next to the archives by tools/build-dist.sh).
-$Version = $env:CIRC_VERSION
-if (-not $Version) {
-  try { $Version = (Invoke-RestMethod -Uri "$Downloads/latest").ToString().Trim() } catch { }
+# Resolve the tag: explicit override (accept 0.0.2 or v0.0.2), else the latest
+# published release via the GitHub API (Invoke-RestMethod sends a User-Agent and
+# parses the JSON, so tag_name is read directly).
+$Tag = $env:CIRC_VERSION
+if ($Tag) {
+  if ($Tag -notmatch '^v') { $Tag = "v$Tag" }
+} else {
+  try { $Tag = (Invoke-RestMethod -Uri "$Api/releases/latest").tag_name } catch { }
 }
-if (-not $Version) { Die "could not determine the latest version; set `$env:CIRC_VERSION (see $Repo)" }
+if (-not $Tag) { Die "could not determine the latest release; set `$env:CIRC_VERSION (see $Repo)" }
 
-$Pkg = "circ-compile-$Version-$Label"
-$Url = "$Downloads/$Pkg.zip"
-Say "installing circ-compile $Version ($Label)"
+$Asset = "circ-compile-$Tag-$Label.exe"
+$Url   = "$Repo/releases/download/$Tag/$Asset"
+Say "installing circ-compile $Tag ($Label)"
 
 $Tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("circ-" + [System.Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $Tmp -Force | Out-Null
 try {
-  $Zip = Join-Path $Tmp 'pkg.zip'
-  try { Invoke-WebRequest -Uri $Url -OutFile $Zip } catch { Die "download failed: $Url" }
-  Expand-Archive -Path $Zip -DestinationPath $Tmp -Force
-  $Exe = Join-Path $Tmp (Join-Path $Pkg 'circ-compile.exe')
-  if (-not (Test-Path $Exe)) { Die "archive did not contain circ-compile.exe" }
+  $TmpExe = Join-Path $Tmp 'circ-compile.exe'
+  try { Invoke-WebRequest -Uri $Url -OutFile $TmpExe } catch { Die "download failed: $Url" }
+  if (-not (Test-Path $TmpExe) -or (Get-Item $TmpExe).Length -eq 0) { Die "downloaded an empty file from $Url" }
   New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
-  Copy-Item -Path $Exe -Destination (Join-Path $InstallDir 'circ-compile.exe') -Force
+  Copy-Item -Path $TmpExe -Destination (Join-Path $InstallDir 'circ-compile.exe') -Force
 } finally {
   Remove-Item -Recurse -Force $Tmp -ErrorAction SilentlyContinue
 }

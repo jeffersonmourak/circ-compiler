@@ -5,42 +5,48 @@ import { fileURLToPath } from 'node:url';
 import Base from '../layouts/Base.astro';
 import { url, GITHUB_PUBLIC, GITHUB_REPO } from '../utils/url.ts';
 
-// Single source of truth: the VERSION file at the repo root, also read
-// by tools/build-dist.sh so the archive filenames and the URLs on this
-// page can never drift apart.
+// Single source of truth: the VERSION file at the repo root. The CLI release
+// workflow tags each version `v<VERSION>` and publishes the per-platform
+// binaries to that GitHub Release, so the filenames and URLs below always
+// resolve to a real, downloadable asset.
 const here = path.dirname(fileURLToPath(import.meta.url));
 const version = fs.readFileSync(path.resolve(here, '../../../VERSION'), 'utf8').trim();
+const tag = `v${version}`;
 
 const platforms = [
   {
     os: 'Linux',
     arch: 'x86_64',
     label: 'linux-x86_64',
-    ext: 'tar.gz',
+    ext: '',
     minOs: 'Kernel 3.2+',
   },
   {
     os: 'macOS',
     arch: 'aarch64 (Apple Silicon)',
     label: 'macos-aarch64',
-    ext: 'tar.gz',
+    ext: '',
     minOs: '11 (Big Sur)',
   },
   {
     os: 'Windows',
     arch: 'x86_64',
     label: 'windows-x86_64',
-    ext: 'zip',
+    ext: '.exe',
     minOs: '10',
   },
 ];
 
-const downloads = platforms.map((p) => ({
-  os: p.os,
-  arch: p.arch,
-  file: `circ-compile-${version}-${p.label}.${p.ext}`,
-  minOs: p.minOs,
-}));
+const downloads = platforms.map((p) => {
+  const file = `circ-compile-${tag}-${p.label}${p.ext}`;
+  return {
+    os: p.os,
+    arch: p.arch,
+    file,
+    href: `${GITHUB_REPO}/releases/download/${tag}/${file}`,
+    minOs: p.minOs,
+  };
+});
 ---
 <Base
   title="Download — circ"
@@ -81,7 +87,7 @@ const downloads = platforms.map((p) => ({
   </section>
 
   <p class="download-intro">
-    Or grab a specific pre-built archive by hand. Prefer to build from source?
+    Or grab a pre-built binary for your platform by hand. Prefer to build from source?
     See the <a href={url('/reference/getting-started')}>getting-started guide</a>.
   </p>
 
@@ -104,7 +110,7 @@ const downloads = platforms.map((p) => ({
           <td>{d.minOs}</td>
           <td>
             <a
-              href={url(`/downloads/${d.file}`)}
+              href={d.href}
               download
               data-cli-download
               data-os={d.os}
