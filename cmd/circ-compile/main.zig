@@ -161,6 +161,7 @@ pub fn run(
 ) !u8 {
     const args = cli_args.parse(argv) catch |err| {
         if (err == error.HelpRequested) {
+            try stdout_writer.print("v{s} (rev:{s})\n\n", .{ build_info.version, build_info.revision });
             try stdout_writer.writeAll(cli_args.help_text);
             return 0;
         }
@@ -579,6 +580,8 @@ test "run with --help writes help text to stdout and exits 0" {
     try std.testing.expectEqual(@as(usize, 0), stderr_buf.items.len);
     try std.testing.expect(std.mem.indexOf(u8, stdout_buf.items, "USAGE:") != null);
     try std.testing.expect(std.mem.indexOf(u8, stdout_buf.items, "--truth-table") != null);
+    // --help leads with the version header line (matches --version output).
+    try std.testing.expect(std.mem.indexOf(u8, stdout_buf.items, "rev:") != null);
 }
 
 test "run with --inspect on existing fixture" {
