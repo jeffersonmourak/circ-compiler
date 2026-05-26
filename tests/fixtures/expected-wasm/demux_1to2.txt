@@ -1,0 +1,6 @@
+# 1-to-2 demux through the real artifact: sel picks which output the input
+# is routed to; the other output is held low.
+in=1 sel=0 => out_a=1 out_b=0
+in=1 sel=1 => out_a=0 out_b=1
+in=0 sel=0 => out_a=0 out_b=0
+in=0 sel=1 => out_a=0 out_b=0

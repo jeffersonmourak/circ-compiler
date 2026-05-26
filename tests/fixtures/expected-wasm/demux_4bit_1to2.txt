@@ -1,0 +1,4 @@
+# 4-bit 1-to-2 demux through the real artifact. in=10 (0b1010).
+# sel=0 routes in to out_a (out_b held low); sel=1 routes in to out_b.
+in0=0 in1=1 in2=0 in3=1 sel=0 => out_a0=0 out_a1=1 out_a2=0 out_a3=1 out_b0=0 out_b1=0 out_b2=0 out_b3=0
+in0=0 in1=1 in2=0 in3=1 sel=1 => out_a0=0 out_a1=0 out_a2=0 out_a3=0 out_b0=0 out_b1=1 out_b2=0 out_b3=1

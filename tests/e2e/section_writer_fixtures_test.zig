@@ -284,6 +284,18 @@ const circuit_fixtures = [_]Fixture{
     .{ .root_path = "tests/fixtures/circuits/regression_led_out_drives_gate.circ", .spec_path = "tests/fixtures/expected-wasm/regression_led_out_drives_gate.txt" },
     .{ .root_path = "tests/fixtures/circuits/stress_chain_100.circ", .spec_path = "tests/fixtures/expected-wasm/stress_chain_100.txt" },
     .{ .root_path = "tests/fixtures/circuits/stress_grid_10x10.circ", .spec_path = "tests/fixtures/expected-wasm/stress_grid_10x10.txt" },
+    // Datapath circuits: multi-bit logic decomposed onto width-1 pins, so they
+    // exercise real arithmetic / routing through the artifact without needing
+    // the multi-bit value codec. Expected values come from `--truth-table`.
+    .{ .root_path = "tests/fixtures/circuits/mux_2to1.circ", .spec_path = "tests/fixtures/expected-wasm/mux_2to1.txt" },
+    .{ .root_path = "tests/fixtures/circuits/mux_4bit_2to1.circ", .spec_path = "tests/fixtures/expected-wasm/mux_4bit_2to1.txt" },
+    .{ .root_path = "tests/fixtures/circuits/demux_1to2.circ", .spec_path = "tests/fixtures/expected-wasm/demux_1to2.txt" },
+    .{ .root_path = "tests/fixtures/circuits/demux_4bit_1to2.circ", .spec_path = "tests/fixtures/expected-wasm/demux_4bit_1to2.txt" },
+    .{ .root_path = "tests/fixtures/circuits/four_bit_adder.circ", .spec_path = "tests/fixtures/expected-wasm/four_bit_adder.txt" },
+    .{ .root_path = "tests/fixtures/circuits/five_bit_adder.circ", .spec_path = "tests/fixtures/expected-wasm/five_bit_adder.txt" },
+    .{ .root_path = "tests/fixtures/circuits/six_bit_adder.circ", .spec_path = "tests/fixtures/expected-wasm/six_bit_adder.txt" },
+    .{ .root_path = "tests/fixtures/circuits/eight_bit_adder.circ", .spec_path = "tests/fixtures/expected-wasm/eight_bit_adder.txt" },
+    .{ .root_path = "tests/fixtures/circuits/alu_4bit.circ", .spec_path = "tests/fixtures/expected-wasm/alu_4bit.txt" },
 };
 
 const project_fixtures = [_]Fixture{
