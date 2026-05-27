@@ -1,6 +1,8 @@
 # Tests and Fixtures
 
-This project uses `zig build test` as the canonical local test command.
+This project uses `zig build test` as the canonical local test command — the fast,
+dev-loop suite. `zig build test-all` additionally runs `test-emit`, the slow emit-zig
+backend smoke that spawns a nested `zig build wasm` per fixture, and is what CI runs.
 Behavioral WASM harness tests also require `node` on your `PATH`.
 
 Fixture directories are organized by artifact kind:

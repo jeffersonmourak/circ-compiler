@@ -1,3 +1,13 @@
+//! Emit-zig backend smoke (single-module path).
+//!
+//! Circuit *behavior* for the whole fixture corpus is covered cheaply by the
+//! production path in tests/e2e/serializer_fixtures_test.zig (prebuilt runtime
+//! + topology sections, no per-fixture compile). This file's only remaining job
+//! is to guard that the experimental `--emit-zig` standalone-source backend
+//! still emits runnable wasm, so it keeps a minimal set of fixtures and is wired
+//! into the opt-in `test-emit` build step rather than the default `test` step.
+//! Each kept fixture triggers one nested `zig build wasm` via wasm_run, so add
+//! new cases sparingly.
 const std = @import("std");
 const translate = @import("translate");
 const resolver = @import("resolver");
@@ -156,7 +166,11 @@ fn runBehaviorFixture(fixture: BehaviorFixture) !void {
     try std.testing.expectEqualStrings(script_and_expected.expected_stdout, stdout);
 }
 
-test "behavior fixture: inverter" {
+// Minimal emit-zig single-module smoke set. The full behavioral corpus runs on
+// the production path in serializer_fixtures_test.zig; these two only prove the
+// --emit-zig backend still emits runnable wasm. `inverter` is the smallest
+// circuit (one NOT gate); `chain` exercises multi-stage wire propagation.
+test "emit-zig smoke: inverter" {
     try runBehaviorFixture(.{
         .source_path = "tests/fixtures/circuits/inverter.circ",
         .source_name = "inverter.circ",
@@ -164,101 +178,10 @@ test "behavior fixture: inverter" {
     });
 }
 
-test "behavior fixture: and gate" {
-    try runBehaviorFixture(.{
-        .source_path = "tests/fixtures/circuits/and_gate.circ",
-        .source_name = "and_gate.circ",
-        .expected_path = "tests/fixtures/expected-wasm/and_gate.txt",
-    });
-}
-
-test "behavior fixture: and of not" {
-    try runBehaviorFixture(.{
-        .source_path = "tests/fixtures/circuits/and_of_not.circ",
-        .source_name = "and_of_not.circ",
-        .expected_path = "tests/fixtures/expected-wasm/and_of_not.txt",
-    });
-}
-
-test "behavior fixture: chain" {
+test "emit-zig smoke: chain" {
     try runBehaviorFixture(.{
         .source_path = "tests/fixtures/circuits/chain.circ",
         .source_name = "chain.circ",
         .expected_path = "tests/fixtures/expected-wasm/chain.txt",
     });
-}
-
-test "behavior fixture: unused input" {
-    try runBehaviorFixture(.{
-        .source_path = "tests/fixtures/circuits/unused_input.circ",
-        .source_name = "unused_input.circ",
-        .expected_path = "tests/fixtures/expected-wasm/unused_input.txt",
-    });
-}
-
-const edge_behavior_fixtures = [_]BehaviorFixture{
-    .{
-        .source_path = "tests/fixtures/circuits/edge_empty_circuit.circ",
-        .source_name = "edge_empty_circuit.circ",
-        .expected_path = "tests/fixtures/expected-wasm/edge_empty_circuit.txt",
-    },
-    .{
-        .source_path = "tests/fixtures/circuits/edge_single_component.circ",
-        .source_name = "edge_single_component.circ",
-        .expected_path = "tests/fixtures/expected-wasm/edge_single_component.txt",
-    },
-    .{
-        .source_path = "tests/fixtures/circuits/edge_deep_anonymous.circ",
-        .source_name = "edge_deep_anonymous.circ",
-        .expected_path = "tests/fixtures/expected-wasm/edge_deep_anonymous.txt",
-    },
-    .{
-        .source_path = "tests/fixtures/circuits/edge_wide_fanin.circ",
-        .source_name = "edge_wide_fanin.circ",
-        .expected_path = "tests/fixtures/expected-wasm/edge_wide_fanin.txt",
-    },
-    .{
-        .source_path = "tests/fixtures/circuits/edge_wide_fanout.circ",
-        .source_name = "edge_wide_fanout.circ",
-        .expected_path = "tests/fixtures/expected-wasm/edge_wide_fanout.txt",
-    },
-};
-
-test "Phase 9 edge: single-file wasm fixtures" {
-    for (edge_behavior_fixtures) |fx| {
-        try runBehaviorFixture(fx);
-    }
-}
-
-const stress_behavior_fixtures = [_]BehaviorFixture{
-    .{
-        .source_path = "tests/fixtures/circuits/stress_chain_100.circ",
-        .source_name = "stress_chain_100.circ",
-        .expected_path = "tests/fixtures/expected-wasm/stress_chain_100.txt",
-    },
-    .{
-        .source_path = "tests/fixtures/circuits/stress_grid_10x10.circ",
-        .source_name = "stress_grid_10x10.circ",
-        .expected_path = "tests/fixtures/expected-wasm/stress_grid_10x10.txt",
-    },
-};
-
-const regression_behavior_fixtures = [_]BehaviorFixture{
-    .{
-        .source_path = "tests/fixtures/circuits/regression_led_out_drives_gate.circ",
-        .source_name = "regression_led_out_drives_gate.circ",
-        .expected_path = "tests/fixtures/expected-wasm/regression_led_out_drives_gate.txt",
-    },
-};
-
-test "Phase 9 regression: single-file wasm fixtures" {
-    for (regression_behavior_fixtures) |fx| {
-        try runBehaviorFixture(fx);
-    }
-}
-
-test "Phase 9 stress: large single-file wasm fixtures" {
-    for (stress_behavior_fixtures) |fx| {
-        try runBehaviorFixture(fx);
-    }
 }

@@ -153,6 +153,7 @@ This is the heart of the compiler:
 |------------------------|-------------------------------------|----------------------------------------------------------------------|
 | `circ-compile`         | `zig-out/bin/circ-compile`          | The `.circ` → `.wasm` CLI compiler.                                  |
 | (default `zig build`)  | `zig-out/lib/circ-runtime.wasm`     | The prebuilt runtime template embedded into compiled artifacts.       |
-| `zig build test`       | runs unit + integration tests       | Suite under `tests/`. Set `CIRC_SKIP_PERF=1` to skip the perf smoke.  |
+| `zig build test`       | fast unit + integration suite       | Suite under `tests/` (dev-loop default). Set `CIRC_SKIP_PERF=1` to skip the perf smoke.  |
+| `zig build test-all`   | `test` + slow emit-zig smoke        | Adds `test-emit` (a nested `zig build wasm` per fixture); the gate CI runs.  |
 
 There is no longer a "TypeScript SDK" target, a Canvas-2D rendering layer, or a `compiler:run` step — those were prototypes that have been removed in favour of the CLI-only model.

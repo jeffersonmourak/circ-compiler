@@ -111,5 +111,6 @@ zig build circ-compile               # → zig-out/bin/circ-compile
 zig build                             # → zig-out/lib/circ-runtime.wasm
 
 # Tests
-zig build test                        # set CIRC_SKIP_PERF=1 to skip perf smoke
+zig build test                        # fast dev-loop suite; CIRC_SKIP_PERF=1 skips perf smoke
+zig build test-all                    # test + test-emit (slow emit-zig smoke); what CI runs
 ```

@@ -52,7 +52,7 @@ The binary lands at `zig-out/bin/circ-compile`. Run the test suite with:
 zig build test
 ```
 
-(Set `CIRC_SKIP_PERF=1` to skip the smoke perf test in noisy CI environments.)
+This is the fast dev-loop suite. `zig build test-all` additionally runs the slow emit-zig backend smoke (`test-emit`, a nested `zig build wasm` per fixture) and is what CI runs. (Set `CIRC_SKIP_PERF=1` to skip the smoke perf test in noisy CI environments.)
 
 ## Usage
 

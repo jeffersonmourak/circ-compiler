@@ -1,3 +1,13 @@
+//! Emit-zig backend smoke (multi-file project path).
+//!
+//! Circuit *behavior* for the whole fixture corpus is covered cheaply by the
+//! production path in tests/e2e/serializer_fixtures_test.zig (prebuilt runtime
+//! + topology sections, no per-fixture compile). This file's only remaining job
+//! is to guard that the experimental `--emit-zig` project backend
+//! (emit_project.emitProjectSource) still emits runnable wasm, so it keeps a
+//! minimal set of fixtures and is wired into the opt-in `test-emit` build step
+//! rather than the default `test` step. Each kept fixture triggers one nested
+//! `zig build wasm` via wasm_run, so add new cases sparingly.
 const std = @import("std");
 const scan_imports = @import("scan_imports");
 const import_cycle = @import("import_cycle");
@@ -176,100 +186,12 @@ fn runFixture(fixture: Fixture) !void {
     try std.testing.expectEqualStrings(script_and_expected.expected_stdout, stdout);
 }
 
-test "project behavior: passthrough_chain" {
-    try runFixture(.{
-        .name = "passthrough_chain",
-        .root_path = "tests/fixtures/projects/passthrough_chain/root.circ",
-        .source_name = "root.circ",
-        .spec_path = "tests/fixtures/expected-wasm/projects/passthrough_chain.txt",
-    });
-}
-
-test "project behavior: and_pair" {
-    try runFixture(.{
-        .name = "and_pair",
-        .root_path = "tests/fixtures/projects/and_pair/root.circ",
-        .source_name = "root.circ",
-        .spec_path = "tests/fixtures/expected-wasm/projects/and_pair.txt",
-    });
-}
-
-test "project behavior: nested_invert" {
-    try runFixture(.{
-        .name = "nested_invert",
-        .root_path = "tests/fixtures/projects/nested_invert/root.circ",
-        .source_name = "root.circ",
-        .spec_path = "tests/fixtures/expected-wasm/projects/nested_invert.txt",
-    });
-}
-
-test "project behavior: diamond shared base" {
-    try runFixture(.{
-        .name = "diamond",
-        .root_path = "tests/fixtures/projects/diamond/root.circ",
-        .source_name = "root.circ",
-        .spec_path = "tests/fixtures/expected-wasm/projects/diamond.txt",
-    });
-}
-
-test "project behavior: deep_chain" {
-    try runFixture(.{
-        .name = "deep_chain",
-        .root_path = "tests/fixtures/projects/deep_chain/root.circ",
-        .source_name = "root.circ",
-        .spec_path = "tests/fixtures/expected-wasm/projects/deep_chain.txt",
-    });
-}
-
-test "project behavior: same_name_half_adder" {
-    try runFixture(.{
-        .name = "same_name_half_adder",
-        .root_path = "tests/fixtures/projects/same_name_half_adder/root.circ",
-        .source_name = "root.circ",
-        .spec_path = "tests/fixtures/expected-wasm/projects/same_name_half_adder.txt",
-    });
-}
-
-const builtin_truth_fixtures = [_]Fixture{
-    .{
-        .name = "builtin_or",
-        .root_path = "tests/fixtures/circuits/builtin_or.circ",
-        .source_name = "builtin_or.circ",
-        .spec_path = "tests/fixtures/expected-wasm/builtin_or.txt",
-    },
-    .{
-        .name = "builtin_nand",
-        .root_path = "tests/fixtures/circuits/builtin_nand.circ",
-        .source_name = "builtin_nand.circ",
-        .spec_path = "tests/fixtures/expected-wasm/builtin_nand.txt",
-    },
-    .{
-        .name = "builtin_nor",
-        .root_path = "tests/fixtures/circuits/builtin_nor.circ",
-        .source_name = "builtin_nor.circ",
-        .spec_path = "tests/fixtures/expected-wasm/builtin_nor.txt",
-    },
-    .{
-        .name = "builtin_xor",
-        .root_path = "tests/fixtures/circuits/builtin_xor.circ",
-        .source_name = "builtin_xor.circ",
-        .spec_path = "tests/fixtures/expected-wasm/builtin_xor.txt",
-    },
-    .{
-        .name = "builtin_xnor",
-        .root_path = "tests/fixtures/circuits/builtin_xnor.circ",
-        .source_name = "builtin_xnor.circ",
-        .spec_path = "tests/fixtures/expected-wasm/builtin_xnor.txt",
-    },
-};
-
-test "built-in macros: truth tables (or nand nor xor xnor)" {
-    for (builtin_truth_fixtures) |fx| {
-        try runFixture(fx);
-    }
-}
-
-test "composition: full adder from built-in xor, and, or" {
+// Minimal emit-zig project smoke set. The full behavioral corpus runs on the
+// production path in serializer_fixtures_test.zig; these two only prove the
+// --emit-zig project backend still emits runnable wasm. `full_adder_from_builtins`
+// exercises auto-imported builtins + sub-circuit flattening; `half_adder` is a
+// canonical two-file project.
+test "emit-zig smoke: full adder from built-in xor, and, or" {
     try runFixture(.{
         .name = "full_adder_from_builtins",
         .root_path = "tests/fixtures/circuits/full_adder_from_builtins.circ",
@@ -278,43 +200,7 @@ test "composition: full adder from built-in xor, and, or" {
     });
 }
 
-test "composition: full adder from user half_adder plus xor, and, or macros" {
-    try runFixture(.{
-        .name = "full_adder_ha_or",
-        .root_path = "tests/fixtures/projects/full_adder_ha_or/root.circ",
-        .source_name = "root.circ",
-        .spec_path = "tests/fixtures/expected-wasm/projects/full_adder_ha_or.txt",
-    });
-}
-
-test "Phase 9 edge: single built-in gate only (xor)" {
-    try runFixture(.{
-        .name = "edge_single_builtin",
-        .root_path = "tests/fixtures/circuits/edge_single_builtin.circ",
-        .source_name = "edge_single_builtin.circ",
-        .spec_path = "tests/fixtures/expected-wasm/edge_single_builtin.txt",
-    });
-}
-
-test "Phase 9 edge: deep sub-circuit import chain" {
-    try runFixture(.{
-        .name = "deep_subcircuit_chain",
-        .root_path = "tests/fixtures/projects/deep_subcircuit_chain/root.circ",
-        .source_name = "root.circ",
-        .spec_path = "tests/fixtures/expected-wasm/projects/deep_subcircuit_chain.txt",
-    });
-}
-
-test "Phase 9 stress: deep hierarchy 256 leaf NOTs" {
-    try runFixture(.{
-        .name = "stress_deep_subcircuit",
-        .root_path = "tests/fixtures/projects/stress_deep_subcircuit/root.circ",
-        .source_name = "root.circ",
-        .spec_path = "tests/fixtures/expected-wasm/projects/stress_deep_subcircuit.txt",
-    });
-}
-
-test "canonical: half adder project (sum, carry truth table)" {
+test "emit-zig smoke: half adder project (sum, carry truth table)" {
     try runFixture(.{
         .name = "half_adder",
         .root_path = "tests/fixtures/projects/half_adder/root.circ",
@@ -322,22 +208,3 @@ test "canonical: half adder project (sum, carry truth table)" {
         .spec_path = "tests/fixtures/expected-wasm/projects/half_adder.txt",
     });
 }
-
-test "canonical: full adder project (two half-adders + or)" {
-    try runFixture(.{
-        .name = "full_adder",
-        .root_path = "tests/fixtures/projects/full_adder/root.circ",
-        .source_name = "root.circ",
-        .spec_path = "tests/fixtures/expected-wasm/projects/full_adder.txt",
-    });
-}
-
-test "canonical: 4-bit AND/OR network project" {
-    try runFixture(.{
-        .name = "and_or_network",
-        .root_path = "tests/fixtures/projects/and_or_network/root.circ",
-        .source_name = "root.circ",
-        .spec_path = "tests/fixtures/expected-wasm/projects/and_or_network.txt",
-    });
-}
-

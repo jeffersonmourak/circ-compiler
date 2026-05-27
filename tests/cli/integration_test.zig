@@ -35,10 +35,18 @@ fn exitCode(term: std.process.Child.Term) i32 {
     };
 }
 
+// `zig build circ-compile` produces an identical binary for every test in this
+// file, so build it at most once. Zig runs a test binary's tests serially on a
+// single thread, so a plain flag suffices (no atomics / std.once). A failed
+// first build leaves the flag false, so later tests retry rather than skip.
+var cli_built = false;
+
 fn buildCli() !void {
+    if (cli_built) return;
     var result = try run(&.{ "zig", "build", "circ-compile" });
     defer result.deinit(std.testing.allocator);
     try std.testing.expectEqual(@as(i32, 0), exitCode(result.term));
+    cli_built = true;
 }
 
 fn expectFileExists(path: []const u8) !void {

@@ -46,4 +46,8 @@ jobs:
         # divergence is investigated.
         env:
           SKIP_WASM_E2E: "1"
-        run: zig build test --summary all
+        # `test-all` = the fast `test` step plus `test-emit` (the experimental
+        # --emit-zig backend smoke, which spawns nested wasm builds per fixture).
+        # The dev-loop default `zig build test` omits `test-emit` for speed; CI
+        # runs both so emit-backend regressions still gate merges.
+        run: zig build test-all --summary all
