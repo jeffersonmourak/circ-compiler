@@ -15,7 +15,13 @@ const Fixture = struct {
 
 const Assignment = struct {
     name: []const u8,
-    value: i32,
+    /// Raw state token as written, e.g. "1010" or "?". Emitted verbatim on the
+    /// expected-output side, so it must already be in canonical form.
+    text: []const u8,
+    /// MSB-first decoding of `text` into the BitVecState halves: char 0 is the
+    /// high bit. Undefined bits ('?') leave both `value` and `defined` clear.
+    value: u64,
+    defined: u64,
 };
 
 const Step = struct {
@@ -30,12 +36,33 @@ fn hasHardErrors(diags: []const diagnostics.Diagnostic) bool {
     return false;
 }
 
+/// A state token is a per-bit string over {0, 1, ?}, MSB first (char 0 is the
+/// high bit), one character per pin bit. Width-1 pins use a single "0"/"1"/"?";
+/// wider buses use one char per bit (e.g. "1010" is value 10 across 4 bits,
+/// "10?1" marks bit 1 undefined). This replaces the previous decimal encoding
+/// where "2" was the undefined sentinel, which could not represent multi-bit
+/// values or per-bit undefined.
 fn parseAssignment(token: []const u8) !Assignment {
     const eq = std.mem.indexOfScalar(u8, token, '=') orelse return error.InvalidAssignment;
-    return .{
-        .name = token[0..eq],
-        .value = try std.fmt.parseInt(i32, token[eq + 1 ..], 10),
-    };
+    const name = token[0..eq];
+    const text = token[eq + 1 ..];
+    if (text.len == 0 or text.len > 64) return error.InvalidStateToken;
+    var value: u64 = 0;
+    var defined: u64 = 0;
+    for (text, 0..) |c, i| {
+        const bit: u6 = @intCast(text.len - 1 - i);
+        const mask = @as(u64, 1) << bit;
+        switch (c) {
+            '0' => defined |= mask,
+            '1' => {
+                defined |= mask;
+                value |= mask;
+            },
+            '?' => {},
+            else => return error.InvalidStateToken,
+        }
+    }
+    return .{ .name = name, .text = text, .value = value, .defined = defined };
 }
 
 fn parseSide(allocator: std.mem.Allocator, text: []const u8) ![]Assignment {
@@ -66,6 +93,13 @@ fn parseSteps(allocator: std.mem.Allocator, text: []const u8) ![]Step {
 fn pinId(mappings: []const serializer.PinMapping, name: []const u8) ?u32 {
     for (mappings) |m| {
         if (std.mem.eql(u8, m.name, name)) return m.global_id;
+    }
+    return null;
+}
+
+fn pinMapping(mappings: []const serializer.PinMapping, name: []const u8) ?serializer.PinMapping {
+    for (mappings) |m| {
+        if (std.mem.eql(u8, m.name, name)) return m;
     }
     return null;
 }
@@ -202,6 +236,7 @@ fn runFixture(fixture: Fixture, allocator: std.mem.Allocator) !void {
         \\    const ptr = instance.exports.topology_alloc(topoBytes.length);
         \\    new Uint8Array(instance.exports.memory.buffer).set(topoBytes, ptr);
         \\    instance.exports.init();
+        \\    const fmtState = (v, d, w) => { let s = ''; for (let b = w - 1; b >= 0; b--) { const m = 1n << BigInt(b); s += ((d & m) === 0n) ? '?' : (((v & m) === 0n) ? '0' : '1'); } return s; };
         \\
     );
 
@@ -214,25 +249,23 @@ fn runFixture(fixture: Fixture, allocator: std.mem.Allocator) !void {
                 std.debug.print("Unknown input pin '{s}' in fixture {s}\n", .{ inp.name, fixture.root_path });
                 return error.UnknownInputPin;
             };
-            const value: u64 = if (inp.value == 1) 1 else 0;
-            const defined: u64 = if (inp.value == 2) 0 else 1;
-            try w.print("    instance.exports.setPin({d}, {d}n, {d}n);\n", .{ id, value, defined });
+            try w.print("    instance.exports.setPin({d}, {d}n, {d}n);\n", .{ id, inp.value, inp.defined });
         }
         try w.writeAll("    instance.exports.run();\n");
         try w.print("    const p{d} = [];\n", .{idx});
         var first = true;
         for (step.outputs) |out| {
-            const id = pinId(topo.output_ids, out.name) orelse {
+            const mapping = pinMapping(topo.output_ids, out.name) orelse {
                 std.debug.print("Unknown output pin '{s}' in fixture {s}\n", .{ out.name, fixture.root_path });
                 return error.UnknownOutputPin;
             };
             try w.print(
-                "    p{d}.push('{s}=' + ((instance.exports.getOutputDefined({d}) === 0n) ? 2 : (instance.exports.getOutputValue({d}) === 0n ? 0 : 1)));\n",
-                .{ idx, out.name, id, id },
+                "    p{d}.push('{s}=' + fmtState(instance.exports.getOutputValue({d}), instance.exports.getOutputDefined({d}), {d}));\n",
+                .{ idx, out.name, mapping.global_id, mapping.global_id, mapping.width },
             );
             if (!first) try ew.writeAll(" ");
             first = false;
-            try ew.print("{s}={d}", .{ out.name, out.value });
+            try ew.print("{s}={s}", .{ out.name, out.text });
         }
         try w.print("    console.log(p{d}.join(' '));\n", .{idx});
         try ew.writeAll("\n");
@@ -284,6 +317,37 @@ const circuit_fixtures = [_]Fixture{
     .{ .root_path = "tests/fixtures/circuits/regression_led_out_drives_gate.circ", .spec_path = "tests/fixtures/expected-wasm/regression_led_out_drives_gate.txt" },
     .{ .root_path = "tests/fixtures/circuits/stress_chain_100.circ", .spec_path = "tests/fixtures/expected-wasm/stress_chain_100.txt" },
     .{ .root_path = "tests/fixtures/circuits/stress_grid_10x10.circ", .spec_path = "tests/fixtures/expected-wasm/stress_grid_10x10.txt" },
+    // Datapath circuits: multi-bit logic decomposed onto width-1 pins, so they
+    // exercise real arithmetic / routing through the artifact without needing
+    // the multi-bit value codec. Expected values come from `--truth-table`.
+    .{ .root_path = "tests/fixtures/circuits/mux_2to1.circ", .spec_path = "tests/fixtures/expected-wasm/mux_2to1.txt" },
+    .{ .root_path = "tests/fixtures/circuits/mux_4bit_2to1.circ", .spec_path = "tests/fixtures/expected-wasm/mux_4bit_2to1.txt" },
+    .{ .root_path = "tests/fixtures/circuits/demux_1to2.circ", .spec_path = "tests/fixtures/expected-wasm/demux_1to2.txt" },
+    .{ .root_path = "tests/fixtures/circuits/demux_4bit_1to2.circ", .spec_path = "tests/fixtures/expected-wasm/demux_4bit_1to2.txt" },
+    .{ .root_path = "tests/fixtures/circuits/four_bit_adder.circ", .spec_path = "tests/fixtures/expected-wasm/four_bit_adder.txt" },
+    .{ .root_path = "tests/fixtures/circuits/five_bit_adder.circ", .spec_path = "tests/fixtures/expected-wasm/five_bit_adder.txt" },
+    .{ .root_path = "tests/fixtures/circuits/six_bit_adder.circ", .spec_path = "tests/fixtures/expected-wasm/six_bit_adder.txt" },
+    .{ .root_path = "tests/fixtures/circuits/eight_bit_adder.circ", .spec_path = "tests/fixtures/expected-wasm/eight_bit_adder.txt" },
+    .{ .root_path = "tests/fixtures/circuits/alu_4bit.circ", .spec_path = "tests/fixtures/expected-wasm/alu_4bit.txt" },
+    // Codec coverage: slice_basic crosses a multi-bit value in and out;
+    // single_gate carries an undefined ('?') vector. Together they exercise
+    // both new paths in the fixture bit-string codec.
+    .{ .root_path = "tests/fixtures/circuits/slice_basic.circ", .spec_path = "tests/fixtures/expected-wasm/slice_basic.txt" },
+    .{ .root_path = "tests/fixtures/circuits/single_gate.circ", .spec_path = "tests/fixtures/expected-wasm/single_gate.txt" },
+    // Bus-width circuits across the artifact: slice / concat / bit-index value
+    // lowering, the multi-bit ALU (also parametric macros at width), and the
+    // wide built-in macro expansions. concat_four_bits also drives one bit
+    // undefined to check multi-bit undefined propagation.
+    .{ .root_path = "tests/fixtures/circuits/slice_high_bits.circ", .spec_path = "tests/fixtures/expected-wasm/slice_high_bits.txt" },
+    .{ .root_path = "tests/fixtures/circuits/slice_then_concat.circ", .spec_path = "tests/fixtures/expected-wasm/slice_then_concat.txt" },
+    .{ .root_path = "tests/fixtures/circuits/concat_four_bits.circ", .spec_path = "tests/fixtures/expected-wasm/concat_four_bits.txt" },
+    .{ .root_path = "tests/fixtures/circuits/bit_index_a2.circ", .spec_path = "tests/fixtures/expected-wasm/bit_index_a2.txt" },
+    .{ .root_path = "tests/fixtures/circuits/alu_4bit_multibit.circ", .spec_path = "tests/fixtures/expected-wasm/alu_4bit_multibit.txt" },
+    .{ .root_path = "tests/fixtures/circuits/nand_4bit_macro.circ", .spec_path = "tests/fixtures/expected-wasm/nand_4bit_macro.txt" },
+    .{ .root_path = "tests/fixtures/circuits/or_4bit_macro.circ", .spec_path = "tests/fixtures/expected-wasm/or_4bit_macro.txt" },
+    .{ .root_path = "tests/fixtures/circuits/xnor_4bit_macro.circ", .spec_path = "tests/fixtures/expected-wasm/xnor_4bit_macro.txt" },
+    .{ .root_path = "tests/fixtures/circuits/nor_8bit_macro.circ", .spec_path = "tests/fixtures/expected-wasm/nor_8bit_macro.txt" },
+    .{ .root_path = "tests/fixtures/circuits/xor_8bit_macro.circ", .spec_path = "tests/fixtures/expected-wasm/xor_8bit_macro.txt" },
 };
 
 const project_fixtures = [_]Fixture{

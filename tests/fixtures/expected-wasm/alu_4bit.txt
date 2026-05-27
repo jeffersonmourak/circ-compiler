@@ -1,0 +1,28 @@
+# Hack ALU (4-bit) driven through the real compiled artifact.
+# Operands are fixed at x=3 (0b0011) and y=5 (0b0101); each vector sets the
+# six control bits (zx nx zy ny f no) for one documented operation and reads
+# the four result bits. Outputs are little-endian: out0 is the LSB.
+# Expected values were taken from `circ-compile alu_4bit.circ --truth-table`.
+
+# out = 0
+zx=1 nx=0 zy=1 ny=0 f=1 no=0 x0=1 x1=1 x2=0 x3=0 y0=1 y1=0 y2=1 y3=0 => out0=0 out1=0 out2=0 out3=0
+# out = 1
+zx=1 nx=1 zy=1 ny=1 f=1 no=1 x0=1 x1=1 x2=0 x3=0 y0=1 y1=0 y2=1 y3=0 => out0=1 out1=0 out2=0 out3=0
+# out = -1 (0b1111)
+zx=1 nx=1 zy=1 ny=0 f=1 no=0 x0=1 x1=1 x2=0 x3=0 y0=1 y1=0 y2=1 y3=0 => out0=1 out1=1 out2=1 out3=1
+# out = x (3)
+zx=0 nx=0 zy=1 ny=1 f=0 no=0 x0=1 x1=1 x2=0 x3=0 y0=1 y1=0 y2=1 y3=0 => out0=1 out1=1 out2=0 out3=0
+# out = y (5)
+zx=1 nx=1 zy=0 ny=0 f=0 no=0 x0=1 x1=1 x2=0 x3=0 y0=1 y1=0 y2=1 y3=0 => out0=1 out1=0 out2=1 out3=0
+# out = !x (0b1100 = 12)
+zx=0 nx=0 zy=1 ny=1 f=0 no=1 x0=1 x1=1 x2=0 x3=0 y0=1 y1=0 y2=1 y3=0 => out0=0 out1=0 out2=1 out3=1
+# out = -x (0b1101 = 13)
+zx=0 nx=0 zy=1 ny=1 f=1 no=1 x0=1 x1=1 x2=0 x3=0 y0=1 y1=0 y2=1 y3=0 => out0=1 out1=0 out2=1 out3=1
+# out = x + y (8)
+zx=0 nx=0 zy=0 ny=0 f=1 no=0 x0=1 x1=1 x2=0 x3=0 y0=1 y1=0 y2=1 y3=0 => out0=0 out1=0 out2=0 out3=1
+# out = x - y (0b1110 = 14)
+zx=0 nx=1 zy=0 ny=0 f=1 no=1 x0=1 x1=1 x2=0 x3=0 y0=1 y1=0 y2=1 y3=0 => out0=0 out1=1 out2=1 out3=1
+# out = x & y (1)
+zx=0 nx=0 zy=0 ny=0 f=0 no=0 x0=1 x1=1 x2=0 x3=0 y0=1 y1=0 y2=1 y3=0 => out0=1 out1=0 out2=0 out3=0
+# out = x | y (0b0111 = 7)
+zx=0 nx=1 zy=0 ny=1 f=0 no=1 x0=1 x1=1 x2=0 x3=0 y0=1 y1=0 y2=1 y3=0 => out0=1 out1=1 out2=1 out3=0

@@ -1,0 +1,4 @@
+# 4-bit 2-to-1 mux through the real artifact. a=10 (0b1010), b=5 (0b0101).
+# sel=0 routes a to out, sel=1 routes b. Outputs little-endian.
+a0=0 a1=1 a2=0 a3=1 b0=1 b1=0 b2=1 b3=0 sel=0 => out0=0 out1=1 out2=0 out3=1
+a0=0 a1=1 a2=0 a3=1 b0=1 b1=0 b2=1 b3=0 sel=1 => out0=1 out1=0 out2=1 out3=0

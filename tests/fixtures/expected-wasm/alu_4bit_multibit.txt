@@ -1,0 +1,29 @@
+# Multi-bit Hack ALU through the real artifact: x and y are 4-bit buses and
+# out is a 4-bit bus, so each vector drives two multi-bit values across setPin
+# and reads a multi-bit value back. Internally the ALU broadcasts control bits
+# into the lanes and uses the parametric built-in macros at width 4, so this
+# also exercises parametric sub-circuit instantiation through the artifact.
+# Operands fixed at x=3 (0011) and y=5 (0101); values from --truth-table.
+
+# out = 0
+zx=1 nx=0 zy=1 ny=0 f=1 no=0 x=0011 y=0101 => out=0000
+# out = 1
+zx=1 nx=1 zy=1 ny=1 f=1 no=1 x=0011 y=0101 => out=0001
+# out = -1
+zx=1 nx=1 zy=1 ny=0 f=1 no=0 x=0011 y=0101 => out=1111
+# out = x
+zx=0 nx=0 zy=1 ny=1 f=0 no=0 x=0011 y=0101 => out=0011
+# out = y
+zx=1 nx=1 zy=0 ny=0 f=0 no=0 x=0011 y=0101 => out=0101
+# out = !x
+zx=0 nx=0 zy=1 ny=1 f=0 no=1 x=0011 y=0101 => out=1100
+# out = -x
+zx=0 nx=0 zy=1 ny=1 f=1 no=1 x=0011 y=0101 => out=1101
+# out = x + y
+zx=0 nx=0 zy=0 ny=0 f=1 no=0 x=0011 y=0101 => out=1000
+# out = x - y
+zx=0 nx=1 zy=0 ny=0 f=1 no=1 x=0011 y=0101 => out=1110
+# out = x & y
+zx=0 nx=0 zy=0 ny=0 f=0 no=0 x=0011 y=0101 => out=0001
+# out = x | y
+zx=0 nx=1 zy=0 ny=1 f=0 no=1 x=0011 y=0101 => out=0111

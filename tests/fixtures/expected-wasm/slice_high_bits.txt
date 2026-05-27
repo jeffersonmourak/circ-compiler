@@ -1,0 +1,6 @@
+# Slice through the real artifact: o = a[2..4], the high two bits of a 4-bit
+# input. Tokens are MSB-first.
+a=1010 => o=10
+a=1100 => o=11
+a=0111 => o=01
+a=0011 => o=00

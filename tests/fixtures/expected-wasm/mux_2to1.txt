@@ -1,0 +1,5 @@
+# 2-to-1 mux through the real artifact: sel=0 routes a, sel=1 routes b.
+a=1 b=0 sel=0 => out=1
+a=0 b=1 sel=0 => out=0
+a=1 b=0 sel=1 => out=0
+a=0 b=1 sel=1 => out=1

@@ -1,0 +1,7 @@
+# Slice-then-concat through the real artifact: o = {a[0..2], a[2..4]}, which
+# splits the 4-bit input into halves and rejoins them, reconstituting a.
+# Verifies a slice feeding a concat survives the topology round-trip.
+a=1010 => o=1010
+a=0110 => o=0110
+a=1111 => o=1111
+a=0001 => o=0001
