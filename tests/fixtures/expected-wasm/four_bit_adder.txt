@@ -1,0 +1,14 @@
+# 4-bit ripple-carry adder through the real artifact. a=(a3a2a1a0), b=(b3b2b1b0),
+# sum bits s0..s3 little-endian, cout is the carry out of bit 3.
+# Expected values from `circ-compile four_bit_adder.circ --truth-table`.
+
+# 0 + 0 = 0
+a0=0 a1=0 a2=0 a3=0 b0=0 b1=0 b2=0 b3=0 => s0=0 s1=0 s2=0 s3=0 cout=0
+# 3 + 5 = 8
+a0=1 a1=1 a2=0 a3=0 b0=1 b1=0 b2=1 b3=0 => s0=0 s1=0 s2=0 s3=1 cout=0
+# 6 + 6 = 12
+a0=0 a1=1 a2=1 a3=0 b0=0 b1=1 b2=1 b3=0 => s0=0 s1=0 s2=1 s3=1 cout=0
+# 7 + 9 = 16 (carry out)
+a0=1 a1=1 a2=1 a3=0 b0=1 b1=0 b2=0 b3=1 => s0=0 s1=0 s2=0 s3=0 cout=1
+# 15 + 1 = 16 (carry out)
+a0=1 a1=1 a2=1 a3=1 b0=1 b1=0 b2=0 b3=0 => s0=0 s1=0 s2=0 s3=0 cout=1

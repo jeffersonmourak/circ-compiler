@@ -1,0 +1,6 @@
+# Width-1 NOT gate, including an undefined vector. NOT of an undefined input
+# stays undefined: the engine flips defined bits and leaves undefined bits
+# alone. '?' is the undefined state token.
+a=0 => out=1
+a=1 => out=0
+a=? => out=?
