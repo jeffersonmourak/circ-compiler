@@ -37,7 +37,7 @@ There is no `-Dtest-filter` flag wired into `build.zig`. To run a single test mo
 
 ## CLI shape
 
-`circ-compile` has six mutually exclusive modes (dispatch lives in `cmd/circ-compile/main.zig`'s `run()`), plus a seventh `--analyze` surface intercepted earlier in `main()` that takes a JSON request on stdin rather than a file path. Only the default mode writes a `.wasm`:
+`circ-compile` has the following mutually exclusive modes (dispatch lives in `cmd/circ-compile/main.zig`'s `run()`), plus an `--analyze` surface intercepted earlier in `main()` that takes a JSON request on stdin rather than a file path. Only the default mode writes a `.wasm`:
 
 | Invocation | Output |
 | --- | --- |

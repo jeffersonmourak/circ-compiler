@@ -56,7 +56,7 @@ This is the fast dev-loop suite. `zig build test-all` additionally runs the slow
 
 ## Usage
 
-`circ-compile` has six mutually exclusive modes:
+`circ-compile` has the following mutually exclusive modes:
 
 | Invocation                                       | Produces                                                                                       |
 |--------------------------------------------------|------------------------------------------------------------------------------------------------|

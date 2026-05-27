@@ -49,7 +49,7 @@
    final .wasm  ← hands to host (Node, browser, etc.)
 ```
 
-The CLI driver is `cmd/circ-compile/main.zig`. The compiler runs six mutually exclusive modes (`--inspect`, `--preview`, `--emit-zig`, `--truth-table`, `--sim`, default compile); only the default mode produces a `.wasm`. See `cmd/circ-compile/main.zig`'s `run()` for the dispatch. (`--sim` drives the circuit over an interactive stdio protocol for testing and tooling; see [sim-protocol.md](sim-protocol.md).) A seventh invocation, `--analyze`, is handled in `main()` ahead of `run()`: it reads a JSON request on stdin (rather than a file path) and emits structured diagnostics, symbols, and references for editor tooling such as the external circ-lsp server. See [analyze-api.md](analyze-api.md).
+The CLI driver is `cmd/circ-compile/main.zig`. It dispatches several mutually exclusive modes — `run()` is the authoritative set, and the [README usage table](../README.md#usage) documents what each produces; only the default mode produces a `.wasm`. A separate `--analyze` invocation is handled in `main()` ahead of `run()`: it reads a JSON request on stdin (rather than a file path) and emits structured diagnostics, symbols, and references for editor tooling such as the external circ-lsp server. See [analyze-api.md](analyze-api.md).
 
 ## Layer 1 — Simulation engine (`lib/circuit.zig`)
 
@@ -100,7 +100,7 @@ propagate()
 
 The per-timestamp batching matters: without it, a downstream gate with multiple upstream events at the same `T` could read partial state, dedup the corrective re-enqueue, and get stuck on the wrong final value. See `simulation-engine.md` for the full rationale.
 
-Delays are compile-time constants (`PROPAGATION_DELAY = 5`, `WIRE_PROPAGATION_DELAY = 1`). `wire`, `output_pin`, `led`, `slice`, and `concat` use the wire delay; everything else uses the gate delay.
+Delays are compile-time constants (`PROPAGATION_DELAY = 5`, `WIRE_PROPAGATION_DELAY = 1`); the delay switch in `lib/circuit.zig` is the source of truth for which component kinds take the wire delay versus the gate delay. See [simulation-engine.md](simulation-engine.md) for the full timing model.
 
 ### Memory
 
