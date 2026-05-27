@@ -48,6 +48,7 @@ const truth_table_markdown = @import("truth_table_markdown");
 const truth_table_csv = @import("truth_table_csv");
 const truth_table_json = @import("truth_table_json");
 const analyzer = @import("analyze");
+const sim_loop = @import("sim_loop");
 const build_info = @import("build_info");
 
 fn makePathAny(path: []const u8) !void {
@@ -206,7 +207,7 @@ pub fn run(
     // scan_imports' implicit_builtin path. Compile/emit_zig keep the cheaper
     // has_imports gate to avoid the extra disk I/O on macro-free fixtures (locked
     // by perf-budget tests).
-    const needs_project_resolution = args.mode != .inspect and (has_imports or args.mode == .preview or args.mode == .truth_table);
+    const needs_project_resolution = args.mode != .inspect and (has_imports or args.mode == .preview or args.mode == .truth_table or args.mode == .sim);
 
     if (needs_project_resolution) {
         const scan_result = scan_imports.scanProjectImports(allocator, args.input_path) catch |err| {
@@ -269,6 +270,34 @@ pub fn run(
         try stdout_writer.writeAll("\n=== Summary ===\n");
         try stdout_writer.print("{d} errors, {d} warnings\n", .{ counts.errors, counts.warnings });
         return if (counts.errors > 0) 1 else 0;
+    }
+
+    // --sim emits its diagnostics inside the protocol handshake (as `error`/
+    // `diag` lines on stdout), so it intercepts here before the generic
+    // human-readable stderr dump below.
+    if (args.mode == .sim) {
+        if (counts.errors > 0) {
+            try sim_loop.serveError(stdout_writer, args.input_path, diagnostic_list.items);
+            return 1;
+        }
+        var topology = if (maybe_project) |*project|
+            full_serializer.buildFromProject(allocator, project) catch |err| {
+                try stderr_writer.print("topology build failed: {s}\n", .{@errorName(err)});
+                return 1;
+            }
+        else
+            full_serializer.buildFromModule(allocator, &ir_module) catch |err| {
+                try stderr_writer.print("topology build failed: {s}\n", .{@errorName(err)});
+                return 1;
+            };
+        defer topology.deinit(allocator);
+
+        const stdin_reader = std.fs.File.stdin().deprecatedReader();
+        sim_loop.serve(allocator, topology, args.input_path, diagnostic_list.items, stdin_reader, stdout_writer) catch |err| {
+            try stderr_writer.print("sim: {s}\n", .{@errorName(err)});
+            return 1;
+        };
+        return 0;
     }
 
     _ = try printDiagnosticSet(allocator, stderr_writer, args.input_path, diagnostic_list.items);
@@ -352,6 +381,7 @@ pub fn run(
             return 0;
         },
         .inspect => unreachable,
+        .sim => unreachable,
         .preview => {
             var topology = if (maybe_project) |*project|
                 full_serializer.buildFromProject(allocator, project) catch |err| {

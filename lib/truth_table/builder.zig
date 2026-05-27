@@ -1,6 +1,7 @@
 const std = @import("std");
 const engine = @import("circuit");
 const full_format = @import("full_format");
+const engine_session = @import("engine_session");
 
 /// Re-export of the engine's `BitVecState`. Callers that only depend on
 /// the truth-table layer can construct cell values without taking a
@@ -29,11 +30,9 @@ pub const State = enum(u2) {
     }
 };
 
-pub const PinRef = struct {
-    name: []const u8,
-    component_id: u32,
-    width: u8,
-};
+/// Re-exported from the shared engine session; existing consumers
+/// (`Header`, the renderers) keep referring to `builder.PinRef`.
+pub const PinRef = engine_session.PinRef;
 
 pub const Header = struct {
     inputs: []const PinRef,
@@ -88,16 +87,6 @@ pub const BuildError = error{
     InvalidTopology,
 };
 
-fn portByteToName(port: u8) ![]const u8 {
-    const port_name = std.meta.intToEnum(full_format.PortName, port) catch return error.InvalidTopology;
-    return switch (port_name) {
-        .in => "in",
-        .a => "a",
-        .b => "b",
-        .out => "out",
-    };
-}
-
 fn widthMaskU64(width: u8) u64 {
     if (width == 0) return 0;
     if (width >= 64) return std.math.maxInt(u64);
@@ -131,16 +120,12 @@ pub fn build(
     // sub-circuits also emit input_pin / output_pin primitives, but those are
     // wired through to root drivers and aren't independent test vectors. The
     // origin chain is empty exactly for root-level components.
-    var input_count: usize = 0;
     var output_count: usize = 0;
     var total_input_bits: u32 = 0;
     for (topology.components) |comp| {
         if (comp.origin.len != 0) continue;
         switch (comp.kind) {
-            .input_pin => {
-                input_count += 1;
-                total_input_bits += comp.width;
-            },
+            .input_pin => total_input_bits += comp.width,
             .output_pin => output_count += 1,
             else => {},
         }
@@ -148,69 +133,11 @@ pub fn build(
     if (total_input_bits > options.max_input_bits) return error.TooManyInputs;
     if (output_count == 0) return error.NoOutputs;
 
-    var inputs = try arena_alloc.alloc(PinRef, input_count);
-    var outputs = try arena_alloc.alloc(PinRef, output_count);
-    var i_idx: usize = 0;
-    var o_idx: usize = 0;
-    for (topology.components) |comp| {
-        if (comp.origin.len != 0) continue;
-        switch (comp.kind) {
-            .input_pin => {
-                inputs[i_idx] = .{ .name = comp.name, .component_id = comp.id, .width = comp.width };
-                i_idx += 1;
-            },
-            .output_pin => {
-                outputs[o_idx] = .{ .name = comp.name, .component_id = comp.id, .width = comp.width };
-                o_idx += 1;
-            },
-            else => {},
-        }
-    }
-
     var circuit = engine.Circuit.init() catch return error.InvalidTopology;
     defer circuit.deinit();
-
-    var id_to_node = std.AutoHashMap(u32, *engine.Component).init(arena_alloc);
-    try id_to_node.ensureTotalCapacity(@intCast(topology.components.len));
-    for (topology.components) |comp| {
-        const node = switch (comp.kind) {
-            .input_pin => circuit.createComponent(.{ .input_pin_gate = .{} }, comp.width),
-            .not_gate => circuit.createComponent(.{ .not_gate = .{} }, comp.width),
-            .and_gate => circuit.createComponent(.{ .and_gate = .{} }, comp.width),
-            .wire => circuit.createComponent(.{ .wire = .{} }, comp.width),
-            .led => circuit.createComponent(.{ .led = .{} }, comp.width),
-            .output_pin => circuit.createComponent(.{ .output_pin = .{} }, comp.width),
-            .slice => blk: {
-                const aux = switch (comp.aux) {
-                    .slice => |s| s,
-                    else => return error.InvalidTopology,
-                };
-                break :blk circuit.createComponent(
-                    .{ .slice = .{ .lo = aux.lo, .hi = aux.hi } },
-                    comp.width,
-                );
-            },
-            .concat => circuit.createComponent(.{ .concat = .{} }, comp.width),
-        } catch return error.InvalidTopology;
-        node.id = comp.id;
-        id_to_node.putAssumeCapacity(comp.id, node);
-    }
-
-    for (topology.connections) |conn| {
-        const from_node = id_to_node.get(conn.from_id) orelse return error.InvalidTopology;
-        const to_node = id_to_node.get(conn.to_id) orelse return error.InvalidTopology;
-        // Concat destinations interpret the port byte as an operand
-        // index, not a `PortName`. Format the byte back into the
-        // `operand_<N>` string the engine's `connect()` expects.
-        if (to_node.kind == .concat) {
-            var port_buf: [16]u8 = undefined;
-            const port_str = std.fmt.bufPrint(&port_buf, "operand_{d}", .{conn.port}) catch return error.InvalidTopology;
-            circuit.connect(.{ from_node, "out" }, .{ to_node, port_str }) catch return error.InvalidTopology;
-        } else {
-            const port_str = portByteToName(conn.port) catch return error.InvalidTopology;
-            circuit.connect(.{ from_node, "out" }, .{ to_node, port_str }) catch return error.InvalidTopology;
-        }
-    }
+    const session = try engine_session.Session.build(arena_alloc, &circuit, topology);
+    const inputs = session.inputs;
+    const outputs = session.outputs;
 
     const row_count: u64 = if (total_input_bits == 0) 1 else (@as(u64, 1) << @intCast(total_input_bits));
     var rows = try arena_alloc.alloc(Row, @intCast(row_count));
@@ -228,14 +155,14 @@ pub fn build(
                 .defined = pin_mask,
                 .width = pin.width,
             };
-            const node = id_to_node.get(pin.component_id) orelse return error.InvalidTopology;
+            const node = session.nodeById(pin.component_id) orelse return error.InvalidTopology;
             circuit.propagateEvent(node, new_state) catch return error.InvalidTopology;
             bit_offset += pin.width;
         }
 
         const row_outputs = try arena_alloc.alloc(engine.BitVecState, output_count);
         for (outputs, 0..) |pin, idx| {
-            const node = id_to_node.get(pin.component_id) orelse return error.InvalidTopology;
+            const node = session.nodeById(pin.component_id) orelse return error.InvalidTopology;
             row_outputs[idx] = circuit.readState(node.state_handle);
         }
         rows[@intCast(mask)] = .{ .input_bits = mask, .outputs = row_outputs };

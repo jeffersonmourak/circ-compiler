@@ -23,6 +23,7 @@ output out(in=inv.out)
 | [simulation-engine.md](simulation-engine.md) | Zig API reference for `lib/circuit.zig`: types, propagation, gate logic |
 | [wasm-api.md](wasm-api.md)                   | Runtime API exposed by the compiled `.wasm`: imports, exports, sections |
 | [analyze-api.md](analyze-api.md)             | `circ-compile --analyze` JSON contract for editor tooling (the circ-lsp server) |
+| [sim-protocol.md](sim-protocol.md)           | `circ-compile --sim` stdio drive protocol for testing and tooling               |
 | [circuit-format.md](circuit-format.md)       | `.circ` DSL syntax, grammar, file examples                              |
 | [preview.md](preview.md)                     | `circ-compile --preview`: ASCII circuit schematic rendering             |
 | [benchmark.md](benchmark.md)                 | `zig build bench`: engine regression gate, counters, golden workflow    |
