@@ -1171,6 +1171,22 @@ pub fn build(b: *std.Build) void {
     const run_preview_dump_tests = b.addRunArtifact(preview_dump_tests);
     test_step.dependOn(&run_preview_dump_tests.step);
 
+    // Shared engine session: builds a live engine.Circuit from a full topology
+    // and resolves root pins by name. Consumed by the truth-table builder and
+    // the --sim drive loop.
+    const engine_session_mod = b.createModule(.{
+        .root_source_file = b.path("lib/engine_session.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    engine_session_mod.addImport("circuit", circuit_mod);
+    engine_session_mod.addImport("full_format", topology_full_format_mod);
+    const engine_session_tests = b.addTest(.{
+        .root_module = engine_session_mod,
+    });
+    const run_engine_session_tests = b.addRunArtifact(engine_session_tests);
+    test_step.dependOn(&run_engine_session_tests.step);
+
     // Truth-table mode: enumerates input vectors against a native engine.Circuit
     // built from the full topology, then renders to Markdown.
     const truth_table_builder_mod = b.createModule(.{
@@ -1180,6 +1196,7 @@ pub fn build(b: *std.Build) void {
     });
     truth_table_builder_mod.addImport("circuit", circuit_mod);
     truth_table_builder_mod.addImport("full_format", topology_full_format_mod);
+    truth_table_builder_mod.addImport("engine_session", engine_session_mod);
     circ_compile_mod.addImport("truth_table_builder", truth_table_builder_mod);
     const truth_table_builder_tests = b.addTest(.{
         .root_module = truth_table_builder_mod,
