@@ -1607,6 +1607,18 @@ pub fn build(b: *std.Build) void {
     });
     bench_circuit_mod.addOptions("build_options", circuit_options_bench);
 
+    // Bench-mode engine_session: must bind to bench_circuit_mod (collect_metrics
+    // = true) so its `Circuit` type matches the one bench_truth_table_builder_mod
+    // passes into Session.build. Reusing the non-bench engine_session_mod here
+    // would be a type mismatch (two distinct circuit modules).
+    const bench_engine_session_mod = b.createModule(.{
+        .root_source_file = b.path("lib/engine_session.zig"),
+        .target = target,
+        .optimize = bench_optimize,
+    });
+    bench_engine_session_mod.addImport("circuit", bench_circuit_mod);
+    bench_engine_session_mod.addImport("full_format", topology_full_format_mod);
+
     const bench_truth_table_builder_mod = b.createModule(.{
         .root_source_file = b.path("lib/truth_table/builder.zig"),
         .target = target,
@@ -1614,6 +1626,7 @@ pub fn build(b: *std.Build) void {
     });
     bench_truth_table_builder_mod.addImport("circuit", bench_circuit_mod);
     bench_truth_table_builder_mod.addImport("full_format", topology_full_format_mod);
+    bench_truth_table_builder_mod.addImport("engine_session", bench_engine_session_mod);
 
     const bench_mod = b.createModule(.{
         .root_source_file = b.path("tools/bench/main.zig"),

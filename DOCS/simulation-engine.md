@@ -341,7 +341,7 @@ const PROPAGATION_DELAY: Timestamp = 5;
 const WIRE_PROPAGATION_DELAY: Timestamp = 1;
 ```
 
-`wire`, `output_pin`, and `led` use the wire delay; everything else uses the gate delay. A chain of `N` gates plus `M` wires/output_pins/leds settles after `N*5 + M*1` time units.
+`wire`, `output_pin`, `led`, `slice`, and `concat` use the wire delay; everything else uses the gate delay. A chain of `N` gates plus `M` wire-delay components (`wire`, `output_pin`, `led`, `slice`, `concat`) settles after `N*5 + M*1` time units.
 
 ### State snapshot
 

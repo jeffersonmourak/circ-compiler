@@ -278,6 +278,20 @@ pub fn parse(argv: []const []const u8) ParseError!Args {
     return args;
 }
 
+test "Mode set matches its docs (update README / CLAUDE.md / DOCS/architecture.md on change)" {
+    // Tripwire against doc drift: the CLI mode list is mirrored in the README
+    // "Usage" table and the CLAUDE.md "CLI shape" table, and DOCS/architecture.md
+    // points at this enum's dispatch. If you add or remove a `Mode`, update those
+    // docs (and DOCS/sim-protocol.md or DOCS/analyze-api.md as relevant) so they
+    // cannot silently disagree with the code.
+    const expected = [_][]const u8{ "compile", "emit_zig", "inspect", "preview", "truth_table", "sim" };
+    const fields = std.meta.fields(Mode);
+    try std.testing.expectEqual(expected.len, fields.len);
+    inline for (fields, 0..) |field, i| {
+        try std.testing.expectEqualStrings(expected[i], field.name);
+    }
+}
+
 test "parse compile mode with output" {
     const parsed = try parse(&.{ "circ-compile", "in.circ", "-o", "out.wasm" });
     try std.testing.expectEqualStrings("in.circ", parsed.input_path);

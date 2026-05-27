@@ -37,7 +37,7 @@ There is no `-Dtest-filter` flag wired into `build.zig`. To run a single test mo
 
 ## CLI shape
 
-`circ-compile` has six mutually exclusive modes (dispatch lives in `cmd/circ-compile/main.zig`'s `run()`), plus a seventh `--analyze` surface intercepted earlier in `main()` that takes a JSON request on stdin rather than a file path. Only the default mode writes a `.wasm`:
+`circ-compile` has the following mutually exclusive modes (dispatch lives in `cmd/circ-compile/main.zig`'s `run()`), plus an `--analyze` surface intercepted earlier in `main()` that takes a JSON request on stdin rather than a file path. Only the default mode writes a `.wasm`:
 
 | Invocation | Output |
 | --- | --- |
@@ -102,7 +102,7 @@ Facts that materially shape edits:
 2. **The value currency is `BitVecState` (`value`, `defined`, `width`).** Two `BitVecState` are equal iff `(a.defined == b.defined) AND ((a.value & a.defined) == (b.value & b.defined))`. That preserves the rule that two undefined slots compare equal regardless of `value` bits; the Phase-1 dedup in `propagate()` relies on it.
 3. **The WASM boundary uses `BitVecState` directly, not the scalar `toInt` encoding.** `setPin(id, value, defined)` and the paired `getOutputValue`/`getOutputDefined` exports cross `(value, defined)` as `i64`/`BigInt`. The legacy width-1 helpers (`toInt`: `low=0, high=1, undefined=2`; `toTransportByte`: enum order `undefined=0, low=1, high=2`) still exist as convenience mirrors for tests and `lib/transport.zig`, but neither is on the host-facing API path anymore.
 4. **Propagation is per-timestamp batched.** `propagate()` drains every event at the current timestamp `T` in Phase 1 (commit state, collect changed), then in Phase 2 walks the outputs of changed components, recalculating and rescheduling. Without that batching, a downstream gate with multiple upstream events at the same `T` can read partial state, dedup the corrective re-enqueue, and stick on the wrong final value. See `DOCS/simulation-engine.md` for the full rationale.
-5. **Delays are compile-time constants:** `PROPAGATION_DELAY = 5`, `WIRE_PROPAGATION_DELAY = 1`. `wire`, `output_pin`, and `led` use the wire delay; everything else uses the gate delay.
+5. **Delays are compile-time constants:** `PROPAGATION_DELAY = 5`, `WIRE_PROPAGATION_DELAY = 1`. `wire`, `output_pin`, `led`, `slice`, and `concat` use the wire delay; everything else uses the gate delay.
 6. **The allocator is global, not parameterised.** Allocations route through `memory.allocator` from `lib/memory.zig`. On WASM that is `std.heap.wasm_allocator`; on native (test builds) it is a `GeneralPurposeAllocator`. Do not add an allocator parameter to engine functions.
 7. **Widths 1 through 64 are wired; pool tiers are lazily allocated per width.** Each tier indexes a separate SoA pool (`tier == width`; tier 0 is unused). `PoolHandle.tier`/`.slot` make every read/write a single dispatch followed by a direct bitmap op against the tier's `(values, defined)` u64 buffers. The width=1 tier packs 64 slots per word; wider tiers store one u64 per slot. Widths > 64 trap at allocation time. The historical roll-out lives in `DOCS/archive/plan-multi-bit-language.md`.
 
