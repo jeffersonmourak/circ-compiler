@@ -7,6 +7,7 @@ pub const Mode = enum {
     inspect,
     preview,
     truth_table,
+    sim,
 };
 
 pub const ColorMode = render_color.ColorMode;
@@ -76,6 +77,7 @@ pub const help_text =
     \\    --inspect         Print parse tree, resolved IR, and diagnostics to stdout.
     \\    --preview         Render an ASCII schematic of the circuit to stdout.
     \\    --truth-table     Enumerate every input vector and print a truth table to stdout.
+    \\    --sim             Drive the circuit over a stdio line protocol (proto=1; see DOCS/sim-protocol.md).
     \\
     \\OPTIONS:
     \\    -o <path>                       Output file. Required by compile and --emit-zig modes.
@@ -140,33 +142,40 @@ pub fn parse(argv: []const []const u8) ParseError!Args {
     var seen_inspect = false;
     var seen_preview = false;
     var seen_truth_table = false;
+    var seen_sim = false;
 
     var i: usize = if (argv.len > 0) 1 else 0;
     while (i < argv.len) : (i += 1) {
         const token = argv[i];
 
         if (std.mem.eql(u8, token, "--emit-zig")) {
-            if (seen_inspect or seen_preview or seen_truth_table) return error.ConflictingModes;
+            if (seen_inspect or seen_preview or seen_truth_table or seen_sim) return error.ConflictingModes;
             seen_emit_zig = true;
             args.mode = .emit_zig;
             continue;
         }
         if (std.mem.eql(u8, token, "--inspect")) {
-            if (seen_emit_zig or seen_preview or seen_truth_table) return error.ConflictingModes;
+            if (seen_emit_zig or seen_preview or seen_truth_table or seen_sim) return error.ConflictingModes;
             seen_inspect = true;
             args.mode = .inspect;
             continue;
         }
         if (std.mem.eql(u8, token, "--preview")) {
-            if (seen_emit_zig or seen_inspect or seen_truth_table) return error.ConflictingModes;
+            if (seen_emit_zig or seen_inspect or seen_truth_table or seen_sim) return error.ConflictingModes;
             seen_preview = true;
             args.mode = .preview;
             continue;
         }
         if (std.mem.eql(u8, token, "--truth-table")) {
-            if (seen_emit_zig or seen_inspect or seen_preview) return error.ConflictingModes;
+            if (seen_emit_zig or seen_inspect or seen_preview or seen_sim) return error.ConflictingModes;
             seen_truth_table = true;
             args.mode = .truth_table;
+            continue;
+        }
+        if (std.mem.eql(u8, token, "--sim")) {
+            if (seen_emit_zig or seen_inspect or seen_preview or seen_truth_table) return error.ConflictingModes;
+            seen_sim = true;
+            args.mode = .sim;
             continue;
         }
         if (std.mem.eql(u8, token, "--warnings-as-errors") or std.mem.eql(u8, token, "-Werror")) {
@@ -254,9 +263,10 @@ pub fn parse(argv: []const []const u8) ParseError!Args {
     }
 
     if (!have_input) return error.MissingInput;
-    if (args.mode != .inspect and args.mode != .preview and args.mode != .truth_table and args.output_path == null) return error.MissingOutput;
+    if (args.mode != .inspect and args.mode != .preview and args.mode != .truth_table and args.mode != .sim and args.output_path == null) return error.MissingOutput;
     if (args.mode == .preview and args.output_path != null) return error.InvalidFlagValue;
     if (args.mode == .truth_table and args.output_path != null) return error.InvalidFlagValue;
+    if (args.mode == .sim and args.output_path != null) return error.InvalidFlagValue;
     if (args.expand_macros and args.mode != .preview) return error.InvalidFlagValue;
     if (args.expand_display and args.mode != .preview) return error.InvalidFlagValue;
     if (args.truth_table_format != .markdown and args.mode != .truth_table) return error.InvalidFlagValue;
@@ -487,7 +497,7 @@ test "cli_args_help_text_mentions_every_mode_and_flag" {
         "-o",           "--help",        "-h",                 "--warnings-as-errors",
         "-Werror",      "--expand-macros", "--color=",        "--format=",
         "--strict",     "--verbose",      "--truth-table-format=", "--truth-table-cap=",
-        "--version",
+        "--version",    "--sim",
     };
     inline for (needles) |needle| {
         try std.testing.expect(std.mem.indexOf(u8, help_text, needle) != null);
@@ -563,4 +573,20 @@ test "cli_args_cap_rejects_outside_truth_table" {
         error.InvalidFlagValue,
         parse(&.{ "circ-compile", "in.circ", "--preview", "--truth-table-cap=20" }),
     );
+}
+
+test "cli_args_parse_sim_flag" {
+    const parsed = try parse(&.{ "circ-compile", "in.circ", "--sim" });
+    try std.testing.expectEqual(Mode.sim, parsed.mode);
+    try std.testing.expect(parsed.output_path == null);
+    try std.testing.expectEqualStrings("in.circ", parsed.input_path);
+}
+
+test "cli_args_sim_rejects_output_path" {
+    try std.testing.expectError(error.InvalidFlagValue, parse(&.{ "circ-compile", "in.circ", "--sim", "-o", "out.txt" }));
+}
+
+test "cli_args_sim_rejects_other_modes" {
+    try std.testing.expectError(error.ConflictingModes, parse(&.{ "circ-compile", "in.circ", "--sim", "--truth-table" }));
+    try std.testing.expectError(error.ConflictingModes, parse(&.{ "circ-compile", "in.circ", "--inspect", "--sim" }));
 }
