@@ -19,7 +19,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | --- | --- |
 | `zig build` | Default. Builds the runtime template into `zig-out/lib/circ-runtime.wasm` and installs the CLI. |
 | `zig build circ-compile` | Builds the CLI to `zig-out/bin/circ-compile`. |
-| `zig build test` | Full test suite, aggregated from many per-module `addTest` artifacts in `build.zig`. |
+| `zig build test` | Fast suite (dev-loop default), aggregated from many per-module `addTest` artifacts in `build.zig`. Excludes the slow emit-zig behavioral smoke; circuit behavior on the production path is still fully covered via `tests/e2e/serializer_fixtures_test.zig`. |
+| `zig build test-emit` | Emit-zig backend behavioral smoke (`tests/emit/{behavior,project_behavior}_test.zig`). Slow: every fixture spawns a nested `zig build wasm`. Guards the experimental `--emit-zig` pipeline only. |
+| `zig build test-all` | `test` + `test-emit`. The full gate CI runs (see `.github/workflows/pr-tests.yml`). |
 | `zig build bench` | Engine benchmark over the truth-table fixture corpus, compared against `tests/fixtures/bench/engine.bench.golden`. Counters are asserted; wall-clock is not. |
 | `zig build parser:archive` | Rebuilds `lib/parser/parser.a` from `lib/parser/shim/shim.go` via `go build -buildmode=c-archive`. Runs automatically as a dependency of `circ-compile`. |
 | `zig build parser:gen` | Regenerates `lib/parser/parser.go` from `lib/grammar/proto-circ.peg`. Only when the grammar changes; requires langlang on `PATH`. |
@@ -31,7 +33,7 @@ Useful environment variables:
 - `UPDATE_GOLDENS=1` regenerates fixtures under `tests/fixtures/expected-*/` instead of comparing against them. Diff the result before committing.
 - `NO_COLOR=1` strips ANSI from `--preview` output.
 
-There is no `-Dtest-filter` flag wired into `build.zig`. To run a single test module in isolation, invoke `zig test <path>` against its root file (e.g. `zig test tests/validator/run_test.zig`); the `test` step in `build.zig` is the canonical aggregator.
+There is no `-Dtest-filter` flag wired into `build.zig`. To run a single test module in isolation, invoke `zig test <path>` against its root file (e.g. `zig test tests/validator/run_test.zig`). The `test` step is the fast dev-loop aggregator; `zig build test-all` adds the slow emit-zig smoke (`test-emit`) and is the full gate CI runs.
 
 ## CLI shape
 

@@ -979,7 +979,6 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_emit_build_fn_tests.step);
     test_step.dependOn(&run_emit_metadata_tests.step);
     test_step.dependOn(&run_emit_full_tests.step);
-    test_step.dependOn(&run_emit_behavior_tests.step);
     test_step.dependOn(&run_cli_args_tests.step);
     test_step.dependOn(&run_preview_render_color_tests.step);
     test_step.dependOn(&run_preview_render_canvas_tests.step);
@@ -1042,7 +1041,7 @@ pub fn build(b: *std.Build) void {
     linkParserArchive(b, project_behavior_tests, build_archive_cmd);
     project_behavior_tests.linkLibC();
     const run_project_behavior_tests = b.addRunArtifact(project_behavior_tests);
-    test_step.dependOn(&run_project_behavior_tests.step);
+    // Detached from `test`; wired into `test-emit` near the end of build().
 
     const topology_format_tests_mod = b.createModule(.{
         .root_source_file = b.path("lib/topology/format.zig"),
@@ -1558,6 +1557,21 @@ pub fn build(b: *std.Build) void {
     });
     const run_topology_interpreter_tests = b.addRunArtifact(topology_interpreter_tests);
     test_step.dependOn(&run_topology_interpreter_tests.step);
+
+    // The emit-zig backend behavioral smoke tests each spawn a nested
+    // `zig build wasm` per fixture, which is dramatically slower than the rest
+    // of the suite. They guard the experimental --emit-zig pipeline only;
+    // circuit *behavior* on the production path (prebuilt runtime + topology
+    // sections) is already covered by serializer_fixtures_test, which stays in
+    // the default `test` step. So keep them out of the dev-loop `test` step and
+    // behind an opt-in `test-emit` step. CI runs everything via `test-all`.
+    const test_emit_step = b.step("test-emit", "Emit-zig backend behavioral smoke (nested wasm builds; slow)");
+    test_emit_step.dependOn(&run_emit_behavior_tests.step);
+    test_emit_step.dependOn(&run_project_behavior_tests.step);
+
+    const test_all_step = b.step("test-all", "Full suite: `test` plus the emit-zig smoke (`test-emit`)");
+    test_all_step.dependOn(test_step);
+    test_all_step.dependOn(test_emit_step);
 
     // ---- Engine benchmark step ----
     // The bench step compiles a *parallel* circuit module with
