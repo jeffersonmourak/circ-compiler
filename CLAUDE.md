@@ -6,6 +6,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `circ-compiler` is a one-shot compiler. It takes a `.circ` digital-logic source (plus any siblings it imports) and emits a self-contained `.wasm` artifact whose exports simulate that exact circuit. The compiler is pure Zig (the parser is a langlang-generated Go CGo c-archive linked in); there is no runtime SDK, no rendering layer, and no JavaScript in the build. Every compiled `.wasm` carries a vendored prebuilt runtime plus two custom sections (`circ.topology.v0.min`, `circ.topology.v0.full`) and exposes a fixed pull-based API: `topology_alloc`, `init`, `run`, `setPin(id, value, defined)`, `getOutputValue(id)`, `getOutputDefined(id)`. The two getters return paired `BitVecState` halves crossed as `i64`/`BigInt`.
 
+## Analysis philosophy
+
+> "Talk is cheap. Show me the code." — Linus Torvalds
+
+When analyzing this codebase, ground every claim in the code. Prefer reading the
+actual source and pointing at concrete `file:line` references over describing what
+*should* be true in the abstract. When reasoning about engine behavior, propagation,
+the topology format, or a diagnostic code, cite the lines that prove it rather than
+asserting from memory — and when proposing a change, show the diff (or a minimal
+repro/test) instead of narrating it. A proposal backed by the relevant lines beats a
+confident summary.
+
 ## Toolchain prerequisites
 
 - Zig 0.15.x.
