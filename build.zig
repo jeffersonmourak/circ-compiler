@@ -197,6 +197,13 @@ pub fn build(b: *std.Build) void {
     });
     name_collision_mod.addImport("diagnostics", validator_diagnostics_mod);
     name_collision_mod.addImport("ir_types", ir_types_mod);
+    const memory_validation_mod = b.createModule(.{
+        .root_source_file = b.path("lib/validator/passes/memory_validation.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    memory_validation_mod.addImport("diagnostics", validator_diagnostics_mod);
+    memory_validation_mod.addImport("ir_types", ir_types_mod);
     const port_validation_mod = b.createModule(.{
         .root_source_file = b.path("lib/validator/passes/port_validation.zig"),
         .target = target,
@@ -204,6 +211,7 @@ pub fn build(b: *std.Build) void {
     });
     port_validation_mod.addImport("diagnostics", validator_diagnostics_mod);
     port_validation_mod.addImport("ir_types", ir_types_mod);
+    port_validation_mod.addImport("memory_validation", memory_validation_mod);
     const multi_driver_mod = b.createModule(.{
         .root_source_file = b.path("lib/validator/passes/multi_driver.zig"),
         .target = target,
@@ -246,13 +254,6 @@ pub fn build(b: *std.Build) void {
     });
     unused_import_mod.addImport("diagnostics", validator_diagnostics_mod);
     unused_import_mod.addImport("ir_types", ir_types_mod);
-    const memory_validation_mod = b.createModule(.{
-        .root_source_file = b.path("lib/validator/passes/memory_validation.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    memory_validation_mod.addImport("diagnostics", validator_diagnostics_mod);
-    memory_validation_mod.addImport("ir_types", ir_types_mod);
     const validator_run_mod = b.createModule(.{
         .root_source_file = b.path("lib/validator/run.zig"),
         .target = target,

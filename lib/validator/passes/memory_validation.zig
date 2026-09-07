@@ -14,6 +14,9 @@ pub const Side = enum { from, to };
 /// width does this output port drive". Unknown ports yield null (the port
 /// validity pass reports them separately).
 pub fn memoryPortWidth(mem: ir.Memory, port: []const u8, side: Side) ?u8 {
+    // With a malformed argument list the widths are the resolver's
+    // placeholders, not a contract; E017 is the only useful report.
+    if (mem.arg_count != 2) return null;
     return switch (side) {
         .from => if (std.mem.eql(u8, port, "out")) mem.data_width else null,
         .to => if (std.mem.eql(u8, port, "addr"))
@@ -159,6 +162,10 @@ test "memoryPortWidth contract" {
     try std.testing.expectEqual(@as(?u8, 1), memoryPortWidth(ram, "clk", .to));
     try std.testing.expectEqual(@as(?u8, 12), memoryPortWidth(ram, "out", .from));
     try std.testing.expectEqual(@as(?u8, null), memoryPortWidth(ram, "in", .to));
+
+    const malformed = ir.Memory{ .mode = .rom, .data_width = 1, .addr_width = 1, .arg_count = 1, .type_width_given = false };
+    try std.testing.expectEqual(@as(?u8, null), memoryPortWidth(malformed, "addr", .to));
+    try std.testing.expectEqual(@as(?u8, null), memoryPortWidth(malformed, "out", .from));
 }
 
 test "memory_validation: rejects wrong arity" {

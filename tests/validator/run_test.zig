@@ -38,6 +38,36 @@ const fixtures = [_]Fixture{
         .expected_path = "tests/fixtures/expected-diagnostics/E018_memory_width_range.txt",
     },
     .{
+        .name = "E002 memory unknown port",
+        .source_path = "tests/fixtures/circuits/E002_memory_unknown_port.circ",
+        .expected_path = "tests/fixtures/expected-diagnostics/E002_memory_unknown_port.txt",
+    },
+    .{
+        .name = "E004 memory missing ports",
+        .source_path = "tests/fixtures/circuits/E004_memory_missing_ports.circ",
+        .expected_path = "tests/fixtures/expected-diagnostics/E004_memory_missing_ports.txt",
+    },
+    .{
+        .name = "E014 memory port width",
+        .source_path = "tests/fixtures/circuits/E014_memory_port_width.circ",
+        .expected_path = "tests/fixtures/expected-diagnostics/E014_memory_port_width.txt",
+    },
+    .{
+        .name = "E006 instance shadows memory keyword",
+        .source_path = "tests/fixtures/circuits/E006_shadows_memory.circ",
+        .expected_path = "tests/fixtures/expected-diagnostics/E006_shadows_memory.txt",
+    },
+    .{
+        .name = "E008 rom in a wire loop",
+        .source_path = "tests/fixtures/circuits/E008_rom_loop.circ",
+        .expected_path = "tests/fixtures/expected-diagnostics/E008_rom_loop.txt",
+    },
+    .{
+        .name = "clean ram feedback",
+        .source_path = "tests/fixtures/circuits/clean_ram_feedback.circ",
+        .expected_path = "tests/fixtures/expected-diagnostics/clean_ram_feedback.txt",
+    },
+    .{
         .name = "W001 unused input",
         .source_path = "tests/fixtures/circuits/W001_unused_input.circ",
         .expected_path = "tests/fixtures/expected-diagnostics/W001_unused_input.txt",

@@ -1,0 +1,3 @@
+tests/fixtures/circuits/E014_memory_port_width.circ:5:16: error: E014: width mismatch: source width 3, destination expects 4
+tests/fixtures/circuits/E014_memory_port_width.circ:5:44: error: E014: width mismatch: source width 2, destination expects 1
+tests/fixtures/circuits/E014_memory_port_width.circ:6:1: error: E014: width mismatch: source width 8, destination expects 4

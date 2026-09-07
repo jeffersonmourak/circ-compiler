@@ -1,0 +1,2 @@
+tests/fixtures/circuits/E004_memory_missing_ports.circ:3:1: error: E004: required input 'we' is unconnected
+tests/fixtures/circuits/E004_memory_missing_ports.circ:3:1: error: E004: required input 'clk' is unconnected

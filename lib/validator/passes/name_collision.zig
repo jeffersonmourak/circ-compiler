@@ -22,7 +22,9 @@ fn isBuiltinName(name: []const u8) bool {
         std.mem.eql(u8, name, "wire") or
         std.mem.eql(u8, name, "led") or
         std.mem.eql(u8, name, "input_pin") or
-        std.mem.eql(u8, name, "output_pin");
+        std.mem.eql(u8, name, "output_pin") or
+        std.mem.eql(u8, name, "rom") or
+        std.mem.eql(u8, name, "ram");
 }
 
 pub fn run(

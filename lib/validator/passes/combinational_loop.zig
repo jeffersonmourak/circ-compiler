@@ -18,6 +18,9 @@ fn isCycleBreaking(component: ir.Component) bool {
             .and_gate, .not_gate => true,
             else => false,
         },
+        // A ram holds state across the clock edge; a rom's addr -> out
+        // path is a genuine combinational path.
+        .memory => |m| m.mode == .ram,
         else => false,
     };
 }

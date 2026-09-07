@@ -30,7 +30,7 @@ pub const ScanResult = struct {
 
 fn isBuiltinAlias(alias: []const u8) bool {
     const reserved = [_][]const u8{
-        "input", "output", "and", "not", "wire", "led", "input_pin", "output_pin",
+        "input", "output", "and", "not", "wire", "led", "input_pin", "output_pin", "rom", "ram",
     };
     for (reserved) |name| {
         if (std.mem.eql(u8, alias, name)) return true;

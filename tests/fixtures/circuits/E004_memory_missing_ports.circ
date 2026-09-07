@@ -1,0 +1,4 @@
+input[4] a
+input[8] d
+ram data[8, 4](addr = a.out, din = d.out)
+output[8] q(in = data.out)
