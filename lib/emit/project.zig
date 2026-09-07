@@ -169,6 +169,7 @@ fn walkFile(
                 });
             },
             .unresolved_name => return error.UnresolvedComponentName,
+            .memory => return error.MemoryUnsupportedInEmitZig,
         }
     }
 }
@@ -392,6 +393,7 @@ fn emitFileBuildFunction(
                 );
             },
             .unresolved_name => return error.UnresolvedComponentName,
+            .memory => return error.MemoryUnsupportedInEmitZig,
         }
     }
 

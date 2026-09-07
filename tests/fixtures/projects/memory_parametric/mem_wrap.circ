@@ -1,0 +1,5 @@
+input<W>[W] din
+input<A>[A] addr
+input we, clk
+ram m[W, A](addr = addr.out, din = din.out, we = we.out, clk = clk.out)
+output[W] q(in = m.out)

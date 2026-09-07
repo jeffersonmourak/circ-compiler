@@ -254,6 +254,7 @@ fn symbolKind(kind: ir.ComponentKind) ?[]const u8 {
         },
         .sub_circuit_ref, .unresolved_name => "instance",
         .slice, .concat => null,
+        .memory => |m| @tagName(m.mode),
     };
 }
 
@@ -273,8 +274,13 @@ fn hoverForComponent(allocator: std.mem.Allocator, module: *const ir.Module, id:
             .unresolved_name => |n| n,
             .slice => "slice",
             .concat => "concat",
+            .memory => |m| @tagName(m.mode),
         };
         const name = c.instance_name orelse "";
+        if (c.kind == .memory) {
+            const m = c.kind.memory;
+            return std.fmt.allocPrint(allocator, "{s}[{d},{d}] {s}", .{ kname, m.data_width, m.addr_width, name });
+        }
         if (c.width > 1) return std.fmt.allocPrint(allocator, "{s}[{d}] {s}", .{ kname, c.width, name });
         return std.fmt.allocPrint(allocator, "{s} {s}", .{ kname, name });
     }
@@ -509,6 +515,36 @@ test "analyze: emits symbols and reference links" {
     try std.testing.expect(has_input_a);
     try std.testing.expect(has_gate_g);
     try std.testing.expect(result.references.len >= 3);
+}
+
+test "analyze: memory declarations resolve to rom/ram symbols with hover" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    var overlay = Overlay{};
+    try overlay.put(a, "/virtual/rom.circ", "input[4] pc\nrom code[8, 4](addr = pc.out)\noutput[8] out(in = code.out)\n");
+
+    const result = try analyze(a, "/virtual/rom.circ", overlay);
+    for (result.diagnostics) |d| {
+        try std.testing.expect(!std.mem.eql(u8, d.severity, "error"));
+    }
+
+    var found_symbol = false;
+    for (result.symbols) |s| {
+        if (std.mem.eql(u8, s.name, "code")) {
+            try std.testing.expectEqualStrings("rom", s.kind);
+            try std.testing.expectEqual(@as(u8, 8), s.width);
+            found_symbol = true;
+        }
+    }
+    try std.testing.expect(found_symbol);
+
+    var found_hover = false;
+    for (result.references) |r| {
+        if (std.mem.eql(u8, r.hover, "rom[8,4] code")) found_hover = true;
+    }
+    try std.testing.expect(found_hover);
 }
 
 test "analyze: garbage input yields a syntax diagnostic, not a failure" {

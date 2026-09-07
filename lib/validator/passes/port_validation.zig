@@ -33,6 +33,11 @@ fn isValidInputPort(component: ir.Component, port: []const u8) bool {
         // valid input. The resolver always emits well-formed names, so
         // we just check the prefix here.
         .concat => std.mem.startsWith(u8, port, "operand_"),
+        .memory => |m| switch (m.mode) {
+            .rom => std.mem.eql(u8, port, "addr"),
+            .ram => std.mem.eql(u8, port, "addr") or std.mem.eql(u8, port, "din") or
+                std.mem.eql(u8, port, "we") or std.mem.eql(u8, port, "clk"),
+        },
     };
 }
 
@@ -46,6 +51,7 @@ fn isValidOutputPort(component: ir.Component, port: []const u8) bool {
         .unresolved_name => true,
         .slice => std.mem.eql(u8, port, "out"),
         .concat => std.mem.eql(u8, port, "out"),
+        .memory => std.mem.eql(u8, port, "out"),
     };
 }
 

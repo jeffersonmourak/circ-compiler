@@ -122,6 +122,7 @@ fn dumpComponentKind(writer: anytype, kind: anytype) !void {
         .unresolved_name => |name| try writer.print("unresolved_name:{s}", .{name}),
         .slice => |s| try writer.print("slice:[{d}..{d})", .{ s.lo, s.hi }),
         .concat => try writer.writeAll("concat"),
+        .memory => |m| try writer.print("{s}[W={d},A={d}]", .{ @tagName(m.mode), m.data_width, m.addr_width }),
     }
 }
 

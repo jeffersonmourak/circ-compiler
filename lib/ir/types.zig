@@ -40,6 +40,23 @@ pub const Slice = struct {
     hi: u8,
 };
 
+pub const MemoryMode = enum { rom, ram };
+
+/// A `rom`/`ram` declaration. `data_width` (W) and `addr_width` (A) come
+/// from the instance-position `[W, A]` call widths; `Component.width`
+/// mirrors `data_width` so single-width consumers see the width of `out`.
+/// `arg_count` and `type_width_given` exist only so the validator can
+/// report a malformed parameter list without re-reading the AST; when the
+/// list is malformed the unresolved widths default to 1 to keep the IR
+/// structurally valid until the diagnostic surfaces.
+pub const Memory = struct {
+    mode: MemoryMode,
+    data_width: u8,
+    addr_width: u8,
+    arg_count: u8,
+    type_width_given: bool,
+};
+
 pub const ComponentKind = union(enum) {
     primitive: PrimitiveKind,
     sub_circuit_ref: UnresolvedRef,
@@ -57,6 +74,11 @@ pub const ComponentKind = union(enum) {
     /// width on `Component.width` is the sum of operand widths. The
     /// arity is implicit in how many connections target this concat.
     concat,
+    /// Native `rom`/`ram` memory. Ports are heterogeneous in width
+    /// (`addr` is A wide, `din`/`out` are W wide, `we`/`clk` are 1), so
+    /// width checks go through the validator's per-port helper instead
+    /// of `Component.width`.
+    memory: Memory,
 };
 
 pub const Component = struct {

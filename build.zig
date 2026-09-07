@@ -262,6 +262,13 @@ pub fn build(b: *std.Build) void {
     validator_run_mod.addImport("combinational_loop", combinational_loop_mod);
     validator_run_mod.addImport("dead_code", dead_code_mod);
     validator_run_mod.addImport("unused_import", unused_import_mod);
+    const memory_validation_mod = b.createModule(.{
+        .root_source_file = b.path("lib/validator/passes/memory_validation.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    memory_validation_mod.addImport("diagnostics", validator_diagnostics_mod);
+    memory_validation_mod.addImport("ir_types", ir_types_mod);
     const sub_circuit_validation_mod = b.createModule(.{
         .root_source_file = b.path("lib/validator/passes/sub_circuit_validation.zig"),
         .target = target,
@@ -269,6 +276,7 @@ pub fn build(b: *std.Build) void {
     });
     sub_circuit_validation_mod.addImport("diagnostics", validator_diagnostics_mod);
     sub_circuit_validation_mod.addImport("ir_types", ir_types_mod);
+    sub_circuit_validation_mod.addImport("memory_validation", memory_validation_mod);
     const validator_run_project_mod = b.createModule(.{
         .root_source_file = b.path("lib/validator/run_project.zig"),
         .target = target,
@@ -314,6 +322,7 @@ pub fn build(b: *std.Build) void {
     validator_structural_tests_mod.addImport("multi_driver", multi_driver_mod);
     validator_structural_tests_mod.addImport("required_input", required_input_mod);
     validator_structural_tests_mod.addImport("output_assignment", output_assignment_mod);
+    validator_structural_tests_mod.addImport("memory_validation", memory_validation_mod);
     validator_structural_tests_mod.addImport("golden", b.createModule(.{
         .root_source_file = b.path("tests/helpers/golden.zig"),
         .target = target,

@@ -153,6 +153,7 @@ fn resolveSignalGlobalId(
             return outputs.get(endpoint.port) orelse return error.UnknownPortName;
         },
         .unresolved_name => return error.UnresolvedComponent,
+        .memory => return error.MemoryNotYetSupported,
     }
 }
 
@@ -180,6 +181,7 @@ fn expandModule(
         switch (comp.kind) {
             .sub_circuit_ref => continue,
             .unresolved_name => return error.UnresolvedComponent,
+            .memory => return error.MemoryNotYetSupported,
             else => {},
         }
         switch (comp.kind) {
@@ -259,7 +261,7 @@ fn expandModule(
                     .origin = origin_copy,
                 });
             },
-            .sub_circuit_ref, .unresolved_name => unreachable,
+            .sub_circuit_ref, .unresolved_name, .memory => unreachable,
         }
     }
 
@@ -457,6 +459,7 @@ pub fn buildFromModule(allocator: std.mem.Allocator, module: *const ir.Module) !
             },
             .sub_circuit_ref => return error.SubCircuitInFlatModule,
             .unresolved_name => return error.UnresolvedComponent,
+            .memory => return error.MemoryNotYetSupported,
         }
     }
 

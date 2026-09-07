@@ -7,7 +7,13 @@ const port_validation = @import("port_validation");
 const multi_driver = @import("multi_driver");
 const required_input = @import("required_input");
 const output_assignment = @import("output_assignment");
+const memory_validation = @import("memory_validation");
 const golden = @import("golden");
+
+// Pulls the pass's inline tests into this test root.
+test {
+    _ = memory_validation;
+}
 
 const Fixture = struct {
     name: []const u8,

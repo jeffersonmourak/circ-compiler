@@ -233,6 +233,7 @@ const project_fixtures = [_]Project{
     .{ .root = "tests/fixtures/projects/E016_arity_over/root.circ", .golden = "tests/fixtures/expected-diagnostics/E016_arity_over.txt" },
     .{ .root = "tests/fixtures/projects/E016_arity_under/root.circ", .golden = "tests/fixtures/expected-diagnostics/E016_arity_under.txt" },
     .{ .root = "tests/fixtures/projects/W002_dangling_subcircuit_output/root.circ", .golden = "tests/fixtures/expected-diagnostics/W002_dangling_subcircuit_output.txt" },
+    .{ .root = "tests/fixtures/projects/memory_parametric/root.circ", .golden = "tests/fixtures/expected-diagnostics/memory_parametric_clean.txt" },
 };
 
 test "Phase 9.3 diagnostic code snapshots (single-file full validator)" {

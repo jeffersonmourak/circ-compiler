@@ -29,6 +29,7 @@ pub fn serializeModule(
                 break :blk .slice;
             },
             .concat => .concat,
+            .memory => return error.MemoryNotYetSupported,
             else => return error.SubCircuitInFlatModule,
         };
         try components.append(allocator, .{
@@ -169,6 +170,7 @@ fn expandModule(
         switch (comp.kind) {
             .sub_circuit_ref => continue,
             .unresolved_name => return error.UnresolvedComponent,
+            .memory => return error.MemoryNotYetSupported,
             else => {},
         }
         switch (comp.kind) {
@@ -215,7 +217,7 @@ fn expandModule(
                     .width = comp.width,
                 });
             },
-            .sub_circuit_ref, .unresolved_name => unreachable,
+            .sub_circuit_ref, .unresolved_name, .memory => unreachable,
         }
     }
 
@@ -332,6 +334,7 @@ fn resolveSignalGlobalId(
             return outputs.get(endpoint.port) orelse return error.UnknownPortName;
         },
         .unresolved_name => return error.UnresolvedComponent,
+        .memory => return error.MemoryNotYetSupported,
     }
 }
 
