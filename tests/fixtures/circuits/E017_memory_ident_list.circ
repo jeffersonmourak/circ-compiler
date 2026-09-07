@@ -1,0 +1,3 @@
+input pc
+rom a, b
+output out(in = pc.out)

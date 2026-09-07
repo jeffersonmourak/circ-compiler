@@ -1,0 +1,2 @@
+tests/fixtures/circuits/E017_memory_ident_list.circ:2:1: error: E017: memory 'a' requires exactly two width arguments [W, A]; got 0 (write 'rom a[W, A](...)' on its own line)
+tests/fixtures/circuits/E017_memory_ident_list.circ:2:1: error: E017: memory 'b' requires exactly two width arguments [W, A]; got 0 (write 'rom b[W, A](...)' on its own line)

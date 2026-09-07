@@ -43,7 +43,7 @@ diag error E004 in.circ:3:1 required input 'b' is unconnected
 ```
 
 `diag <error|warning> <CODE> <file>:<line>:<col> <message>`, reusing the stable
-validator codes (`E001`-`E016`, `W001`-`W003`).
+validator codes (`E001`-`E018`, `W001`-`W003`).
 
 ## Value and width encoding
 

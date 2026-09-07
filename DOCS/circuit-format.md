@@ -148,7 +148,7 @@ Compiled `.wasm` artifacts embed the resolved circuit as a custom section. The c
 
 ## Diagnostic Codes
 
-The stable validator surface (E001–E016, W001–W003) is enumerated in [`language.md`](language.md) §4.2 and `lib/validator/codes.zig`. The multi-bit codes added with v02 are:
+The stable validator surface (E001–E018, W001–W003) is enumerated in [`language.md`](language.md) §4.2 and `lib/validator/codes.zig`. The multi-bit codes added with v02 are:
 
 | Code | Meaning |
 | --- | --- |

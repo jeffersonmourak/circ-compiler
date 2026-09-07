@@ -1,0 +1,1 @@
+tests/fixtures/circuits/E017_memory_type_width.circ:2:1: error: E017: memory 'code': the width annotation goes in the instance position; write 'rom code[8, 4](...)' with no width after 'rom'

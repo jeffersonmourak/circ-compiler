@@ -10,12 +10,14 @@ const output_assignment = @import("output_assignment");
 const combinational_loop = @import("combinational_loop");
 const dead_code = @import("dead_code");
 const unused_import = @import("unused_import");
+const memory_validation = @import("memory_validation");
 
 pub fn run(allocator: std.mem.Allocator, module: *const ir.Module) !diagnostics.DiagnosticList {
     var diagnostic_list = diagnostics.initDiagnosticList();
 
     try name_resolution.run(allocator, module, &diagnostic_list);
     try name_collision.run(allocator, module, &diagnostic_list);
+    try memory_validation.run(allocator, module, &diagnostic_list);
     try port_validation.run(allocator, module, &diagnostic_list);
     try multi_driver.run(allocator, module, &diagnostic_list);
     try required_input.run(allocator, module, &diagnostic_list);

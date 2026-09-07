@@ -13,6 +13,31 @@ const Fixture = struct {
 
 const fixtures = [_]Fixture{
     .{
+        .name = "E017 memory without width arguments",
+        .source_path = "tests/fixtures/circuits/E017_memory_no_widths.circ",
+        .expected_path = "tests/fixtures/expected-diagnostics/E017_memory_no_widths.txt",
+    },
+    .{
+        .name = "E017 memory with one width argument",
+        .source_path = "tests/fixtures/circuits/E017_memory_one_width.circ",
+        .expected_path = "tests/fixtures/expected-diagnostics/E017_memory_one_width.txt",
+    },
+    .{
+        .name = "E017 memory with type-position width",
+        .source_path = "tests/fixtures/circuits/E017_memory_type_width.circ",
+        .expected_path = "tests/fixtures/expected-diagnostics/E017_memory_type_width.txt",
+    },
+    .{
+        .name = "E017 memory in identifier-list form",
+        .source_path = "tests/fixtures/circuits/E017_memory_ident_list.circ",
+        .expected_path = "tests/fixtures/expected-diagnostics/E017_memory_ident_list.txt",
+    },
+    .{
+        .name = "E018 memory width out of range",
+        .source_path = "tests/fixtures/circuits/E018_memory_width_range.circ",
+        .expected_path = "tests/fixtures/expected-diagnostics/E018_memory_width_range.txt",
+    },
+    .{
         .name = "W001 unused input",
         .source_path = "tests/fixtures/circuits/W001_unused_input.circ",
         .expected_path = "tests/fixtures/expected-diagnostics/W001_unused_input.txt",

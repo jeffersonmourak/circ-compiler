@@ -88,7 +88,7 @@ lib/
   syntax/                  Parse tree → AST translation, FFI to the c-archive
   resolver/                scan_imports, import_cycle, resolve_bodies, builtins
   ir/                      Resolved IR (types, single-module resolver)
-  validator/               Diagnostic codes (E001–E016, W001–W003) and passes
+  validator/               Diagnostic codes (E001–E018, W001–W003) and passes
   topology/                Compact + full topology serializers, custom-section writer
   emit/                    Experimental --emit-zig path (standalone Zig output)
   preview/                 ASCII schematic layout + renderer for --preview

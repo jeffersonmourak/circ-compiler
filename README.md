@@ -77,7 +77,7 @@ Additional flags:
 - `--format=markdown|csv|json` — only valid with `--truth-table`; selects the output format. Default is `markdown`. CSV uses `0`/`1`/`?` cells; JSON encodes undefined cells as `null` so consumers can branch on type.
 - `--strict` — only valid with `--truth-table`; promotes any `?` (undefined) output cell into a hard exit-1 with one diagnostic line per offending row on stderr. The table itself still renders. Useful as a CI gate — a regression that introduces a dangling output now fails the build instead of silently producing `?` rows.
 
-Hard errors block emission — partial or "best-effort" artifacts are never produced. Diagnostics use stable codes (`E001`–`E016`, `W001`–`W003`) so downstream tooling can match on them.
+Hard errors block emission — partial or "best-effort" artifacts are never produced. Diagnostics use stable codes (`E001`–`E018`, `W001`–`W003`) so downstream tooling can match on them.
 
 ## Documentation
 

@@ -300,7 +300,7 @@ rules as a named one.
 ### 4.1 Validation Rules
 
 The compiler enforces a small set of rules on the resulting graph; violations
-produce diagnostics with stable codes (`E001`–`E016`, `W001`–`W003`, see
+produce diagnostics with stable codes (`E001`–`E018`, `W001`–`W003`, see
 `circuit-format.md` for the full catalogue):
 
 * Every signal reference must resolve to a declared name (`E001`).

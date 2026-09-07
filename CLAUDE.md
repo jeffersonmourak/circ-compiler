@@ -81,7 +81,7 @@ Hard errors block emission; partial or "best-effort" artifacts are never produce
 [lib/ir]                    Resolved IR (Module, Project, Component, Pin).
      │
      ▼
-[lib/validator]             Stable diagnostic codes E001-E016, W001-W003.
+[lib/validator]             Stable diagnostic codes E001-E018, W001-W003.
                             Single-module: run.zig. Whole-project: run_project.zig.
      │
      ▼
@@ -142,6 +142,8 @@ Facts that materially shape edits:
 | E014 | width mismatch between driver and the port it feeds |
 | E015 | sub-circuit is not parametric (caller passed `[N]` to a scalar callee) |
 | E016 | parametric arity mismatch at the call site |
+| E017 | memory parameter list malformed (`rom`/`ram` takes exactly two instance-position width arguments `[W, A]`) |
+| E018 | memory width out of range (`W` in 1..64, `A` in 1..16) |
 | W001 | unused input declaration |
 | W002 | dangling output declaration |
 | W003 | unused import declaration |

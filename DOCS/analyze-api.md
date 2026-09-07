@@ -52,7 +52,7 @@ message on stderr for a malformed request or an internal failure.
 ```
 
 - **`files`**: `file_id` to absolute path. Paths beginning `<builtin>/` are embedded macro sources with no on-disk file; consumers should skip them when mapping to editor URIs.
-- **`diagnostics`**: `severity` is `"error"` or `"warning"`. `code` is a validator code (`E001`-`E016`, `W001`-`W003`, a stable surface) or `"syntax"` for the synthetic truncation diagnostic (see below). `related` carries secondary spans (e.g. the first declaration in a collision).
+- **`diagnostics`**: `severity` is `"error"` or `"warning"`. `code` is a validator code (`E001`-`E018`, `W001`-`W003`, a stable surface) or `"syntax"` for the synthetic truncation diagnostic (see below). `related` carries secondary spans (e.g. the first declaration in a collision).
 - **`symbols`**: `kind` is `input`, `output`, `and`, `not`, `led`, or `instance`. One entry per declaration.
 - **`references`**: a navigable link from a use site (`range`) to a definition (`target_file` + `target_range`), with a `hover` string. Covers signal references (to the source component's declaration) and import aliases (to the imported file).
 

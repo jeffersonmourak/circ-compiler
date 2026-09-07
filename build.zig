@@ -246,6 +246,13 @@ pub fn build(b: *std.Build) void {
     });
     unused_import_mod.addImport("diagnostics", validator_diagnostics_mod);
     unused_import_mod.addImport("ir_types", ir_types_mod);
+    const memory_validation_mod = b.createModule(.{
+        .root_source_file = b.path("lib/validator/passes/memory_validation.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    memory_validation_mod.addImport("diagnostics", validator_diagnostics_mod);
+    memory_validation_mod.addImport("ir_types", ir_types_mod);
     const validator_run_mod = b.createModule(.{
         .root_source_file = b.path("lib/validator/run.zig"),
         .target = target,
@@ -262,13 +269,7 @@ pub fn build(b: *std.Build) void {
     validator_run_mod.addImport("combinational_loop", combinational_loop_mod);
     validator_run_mod.addImport("dead_code", dead_code_mod);
     validator_run_mod.addImport("unused_import", unused_import_mod);
-    const memory_validation_mod = b.createModule(.{
-        .root_source_file = b.path("lib/validator/passes/memory_validation.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    memory_validation_mod.addImport("diagnostics", validator_diagnostics_mod);
-    memory_validation_mod.addImport("ir_types", ir_types_mod);
+    validator_run_mod.addImport("memory_validation", memory_validation_mod);
     const sub_circuit_validation_mod = b.createModule(.{
         .root_source_file = b.path("lib/validator/passes/sub_circuit_validation.zig"),
         .target = target,
@@ -309,6 +310,10 @@ pub fn build(b: *std.Build) void {
     linkParserArchive(b, validator_name_passes_tests, build_archive_cmd);
     validator_name_passes_tests.linkLibC();
     const run_validator_name_passes_tests = b.addRunArtifact(validator_name_passes_tests);
+    // Zig collects tests only from a test root's own module, so a pass with
+    // inline tests must be its own root.
+    const memory_validation_tests = b.addTest(.{ .root_module = memory_validation_mod });
+    const run_memory_validation_tests = b.addRunArtifact(memory_validation_tests);
     const validator_structural_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/validator/structural_passes_test.zig"),
         .target = target,
@@ -322,7 +327,6 @@ pub fn build(b: *std.Build) void {
     validator_structural_tests_mod.addImport("multi_driver", multi_driver_mod);
     validator_structural_tests_mod.addImport("required_input", required_input_mod);
     validator_structural_tests_mod.addImport("output_assignment", output_assignment_mod);
-    validator_structural_tests_mod.addImport("memory_validation", memory_validation_mod);
     validator_structural_tests_mod.addImport("golden", b.createModule(.{
         .root_source_file = b.path("tests/helpers/golden.zig"),
         .target = target,
@@ -980,6 +984,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_resolver_tests.step);
     test_step.dependOn(&run_validator_tests.step);
     test_step.dependOn(&run_validator_name_passes_tests.step);
+    test_step.dependOn(&run_memory_validation_tests.step);
     test_step.dependOn(&run_validator_structural_tests.step);
     test_step.dependOn(&run_validator_loop_tests.step);
     test_step.dependOn(&run_validator_run_tests.step);

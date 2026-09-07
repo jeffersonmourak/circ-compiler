@@ -26,7 +26,7 @@
         ▼
    ┌───────────────────────────────────────────────────────────┐
    │  Validator (lib/validator/)                               │
-   │  Stable diagnostic codes E001–E016, W001–W003             │
+   │  Stable diagnostic codes E001–E018, W001–W003             │
    │  Hard errors block emission; --warnings-as-errors promotes│
    └───────────────────────────────────────────────────────────┘
         │
