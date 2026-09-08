@@ -676,6 +676,72 @@ test "serve: memory error replies" {
     try t.expect(std.mem.endsWith(u8, out, "err E_PROTO malformed command\n"));
 }
 
+// The memory transcript in DOCS/sim-protocol.md, replayed against the rom
+// topology: every command line is fed to serve() and every other line must
+// come back, in order, as the loop's reply — and the doc must contain the
+// block verbatim.
+test "serve: doc example session" {
+    const transcript =
+        \\ready proto=1 pins=2 warnings=0
+        \\pin addr in 4
+        \\pin out out 8
+        \\mems
+        \\mems 1
+        \\mem code rom 8 4
+        \\poke code 3 0x2a
+        \\ok
+        \\set addr 3
+        \\ok
+        \\get out
+        \\ok 0x2a 0xff
+        \\peek code 4
+        \\ok 0x0 0x0
+        \\mem code 2 3
+        \\cells 3
+        \\0x2 0x0 0x0
+        \\0x3 0x2a 0xff
+        \\0x4 0x0 0x0
+        \\clear code
+        \\ok
+        \\get out
+        \\ok 0x0 0x0
+        \\reset
+        \\ok
+        \\quit
+        \\ok bye
+        \\
+    ;
+    const commands = [_][]const u8{ "mems", "poke code 3 0x2a", "set addr 3", "get out", "peek code 4", "mem code 2 3", "clear code", "get out", "reset", "quit" };
+
+    const doc = try std.fs.cwd().readFileAlloc(t.allocator, "DOCS/sim-protocol.md", 1024 * 1024);
+    defer t.allocator.free(doc);
+    try t.expect(std.mem.indexOf(u8, doc, transcript) != null);
+
+    var script: std.ArrayList(u8) = .{};
+    defer script.deinit(t.allocator);
+    for (commands) |c| {
+        try script.appendSlice(t.allocator, c);
+        try script.append(t.allocator, '\n');
+    }
+    var buf: std.ArrayList(u8) = .{};
+    defer buf.deinit(t.allocator);
+    try runTopologyScript(&buf, rom_topology, &.{}, script.items);
+
+    var replies = std.mem.splitScalar(u8, buf.items, '\n');
+    var lines = std.mem.splitScalar(u8, transcript, '\n');
+    var next_command: usize = 0;
+    while (lines.next()) |line| {
+        if (line.len == 0) continue;
+        if (next_command < commands.len and std.mem.eql(u8, line, commands[next_command])) {
+            next_command += 1;
+            continue;
+        }
+        try t.expectEqualStrings(line, replies.next() orelse "<end of output>");
+    }
+    try t.expectEqual(commands.len, next_command);
+    try t.expectEqualStrings("", replies.next() orelse "<end of output>");
+}
+
 test "writeImageError reasons" {
     var buf: std.ArrayList(u8) = .{};
     defer buf.deinit(t.allocator);

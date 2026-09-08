@@ -58,7 +58,7 @@ There is no `-Dtest-filter` flag wired into `build.zig`. To run a single test mo
 | `circ-compile in.circ --inspect` | Pretty-printed parse tree, resolved IR, diagnostics. |
 | `circ-compile in.circ --preview` | ASCII schematic of the resolved circuit. |
 | `circ-compile in.circ --truth-table` | Enumerated truth table. Pair with `--format=markdown\|csv\|json`. |
-| `circ-compile in.circ --sim` | Interactive stdio drive protocol (proto=1): drive the circuit by pin name for testing/tooling; see `DOCS/sim-protocol.md`. |
+| `circ-compile in.circ --sim` | Interactive stdio drive protocol (proto=1): drive the circuit by pin name for testing/tooling, load/inspect `rom`/`ram` contents by declared name (`--mem=<name>=<path>` preloads, `load`/`save`/`peek`/`poke`/`mem`/`clear` verbs); see `DOCS/sim-protocol.md`. |
 | `echo '<json>' \| circ-compile --analyze` | JSON analysis (files, diagnostics, symbols, references) on stdout for editor tooling; see `DOCS/analyze-api.md`. |
 
 Hard errors block emission; partial or "best-effort" artifacts are never produced. `--warnings-as-errors` (alias `-Werror`) promotes warnings.

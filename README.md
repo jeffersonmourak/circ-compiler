@@ -65,7 +65,7 @@ This is the fast dev-loop suite. `zig build test-all` additionally runs the slow
 | `circ-compile input.circ --inspect`              | Pretty-printed parse tree, resolved IR, and diagnostics on stdout.                             |
 | `circ-compile input.circ --preview`              | ASCII schematic of the resolved circuit on stdout (no artifact written).                       |
 | `circ-compile input.circ --truth-table`          | Markdown truth table enumerating every input vector against the simulated circuit, on stdout.  |
-| `circ-compile input.circ --sim`                  | Interactive stdio drive protocol; drive the circuit by pin name for testing/tooling. See `DOCS/sim-protocol.md`. |
+| `circ-compile input.circ --sim`                  | Interactive stdio drive protocol; drive the circuit by pin name and load/inspect `rom`/`ram` contents (`--mem=<name>=<path>`, `load`/`save`/`peek`/`poke`). See `DOCS/sim-protocol.md`. |
 
 In default compile mode, `circ-compile` runs the parser, resolver, validator, and topology serializers in-process and splices the resulting `circ.topology.v0.min` and `circ.topology.v0.full` blobs into a vendored prebuilt runtime `.wasm` (embedded in the CLI via `@embedFile`). No `zig` toolchain or subprocess is required at user runtime.
 
