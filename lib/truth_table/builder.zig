@@ -85,7 +85,20 @@ pub const BuildError = error{
     NoOutputs,
     OutOfMemory,
     InvalidTopology,
+    /// The circuit holds state across rows (a ram): its clk/we would be
+    /// enumerated as inputs and the table would depend on visiting order.
+    StatefulComponent,
 };
+
+/// Name of the first ram in the topology at any origin depth, or null.
+/// A nested ram is still driven from the enumerated root inputs, so the
+/// origin filter that scopes pins must not scope this check.
+pub fn firstRamName(topology: full_format.FullTopology) ?[]const u8 {
+    for (topology.components) |comp| {
+        if (comp.kind == .ram) return comp.name;
+    }
+    return null;
+}
 
 fn widthMaskU64(width: u8) u64 {
     if (width == 0) return 0;
@@ -115,6 +128,8 @@ pub fn build(
     var arena = std.heap.ArenaAllocator.init(parent_allocator);
     errdefer arena.deinit();
     const arena_alloc = arena.allocator();
+
+    if (firstRamName(topology) != null) return error.StatefulComponent;
 
     // Only the root circuit's pins matter for the truth table. Macro-expanded
     // sub-circuits also emit input_pin / output_pin primitives, but those are
@@ -358,4 +373,52 @@ test "truth_table_build_countInputBits_sums_widths" {
         .{ .id = 3, .kind = .output_pin, .width = 4, .name = "r", .origin = &.{} },
     };
     try std.testing.expectEqual(@as(u32, 7), countInputBits(topo(&components, &.{})));
+}
+
+const ram_components = [_]FullComponentRecord{
+    .{ .id = 0, .kind = .input_pin, .width = 4, .name = "a", .origin = &.{} },
+    .{ .id = 1, .kind = .input_pin, .width = 8, .name = "d", .origin = &.{} },
+    .{ .id = 2, .kind = .input_pin, .width = 1, .name = "we", .origin = &.{} },
+    .{ .id = 3, .kind = .input_pin, .width = 1, .name = "clk", .origin = &.{} },
+    .{ .id = 4, .kind = .ram, .width = 8, .name = "data", .origin = &.{}, .aux = .{ .memory = .{ .addr_width = 4 } } },
+    .{ .id = 5, .kind = .output_pin, .width = 8, .name = "q", .origin = &.{} },
+};
+const ram_connections = [_]FullConnectionRecord{
+    .{ .from_id = 0, .to_id = 4, .port = @intFromEnum(full_format.PortName.addr) },
+    .{ .from_id = 1, .to_id = 4, .port = @intFromEnum(full_format.PortName.din) },
+    .{ .from_id = 2, .to_id = 4, .port = @intFromEnum(full_format.PortName.we) },
+    .{ .from_id = 3, .to_id = 4, .port = @intFromEnum(full_format.PortName.clk) },
+    .{ .from_id = 4, .to_id = 5, .port = @intFromEnum(full_format.PortName.in) },
+};
+
+test "truth_table_build_rejects_ram_as_stateful" {
+    try std.testing.expectEqualStrings("data", firstRamName(topo(&ram_components, &ram_connections)).?);
+    try std.testing.expectError(error.StatefulComponent, build(test_alloc, topo(&ram_components, &ram_connections), .{}));
+}
+
+test "truth_table_build_rejects_nested_ram" {
+    // The same ram one origin frame deep: still driven from root inputs, still rejected.
+    const nested_origin = [_]full_format.OriginFrame{.{ .alias = "inner", .subcircuit = "mem_wrap", .target_file = 1 }};
+    var components = ram_components;
+    components[4].origin = &nested_origin;
+    try std.testing.expectEqualStrings("data", firstRamName(topo(&components, &ram_connections)).?);
+    try std.testing.expectError(error.StatefulComponent, build(test_alloc, topo(&components, &ram_connections), .{}));
+}
+
+test "truth_table_build_rom_reads_undefined_until_loaded" {
+    const components = [_]FullComponentRecord{
+        .{ .id = 0, .kind = .input_pin, .width = 4, .name = "pc", .origin = &.{} },
+        .{ .id = 1, .kind = .rom, .width = 8, .name = "code", .origin = &.{}, .aux = .{ .memory = .{ .addr_width = 4 } } },
+        .{ .id = 2, .kind = .output_pin, .width = 8, .name = "out", .origin = &.{} },
+    };
+    const connections = [_]FullConnectionRecord{
+        .{ .from_id = 0, .to_id = 1, .port = @intFromEnum(full_format.PortName.addr) },
+        .{ .from_id = 1, .to_id = 2, .port = @intFromEnum(full_format.PortName.in) },
+    };
+    try std.testing.expect(firstRamName(topo(&components, &connections)) == null);
+
+    var table = try build(test_alloc, topo(&components, &connections), .{});
+    defer table.deinit();
+    try std.testing.expectEqual(@as(usize, 16), table.rows.len);
+    for (table.rows) |row| try std.testing.expect(row.outputs[0].isUndefined());
 }

@@ -275,6 +275,13 @@ test "cli memory sources compile in every artifact mode except emit-zig" {
         try std.testing.expectEqual(@as(i32, 0), exitCode(result.term));
     }
     {
+        var result = try run(&.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/ram_basic.circ", "--truth-table" });
+        defer result.deinit(std.testing.allocator);
+        try std.testing.expectEqual(@as(i32, 1), exitCode(result.term));
+        try std.testing.expectEqual(@as(usize, 0), result.stdout.len);
+        try std.testing.expect(std.mem.indexOf(u8, result.stderr, "ram 'data' is stateful") != null);
+    }
+    {
         // stdin is ignored by `run`, so serve() sees EOF right after the handshake.
         var result = try run(&.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/ram_basic.circ", "--sim" });
         defer result.deinit(std.testing.allocator);

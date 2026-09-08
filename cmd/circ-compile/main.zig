@@ -459,6 +459,16 @@ pub fn run(
                 };
             defer topology.deinit(allocator);
 
+            // Pre-flight the stateful case so the message names the ram
+            // instead of surfacing a bare StatefulComponent from the builder.
+            if (truth_table_builder.firstRamName(topology)) |ram_name| {
+                try stderr_writer.print(
+                    "truth-table: ram '{s}' is stateful (its clk/we would be enumerated as inputs and rows would depend on visiting order); use --sim to drive it\n",
+                    .{ram_name},
+                );
+                return 1;
+            }
+
             // Pre-flight the cap so users get a specific bit-count
             // message ("X exceeds cap of Y") instead of a generic
             // TooManyInputs error from the builder.
@@ -747,6 +757,34 @@ test "phase3_render_single_gate" {
     const exit_code = try runPreview(allocator, "tests/fixtures/circuits/single_gate.circ", &stdout_buf, &stderr_buf);
     try std.testing.expectEqual(@as(u8, 0), exit_code);
     try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/single_gate.render.golden");
+}
+
+test "preview: rom box render golden" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+    const exit_code = try runPreview(allocator, "tests/fixtures/circuits/rom_basic.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try std.testing.expectEqual(@as(usize, 0), stderr_buf.items.len);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/rom_basic.render.golden");
+}
+
+test "preview: ram box render golden" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+    const exit_code = try runPreview(allocator, "tests/fixtures/circuits/ram_basic.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try std.testing.expectEqual(@as(usize, 0), stderr_buf.items.len);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/ram_basic.render.golden");
 }
 
 test "preview: multi-bit input pin label" {
@@ -1116,6 +1154,38 @@ test "truth_table_chain_fixture" {
     const exit_code = try runTruthTable(allocator, "tests/fixtures/circuits/chain.circ", &stdout_buf, &stderr_buf);
     try std.testing.expectEqual(@as(u8, 0), exit_code);
     try golden.expectGolden(stdout_buf.items, "tests/fixtures/truth_table/chain.truth.golden");
+}
+
+test "truth_table_rom_unloaded_renders_undefined_golden" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const exit_code = try runTruthTable(allocator, "tests/fixtures/circuits/rom_basic.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/truth_table/rom_basic.truth.golden");
+}
+
+test "truth_table_rejects_ram_as_stateful" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const exit_code = try runTruthTable(allocator, "tests/fixtures/circuits/ram_basic.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 1), exit_code);
+    try std.testing.expectEqual(@as(usize, 0), stdout_buf.items.len);
+    try std.testing.expect(std.mem.indexOf(u8, stderr_buf.items, "truth-table: ram 'data' is stateful") != null);
+    try std.testing.expect(std.mem.indexOf(u8, stderr_buf.items, "--sim") != null);
 }
 
 test "truth_table_rejects_output_path" {
