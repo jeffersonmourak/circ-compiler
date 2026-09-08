@@ -52,7 +52,7 @@ The compiled `.wasm` artifact exposes a fixed runtime API for hosts (browsers, N
 
 ### Topology section copied into linear memory at startup
 
-**Decision.** The compiled `.wasm` carries the circuit topology as a `circ.topology.v0.min` custom section, not in linear memory. The host reads the section via `WebAssembly.Module.customSections`, calls `topology_alloc(byteLength)` to reserve a buffer in linear memory, copies the bytes, then calls `init()`. `init()` parses the buffer and constructs the circuit. The section name still starts with `v0` for backwards-compatible host code; the version byte inside (`0x02`) is the format axis that evolves.
+**Decision.** The compiled `.wasm` carries the circuit topology as a `circ.topology.v0.min` custom section, not in linear memory. The host reads the section via `WebAssembly.Module.customSections`, calls `topology_alloc(byteLength)` to reserve a buffer in linear memory, copies the bytes, then calls `init()`. `init()` parses the buffer and constructs the circuit. The section name still starts with `v0` for backwards-compatible host code; the version byte inside (`0x03`) is the format axis that evolves.
 
 **Rationale.** WASM custom sections are opaque to the module itself — there is no in-module API to read them. The three-call protocol (`topology_alloc` → `memcpy` → `init`) is the smallest portable bridge any JS host can implement without an SDK. Hosts that don't need rendering metadata can ignore the parallel `circ.topology.v0.full` section, which carries the same structural data plus per-component names and macro provenance.
 

@@ -144,7 +144,7 @@ Parse tree node types used by `lib/syntax/translate.zig`:
 
 ## Topology Format Version
 
-Compiled `.wasm` artifacts embed the resolved circuit as a custom section. The current format identifier is `CIRC` (v02), bumped from the v01 format that preceded multi-bit support. Each serialised component now carries a `width: u8` byte; the runtime materialises the corresponding pool tier on `init()`. See [`wasm-api.md`](wasm-api.md) for the host-facing ABI and `lib/topology/serializer.zig` for the wire layout.
+Compiled `.wasm` artifacts embed the resolved circuit as a custom section. The current format identifier is `CIRC` (v03). v02 added a `width: u8` byte to every serialised component (the runtime materialises the corresponding pool tier on `init()`); v03 adds the memory kinds `rom = 8` and `ram = 9`, whose records carry one trailing `addr_width` byte, and the port bytes `addr`/`din`/`we`/`clk`. Memory contents are not part of the topology — they are loaded at runtime. See [`wasm-api.md`](wasm-api.md) for the host-facing ABI and `lib/topology/serializer.zig` for the wire layout.
 
 ## Diagnostic Codes
 

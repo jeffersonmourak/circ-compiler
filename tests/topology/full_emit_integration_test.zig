@@ -10,6 +10,17 @@ const full_decoder = @import("full_decoder");
 const section_writer = @import("section_writer");
 const runtime_embed = @import("runtime_embed");
 
+/// Byte length of a `.min` component record from its kind byte
+/// (`format.ComponentKind`: slice = 6 carries `(lo, hi)`, rom = 8 and
+/// ram = 9 carry `addr_width`; everything else is the 6-byte prefix).
+fn minRecordLen(kind_byte: u8) usize {
+    return switch (kind_byte) {
+        6 => 8,
+        8, 9 => 7,
+        else => 6,
+    };
+}
+
 fn hasHardErrors(diags: []const diagnostics.Diagnostic) bool {
     for (diags) |d| {
         if (d.level == .err) return true;
@@ -144,8 +155,12 @@ test "phase0_full_pipeline_roundtrip: and_pair fixture carries both sections wit
     try std.testing.expectEqual(@as(usize, min_conn_count), decoded.connections.len);
 
     // Walk min bytes to extract each connection record and compare with decoded full.
-    // Min layout: header(13) + components(6 bytes each: id+kind+width) + connections(9 bytes each).
-    var min_pos: usize = 13 + min_component_count * 6;
+    // Min layout: header(13) + components(6-byte prefix plus the kind's aux bytes) + connections(9 bytes each).
+    var min_pos: usize = 13;
+    {
+        var k: usize = 0;
+        while (k < min_component_count) : (k += 1) min_pos += minRecordLen(min_bytes[min_pos + 4]);
+    }
     for (decoded.connections) |full_conn| {
         const from_id = std.mem.readInt(u32, min_bytes[min_pos..][0..4], .little);
         min_pos += 4;
@@ -196,6 +211,6 @@ test "multibit_import: widths flow through the import boundary into the min payl
     while (i < min_component_count) : (i += 1) {
         const width = min_bytes[offset + 5];
         try std.testing.expectEqual(@as(u8, 4), width);
-        offset += 6;
+        offset += minRecordLen(min_bytes[offset + 4]);
     }
 }

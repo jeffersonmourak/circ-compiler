@@ -29,7 +29,10 @@ pub fn serializeModule(
                 break :blk .slice;
             },
             .concat => .concat,
-            .memory => return error.MemoryNotYetSupported,
+            .memory => |m| blk: {
+                aux_lo = m.addr_width;
+                break :blk memoryWireKind(m.mode);
+            },
             else => return error.SubCircuitInFlatModule,
         };
         try components.append(allocator, .{
@@ -79,13 +82,24 @@ pub const ProjectTopology = struct {
     payload: []u8,
     input_ids: []PinMapping,
     output_ids: []PinMapping,
+    /// Root-module memories by declared name (`width` is the data width),
+    /// so a host or harness can find the ids the memory exports take.
+    memory_ids: []PinMapping,
 
     pub fn deinit(self: *ProjectTopology, allocator: std.mem.Allocator) void {
         allocator.free(self.payload);
         allocator.free(self.input_ids);
         allocator.free(self.output_ids);
+        allocator.free(self.memory_ids);
     }
 };
+
+fn memoryWireKind(mode: ir.MemoryMode) format.ComponentKind {
+    return switch (mode) {
+        .rom => .rom,
+        .ram => .ram,
+    };
+}
 
 pub fn serializeProjectFull(
     allocator: std.mem.Allocator,
@@ -122,6 +136,15 @@ pub fn serializeProjectFull(
         try output_ids_list.append(allocator, .{ .name = output.name, .global_id = global_id, .width = output.width });
     }
 
+    var memory_ids_list: std.ArrayList(PinMapping) = .{};
+    errdefer memory_ids_list.deinit(allocator);
+    for (root_module.components) |comp| {
+        if (comp.kind != .memory) continue;
+        const name = comp.instance_name orelse continue;
+        const global_id = root_local_to_global.get(comp.id.value) orelse continue;
+        try memory_ids_list.append(allocator, .{ .name = name, .global_id = global_id, .width = comp.width });
+    }
+
     const payload = try encodePayload(allocator, state.components.items, state.connections.items);
     errdefer allocator.free(payload);
 
@@ -129,6 +152,7 @@ pub fn serializeProjectFull(
         .payload = payload,
         .input_ids = try input_ids_list.toOwnedSlice(allocator),
         .output_ids = try output_ids_list.toOwnedSlice(allocator),
+        .memory_ids = try memory_ids_list.toOwnedSlice(allocator),
     };
 }
 
@@ -139,6 +163,7 @@ pub fn serializeProject(
     const topo = try serializeProjectFull(allocator, project);
     allocator.free(topo.input_ids);
     allocator.free(topo.output_ids);
+    allocator.free(topo.memory_ids);
     return topo.payload;
 }
 
@@ -170,7 +195,6 @@ fn expandModule(
         switch (comp.kind) {
             .sub_circuit_ref => continue,
             .unresolved_name => return error.UnresolvedComponent,
-            .memory => return error.MemoryNotYetSupported,
             else => {},
         }
         switch (comp.kind) {
@@ -217,7 +241,19 @@ fn expandModule(
                     .width = comp.width,
                 });
             },
-            .sub_circuit_ref, .unresolved_name, .memory => unreachable,
+            .memory => |m| {
+                const global_id = state.next_global_id;
+                state.next_global_id += 1;
+                try local_to_global.put(comp.id.value, global_id);
+
+                try state.components.append(state.allocator, .{
+                    .id = global_id,
+                    .kind = @intFromEnum(memoryWireKind(m.mode)),
+                    .width = comp.width,
+                    .aux_lo = m.addr_width,
+                });
+            },
+            .sub_circuit_ref, .unresolved_name => unreachable,
         }
     }
 
@@ -263,7 +299,7 @@ fn expandModule(
     for (module.connections) |conn| {
         const to_comp = findComponent(module, conn.to.component) orelse return error.ComponentNotFound;
         switch (to_comp.kind) {
-            .primitive, .slice, .concat => {},
+            .primitive, .slice, .concat, .memory => {},
             else => continue,
         }
 
@@ -326,7 +362,7 @@ fn resolveSignalGlobalId(
 ) !u32 {
     const comp = findComponent(module, endpoint.component) orelse return error.ComponentNotFound;
     switch (comp.kind) {
-        .primitive, .slice, .concat => {
+        .primitive, .slice, .concat, .memory => {
             return local_to_global.get(endpoint.component.value) orelse error.InternalError;
         },
         .sub_circuit_ref => {
@@ -334,7 +370,6 @@ fn resolveSignalGlobalId(
             return outputs.get(endpoint.port) orelse return error.UnknownPortName;
         },
         .unresolved_name => return error.UnresolvedComponent,
-        .memory => return error.MemoryNotYetSupported,
     }
 }
 
@@ -350,6 +385,10 @@ fn parsePortName(name: []const u8) !format.PortName {
     if (std.mem.eql(u8, name, "a")) return .a;
     if (std.mem.eql(u8, name, "b")) return .b;
     if (std.mem.eql(u8, name, "out")) return .out;
+    if (std.mem.eql(u8, name, "addr")) return .addr;
+    if (std.mem.eql(u8, name, "din")) return .din;
+    if (std.mem.eql(u8, name, "we")) return .we;
+    if (std.mem.eql(u8, name, "clk")) return .clk;
     return error.UnknownPortName;
 }
 
@@ -390,11 +429,14 @@ fn encodePayload(
         try out.appendSlice(allocator, &buf);
         try out.append(allocator, comp.kind);
         try out.append(allocator, comp.width);
-        // Kind-dispatched suffix: slice records carry `(lo, hi)` after
-        // the fixed prefix. Older kinds keep their historical 6 bytes.
+        // Kind-dispatched suffix: slice records carry `(lo, hi)` and
+        // memory records their address width after the fixed prefix.
+        // Older kinds keep their historical 6 bytes.
         if (comp.kind == @intFromEnum(format.ComponentKind.slice)) {
             try out.append(allocator, comp.aux_lo);
             try out.append(allocator, comp.aux_hi);
+        } else if (comp.kind == @intFromEnum(format.ComponentKind.rom) or comp.kind == @intFromEnum(format.ComponentKind.ram)) {
+            try out.append(allocator, comp.aux_lo);
         }
     }
 
@@ -452,23 +494,23 @@ test "serialize: inverter module bytes" {
     // conn_count = 2
     try std.testing.expectEqual(@as(u32, 2), std.mem.readInt(u32, payload[9..13][0..4], .little));
     
-    // Verify records (each: id(4)+kind(1)+width(1) = 6 bytes)
+    // Verify records (fixed prefix id(4)+kind(1)+width(1), plus the kind's aux bytes)
     var offset: usize = 13;
     // Comp 0
     try std.testing.expectEqual(@as(u32, 0), std.mem.readInt(u32, payload[offset..offset+4][0..4], .little));
     try std.testing.expectEqual(@intFromEnum(format.ComponentKind.input_pin), payload[offset+4]);
     try std.testing.expectEqual(@as(u8, 1), payload[offset+5]);
-    offset += 6;
+    offset += recordLen(payload[offset + 4]);
     // Comp 1
     try std.testing.expectEqual(@as(u32, 1), std.mem.readInt(u32, payload[offset..offset+4][0..4], .little));
     try std.testing.expectEqual(@intFromEnum(format.ComponentKind.not_gate), payload[offset+4]);
     try std.testing.expectEqual(@as(u8, 1), payload[offset+5]);
-    offset += 6;
+    offset += recordLen(payload[offset + 4]);
     // Comp 2
     try std.testing.expectEqual(@as(u32, 2), std.mem.readInt(u32, payload[offset..offset+4][0..4], .little));
     try std.testing.expectEqual(@intFromEnum(format.ComponentKind.output_pin), payload[offset+4]);
     try std.testing.expectEqual(@as(u8, 1), payload[offset+5]);
-    offset += 6;
+    offset += recordLen(payload[offset + 4]);
     
     // Conn 0
     try std.testing.expectEqual(@as(u32, 0), std.mem.readInt(u32, payload[offset..offset+4][0..4], .little));
@@ -543,12 +585,108 @@ test "serialize: ir.Component.width threads into payload width byte" {
     const payload = try serializeModule(allocator, &module);
     defer allocator.free(payload);
 
-    // Header is magic(4)+ver(1)+comp_count(4)+conn_count(4) = 13. Each record is id(4)+kind(1)+width(1) = 6.
+    // Header is magic(4)+ver(1)+comp_count(4)+conn_count(4) = 13. Each record is id(4)+kind(1)+width(1) plus aux.
     var offset: usize = 13;
     for (components) |_| {
         try std.testing.expectEqual(@as(u8, 4), payload[offset + 5]);
-        offset += 6;
+        offset += recordLen(payload[offset + 4]);
     }
+}
+
+/// Byte length of a `.min` component record from its kind byte.
+fn recordLen(kind_byte: u8) usize {
+    if (kind_byte == @intFromEnum(format.ComponentKind.slice)) return 8;
+    if (kind_byte == @intFromEnum(format.ComponentKind.rom) or kind_byte == @intFromEnum(format.ComponentKind.ram)) return 7;
+    return 6;
+}
+
+test "serialize: rom/ram records carry addr_width suffix" {
+    const allocator = std.testing.allocator;
+    const span = ir.Span{ .file_id = 0, .start_line = 0, .start_col = 0, .end_line = 0, .end_col = 0 };
+    const rom = ir.Memory{ .mode = .rom, .data_width = 8, .addr_width = 4, .arg_count = 2, .type_width_given = false };
+    const ram = ir.Memory{ .mode = .ram, .data_width = 8, .addr_width = 2, .arg_count = 2, .type_width_given = false };
+
+    const components = [_]ir.Component{
+        .{ .id = .{ .value = 0 }, .kind = .{ .primitive = .input_pin }, .instance_name = "pc", .span = span, .width = 4 },
+        .{ .id = .{ .value = 1 }, .kind = .{ .memory = rom }, .instance_name = "code", .span = span, .width = 8 },
+        .{ .id = .{ .value = 2 }, .kind = .{ .memory = ram }, .instance_name = "data", .span = span, .width = 8 },
+    };
+    const connections = [_]ir.Connection{
+        .{ .from = .{ .component = .{ .value = 0 }, .port = "out" }, .to = .{ .component = .{ .value = 1 }, .port = "addr" }, .span = span },
+        .{ .from = .{ .component = .{ .value = 1 }, .port = "out" }, .to = .{ .component = .{ .value = 2 }, .port = "din" }, .span = span },
+        .{ .from = .{ .component = .{ .value = 0 }, .port = "out" }, .to = .{ .component = .{ .value = 2 }, .port = "we" }, .span = span },
+        .{ .from = .{ .component = .{ .value = 0 }, .port = "out" }, .to = .{ .component = .{ .value = 2 }, .port = "clk" }, .span = span },
+    };
+    const module = ir.Module{
+        .file_id = .{ .value = 0 },
+        .inputs = &.{},
+        .outputs = &.{},
+        .components = &components,
+        .connections = &connections,
+        .imports = &.{},
+    };
+
+    const payload = try serializeModule(allocator, &module);
+    defer allocator.free(payload);
+
+    var offset: usize = 13;
+    offset += recordLen(payload[offset + 4]); // pc: 6 bytes
+    try std.testing.expectEqual(@intFromEnum(format.ComponentKind.rom), payload[offset + 4]);
+    try std.testing.expectEqual(@as(u8, 8), payload[offset + 5]);
+    try std.testing.expectEqual(@as(u8, 4), payload[offset + 6]);
+    try std.testing.expectEqual(@as(usize, 7), recordLen(payload[offset + 4]));
+    offset += 7;
+    try std.testing.expectEqual(@intFromEnum(format.ComponentKind.ram), payload[offset + 4]);
+    try std.testing.expectEqual(@as(u8, 2), payload[offset + 6]);
+    offset += 7;
+
+    // Connection port bytes: addr, din, we, clk.
+    try std.testing.expectEqual(@intFromEnum(format.PortName.addr), payload[offset + 8]);
+    try std.testing.expectEqual(@intFromEnum(format.PortName.din), payload[offset + 9 + 8]);
+    try std.testing.expectEqual(@intFromEnum(format.PortName.we), payload[offset + 18 + 8]);
+    try std.testing.expectEqual(@intFromEnum(format.PortName.clk), payload[offset + 27 + 8]);
+}
+
+test "serialize: project path assigns dense ids across memories" {
+    const allocator = std.testing.allocator;
+    const span = ir.Span{ .file_id = 0, .start_line = 0, .start_col = 0, .end_line = 0, .end_col = 0 };
+    const rom = ir.Memory{ .mode = .rom, .data_width = 8, .addr_width = 4, .arg_count = 2, .type_width_given = false };
+
+    const components = [_]ir.Component{
+        .{ .id = .{ .value = 0 }, .kind = .{ .primitive = .input_pin }, .instance_name = "pc", .span = span, .width = 4 },
+        .{ .id = .{ .value = 1 }, .kind = .{ .memory = rom }, .instance_name = "code", .span = span, .width = 8 },
+        .{ .id = .{ .value = 2 }, .kind = .{ .primitive = .output_pin }, .instance_name = "out", .span = span, .width = 8 },
+    };
+    const inputs = [_]ir.InputPin{.{ .id = .{ .value = 0 }, .name = "pc", .component = .{ .value = 0 }, .span = span, .width = 4 }};
+    const outputs = [_]ir.OutputPin{.{ .id = .{ .value = 0 }, .name = "out", .driver = .{ .component = .{ .value = 1 }, .port = "out" }, .span = span, .width = 8 }};
+    const connections = [_]ir.Connection{
+        .{ .from = .{ .component = .{ .value = 0 }, .port = "out" }, .to = .{ .component = .{ .value = 1 }, .port = "addr" }, .span = span },
+        .{ .from = .{ .component = .{ .value = 1 }, .port = "out" }, .to = .{ .component = .{ .value = 2 }, .port = "in" }, .span = span },
+    };
+    const modules = [_]ir.Module{.{
+        .file_id = .{ .value = 0 },
+        .inputs = &inputs,
+        .outputs = &outputs,
+        .components = &components,
+        .connections = &connections,
+        .imports = &.{},
+    }};
+    const project = ir.Project{
+        .files = &modules,
+        .root_file_id = .{ .value = 0 },
+        .import_table = &.{},
+        .file_paths = &.{"root.circ"},
+        .source_blobs = &.{""},
+    };
+
+    var topo = try serializeProjectFull(allocator, &project);
+    defer topo.deinit(allocator);
+
+    try std.testing.expectEqual(@as(usize, 1), topo.memory_ids.len);
+    try std.testing.expectEqualStrings("code", topo.memory_ids[0].name);
+    try std.testing.expectEqual(@as(u32, 1), topo.memory_ids[0].global_id);
+    try std.testing.expectEqual(@as(u8, 8), topo.memory_ids[0].width);
+    try std.testing.expectEqual(@as(u32, 3), std.mem.readInt(u32, topo.payload[5..9], .little));
 }
 
 test "serialize: half-adder project flat" {

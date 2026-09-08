@@ -118,8 +118,8 @@ The renderer reads from a versioned topology payload embedded in compiled `.wasm
 
 | Section | Contains |
 |---------|----------|
-| `circ.topology.v0.min` | Flat primitive components (id, kind, `width: u8`) + connections. Magic `CIRC`, version `0x02`. The "lightweight" payload — what the runtime needs. |
-| `circ.topology.v0.full` | Adds per-component instance names + subcircuit-origin chains. Magic `CIRF`, version `0x02`. The "rich" payload — what the renderer (and any future inspection tooling) needs. |
+| `circ.topology.v0.min` | Flat primitive components (id, kind, `width: u8`) + connections. Magic `CIRC`, version `0x03`. The "lightweight" payload — what the runtime needs. |
+| `circ.topology.v0.full` | Adds per-component instance names + subcircuit-origin chains. Magic `CIRF`, version `0x03`. The "rich" payload — what the renderer (and any future inspection tooling) needs. |
 
 `--preview` builds the `full` payload in memory (skipping the `.wasm` write) and feeds it directly into the renderer. Tools that consume a `.wasm` artifact from disk can parse the same payload via `lib/topology/full_decoder.zig:decode`.
 

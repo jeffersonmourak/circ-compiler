@@ -113,12 +113,12 @@ fn parseErrorMessage(err: anyerror) []const u8 {
     };
 }
 
-/// Backend failures print `<context>: <ErrorName>`, except the memory
-/// rejections, which get one human line shared by every artifact mode.
+/// Backend failures print `<context>: <ErrorName>`, except the emit-zig
+/// memory rejection, which gets a human line.
 fn reportBackendError(writer: anytype, context: []const u8, err: anyerror) !void {
     switch (err) {
-        error.MemoryNotYetSupported, error.MemoryUnsupportedInEmitZig => {
-            try writer.writeAll("rom/ram are not yet supported in this mode\n");
+        error.MemoryUnsupportedInEmitZig => {
+            try writer.writeAll("--emit-zig does not support rom/ram; compile to .wasm instead\n");
         },
         else => try writer.print("{s}: {s}\n", .{ context, @errorName(err) }),
     }

@@ -246,7 +246,7 @@ test "cli inspect memory fixture exits 0 and matches golden stdout" {
     try expectStdoutMatchesFixture(result.stdout, "tests/fixtures/expected-inspect/rom_basic.txt");
 }
 
-test "cli memory sources are rejected in every artifact mode" {
+test "cli memory sources compile in every artifact mode except emit-zig" {
     try buildCli();
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
@@ -256,23 +256,38 @@ test "cli memory sources are rejected in every artifact mode" {
     const zig_path = try std.fmt.allocPrint(std.testing.allocator, ".zig-cache/tmp/{s}/rom_basic.zig", .{tmp.sub_path});
     defer std.testing.allocator.free(zig_path);
 
-    const rejection = "rom/ram are not yet supported in this mode";
-    const invocations = [_][]const []const u8{
-        &.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/rom_basic.circ", "-o", wasm_path },
-        &.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/rom_basic.circ", "--emit-zig", "-o", zig_path },
-        &.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/rom_basic.circ", "--preview" },
-        &.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/rom_basic.circ", "--truth-table" },
-        &.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/ram_basic.circ", "--sim" },
-    };
-    for (invocations) |argv| {
-        var result = try run(argv);
+    {
+        var result = try run(&.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/rom_basic.circ", "-o", wasm_path });
+        defer result.deinit(std.testing.allocator);
+        try std.testing.expectEqual(@as(i32, 0), exitCode(result.term));
+        try std.testing.expectEqual(@as(usize, 0), result.stderr.len);
+        try expectFileExists(wasm_path);
+    }
+    {
+        var result = try run(&.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/rom_basic.circ", "--preview" });
+        defer result.deinit(std.testing.allocator);
+        try std.testing.expectEqual(@as(i32, 0), exitCode(result.term));
+        try std.testing.expect(std.mem.indexOf(u8, result.stdout, "rom code[8,4]") != null);
+    }
+    {
+        var result = try run(&.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/rom_basic.circ", "--truth-table" });
+        defer result.deinit(std.testing.allocator);
+        try std.testing.expectEqual(@as(i32, 0), exitCode(result.term));
+    }
+    {
+        // stdin is ignored by `run`, so serve() sees EOF right after the handshake.
+        var result = try run(&.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/ram_basic.circ", "--sim" });
+        defer result.deinit(std.testing.allocator);
+        try std.testing.expectEqual(@as(i32, 0), exitCode(result.term));
+        try std.testing.expect(std.mem.startsWith(u8, result.stdout, "ready proto=1 pins=5"));
+    }
+    {
+        var result = try run(&.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/rom_basic.circ", "--emit-zig", "-o", zig_path });
         defer result.deinit(std.testing.allocator);
         try std.testing.expectEqual(@as(i32, 1), exitCode(result.term));
-        try std.testing.expectEqual(@as(usize, 0), result.stdout.len);
-        try std.testing.expect(std.mem.indexOf(u8, result.stderr, rejection) != null);
+        try std.testing.expect(std.mem.indexOf(u8, result.stderr, "--emit-zig does not support rom/ram") != null);
+        try expectFileMissing(zig_path);
     }
-    try expectFileMissing(wasm_path);
-    try expectFileMissing(zig_path);
 }
 
 test "cli inspect error fixture exits 1 and matches golden stdout" {
