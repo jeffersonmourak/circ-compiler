@@ -1,5 +1,9 @@
 const std = @import("std");
 pub const memory = @import("memory.zig");
+/// Raw memory image codec. Re-exported so every consumer reaches it as
+/// `engine.memimage`; a second relative import from another module would
+/// make Zig reject the file as belonging to two modules.
+pub const memimage = @import("memimage.zig");
 const transport = @import("transport.zig");
 
 const log = @import("log.zig");
@@ -7,6 +11,7 @@ const log = @import("log.zig");
 // Collect the sibling files' inline tests when this file is the test root.
 test {
     _ = transport;
+    _ = memimage;
 }
 
 /// Compile-time switch to include benchmark counters on `Circuit`. The
