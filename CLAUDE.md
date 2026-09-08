@@ -23,7 +23,7 @@ confident summary.
 - Zig 0.15.x.
 - Go 1.21+. Every build runs `go build` once to (re)produce `lib/parser/parser.a` from the vendored `lib/parser/parser.go`.
 - Node on `PATH` for the behavioral WASM harness in `zig build test`.
-- langlang is only needed if you regenerate the parser from `lib/grammar/proto-circ.peg`. circ uses the maintainer's fork, which adds `-output-language zig` on top of upstream `go/v0.0.12` and regenerates the current `parser.go` byte for byte: `go install github.com/jeffersonmourak/langlang/go/cmd/langlang@v0.0.13-zig.1` (branch head: `@zig-parser-gen`; source and docs at https://github.com/jeffersonmourak/langlang, `go/zig/README.md`). Check with `langlang -version`.
+- langlang is only needed if you regenerate the parser from `lib/grammar/proto-circ.peg`. circ uses the maintainer's fork, which adds `-output-language zig` on top of upstream `go/v0.0.12` and regenerates the current `parser.go` byte for byte: `go install github.com/jeffersonmourak/langlang/go/cmd/langlang@v0.0.13-zig.2` (branch head: `@zig-parser-gen`; source and docs at https://github.com/jeffersonmourak/langlang, `go/zig/README.md`). Check with `langlang -version`.
 
 ## Build and test commands
 

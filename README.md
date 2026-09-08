@@ -38,7 +38,7 @@ Prerequisites:
 
 - [Zig](https://ziglang.org/) 0.15.x.
 - [Go](https://go.dev/) 1.21+ — used to compile the langlang-generated parser into a CGo c-archive that links into the Zig binary. Every build runs `go build` once to (re)produce `lib/parser/parser.a`.
-- Optional: [langlang](https://github.com/jeffersonmourak/langlang) — only needed if you want to regenerate `lib/parser/parser.go` from `lib/grammar/proto-circ.peg`. The generated source is vendored in the repo, so contributors who don't touch the grammar do not need langlang installed. circ uses the maintainer's fork, which adds a Zig output language on top of upstream `go/v0.0.12` and regenerates the current parser byte for byte. Install with `go install github.com/jeffersonmourak/langlang/go/cmd/langlang@v0.0.13-zig.1` and confirm with `langlang -version`.
+- Optional: [langlang](https://github.com/jeffersonmourak/langlang) — only needed if you want to regenerate `lib/parser/parser.go` from `lib/grammar/proto-circ.peg`. The generated source is vendored in the repo, so contributors who don't touch the grammar do not need langlang installed. circ uses the maintainer's fork, which adds a Zig output language on top of upstream `go/v0.0.12` and regenerates the current parser byte for byte. Install with `go install github.com/jeffersonmourak/langlang/go/cmd/langlang@v0.0.13-zig.2` and confirm with `langlang -version`.
 
 Build the CLI:
 
