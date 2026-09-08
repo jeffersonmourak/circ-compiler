@@ -11,7 +11,44 @@ const Diagnostic = diagnostics.Diagnostic;
 /// the value encoding, or the framing (see DOCS/sim-protocol.md).
 pub const PROTO_VERSION: u32 = 1;
 
+// Re-exports for cmd/circ-compile/main.zig, which imports neither
+// engine_session nor circuit; the preload pre-flight reaches everything
+// it needs through here.
+pub const Preload = engine_session.Preload;
+pub const MemRef = engine_session.MemRef;
+pub const collectMemories = engine_session.collectMemories;
+pub const validateImage = engine_session.validateImage;
+pub const MemoryImageError = engine.memimage.MemoryImageError;
+/// The codec's errors plus the read cap from `readFileAlloc`.
+pub const ImageError = MemoryImageError || error{FileTooBig};
+/// Same cap as the CLI's input-file read. The largest legal image is
+/// 8 << 16 = 512 KiB, so every over-capacity-but-under-cap file reaches
+/// the codec and is reported as TooManyWords.
+pub const IMAGE_READ_CAP: usize = 16 * 1024 * 1024;
+
 const MAX_LINE = 8192;
+
+/// One human-readable reason (no code, no newline) for an image `err` on
+/// `mem`, given the image length. Shared by `--mem` (stderr) and `load`
+/// (E_MEMFMT) so the two surfaces never drift.
+pub fn writeImageError(writer: anytype, err: ImageError, mem: MemRef, len: usize) !void {
+    const bpw = engine.memimage.bytesPerWord(mem.data_width);
+    switch (err) {
+        error.LengthNotWordMultiple => try writer.print("length {d} is not a multiple of {d} byte(s)", .{ len, bpw }),
+        error.TooManyWords => try writer.print("{d} words exceed capacity {d}", .{ len / bpw, @as(usize, 1) << @intCast(mem.addr_width) }),
+        error.WordExceedsWidth => try writer.print("a word has bits set beyond data width {d}", .{mem.data_width}),
+        error.FileTooBig => try writer.writeAll("image exceeds 16 MiB"),
+    }
+}
+
+/// Load every preload into its memory. Names and images were validated by
+/// the caller, so a failure here is an internal error, not a user one.
+fn applyPreloads(session: *const engine_session.Session, preloads: []const Preload) !void {
+    for (preloads) |preload| {
+        const mem = session.findMemory(preload.name) orelse return error.UnknownMemory;
+        _ = try session.applyImage(mem, preload.bytes);
+    }
+}
 
 fn widthMask(width: u8) u64 {
     if (width >= 64) return std.math.maxInt(u64);
@@ -64,6 +101,8 @@ pub fn serveError(writer: anytype, file_path: []const u8, diags: []const Diagnos
 /// Build the circuit from `topology`, emit the `ready` handshake, then run the
 /// request/response loop until EOF or `quit`. `diags` carries warnings to
 /// report in the handshake (the caller has already gated hard errors).
+/// `preloads` are applied after the session is built — and again after every
+/// `reset`, so "reset" means "back to the configured initial state".
 ///
 /// `set` enqueues-and-settles via `propagateEvent` and `run` calls
 /// `propagate`, mirroring the shipped artifact's `setPin`/`run` exports 1:1,
@@ -73,6 +112,7 @@ pub fn serve(
     topology: full_format.FullTopology,
     file_path: []const u8,
     diags: []const Diagnostic,
+    preloads: []const Preload,
     reader: anytype,
     writer: anytype,
 ) !void {
@@ -82,6 +122,7 @@ pub fn serve(
     var circuit = engine.Circuit.init() catch return error.InvalidTopology;
     defer circuit.deinit();
     var session = try engine_session.Session.build(sess_arena.allocator(), &circuit, topology);
+    try applyPreloads(&session, preloads);
 
     var warnings: usize = 0;
     for (diags) |d| {
@@ -141,6 +182,7 @@ pub fn serve(
                 circuit = engine.Circuit.init() catch return error.InvalidTopology;
                 _ = sess_arena.reset(.retain_capacity);
                 session = try engine_session.Session.build(sess_arena.allocator(), &circuit, topology);
+                try applyPreloads(&session, preloads);
                 try writer.writeAll("ok\n");
             },
             .set => |a| try doSet(writer, &session, a),
@@ -268,7 +310,59 @@ const and_connections = [_]FullConnectionRecord{
 fn runScript(buf: *std.ArrayList(u8), script: []const u8) !void {
     const topology: full_format.FullTopology = .{ .components = &and_components, .connections = &and_connections };
     var fbs = std.io.fixedBufferStream(script);
-    try serve(t.allocator, topology, "and.circ", &.{}, fbs.reader(), buf.writer(t.allocator));
+    try serve(t.allocator, topology, "and.circ", &.{}, &.{}, fbs.reader(), buf.writer(t.allocator));
+}
+
+// addr (id=0, input_pin[4]) → rom code[8,4] (id=1) → out (id=2, output_pin[8])
+const rom_components = [_]FullComponentRecord{
+    .{ .id = 0, .kind = .input_pin, .width = 4, .name = "addr", .origin = &.{} },
+    .{ .id = 1, .kind = .rom, .width = 8, .name = "code", .origin = &.{}, .aux = .{ .memory = .{ .addr_width = 4 } } },
+    .{ .id = 2, .kind = .output_pin, .width = 8, .name = "out", .origin = &.{} },
+};
+const rom_connections = [_]FullConnectionRecord{
+    .{ .from_id = 0, .to_id = 1, .port = @intFromEnum(full_format.PortName.addr) },
+    .{ .from_id = 1, .to_id = 2, .port = @intFromEnum(full_format.PortName.in) },
+};
+
+fn runRomScript(buf: *std.ArrayList(u8), preloads: []const Preload, script: []const u8) !void {
+    const topology: full_format.FullTopology = .{ .components = &rom_components, .connections = &rom_connections };
+    var fbs = std.io.fixedBufferStream(script);
+    try serve(t.allocator, topology, "rom.circ", &.{}, preloads, fbs.reader(), buf.writer(t.allocator));
+}
+
+test "serve: handshake unchanged with memories" {
+    var buf: std.ArrayList(u8) = .{};
+    defer buf.deinit(t.allocator);
+    try runRomScript(&buf, &.{}, "pins\nquit\n");
+    try t.expect(std.mem.startsWith(u8, buf.items, "ready proto=1 pins=2 warnings=0\npin addr in 4\npin out out 8\npins 2\n"));
+}
+
+test "serve: preload is visible through the circuit and survives reset" {
+    var buf: std.ArrayList(u8) = .{};
+    defer buf.deinit(t.allocator);
+    const image = [_]u8{ 0x10, 0x20, 0x30, 0x40 };
+    try runRomScript(&buf, &.{.{ .name = "code", .bytes = &image }}, "set addr 2\nget out\nreset\nset addr 2\nget out\nset addr 7\nget out\n");
+    const out = buf.items;
+    try t.expect(std.mem.startsWith(u8, out, "ready proto=1 pins=2 warnings=0\n"));
+    // The preloaded word is there, still there after reset, and the tail is undefined.
+    try t.expect(std.mem.indexOf(u8, out, "ok 0x30 0xff\nok\nok\nok 0x30 0xff\nok\nok 0x0 0x0\n") != null);
+}
+
+test "writeImageError reasons" {
+    var buf: std.ArrayList(u8) = .{};
+    defer buf.deinit(t.allocator);
+    const mem = MemRef{ .name = "code", .component_id = 1, .kind = .rom, .data_width = 12, .addr_width = 2 };
+    try writeImageError(buf.writer(t.allocator), error.LengthNotWordMultiple, mem, 3);
+    try buf.append(t.allocator, '|');
+    try writeImageError(buf.writer(t.allocator), error.TooManyWords, mem, 10);
+    try buf.append(t.allocator, '|');
+    try writeImageError(buf.writer(t.allocator), error.WordExceedsWidth, mem, 8);
+    try buf.append(t.allocator, '|');
+    try writeImageError(buf.writer(t.allocator), error.FileTooBig, mem, 0);
+    try t.expectEqualStrings(
+        "length 3 is not a multiple of 2 byte(s)|5 words exceed capacity 4|a word has bits set beyond data width 12|image exceeds 16 MiB",
+        buf.items,
+    );
 }
 
 test "serve: handshake, set/run/get on the AND gate" {
