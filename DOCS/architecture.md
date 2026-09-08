@@ -57,7 +57,7 @@ The engine is pure Zig and oblivious to WebAssembly, JSON, or topology. It model
 
 ### Component kinds
 
-There are eight kinds (`ComponentType` in `lib/circuit.zig`):
+There are nine kinds (`ComponentType` in `lib/circuit.zig`):
 
 | Kind             | Inputs                                  | Output port | Notes                                                              |
 |------------------|-----------------------------------------|-------------|---------------------------------------------------------------------|
@@ -69,6 +69,7 @@ There are eight kinds (`ComponentType` in `lib/circuit.zig`):
 | `led`            | `"in"`                                  | `"out"`     | Visualisation primitive; tracks input state.                       |
 | `slice`          | `"in"`                                  | `"out"`     | Bit-shape kind: masks bits `[lo, hi)` of `from`. Output width is `hi - lo`. Lowered from `a[lo..hi]` and `a[i]`; users never write it directly. |
 | `concat`         | `"operand_0"`, `"operand_1"`, … per op  | `"out"`     | Bit-shape kind: ORs each operand into its bit-position slot. Output width is the sum of operand widths. Lowered from `{a, b, ...}`. |
+| `memory`         | `"addr"` (+ `"din"`, `"we"`, `"clk"` for `.ram`) | `"out"` | Native `rom`/`ram`. Asynchronous read: `out` is `cells[addr]`, undefined when any address bit is; a `.ram` writes `din` on the defined rising edge of `clk` while `we` is high. Cells live on the payload, not in the state pool. |
 
 ### Event-driven propagation
 

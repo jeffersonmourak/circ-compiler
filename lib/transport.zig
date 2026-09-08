@@ -14,6 +14,12 @@ fn kindByte(kind: anytype) u8 {
         .output_pin => 5,
         .slice => 6,
         .concat => 7,
+        // The wire format keeps two memory kinds; the engine carries the
+        // distinction as `mode`.
+        .memory => |m| switch (m.mode) {
+            .rom => 8,
+            .ram => 9,
+        },
     };
 }
 
@@ -69,4 +75,14 @@ test "transport: encodes output_pin state" {
     try std.testing.expectEqual(@as(u8, 0), encoded[0]);
     try std.testing.expectEqual(@as(u8, 5), encoded[1]);
     try std.testing.expectEqual(@as(u8, 0), encoded[2]);
+}
+
+test "transport: memory kind bytes" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    const rom = try circuit.createComponent(.{ .memory = .{ .mode = .rom, .cells = .{ .addr_width = 1 } } }, 1);
+    const ram = try circuit.createComponent(.{ .memory = .{ .mode = .ram, .cells = .{ .addr_width = 1 } } }, 1);
+    try std.testing.expectEqual(@as(u8, 8), kindByte(rom.kind));
+    try std.testing.expectEqual(@as(u8, 9), kindByte(ram.kind));
 }

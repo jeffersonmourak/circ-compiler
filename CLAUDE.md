@@ -106,7 +106,7 @@ Two invariants the rest of the codebase leans on:
 
 The engine is pure Zig, oblivious to WebAssembly, JSON, or the topology format. It models a circuit as a directed graph of `Component`s and advances time with a min-heap event queue. The compiled `.wasm` runtime and the unit tests are both clients of the same `Circuit` API.
 
-Eight component kinds (`ComponentType`): `input_pin_gate`, `not_gate`, `and_gate`, `wire`, `output_pin`, `led`, `slice`, `concat`. Their integer encoding in the topology format is fixed: `input_pin_gate=0`, `not_gate=1`, `led=2`, `and_gate=3`, `wire=4`, `output_pin=5`, `slice=6`, `concat=7`. Do not renumber. `slice` and `concat` are bit-shape kinds — the resolver lowers `a[lo..hi]`, `a[i]`, and `{a, b, ...}` into them; users never write them directly.
+Nine component kinds (`ComponentType`): `input_pin_gate`, `not_gate`, `and_gate`, `wire`, `output_pin`, `led`, `slice`, `concat`, `memory`. Their integer encoding in the topology format is fixed by `lib/topology/format.zig` (the wire truth): `input_pin=0`, `not_gate=1`, `and_gate=2`, `wire=3`, `led=4`, `output_pin=5`, `slice=6`, `concat=7`; the engine's single `memory` kind carries a `mode` and maps to two wire kinds, `rom=8` and `ram=9`. Do not renumber. `slice` and `concat` are bit-shape kinds — the resolver lowers `a[lo..hi]`, `a[i]`, and `{a, b, ...}` into them; users never write them directly. `memory` keeps its cell planes on the component payload, not in the state pool.
 
 Facts that materially shape edits:
 

@@ -63,8 +63,14 @@ Note that `toInt` and `toTransportByte` use **different** encodings. Neither is 
 
 ```zig
 pub const ComponentType = enum {
-    input_pin_gate, not_gate, led, and_gate, wire, output_pin, slice, concat,
+    input_pin_gate, not_gate, led, and_gate, wire, output_pin, slice, concat, memory,
 };
+
+pub const MemoryMode = enum { rom, ram };
+
+/// Cell planes, one u64 per word, length `1 << addr_width`; allocated by
+/// `Circuit.createComponent`. All-zero planes mean every cell is undefined.
+pub const MemCells = struct { addr_width: u8, values: []u64, defined: []u64 };
 
 const Kind = union(ComponentType) {
     input_pin_gate: struct { inputs: std.ArrayList(*Component) = .{} },
@@ -78,6 +84,15 @@ const Kind = union(ComponentType) {
     output_pin:     struct { inputs: std.ArrayList(*Component) = .{} },
     slice:          struct { from: ?*Component = null, lo: u8 = 0, hi: u8 = 0 },
     concat:         struct { operands: std.ArrayList(*Component) = .{} },
+    memory:         struct {
+        mode: MemoryMode,
+        cells: MemCells,
+        addr: ?*Component = null,
+        din: ?*Component = null,   // ram only
+        we: ?*Component = null,    // ram only
+        clk: ?*Component = null,   // ram only
+        prev_clk: BitVecState = BitVecState.undefined_(1),
+    },
 };
 ```
 
@@ -88,23 +103,9 @@ Backward edges are flat `std.ArrayList(*Component)` lists for the eight-input ga
 - A `slice` reads `from`'s current state, masks to bits `[lo, hi)`, and shifts right by `lo`. The output's width is `hi - lo`. Bit-index `a[i]` lowers to a slice with `hi = lo + 1`.
 - A `concat` ORs each operand into a running bit-position. Operands listed low-on-left: bits `[0, op0.width)` come from `op0`, bits `[op0.width, op0.width + op1.width)` from `op1`, and so on. The output's width is the sum of operand widths.
 
-The integer encoding used by the topology format (`lib/topology/`) and `Component.Kind` constructor is:
+`memory` is the native `rom`/`ram` primitive. The engine has one kind carrying a `mode`; the wire format keeps two kinds (`rom=8`, `ram=9`). Its cells are two `u64` planes on the payload (never pool slots), and the pool slot holds the word presented on `out`: `cells[addr]` when every address bit is defined, otherwise fully undefined (`memoryReadOut`). Reads are asynchronous — an `addr` change re-evaluates `out` at gate delay.
 
-```zig
-pub fn toKind(kind: u8) !Component.Kind {
-    return switch (kind) {
-        0 => .input_pin_gate,
-        1 => .not_gate,
-        2 => .led,
-        3 => .and_gate,
-        4 => .wire,
-        5 => .output_pin,
-        6 => .{ .slice = .{} },
-        7 => .{ .concat = .{} },
-        else => return error.InvalidComponentKind,
-    };
-}
-```
+The integer encoding used by the topology format is owned by `lib/topology/format.zig` (`ComponentKind`: `input_pin=0`, `not_gate=1`, `and_gate=2`, `wire=3`, `led=4`, `output_pin=5`, `slice=6`, `concat=7`, with `rom=8` and `ram=9` reserved for memories); the runtime interpreter maps those bytes onto `Component.Kind` when it materialises the topology.
 
 Per-kind port names:
 
