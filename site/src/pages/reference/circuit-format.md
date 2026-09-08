@@ -60,8 +60,10 @@ Declares one or more named input pins for the circuit. Input pins are driven ext
 | `led`    | `in`     | input must match the instance width; widths `> 1` render as a numeric display | Output indicator                                                    |
 | `wire`   | `in`     | input must match the instance width                                           | Pass-through                                                        |
 | `output` | `in`     | input must match the instance width                                           | Externally observable output pin (special-cased declaration kind)   |
+| `rom`    | `addr`   | declared `[W, A]` (data width, address width); `addr` is `A` wide, `out` is `W` wide | Read-only memory of `2^A` words; contents are loaded at runtime, see [`language.md`](/reference) §6.5 |
+| `ram`    | `addr`, `din`, `we`, `clk` | declared `[W, A]`; `addr` is `A`, `din`/`out` are `W`, `we`/`clk` are 1  | Read/write memory; writes `din` on the rising edge of `clk` when `we` is high; contents loaded at runtime, see [`language.md`](/reference) §6.5 |
 
-`input` is a sibling pin declaration with its own syntax (no port list), described above. All primitives accept an optional `[N]` width annotation; absent it, width is 1.
+`input` is a sibling pin declaration with its own syntax (no port list), described above. All primitives accept an optional `[N]` width annotation; absent it, width is 1 — except memories, which take exactly two, `[W, A]`, after the instance name.
 
 **Built-in macro gates** expand at compile time to nested `and` / `not` (and optionally other macros). They use **`a`** and **`b`** as input ports and expose **`out`**. Unlike `and`/`not`, **no `import`** is required — the compiler behaves as if `import … from "<builtin>/<name>.circ"` were present. Each macro is parametric: `or[8] g(a=x, b=y)` produces a bit-parallel 8-bit OR.
 
@@ -159,3 +161,10 @@ The stable validator surface (E001–E018, W001–W003) is enumerated in [`langu
 | E014 | width mismatch between a driver and the port it feeds |
 | E015 | sub-circuit is not parametric (caller passed `[N]` call-widths to a scalar callee) |
 | E016 | parameter count mismatch (wrong number of `[w0, w1, ...]` call-widths at the call site) |
+
+The memory codes added with v03 are:
+
+| Code | Meaning |
+| --- | --- |
+| E017 | memory parameter list malformed (a `rom`/`ram` declaration without exactly two instance-position width arguments `[W, A]`) |
+| E018 | memory width out of range (`W` outside `1..64` or `A` outside `1..16`) |

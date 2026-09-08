@@ -154,7 +154,7 @@ a=0 -> NOT a = high
 a=1 -> NOT a = low
 ```
 
-The two i64 parameters cross the boundary as JavaScript `BigInt` values; `value` and `defined` each pack one bit per signal bit. A scalar pin uses `(0n, 1n)` for low, `(1n, 1n)` for high, and `(_, 0n)` for undefined. The full export list emitted by `circ-compile … -o out.wasm` today is exactly `topology_alloc`, `init`, `run`, `setPin`, `getOutputValue`, `getOutputDefined` (plus `memory`); see [`DOCS/wasm-api.md`](/reference/wasm-api) for the full contract. The two `env` callbacks (`debugEnabled` and `onDebugLog`) are required imports — supply the no-op stubs above unless you want debug logging.
+The two i64 parameters cross the boundary as JavaScript `BigInt` values; `value` and `defined` each pack one bit per signal bit. A scalar pin uses `(0n, 1n)` for low, `(1n, 1n)` for high, and `(_, 0n)` for undefined. The core export list emitted by `circ-compile … -o out.wasm` is `topology_alloc`, `init`, `run`, `setPin`, `getOutputValue`, `getOutputDefined` (plus `memory`); circuits that declare `rom`/`ram` memories additionally get the memory family `getMemInfo`, `memBuffer`, `memLoad`, `memStore`, `memClear`, `setMemWord`, `getMemValue`, `getMemDefined` (step 7 below); see [`DOCS/wasm-api.md`](/reference/wasm-api) for the full contract. The two `env` callbacks (`debugEnabled` and `onDebugLog`) are required imports — supply the no-op stubs above unless you want debug logging.
 
 ### Driving a multi-bit input
 
@@ -234,9 +234,205 @@ Sub-circuits are fully flattened by the serializer into a single ordered sequenc
 
 More worked project fixtures, including a full-adder built from two half-adders and a 4-bit AND/OR network, live under `tests/fixtures/projects/` and double as integration tests.
 
+## 7. Loading a program into ROM and stepping a clocked circuit
+
+`rom` and `ram` are built-in memories. A declaration gives only the *shape* — `[W, A]` is `W` bits per word and `2^A` words — and the contents are loaded at run time, so the same compiled circuit can run any program you hand it. This step authors an image, loads it three ways, and pulses a RAM's clock by hand.
+
+### 7.1 The circuit
+
+Save this as `prog_rom.circ` (it is `tests/fixtures/circuits/sim_rom_pc_walk.circ` verbatim): a 4-bit program counter, a 16-word ROM of 8-bit instructions, and the instruction at the counter as the output.
+
+```text
+input[4] pc
+rom code[8, 4](addr = pc)
+output[8] instr(in = code.out)
+```
+
+There is no register primitive yet, so the program counter is an input pin the host drives — "stepping" is `set pc N`.
+
+### 7.2 Author an image
+
+A memory image is a headerless raw file: `ceil(W/8)` bytes per word, little-endian, high padding bits zero, at most `2^A` words. For `W = 8` that is one byte per word, so four instructions are four bytes. `printf` with octal escapes writes them from any POSIX shell (`\xHH` escapes are a bash/zsh extension; the octal form is the portable one):
+
+```sh
+printf '\020\041\062\103' > prog.bin
+xxd prog.bin
+```
+
+```
+00000000: 1021 3243                                .!2C
+```
+
+Word 0 is `0x10`, word 1 `0x21`, word 2 `0x32`, word 3 `0x43`; words 4–15 are not in the file and will read as undefined.
+
+### 7.3 Preload it and walk the counter with `--sim`
+
+`--mem=<name>=<path>` loads an image into the memory declared with that name before the session starts. Type the lines after the handshake (or pipe them in):
+
+```sh
+zig-out/bin/circ-compile prog_rom.circ --sim --mem=code=prog.bin
+```
+
+```
+ready proto=1 pins=2 warnings=0
+pin pc in 4
+pin instr out 8
+set pc 0
+ok
+get instr
+ok 0x10 0xff
+set pc 3
+ok
+get instr
+ok 0x43 0xff
+mem code 0 4
+cells 4
+0x0 0x10 0xff
+0x1 0x21 0xff
+0x2 0x32 0xff
+0x3 0x43 0xff
+quit
+ok bye
+```
+
+Every reply is a `value mask` pair in hex; a mask of `0xff` means all eight bits are defined. `mem code 0 4` dumps four cells starting at address 0. Try `set pc 4` and `get instr` to see an unloaded cell come back as `0x0 0x0` (undefined), and `load code other.bin` to swap programs without leaving the session. The full verb list is in `DOCS/sim-protocol.md`.
+
+### 7.4 A RAM, stepped by hand
+
+Save `tests/fixtures/circuits/sim_ram_write_read.circ` as `scratch_ram.circ`:
+
+```text
+input[4] a
+input[8] d
+input w, clk
+ram data[8, 4](addr = a, din = d, we = w, clk = clk)
+output[8] q(in = data.out)
+```
+
+A `ram` reads asynchronously — `q` always shows the word at `a` — and writes `d` into that word on a *defined low → high* edge of `clk` while `w` is high. The clock is an ordinary input pin, so a pulse is two `set`s. Because the first level after power-on is undefined, drive the clock low once before the first rising edge:
+
+```sh
+zig-out/bin/circ-compile scratch_ram.circ --sim
+```
+
+```
+ready proto=1 pins=5 warnings=0
+pin a in 4
+pin d in 8
+pin w in 1
+pin clk in 1
+pin q out 8
+mems
+mems 1
+mem data ram 8 4
+set a 2
+ok
+set d 0x2a
+ok
+set w 1
+ok
+set clk 0
+ok
+set clk 1
+ok
+get q
+ok 0x2a 0xff
+set a 3
+ok
+get q
+ok 0x0 0x0
+poke data 3 0x99
+ok
+get q
+ok 0x99 0xff
+save data ram.bin
+ok words=16
+quit
+ok bye
+```
+
+`poke` writes a cell from the host side without a clock, and `q` follows at once because address 3 was being presented. `save` writes the whole memory as an image — undefined cells become `0x00`:
+
+```sh
+xxd ram.bin
+```
+
+```
+00000000: 0000 2a99 0000 0000 0000 0000 0000 0000  ..*.............
+```
+
+`poke`-then-`save` is also the quickest way to author an image interactively for `--mem` later.
+
+### 7.5 The same ROM from Node
+
+A compiled artifact exposes the memory through the `mem*` exports. Compile `prog_rom.circ` and note the ids `--inspect` prints — `pc` is component `0` and `code` is `1` here (for multi-file projects, read them from the `circ.topology.v0.full` section, as [`DOCS/wasm-api.md`](/reference/wasm-api) describes):
+
+```sh
+zig-out/bin/circ-compile prog_rom.circ -o prog_rom.wasm
+zig-out/bin/circ-compile prog_rom.circ --inspect | grep 'kind=rom'
+#   id=1 name=code kind=rom[W=8,A=4] width=8
+```
+
+`run_rom.mjs` instantiates the module as in step 4, then loads the image through the staging buffer:
+
+```js
+import fs from "node:fs";
+
+const bytes = fs.readFileSync(process.argv[2]);
+const mod = await WebAssembly.compile(bytes);
+const { exports: w } = await WebAssembly.instantiate(mod, {
+  env: { debugEnabled: () => 0, onDebugLog: () => {} },
+});
+
+const [topoSection] = WebAssembly.Module.customSections(mod, "circ.topology.v0.min");
+const topoBytes = new Uint8Array(topoSection);
+const topoPtr = w.topology_alloc(topoBytes.length);
+new Uint8Array(w.memory.buffer).set(topoBytes, topoPtr);
+w.init();
+
+const pc = 0, code = 1;                                 // ids from `circ-compile prog_rom.circ --inspect`
+const info = w.getMemInfo(code);
+if (info < 0) throw new Error("not a memory");
+const W = (info >> 8) & 0xff, A = info & 0xff;
+console.log(`code: W=${W} A=${A}`);
+
+const img = fs.readFileSync(process.argv[3]);
+const ptr = w.memBuffer(code);                          // may grow memory: re-view after
+new Uint8Array(w.memory.buffer).set(img, ptr);
+const rc = w.memLoad(code, img.length);
+if (rc !== 0) throw new Error(`memLoad failed with ${rc}`);
+
+for (const addr of [0n, 3n, 4n]) {
+  w.setPin(pc, addr, 0xfn);                             // setPin settles; no run() needed
+  console.log(`pc=${addr} -> instr=0x${w.getOutputValue(code).toString(16)} defined=0x${w.getOutputDefined(code).toString(16)}`);
+}
+
+const n = w.memStore(code);
+fs.writeFileSync("rom-after.bin", new Uint8Array(w.memory.buffer, w.memBuffer(code), n).slice());
+console.log(`stored ${n} bytes`);
+```
+
+```sh
+node run_rom.mjs prog_rom.wasm prog.bin
+xxd rom-after.bin
+```
+
+```
+code: W=8 A=4
+pc=0 -> instr=0x10 defined=0xff
+pc=3 -> instr=0x43 defined=0xff
+pc=4 -> instr=0x0 defined=0x0
+stored 16 bytes
+00000000: 1021 3243 0000 0000 0000 0000 0000 0000  .!2C............
+```
+
+`memStore` exports all `2^A` words, writing `value & defined` so the twelve undefined cells come out as zeros. Every mutator returns `0` on success or a negative status code (`-2` length not a whole number of words, `-3` a word with bits beyond `W`, …) — the table is in [`DOCS/wasm-api.md`](/reference/wasm-api). Read `getOutputValue(code)` directly on the memory's id, or on whatever it drives; the ROM's `out` is the same asynchronous read `instr` sees.
+
 ## Where to go next
 
 - `DOCS/circuit-format.md` — the complete `.circ` language reference (declarations, ports, anonymous components, built-ins).
+- `DOCS/language.md` §6.5 — the `rom`/`ram` reference: ports, X rules, the edge rule, and how contents get in.
 - `DOCS/wasm-api.md` — every export and import on the compiled artifact, plus the topology custom-section layout.
+- `DOCS/sim-protocol.md` — the `--sim` drive protocol, including `--mem` preloads and the memory verbs.
 - `DOCS/architecture.md` and `DOCS/decisions/` — design rationale, useful when contributing.
 - `tests/fixtures/circuits/` and `tests/fixtures/projects/` — copy-and-modify templates for common circuit patterns.
