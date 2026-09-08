@@ -113,6 +113,17 @@ fn parseErrorMessage(err: anyerror) []const u8 {
     };
 }
 
+/// Backend failures print `<context>: <ErrorName>`, except the memory
+/// rejections, which get one human line shared by every artifact mode.
+fn reportBackendError(writer: anytype, context: []const u8, err: anyerror) !void {
+    switch (err) {
+        error.MemoryNotYetSupported, error.MemoryUnsupportedInEmitZig => {
+            try writer.writeAll("rom/ram are not yet supported in this mode\n");
+        },
+        else => try writer.print("{s}: {s}\n", .{ context, @errorName(err) }),
+    }
+}
+
 fn countDiagnostics(diagnostic_list: []const diagnostics.Diagnostic) struct { errors: usize, warnings: usize } {
     var errors: usize = 0;
     var warnings: usize = 0;
@@ -282,12 +293,12 @@ pub fn run(
         }
         var topology = if (maybe_project) |*project|
             full_serializer.buildFromProject(allocator, project) catch |err| {
-                try stderr_writer.print("topology build failed: {s}\n", .{@errorName(err)});
+                try reportBackendError(stderr_writer, "topology build failed", err);
                 return 1;
             }
         else
             full_serializer.buildFromModule(allocator, &ir_module) catch |err| {
-                try stderr_writer.print("topology build failed: {s}\n", .{@errorName(err)});
+                try reportBackendError(stderr_writer, "topology build failed", err);
                 return 1;
             };
         defer topology.deinit(allocator);
@@ -315,7 +326,7 @@ pub fn run(
                         .compile_timestamp = "2026-05-01T22:00:00Z",
                         .compiler_version = "circ-compiler/dev",
                     }) catch |err| {
-                        try stderr_writer.print("emission failed: {s}\n", .{@errorName(err)});
+                        try reportBackendError(stderr_writer, "emission failed", err);
                         return 1;
                     };
                 }
@@ -324,7 +335,7 @@ pub fn run(
                     .compile_timestamp = "2026-05-01T22:00:00Z",
                     .compiler_version = "circ-compiler/dev",
                 }) catch |err| {
-                    try stderr_writer.print("emission failed: {s}\n", .{@errorName(err)});
+                    try reportBackendError(stderr_writer, "emission failed", err);
                     return 1;
                 };
             };
@@ -338,12 +349,12 @@ pub fn run(
             const topology_bytes = blk: {
                 if (maybe_project) |*project| {
                     break :blk serializer.serializeProject(allocator, project) catch |err| {
-                        try stderr_writer.print("topology serialization failed: {s}\n", .{@errorName(err)});
+                        try reportBackendError(stderr_writer, "topology serialization failed", err);
                         return 1;
                     };
                 }
                 break :blk serializer.serializeModule(allocator, &ir_module) catch |err| {
-                    try stderr_writer.print("topology serialization failed: {s}\n", .{@errorName(err)});
+                    try reportBackendError(stderr_writer, "topology serialization failed", err);
                     return 1;
                 };
             };
@@ -352,12 +363,12 @@ pub fn run(
             const full_topology_bytes = blk: {
                 if (maybe_project) |*project| {
                     break :blk full_serializer.serializeProjectFull(allocator, project) catch |err| {
-                        try stderr_writer.print("full topology serialization failed: {s}\n", .{@errorName(err)});
+                        try reportBackendError(stderr_writer, "full topology serialization failed", err);
                         return 1;
                     };
                 }
                 break :blk full_serializer.serializeModuleFull(allocator, &ir_module) catch |err| {
-                    try stderr_writer.print("full topology serialization failed: {s}\n", .{@errorName(err)});
+                    try reportBackendError(stderr_writer, "full topology serialization failed", err);
                     return 1;
                 };
             };
@@ -385,12 +396,12 @@ pub fn run(
         .preview => {
             var topology = if (maybe_project) |*project|
                 full_serializer.buildFromProject(allocator, project) catch |err| {
-                    try stderr_writer.print("topology build failed: {s}\n", .{@errorName(err)});
+                    try reportBackendError(stderr_writer, "topology build failed", err);
                     return 1;
                 }
             else
                 full_serializer.buildFromModule(allocator, &ir_module) catch |err| {
-                    try stderr_writer.print("topology build failed: {s}\n", .{@errorName(err)});
+                    try reportBackendError(stderr_writer, "topology build failed", err);
                     return 1;
                 };
             defer topology.deinit(allocator);
@@ -438,12 +449,12 @@ pub fn run(
             verbose_engine_logs = args.truth_table_verbose;
             var topology = if (maybe_project) |*project|
                 full_serializer.buildFromProject(allocator, project) catch |err| {
-                    try stderr_writer.print("topology build failed: {s}\n", .{@errorName(err)});
+                    try reportBackendError(stderr_writer, "topology build failed", err);
                     return 1;
                 }
             else
                 full_serializer.buildFromModule(allocator, &ir_module) catch |err| {
-                    try stderr_writer.print("topology build failed: {s}\n", .{@errorName(err)});
+                    try reportBackendError(stderr_writer, "topology build failed", err);
                     return 1;
                 };
             defer topology.deinit(allocator);

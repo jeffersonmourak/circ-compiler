@@ -236,6 +236,45 @@ test "cli inspect clean fixture exits 0 and matches golden stdout" {
     try expectStdoutMatchesFixture(result.stdout, "tests/fixtures/expected-inspect/clean_inverter.txt");
 }
 
+test "cli inspect memory fixture exits 0 and matches golden stdout" {
+    try buildCli();
+    var result = try run(&.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/rom_basic.circ", "--inspect" });
+    defer result.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(@as(i32, 0), exitCode(result.term));
+    try std.testing.expectEqual(@as(usize, 0), result.stderr.len);
+    try expectStdoutMatchesFixture(result.stdout, "tests/fixtures/expected-inspect/rom_basic.txt");
+}
+
+test "cli memory sources are rejected in every artifact mode" {
+    try buildCli();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const wasm_path = try std.fmt.allocPrint(std.testing.allocator, ".zig-cache/tmp/{s}/rom_basic.wasm", .{tmp.sub_path});
+    defer std.testing.allocator.free(wasm_path);
+    const zig_path = try std.fmt.allocPrint(std.testing.allocator, ".zig-cache/tmp/{s}/rom_basic.zig", .{tmp.sub_path});
+    defer std.testing.allocator.free(zig_path);
+
+    const rejection = "rom/ram are not yet supported in this mode";
+    const invocations = [_][]const []const u8{
+        &.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/rom_basic.circ", "-o", wasm_path },
+        &.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/rom_basic.circ", "--emit-zig", "-o", zig_path },
+        &.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/rom_basic.circ", "--preview" },
+        &.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/rom_basic.circ", "--truth-table" },
+        &.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/ram_basic.circ", "--sim" },
+    };
+    for (invocations) |argv| {
+        var result = try run(argv);
+        defer result.deinit(std.testing.allocator);
+        try std.testing.expectEqual(@as(i32, 1), exitCode(result.term));
+        try std.testing.expectEqual(@as(usize, 0), result.stdout.len);
+        try std.testing.expect(std.mem.indexOf(u8, result.stderr, rejection) != null);
+    }
+    try expectFileMissing(wasm_path);
+    try expectFileMissing(zig_path);
+}
+
 test "cli inspect error fixture exits 1 and matches golden stdout" {
     try buildCli();
     var result = try run(&.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/E001_undeclared.circ", "--inspect" });

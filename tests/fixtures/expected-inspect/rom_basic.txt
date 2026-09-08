@@ -1,0 +1,35 @@
+=== Parse Tree ===
+File [f0:1:1-4:1]
+Imports (0)
+Inputs (1)
+  Input pc [f0:1:1-1:12]
+Outputs (1)
+  Output out [f0:3:1-3:29]
+    NamedRef code.out [f0:3:20-3:28]
+Components (1)
+  Component type=rom instance=code width_args=[8, 4] [f0:2:1-2:30]
+    Port addr [f0:2:16-2:20]
+      NamedRef pc.out [f0:2:23-2:29]
+
+
+=== Resolved IR ===
+Module file_id=0
+Imports (0)
+Inputs (1)
+  id=0 name=pc component=0
+Outputs (1)
+  id=0 name=out driver=1.out
+Components (3)
+  id=0 name=pc kind=primitive:input_pin width=4
+  id=1 name=code kind=rom[W=8,A=4] width=8
+  id=2 name=out kind=primitive:output_pin width=8
+Connections (2)
+  0.out -> 1.addr
+  1.out -> 2.in
+
+
+=== Diagnostics ===
+
+
+=== Summary ===
+0 errors, 0 warnings

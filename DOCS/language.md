@@ -225,6 +225,45 @@ imports, write the import explicitly:
 import xor "<builtin>/xor.circ"
 ```
 
+### 3.5 Memories (declaration shape)
+
+`rom` and `ram` are built-in memory types. A memory is declared like a
+parametric sub-circuit instance: the type keyword, an instance name, exactly
+two instance-position width arguments `[W, A]` (data width and address
+width), and a port list:
+
+```
+input[4] pc
+rom code[8, 4](addr = pc.out)          // 16 words of 8 bits, read-only
+output[8] out(in = code.out)
+
+input[4] a
+input[8] d
+input we, clk
+ram data[8, 4](addr = a.out, din = d.out, we = we.out, clk = clk.out)
+output[8] q(in = data.out)
+```
+
+| Type  | Input ports                 | Output | Port widths                                  |
+| ----- | --------------------------- | ------ | -------------------------------------------- |
+| `rom` | `addr`                      | `out`  | `addr` is `A` wide; `out` is `W` wide        |
+| `ram` | `addr`, `din`, `we`, `clk`  | `out`  | `addr` is `A`, `din`/`out` are `W`, `we`/`clk` are 1 |
+
+`W` must be in `1..64` and `A` in `1..16` (`E018`); a declaration with any
+other number of width arguments, or with a width written after the keyword
+(`rom[8] m[8, 4]`), is `E017`. Inside a parametric sub-circuit the arguments
+may name introduced parameters (`ram m[W, A](...)`). Every listed input port is
+required (`E004`), ports are checked at their own widths (`E014`), and a
+`ram` breaks combinational loops while a `rom` does not (`E008`). `rom` and
+`ram` are reserved: an instance or input named `rom` is `E006`, and
+`import rom "..."` is `E011`.
+
+Memory contents never appear in source — they are loaded at runtime by the
+host (or by `--sim`). Compiling a memory-bearing source to an artifact is not
+yet supported; every artifact mode reports
+`rom/ram are not yet supported in this mode` and produces nothing, while
+`--inspect` and `--analyze` resolve the declaration in full.
+
 ---
 
 ## 4. Signals and Wiring

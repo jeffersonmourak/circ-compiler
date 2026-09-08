@@ -64,6 +64,17 @@ fn dumpComponent(writer: anytype, comp: anytype, depth: usize) anyerror!void {
     } else {
         try writer.writeAll("<anonymous> ");
     }
+    if (comp.width_args.len > 0) {
+        try writer.writeAll("width_args=[");
+        for (comp.width_args, 0..) |arg, idx| {
+            if (idx > 0) try writer.writeAll(", ");
+            switch (arg) {
+                .literal => |n| try writer.print("{d}", .{n}),
+                .parameter => |name| try writer.writeAll(name),
+            }
+        }
+        try writer.writeAll("] ");
+    }
     try writeSpan(writer, comp.span);
     try writer.writeByte('\n');
     for (comp.ports) |port| {
