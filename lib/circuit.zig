@@ -4,6 +4,11 @@ const transport = @import("transport.zig");
 
 const log = @import("log.zig");
 
+// Collect the sibling files' inline tests when this file is the test root.
+test {
+    _ = transport;
+}
+
 /// Compile-time switch to include benchmark counters on `Circuit`. The
 /// `build_options` module is supplied by `build.zig` per consumer: native and
 /// WASM builds wire it to `false`; the `zig build bench` runner wires it to
@@ -1918,11 +1923,13 @@ test "engine: width-2 slice from a width-4 source extracts bits [1..3)" {
     // Undefined source bits propagate undefined into the slice output at
     // the corresponding output positions.
     //   src value=0b0110, defined=0b1011 (bit 2 undef) → slice[1..3)
-    //   output value=(0b0110 >> 1) & 0b11 = 0b11 & 0b11 = 0b11
+    //   raw shift gives (0b0110 >> 1) & 0b11 = 0b11, but the pool
+    //   canonicalises `value & defined` on write (Pool.write), so the
+    //   committed value is 0b11 & 0b01 = 0b01
     //   output defined=(0b1011 >> 1) & 0b11 = 0b101 & 0b11 = 0b01
     try circuit.propagateEvent(input, BitVecState{ .value = 0b0110, .defined = 0b1011, .width = 4 });
     result = circuit.readState(out.state_handle);
-    try std.testing.expectEqual(@as(u64, 0b11), result.value);
+    try std.testing.expectEqual(@as(u64, 0b01), result.value);
     try std.testing.expectEqual(@as(u64, 0b01), result.defined);
 }
 

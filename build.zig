@@ -1573,6 +1573,13 @@ pub fn build(b: *std.Build) void {
     const run_topology_interpreter_tests = b.addRunArtifact(topology_interpreter_tests);
     test_step.dependOn(&run_topology_interpreter_tests.step);
 
+    // lib/circuit.zig is otherwise only ever a dependency module, and Zig
+    // collects tests only from a root module, so the engine's inline tests
+    // (and, via its relative imports, transport.zig's) need their own root.
+    const engine_tests = b.addTest(.{ .root_module = circuit_mod });
+    const run_engine_tests = b.addRunArtifact(engine_tests);
+    test_step.dependOn(&run_engine_tests.step);
+
     // The emit-zig backend behavioral smoke tests each spawn a nested
     // `zig build wasm` per fixture, which is dramatically slower than the rest
     // of the suite. They guard the experimental --emit-zig pipeline only;
