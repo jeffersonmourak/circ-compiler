@@ -1,0 +1,8 @@
+# A 16 x 8-bit ROM preloaded through the artifact's memBuffer/memLoad exports
+# (the `mem` preamble), then read by address. Word i holds i * 0x11, so the
+# byte read back at address n is nn in hex.
+mem code 00112233445566778899aabbccddeeff
+pc=0000 => out=00000000
+pc=0011 => out=00110011
+pc=1010 => out=10101010
+pc=1111 => out=11111111

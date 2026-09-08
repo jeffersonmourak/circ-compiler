@@ -29,6 +29,18 @@ const Step = struct {
     outputs: []Assignment,
 };
 
+/// A `mem <name> <hexbytes>` preamble line: the raw image loaded into the
+/// named root-level memory through memBuffer/memLoad right after init().
+const Preload = struct {
+    name: []const u8,
+    bytes: []u8,
+};
+
+const Spec = struct {
+    preloads: []Preload,
+    steps: []Step,
+};
+
 fn hasHardErrors(diags: []const diagnostics.Diagnostic) bool {
     for (diags) |d| {
         if (d.level == .err) return true;
@@ -75,19 +87,48 @@ fn parseSide(allocator: std.mem.Allocator, text: []const u8) ![]Assignment {
     return list.toOwnedSlice(allocator);
 }
 
-fn parseSteps(allocator: std.mem.Allocator, text: []const u8) ![]Step {
+/// An even-length hex string (no prefix, no separators) as raw image bytes.
+/// Empty means a zero-length image, which memLoad treats as a clear.
+fn parseHexImage(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
+    if (text.len % 2 != 0) return error.InvalidHexImage;
+    const bytes = try allocator.alloc(u8, text.len / 2);
+    for (bytes, 0..) |*byte, i| {
+        byte.* = std.fmt.parseInt(u8, text[2 * i .. 2 * i + 2], 16) catch return error.InvalidHexImage;
+    }
+    return bytes;
+}
+
+/// Spec grammar: `#` comments; `mem <name> [<hexbytes>]` preamble lines,
+/// which must precede the first vector; then one `<inputs> => <outputs>`
+/// vector per line. Vectors are applied sequentially against one instance.
+fn parseSpec(allocator: std.mem.Allocator, text: []const u8) !Spec {
+    var preloads: std.ArrayList(Preload) = .{};
     var steps: std.ArrayList(Step) = .{};
     var lines = std.mem.splitScalar(u8, text, '\n');
     while (lines.next()) |raw| {
         const line = std.mem.trim(u8, raw, " \t\r");
         if (line.len == 0 or line[0] == '#') continue;
+
+        var tokens = std.mem.tokenizeAny(u8, line, " \t");
+        const head = tokens.next() orelse continue;
+        if (std.mem.eql(u8, head, "mem")) {
+            if (steps.items.len != 0) return error.PreloadAfterVector;
+            const name = tokens.next() orelse return error.InvalidPreloadLine;
+            const hex = tokens.next() orelse "";
+            try preloads.append(allocator, .{ .name = name, .bytes = try parseHexImage(allocator, hex) });
+            continue;
+        }
+
         const arrow = std.mem.indexOf(u8, line, "=>") orelse return error.InvalidBehaviorLine;
         try steps.append(allocator, .{
             .inputs = try parseSide(allocator, std.mem.trim(u8, line[0..arrow], " \t")),
             .outputs = try parseSide(allocator, std.mem.trim(u8, line[arrow + 2 ..], " \t")),
         });
     }
-    return steps.toOwnedSlice(allocator);
+    return .{
+        .preloads = try preloads.toOwnedSlice(allocator),
+        .steps = try steps.toOwnedSlice(allocator),
+    };
 }
 
 fn pinId(mappings: []const serializer.PinMapping, name: []const u8) ?u32 {
@@ -215,7 +256,8 @@ fn runFixture(fixture: Fixture, allocator: std.mem.Allocator) !void {
     defer allocator.free(combined);
 
     const spec_text = try std.fs.cwd().readFileAlloc(allocator, fixture.spec_path, 4 * 1024 * 1024);
-    const steps = try parseSteps(allocator, spec_text);
+    const spec = try parseSpec(allocator, spec_text);
+    const steps = spec.steps;
 
     var script: std.ArrayList(u8) = .{};
     const w = script.writer(allocator);
@@ -239,6 +281,24 @@ fn runFixture(fixture: Fixture, allocator: std.mem.Allocator) !void {
         \\    const fmtState = (v, d, w) => { let s = ''; for (let b = w - 1; b >= 0; b--) { const m = 1n << BigInt(b); s += ((d & m) === 0n) ? '?' : (((v & m) === 0n) ? '0' : '1'); } return s; };
         \\
     );
+
+    // Preloads land right after init(), before the first vector, through the
+    // same memBuffer/memLoad path a host uses. A non-zero status is a failure.
+    for (spec.preloads) |preload| {
+        const id = pinId(topo.memory_ids, preload.name) orelse {
+            std.debug.print("Unknown memory '{s}' in fixture {s}\n", .{ preload.name, fixture.root_path });
+            return error.UnknownMemory;
+        };
+        try w.writeAll("    { const bytes = new Uint8Array([");
+        for (preload.bytes, 0..) |byte, i| {
+            if (i > 0) try w.writeAll(",");
+            try w.print("{d}", .{byte});
+        }
+        try w.print(
+            "]); const mp = instance.exports.memBuffer({d}); if (mp < 0) throw new Error('memBuffer failed'); new Uint8Array(instance.exports.memory.buffer).set(bytes, mp); const rc = instance.exports.memLoad({d}, bytes.length); if (rc !== 0) throw new Error('memLoad returned ' + rc); }}\n",
+            .{ id, id },
+        );
+    }
 
     var expected: std.ArrayList(u8) = .{};
     const ew = expected.writer(allocator);
@@ -348,7 +408,31 @@ const circuit_fixtures = [_]Fixture{
     .{ .root_path = "tests/fixtures/circuits/xnor_4bit_macro.circ", .spec_path = "tests/fixtures/expected-wasm/xnor_4bit_macro.txt" },
     .{ .root_path = "tests/fixtures/circuits/nor_8bit_macro.circ", .spec_path = "tests/fixtures/expected-wasm/nor_8bit_macro.txt" },
     .{ .root_path = "tests/fixtures/circuits/xor_8bit_macro.circ", .spec_path = "tests/fixtures/expected-wasm/xor_8bit_macro.txt" },
+    // Memories through the real artifact: rom_lookup preloads an image with
+    // the `mem` preamble and reads it back by address; ram_write_read pulses
+    // the clock as an ordinary pin and checks the edge rule end to end.
+    .{ .root_path = "tests/fixtures/circuits/rom_lookup.circ", .spec_path = "tests/fixtures/expected-wasm/rom_lookup.txt" },
+    .{ .root_path = "tests/fixtures/circuits/ram_write_read.circ", .spec_path = "tests/fixtures/expected-wasm/ram_write_read.txt" },
 };
+
+test "section_writer: mem preamble parsing" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const spec = try parseSpec(allocator, "# comment\nmem code 2a0b\nmem scratch\na=1 => q=0\n");
+    try std.testing.expectEqual(@as(usize, 2), spec.preloads.len);
+    try std.testing.expectEqualStrings("code", spec.preloads[0].name);
+    try std.testing.expectEqualSlices(u8, &.{ 0x2a, 0x0b }, spec.preloads[0].bytes);
+    try std.testing.expectEqual(@as(usize, 0), spec.preloads[1].bytes.len);
+    try std.testing.expectEqual(@as(usize, 1), spec.steps.len);
+
+    try std.testing.expectError(error.InvalidHexImage, parseSpec(allocator, "mem code abc\n"));
+    try std.testing.expectError(error.InvalidHexImage, parseSpec(allocator, "mem code zz\n"));
+    try std.testing.expectError(error.PreloadAfterVector, parseSpec(allocator, "a=1 => q=0\nmem code 00\n"));
+    try std.testing.expectError(error.InvalidPreloadLine, parseSpec(allocator, "mem\n"));
+    try std.testing.expectError(error.InvalidBehaviorLine, parseSpec(allocator, "a=1 q=0\n"));
+}
 
 const project_fixtures = [_]Fixture{
     .{ .root_path = "tests/fixtures/projects/half_adder/root.circ", .spec_path = "tests/fixtures/expected-wasm/projects/half_adder.txt" },

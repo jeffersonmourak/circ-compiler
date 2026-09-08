@@ -23,3 +23,5 @@ Use consistent fixture names by feature: `<feature>.circ` with paired outputs su
 Behavior fixtures in `tests/fixtures/expected-wasm/*.txt` use:
 
 `<inputs as space-separated pin=state> => <outputs as space-separated pin=state>`
+
+In the multi-bit harness (`tests/e2e/section_writer_fixtures_test.zig`) a state is a per-bit string over `0`/`1`/`?`, MSB first, one character per pin bit (`1010` is 10 on a 4-bit pin; `10?1` leaves bit 1 undefined). Vectors are applied in order against one instance, so state carries from row to row. A spec may open with `mem <name> <hexbytes>` preamble lines: each loads a raw little-endian image (even-length hex, no prefix; empty means clear) into the named root-level memory through the artifact's `memBuffer`/`memLoad` exports right after `init()`, before the first vector.
