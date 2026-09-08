@@ -967,6 +967,71 @@ pub const Circuit = struct {
         try self.propagate();
     }
 
+    // ------------------------------------------------------------------
+    // Host memory hooks. Called between drives, when the event queue is
+    // empty (true after every propagateEvent/propagate return). Each
+    // mutator ends in memoryRefresh so `out` follows the cells; the
+    // planes are reached only through these and memoryCells.
+    // ------------------------------------------------------------------
+
+    fn memoryPayload(comp: *Component) MemoryError!*@TypeOf(comp.kind.memory) {
+        return switch (comp.kind) {
+            .memory => |*m| m,
+            else => error.NotAMemory,
+        };
+    }
+
+    /// Re-present `out` after the cells changed. Guarded by the same
+    /// predicate as Phase 1's dedup: an unconditional propagateEvent would
+    /// advance current_time even when nothing changed (its short-circuit),
+    /// and a looser compare would enqueue an event that propagate() dedups
+    /// only after current_time was already moved.
+    fn memoryRefresh(self: *Circuit, comp: *Component) !void {
+        std.debug.assert(self.event_queue.peek() == null);
+        const next = memoryReadOut(self, comp);
+        if (!self.readState(comp.state_handle).equals(next)) try self.propagateEvent(comp, next);
+    }
+
+    /// Write one word, canonicalised to the data width like Pool.write.
+    pub fn memoryWriteWord(self: *Circuit, comp: *Component, addr: usize, state: BitVecState) !void {
+        const m = try memoryPayload(comp);
+        if (addr >= m.cells.wordCount()) return error.AddressOutOfRange;
+        const mask = widthMask(comp.state_handle.tier);
+        m.cells.defined[addr] = state.defined & mask;
+        m.cells.values[addr] = state.value & state.defined & mask;
+        try self.memoryRefresh(comp);
+    }
+
+    /// Every cell becomes undefined.
+    pub fn memoryClear(self: *Circuit, comp: *Component) !void {
+        const m = try memoryPayload(comp);
+        @memset(m.cells.values, 0);
+        @memset(m.cells.defined, 0);
+        try self.memoryRefresh(comp);
+    }
+
+    /// Replace every cell from a raw image (see memimage). A rejected image
+    /// leaves the cells and `out` untouched. Returns the words loaded.
+    pub fn memoryLoadImage(self: *Circuit, comp: *Component, bytes: []const u8) !usize {
+        const m = try memoryPayload(comp);
+        const words = try memimage.decode(bytes, comp.state_handle.tier, m.cells.addr_width, m.cells.values, m.cells.defined);
+        try self.memoryRefresh(comp);
+        return words;
+    }
+
+    /// Export every cell as a raw image (`value & defined`). `buf` must hold
+    /// a full image; returns the bytes written.
+    pub fn memoryStoreImage(self: *const Circuit, comp: *const Component, buf: []u8) MemoryError!usize {
+        _ = self;
+        const m = switch (comp.kind) {
+            .memory => |*m| m,
+            else => return error.NotAMemory,
+        };
+        const width = comp.state_handle.tier;
+        if (buf.len < memimage.maxImageSize(width, m.cells.addr_width)) return error.BufferTooSmall;
+        return memimage.encode(m.cells.values, m.cells.defined, width, buf);
+    }
+
     pub fn printState(self: *Circuit) void {
         for (self.nodes.items) |node| {
             const s = self.readState(node.state_handle);
@@ -2522,4 +2587,169 @@ test "ram: width-agnostic we/clk bit test" {
     try h.drive(h.we, 0b0001, 0xF);
     try h.pulseClock();
     try std.testing.expect(h.cell(0).equals(BitVecState.fromRaw(0x11, 0xFF, 8)));
+}
+
+// ----------------------------------------------------------------------------
+// Host memory hooks.
+// ----------------------------------------------------------------------------
+
+const RomHarness = struct {
+    circuit: Circuit,
+    addr: *Component,
+    rom: *Component,
+    out: *Component,
+
+    /// A rom [8, 4] fed by a width-4 input pin and driving an output pin.
+    fn init() !RomHarness {
+        var circuit = try Circuit.init();
+        errdefer circuit.deinit();
+        const addr = try circuit.createComponent(.{ .input_pin_gate = .{} }, 4);
+        const rom = try circuit.createComponent(romKind(4), 8);
+        const out = try circuit.createComponent(.{ .output_pin = .{} }, 8);
+        try circuit.connect(addr.port(OUT_PORT_NAME), rom.port(ADDR_PORT_NAME));
+        try circuit.connect(rom.port(OUT_PORT_NAME), out.port(OUTPUT_PIN_IN_PORT_NAME));
+        return .{ .circuit = circuit, .addr = addr, .rom = rom, .out = out };
+    }
+
+    fn deinit(self: *RomHarness) void {
+        self.circuit.deinit();
+    }
+
+    fn present(self: *RomHarness, address: u64) !void {
+        try self.circuit.propagateEvent(self.addr, BitVecState.fromRaw(address, 0xF, 4));
+    }
+
+    fn outState(self: *const RomHarness) BitVecState {
+        return self.circuit.readState(self.out.state_handle);
+    }
+};
+
+// Bytes 0..15 as a full [8, 4] image.
+const identity_image = blk: {
+    var image: [16]u8 = undefined;
+    for (&image, 0..) |*byte, i| byte.* = @intCast(i);
+    break :blk image;
+};
+
+test "memory: host write to presented address resyncs out" {
+    var h = try RomHarness.init();
+    defer h.deinit();
+    try h.present(2);
+    try std.testing.expect(h.outState().equals(BitVecState.undefined_(8)));
+
+    const before = h.circuit.current_time;
+    try h.circuit.memoryWriteWord(h.rom, 2, BitVecState.fromRaw(0x5A, 0xFF, 8));
+    try std.testing.expect(h.circuit.readState(h.rom.state_handle).equals(BitVecState.fromRaw(0x5A, 0xFF, 8)));
+    try std.testing.expect(h.outState().equals(BitVecState.fromRaw(0x5A, 0xFF, 8)));
+    try std.testing.expectEqual(before + PROPAGATION_DELAY + WIRE_PROPAGATION_DELAY, h.circuit.current_time);
+}
+
+test "memory: no-op refresh does not bump current_time" {
+    var h = try RomHarness.init();
+    defer h.deinit();
+    _ = try h.circuit.memoryLoadImage(h.rom, &identity_image);
+    try h.present(2);
+    const before = h.circuit.current_time;
+
+    // A cell that is not presented.
+    try h.circuit.memoryWriteWord(h.rom, 7, BitVecState.fromRaw(0x77, 0xFF, 8));
+    try std.testing.expectEqual(before, h.circuit.current_time);
+    // An image whose presented word is unchanged.
+    _ = try h.circuit.memoryLoadImage(h.rom, &identity_image);
+    try std.testing.expectEqual(before, h.circuit.current_time);
+    // The presented cell rewritten with its current value.
+    try h.circuit.memoryWriteWord(h.rom, 2, BitVecState.fromRaw(2, 0xFF, 8));
+    try std.testing.expectEqual(before, h.circuit.current_time);
+
+    try std.testing.expect(h.circuit.event_queue.peek() == null);
+    try std.testing.expect(h.outState().equals(BitVecState.fromRaw(2, 0xFF, 8)));
+}
+
+test "memory: load image replaces all cells and resyncs" {
+    var h = try RomHarness.init();
+    defer h.deinit();
+    try std.testing.expectEqual(@as(usize, 16), try h.circuit.memoryLoadImage(h.rom, &identity_image));
+    try h.present(9);
+    try std.testing.expect(h.outState().equals(BitVecState.fromRaw(9, 0xFF, 8)));
+
+    const before = h.circuit.current_time;
+    try std.testing.expectEqual(@as(usize, 4), try h.circuit.memoryLoadImage(h.rom, identity_image[0..4]));
+    const cells = memoryCells(h.rom).?;
+    for (cells.defined[0..4]) |defined| try std.testing.expectEqual(@as(u64, 0xFF), defined);
+    for (cells.defined[4..]) |defined| try std.testing.expectEqual(@as(u64, 0), defined);
+    try std.testing.expect(h.outState().equals(BitVecState.undefined_(8)));
+    try std.testing.expectEqual(before + PROPAGATION_DELAY + WIRE_PROPAGATION_DELAY, h.circuit.current_time);
+
+    // An empty image is a clear.
+    _ = try h.circuit.memoryLoadImage(h.rom, &identity_image);
+    try std.testing.expectEqual(@as(usize, 0), try h.circuit.memoryLoadImage(h.rom, &.{}));
+    for (cells.defined) |defined| try std.testing.expectEqual(@as(u64, 0), defined);
+}
+
+test "memory: failed load leaves cells untouched" {
+    var h = try RomHarness.init();
+    defer h.deinit();
+    _ = try h.circuit.memoryLoadImage(h.rom, &identity_image);
+    try h.present(3);
+    const before = h.circuit.current_time;
+
+    const oversized = [_]u8{0xAA} ** 17;
+    try std.testing.expectError(error.TooManyWords, h.circuit.memoryLoadImage(h.rom, &oversized));
+    const cells = memoryCells(h.rom).?;
+    for (cells.values, cells.defined, 0..) |value, defined, i| {
+        try std.testing.expectEqual(@as(u64, @intCast(i)), value);
+        try std.testing.expectEqual(@as(u64, 0xFF), defined);
+    }
+    try std.testing.expectEqual(before, h.circuit.current_time);
+    try std.testing.expect(h.outState().equals(BitVecState.fromRaw(3, 0xFF, 8)));
+}
+
+test "memory: store writes value & defined" {
+    var h = try RomHarness.init();
+    defer h.deinit();
+    try h.circuit.memoryWriteWord(h.rom, 1, BitVecState.fromRaw(0x5A, 0xFF, 8));
+    try h.circuit.memoryWriteWord(h.rom, 2, BitVecState.fromRaw(0xFF, 0x0F, 8));
+
+    var buf: [16]u8 = undefined;
+    try std.testing.expectEqual(@as(usize, 16), try h.circuit.memoryStoreImage(h.rom, &buf));
+    try std.testing.expectEqual(@as(u8, 0x00), buf[0]);
+    try std.testing.expectEqual(@as(u8, 0x5A), buf[1]);
+    try std.testing.expectEqual(@as(u8, 0x0F), buf[2]);
+
+    var short: [15]u8 = undefined;
+    try std.testing.expectError(error.BufferTooSmall, h.circuit.memoryStoreImage(h.rom, &short));
+}
+
+test "memory: clear undefines every cell" {
+    var h = try RomHarness.init();
+    defer h.deinit();
+    _ = try h.circuit.memoryLoadImage(h.rom, &identity_image);
+    try h.present(9);
+    const before = h.circuit.current_time;
+
+    try h.circuit.memoryClear(h.rom);
+    const cells = memoryCells(h.rom).?;
+    for (cells.values, cells.defined) |value, defined| {
+        try std.testing.expectEqual(@as(u64, 0), value);
+        try std.testing.expectEqual(@as(u64, 0), defined);
+    }
+    try std.testing.expect(h.outState().equals(BitVecState.undefined_(8)));
+    try std.testing.expectEqual(before + PROPAGATION_DELAY + WIRE_PROPAGATION_DELAY, h.circuit.current_time);
+}
+
+test "memory: hooks reject non-memory and out-of-range" {
+    var h = try RomHarness.init();
+    defer h.deinit();
+    const wire = try h.circuit.createComponent(.{ .wire = .{} }, 8);
+    var buf: [16]u8 = undefined;
+
+    try std.testing.expectError(error.NotAMemory, h.circuit.memoryWriteWord(wire, 0, BitVecState.fromRaw(1, 0xFF, 8)));
+    try std.testing.expectError(error.NotAMemory, h.circuit.memoryClear(wire));
+    try std.testing.expectError(error.NotAMemory, h.circuit.memoryLoadImage(wire, &identity_image));
+    try std.testing.expectError(error.NotAMemory, h.circuit.memoryStoreImage(wire, &buf));
+
+    _ = try h.circuit.memoryLoadImage(h.rom, &identity_image);
+    try std.testing.expectError(error.AddressOutOfRange, h.circuit.memoryWriteWord(h.rom, 16, BitVecState.fromRaw(1, 0xFF, 8)));
+    const cells = memoryCells(h.rom).?;
+    for (cells.values, 0..) |value, i| try std.testing.expectEqual(@as(u64, @intCast(i)), value);
 }

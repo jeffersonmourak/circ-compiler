@@ -19,6 +19,7 @@ const engine_files = [_][]const u8{
     "memory.zig",
     "transport.zig",
     "log.zig",
+    "memimage.zig",
 };
 
 fn copyTextFile(
