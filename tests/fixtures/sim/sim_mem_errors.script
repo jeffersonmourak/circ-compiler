@@ -1,0 +1,10 @@
+# Every memory error code, from real source (sim_ram_write_read.circ).
+load nosuch tests/fixtures/mem/rom_pc_walk.bin
+load data tests/fixtures/mem/does_not_exist.bin
+load data tests/fixtures/mem/too_many_words.bin
+peek data 16
+poke data 0 0x1ff
+set data 1
+get data
+load data
+quit

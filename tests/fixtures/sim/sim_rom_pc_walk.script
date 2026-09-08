@@ -1,0 +1,26 @@
+# The rom `code` is preloaded from tests/fixtures/mem/rom_pc_walk.bin
+# (4 words: 10 21 32 43) the way `--mem=code=...` would.
+mems
+# Walk the program counter through the loaded words and past them.
+set pc 0
+get instr
+set pc 1
+get instr
+set pc 3
+get instr
+set pc 4
+get instr
+mem code 0 6
+# Any undefined address bit makes the whole read undefined.
+set pc 0 0
+get instr
+set pc 0
+# A mid-session load replaces every cell and resyncs `instr` without a `set`.
+load code tests/fixtures/mem/rom_pc_walk_alt.bin
+get instr
+peek code 3
+# `reset` restores the CLI preload and drops the mid-session load.
+reset
+set pc 0
+get instr
+quit

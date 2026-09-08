@@ -297,6 +297,37 @@ test "cli memory sources compile in every artifact mode except emit-zig" {
     }
 }
 
+// The three `--mem` cases below are the only coverage of main.zig's preload
+// branch through a real process. stdin is ignored by `run`, so serve() sees
+// EOF right after the handshake and the success case's stdout is exactly the
+// `ready` block (no `ok bye`).
+test "sim --mem preload prints the unchanged handshake" {
+    try buildCli();
+    var result = try run(&.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/sim_rom_pc_walk.circ", "--sim", "--mem=code=tests/fixtures/mem/rom_pc_walk.bin" });
+    defer result.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(i32, 0), exitCode(result.term));
+    try std.testing.expectEqualStrings("ready proto=1 pins=2 warnings=0\npin pc in 4\npin instr out 8\n", result.stdout);
+    try std.testing.expectEqual(@as(usize, 0), result.stderr.len);
+}
+
+test "sim --mem unknown memory exits 2 before the handshake" {
+    try buildCli();
+    var result = try run(&.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/sim_rom_pc_walk.circ", "--sim", "--mem=nosuch=tests/fixtures/mem/rom_pc_walk.bin" });
+    defer result.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(i32, 2), exitCode(result.term));
+    try std.testing.expectEqual(@as(usize, 0), result.stdout.len);
+    try std.testing.expect(std.mem.indexOf(u8, result.stderr, "no memory named 'nosuch'") != null);
+}
+
+test "sim --mem missing image exits 2 before the handshake" {
+    try buildCli();
+    var result = try run(&.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/sim_rom_pc_walk.circ", "--sim", "--mem=code=tests/fixtures/mem/does_not_exist.bin" });
+    defer result.deinit(std.testing.allocator);
+    try std.testing.expectEqual(@as(i32, 2), exitCode(result.term));
+    try std.testing.expectEqual(@as(usize, 0), result.stdout.len);
+    try std.testing.expect(std.mem.indexOf(u8, result.stderr, "does_not_exist.bin") != null);
+}
+
 test "cli inspect error fixture exits 1 and matches golden stdout" {
     try buildCli();
     var result = try run(&.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/E001_undeclared.circ", "--inspect" });

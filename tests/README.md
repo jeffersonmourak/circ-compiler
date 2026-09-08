@@ -13,6 +13,9 @@ Fixture directories are organized by artifact kind:
 - `tests/fixtures/expected-zig/`: expected emitted Zig output.
 - `tests/fixtures/expected-wasm/`: expected WASM behavior fixtures.
 - `tests/fixtures/expected-diagnostics/`: expected diagnostic snapshots.
+- `tests/fixtures/sim/`: `--sim` protocol scripts (one command per line, `#` comments allowed).
+- `tests/fixtures/expected-sim/`: the full `--sim` transcript each script produces, from `ready` to `ok bye`.
+- `tests/fixtures/mem/`: raw little-endian memory images the sim scripts and the `--mem` CLI tests load.
 
 When adding a test, place the input circuit in `tests/fixtures/circuits/` and store each expected artifact in its matching `expected-*` directory. Test code should reference fixtures by stable names so updates stay reviewable.
 
@@ -25,3 +28,11 @@ Behavior fixtures in `tests/fixtures/expected-wasm/*.txt` use:
 `<inputs as space-separated pin=state> => <outputs as space-separated pin=state>`
 
 In the multi-bit harness (`tests/e2e/section_writer_fixtures_test.zig`) a state is a per-bit string over `0`/`1`/`?`, MSB first, one character per pin bit (`1010` is 10 on a 4-bit pin; `10?1` leaves bit 1 undefined). Vectors are applied in order against one instance, so state carries from row to row. A spec may open with `mem <name> <hexbytes>` preamble lines: each loads a raw little-endian image (even-length hex, no prefix; empty means clear) into the named root-level memory through the artifact's `memBuffer`/`memLoad` exports right after `init()`, before the first vector.
+
+The `--sim` family (`tests/sim/golden_test.zig`) feeds `tests/fixtures/sim/<name>.script` to `sim_loop.serve` in-process — the circuit built through the same project pipeline `--sim` uses, with any fixture preload applied the way `--mem=<name>=<path>` is — and compares the whole transcript against `tests/fixtures/expected-sim/<name>.txt` (see `DOCS/sim-protocol.md` for the reply grammar). `UPDATE_GOLDENS=1` writes whatever the loop prints, so read every regenerated line before committing it. Scripts run from the repo root with no temp dir: `load` paths are repo-relative and a script must never `save`. The raw images are reproducible from any `sh`:
+
+```sh
+printf '\020\041\062\103' > tests/fixtures/mem/rom_pc_walk.bin      # 10 21 32 43
+printf '\252\273'         > tests/fixtures/mem/rom_pc_walk_alt.bin  # aa bb
+head -c 17 /dev/zero      > tests/fixtures/mem/too_many_words.bin   # one word past a 16-cell rom
+```

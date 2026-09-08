@@ -1541,6 +1541,33 @@ pub fn build(b: *std.Build) void {
     run_serializer_fixtures_tests.step.dependOn(&install_runtime.step);
     test_step.dependOn(&run_serializer_fixtures_tests.step);
 
+    const sim_golden_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/sim/golden_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    sim_golden_tests_mod.addImport("scan_imports", resolver_scan_imports_mod);
+    sim_golden_tests_mod.addImport("import_cycle", resolver_import_cycle_mod);
+    sim_golden_tests_mod.addImport("resolve_bodies", resolver_resolve_bodies_mod);
+    sim_golden_tests_mod.addImport("validator_run_project", validator_run_project_mod);
+    sim_golden_tests_mod.addImport("diagnostics", validator_diagnostics_mod);
+    sim_golden_tests_mod.addImport("full_serializer", topology_full_serializer_mod);
+    sim_golden_tests_mod.addImport("sim_loop", sim_loop_mod);
+    sim_golden_tests_mod.addImport("golden", b.createModule(.{
+        .root_source_file = b.path("tests/helpers/golden.zig"),
+        .target = target,
+        .optimize = optimize,
+    }));
+    const sim_golden_tests = b.addTest(.{
+        .root_module = sim_golden_tests_mod,
+    });
+    sim_golden_tests.addIncludePath(b.path("."));
+    sim_golden_tests.addIncludePath(b.path("./lib"));
+    linkParserArchive(b, sim_golden_tests, build_archive_cmd);
+    sim_golden_tests.linkLibC();
+    const run_sim_golden_tests = b.addRunArtifact(sim_golden_tests);
+    test_step.dependOn(&run_sim_golden_tests.step);
+
     const cli_e2e_options = b.addOptions();
     cli_e2e_options.addOption([]const u8, "circ_compile_path", b.getInstallPath(.bin, "circ-compile"));
     const cli_e2e_tests_mod = b.createModule(.{

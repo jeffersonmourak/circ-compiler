@@ -1,0 +1,9 @@
+ready proto=1 pins=3 warnings=0
+pin a in 1
+pin b in 1
+pin out out 1
+mems 0
+ok
+ok
+ok 0x1 0x1
+ok bye
