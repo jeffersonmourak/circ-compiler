@@ -185,7 +185,35 @@ fn recalculateAndReschedule(
                 .width = width,
             };
         },
-        .memory => {
+        .memory => |*m| {
+            if (m.mode == .ram) {
+                // Edge detection runs in Phase 2, after every same-timestamp
+                // event has been committed, and may run several times per
+                // step (once per changed upstream). `prev_clk` is stored
+                // before acting so the second call sees prev == now and
+                // cannot fire again; updating it on every recalc also keeps
+                // a `we`/`din` change while clk is high from ever writing.
+                const now = if (m.clk) |c| circuit.readState(c.state_handle) else BitVecState.undefined_(1);
+                const rising = bit0High(now) and bit0Low(m.prev_clk);
+                m.prev_clk = now;
+                if (rising) {
+                    const we = if (m.we) |w| circuit.readState(w.state_handle) else BitVecState.undefined_(1);
+                    if (bit0High(we)) {
+                        if (m.addr) |a| {
+                            const addr_state = circuit.readState(a.state_handle);
+                            const addr_mask = widthMask(m.cells.addr_width);
+                            if ((addr_state.defined & addr_mask) == addr_mask) {
+                                const index: usize = @intCast(addr_state.value & addr_mask);
+                                const d = if (m.din) |x| circuit.readState(x.state_handle) else BitVecState.undefined_(width);
+                                const data_mask = widthMask(width);
+                                // Partial-X din is stored as-is, canonical like Pool.write.
+                                m.cells.defined[index] = d.defined & data_mask;
+                                m.cells.values[index] = d.value & d.defined & data_mask;
+                            }
+                        }
+                    }
+                }
+            }
             calculated_state = memoryReadOut(circuit, component);
         },
     }
@@ -385,6 +413,17 @@ fn widthMask(width: u8) u64 {
     std.debug.assert(width >= 1 and width <= MAX_WIDTH);
     if (width == 64) return std.math.maxInt(u64);
     return (@as(u64, 1) << @as(u6, @intCast(width))) - 1;
+}
+
+/// Bit-0 level tests for control signals (`we`, `clk`). Width-agnostic on
+/// purpose: `isHigh`/`isLow` assert `width == 1`, and a hand-built topology
+/// may drive a control port from a wider signal.
+fn bit0High(s: BitVecState) bool {
+    return (s.defined & 1) != 0 and (s.value & 1) != 0;
+}
+
+fn bit0Low(s: BitVecState) bool {
+    return (s.defined & 1) != 0 and (s.value & 1) == 0;
 }
 
 pub const Timestamp = u64;
@@ -2290,4 +2329,197 @@ test "memory: delay class is gate delay" {
     try circuit.propagateEvent(addr, BitVecState.fromRaw(1, 0x3, 2));
     try std.testing.expectEqual(@as(Timestamp, 2 * PROPAGATION_DELAY), circuit.current_time);
     try std.testing.expect(circuit.readState(rom.state_handle).equals(BitVecState.fromRaw(1, 0xF, 4)));
+}
+
+// ----------------------------------------------------------------------------
+// RAM rising-edge write.
+// ----------------------------------------------------------------------------
+
+const RamHarness = struct {
+    circuit: Circuit,
+    addr: *Component,
+    din: *Component,
+    we: *Component,
+    clk: *Component,
+    ram: *Component,
+
+    /// A ram [W, A] with one input pin per port; `we_width` lets a test
+    /// drive the control port from a wider signal.
+    fn init(data_width: u8, addr_width: u8, we_width: u8) !RamHarness {
+        var circuit = try Circuit.init();
+        errdefer circuit.deinit();
+        const addr = try circuit.createComponent(.{ .input_pin_gate = .{} }, addr_width);
+        const din = try circuit.createComponent(.{ .input_pin_gate = .{} }, data_width);
+        const we = try circuit.createComponent(.{ .input_pin_gate = .{} }, we_width);
+        const clk = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+        const ram = try circuit.createComponent(ramKind(addr_width), data_width);
+        try circuit.connect(addr.port(OUT_PORT_NAME), ram.port(ADDR_PORT_NAME));
+        try circuit.connect(din.port(OUT_PORT_NAME), ram.port(DIN_PORT_NAME));
+        try circuit.connect(we.port(OUT_PORT_NAME), ram.port(WE_PORT_NAME));
+        try circuit.connect(clk.port(OUT_PORT_NAME), ram.port(CLK_PORT_NAME));
+        return .{ .circuit = circuit, .addr = addr, .din = din, .we = we, .clk = clk, .ram = ram };
+    }
+
+    fn deinit(self: *RamHarness) void {
+        self.circuit.deinit();
+    }
+
+    fn drive(self: *RamHarness, pin: *Component, value: u64, defined: u64) !void {
+        try self.circuit.propagateEvent(pin, BitVecState.fromRaw(value, defined, pin.state_handle.tier));
+    }
+
+    fn pulseClock(self: *RamHarness) !void {
+        try self.drive(self.clk, 0, 1);
+        try self.drive(self.clk, 1, 1);
+    }
+
+    fn cell(self: *const RamHarness, index: usize) BitVecState {
+        const cells = memoryCells(self.ram).?;
+        return .{ .value = cells.values[index], .defined = cells.defined[index], .width = self.ram.state_handle.tier };
+    }
+
+    fn expectAllUndefined(self: *const RamHarness) !void {
+        for (memoryCells(self.ram).?.defined) |defined| try std.testing.expectEqual(@as(u64, 0), defined);
+    }
+};
+
+test "ram: writes only on defined-low to defined-high" {
+    var h = try RamHarness.init(8, 2, 1);
+    defer h.deinit();
+    try h.drive(h.we, 1, 1);
+    try h.drive(h.addr, 1, 0b11);
+    try h.drive(h.din, 0xAB, 0xFF);
+
+    // clk undefined -> high is not an edge.
+    try h.drive(h.clk, 1, 1);
+    try h.expectAllUndefined();
+
+    // A defined low -> high transition commits the write.
+    try h.pulseClock();
+    try std.testing.expect(h.cell(1).equals(BitVecState.fromRaw(0xAB, 0xFF, 8)));
+    try std.testing.expect(h.circuit.readState(h.ram.state_handle).equals(BitVecState.fromRaw(0xAB, 0xFF, 8)));
+}
+
+test "ram: requires we high and fully defined addr" {
+    var h = try RamHarness.init(8, 2, 1);
+    defer h.deinit();
+    try h.drive(h.addr, 1, 0b11);
+    try h.drive(h.din, 0xAB, 0xFF);
+
+    try h.drive(h.we, 0, 1);
+    try h.pulseClock();
+    try h.expectAllUndefined();
+
+    try h.drive(h.we, 0, 0);
+    try h.pulseClock();
+    try h.expectAllUndefined();
+
+    try h.drive(h.we, 1, 1);
+    try h.drive(h.addr, 1, 0b01);
+    try h.pulseClock();
+    try h.expectAllUndefined();
+}
+
+test "ram: same-step din is captured" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    // One input drives both clk and din, so the ram is recalculated twice
+    // in the step where x rises and the din commit is same-timestamp.
+    const x = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const we = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const addr = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const ram = try circuit.createComponent(ramKind(1), 1);
+    try circuit.connect(x.port(OUT_PORT_NAME), ram.port(CLK_PORT_NAME));
+    try circuit.connect(x.port(OUT_PORT_NAME), ram.port(DIN_PORT_NAME));
+    try circuit.connect(we.port(OUT_PORT_NAME), ram.port(WE_PORT_NAME));
+    try circuit.connect(addr.port(OUT_PORT_NAME), ram.port(ADDR_PORT_NAME));
+
+    try circuit.propagateEvent(we, BitVecState.fromRaw(1, 1, 1));
+    try circuit.propagateEvent(addr, BitVecState.fromRaw(0, 1, 1));
+    try circuit.propagateEvent(x, BitVecState.fromRaw(0, 1, 1));
+    try std.testing.expectEqual(@as(u64, 0), memoryCells(ram).?.defined[0]);
+
+    try circuit.propagateEvent(x, BitVecState.fromRaw(1, 1, 1));
+    try std.testing.expectEqual(@as(u64, 1), memoryCells(ram).?.values[0]);
+    try std.testing.expectEqual(@as(u64, 1), memoryCells(ram).?.defined[0]);
+}
+
+test "ram: no double fire when clk and din change together" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    const x = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const we = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const addr = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const ram = try circuit.createComponent(ramKind(1), 1);
+    try circuit.connect(x.port(OUT_PORT_NAME), ram.port(CLK_PORT_NAME));
+    try circuit.connect(x.port(OUT_PORT_NAME), ram.port(DIN_PORT_NAME));
+    try circuit.connect(we.port(OUT_PORT_NAME), ram.port(WE_PORT_NAME));
+    try circuit.connect(addr.port(OUT_PORT_NAME), ram.port(ADDR_PORT_NAME));
+
+    try circuit.propagateEvent(we, BitVecState.fromRaw(1, 1, 1));
+    try circuit.propagateEvent(addr, BitVecState.fromRaw(0, 1, 1));
+    try circuit.propagateEvent(x, BitVecState.fromRaw(0, 1, 1));
+    try circuit.propagateEvent(x, BitVecState.fromRaw(1, 1, 1));
+
+    // The first of the two recalcs consumed the edge; prev_clk already
+    // equals the committed clk level.
+    try std.testing.expect(ram.kind.memory.prev_clk.equals(circuit.readState(x.state_handle)));
+    try std.testing.expectEqual(@as(u64, 1), memoryCells(ram).?.values[0]);
+
+    // Every later recalc while clk stays high sees prev == now.
+    try circuit.propagateEvent(we, BitVecState.fromRaw(0, 1, 1));
+    try circuit.propagateEvent(we, BitVecState.fromRaw(1, 1, 1));
+    try std.testing.expectEqual(@as(u64, 1), memoryCells(ram).?.values[0]);
+    try std.testing.expectEqual(@as(u64, 1), memoryCells(ram).?.defined[0]);
+    try std.testing.expectEqual(@as(u64, 0), memoryCells(ram).?.defined[1]);
+}
+
+test "ram: level changes while clk high do not write" {
+    var h = try RamHarness.init(8, 2, 1);
+    defer h.deinit();
+    try h.drive(h.addr, 2, 0b11);
+    try h.drive(h.din, 0x5A, 0xFF);
+
+    try h.drive(h.we, 0, 1);
+    try h.pulseClock();
+    try h.expectAllUndefined();
+
+    // we rises while clk is already high: no edge, no write.
+    try h.drive(h.we, 1, 1);
+    try h.expectAllUndefined();
+
+    try h.pulseClock();
+    try std.testing.expect(h.cell(2).equals(BitVecState.fromRaw(0x5A, 0xFF, 8)));
+}
+
+test "ram: partial-X din stored as-is" {
+    var h = try RamHarness.init(8, 2, 1);
+    defer h.deinit();
+    try h.drive(h.we, 1, 1);
+    try h.drive(h.addr, 3, 0b11);
+    try h.drive(h.din, 0b1010, 0b1111_0000);
+    try h.pulseClock();
+
+    const cells = memoryCells(h.ram).?;
+    try std.testing.expectEqual(@as(u64, 0xF0), cells.defined[3]);
+    try std.testing.expectEqual(@as(u64, 0x00), cells.values[3]);
+    try std.testing.expect(h.circuit.readState(h.ram.state_handle).equals(BitVecState.fromRaw(0x00, 0xF0, 8)));
+}
+
+test "ram: width-agnostic we/clk bit test" {
+    var h = try RamHarness.init(8, 2, 4);
+    defer h.deinit();
+    try h.drive(h.addr, 0, 0b11);
+    try h.drive(h.din, 0x11, 0xFF);
+
+    // Bit 0 of a width-4 we decides; the upper bits are ignored.
+    try h.drive(h.we, 0b1110, 0xF);
+    try h.pulseClock();
+    try h.expectAllUndefined();
+
+    try h.drive(h.we, 0b0001, 0xF);
+    try h.pulseClock();
+    try std.testing.expect(h.cell(0).equals(BitVecState.fromRaw(0x11, 0xFF, 8)));
 }
