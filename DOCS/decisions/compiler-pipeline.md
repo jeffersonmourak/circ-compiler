@@ -26,7 +26,7 @@
 
 ### Pre-built runtime WASM
 
-**Decision.** The runtime (simulation engine, WASM entry point with `topology_alloc`, `init`, `run`, `setPin`, `getOutputValue`, `getOutputDefined` exports) is compiled to `wasm32-freestanding` exactly once, at `zig build circ-compile` time, and embedded in the CLI binary via `@embedFile`.
+**Decision.** The runtime (simulation engine, WASM entry point with `topology_alloc`, `init`, `run`, `setPin`, `getOutputValue`, `getOutputDefined` exports — extended additively in v03 with the memory export family, see [runtime-api.md](runtime-api.md) `## Native memories`) is compiled to `wasm32-freestanding` exactly once, at `zig build circ-compile` time, and embedded in the CLI binary via `@embedFile`.
 
 **Rationale.** The CLI is a single self-contained binary — no install prefix, no runtime path lookup, no version drift. Reproducibility is built in: the same CLI binary always embeds the same runtime version. Concurrent `circ-compile` invocations are safe by construction — there is no shared mutable filesystem state.
 

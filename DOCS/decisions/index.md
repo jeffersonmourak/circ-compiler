@@ -22,6 +22,7 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - Pull-based, no `onStateChange` callback
 - Topology section copied into linear memory at startup
 - Deliberately omitted: `deinit`, `reset`, `stop`, `getStateSnapshot`, `getTopology`, `getPendingEvents`, `getFileInfo`, `freeBuffer`
+- Native memories (engine kind + mode, cell planes, raw image format, replace-all load, the eight memory exports, topology v03 records, `--sim` preloads and verbs, tooling policy, `--inspect`)
 
 ### [language.md](language.md)
 - Sub-circuits emit a flat topology binary at serialize time
@@ -30,6 +31,7 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - Import statement syntax (`import name "path"`)
 - LEDs vs `output` declarations
 - Multi-bit wires (17 decisions: width syntax, bit numbering, slice/concat, parametric sub-circuits, topology v02)
+- Native memories (`rom`/`ram` declarations via `CallWidths`, contents are runtime configuration, edge rule, `E008` policy, `E017`/`E018`)
 
 ### [validation.md](validation.md)
 - Hard errors vs warnings vs accepted
@@ -41,6 +43,7 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - Five invocation modes (`-o`, `--emit-zig`, `--inspect`, `--preview`, `--truth-table`)
 - Mode-specific flag gating (`--expand-macros`, `--format`, `--strict`, …)
 - No intermediate `zig build` subprocess; no build-directory override
+- `--mem=<name>=<path>` is scoped to `--sim` and `--truth-table`
 
 ### [tooling.md](tooling.md)
 - langlang version pinning (`go/v0.0.12`)
