@@ -1,0 +1,3 @@
+input[8] pc
+rom code[8, 8](addr = pc)
+output[8] out(in = code.out)

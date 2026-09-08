@@ -73,6 +73,8 @@ pub const Table = struct {
     }
 };
 
+pub const Preload = engine_session.Preload;
+
 pub const BuildOptions = struct {
     /// Hard cap on `sum(inputs[i].width)`. Exceeding it returns
     /// `error.TooManyInputs`. The CLI default is 16 with a `--truth-

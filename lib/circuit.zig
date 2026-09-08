@@ -75,7 +75,7 @@ fn calculateDominantState(circuit: *const Circuit, input_comp_list: std.ArrayLis
 /// the host hooks so a host write and a combinational read cannot disagree.
 /// Precondition: `comp.kind == .memory`.
 pub fn memoryReadOut(circuit: *const Circuit, comp: *const Component) BitVecState {
-    const m = &comp.kind.memory;
+    const m = comp.kind.memory;
     const width: u8 = comp.state_handle.tier;
     const addr_comp = m.addr orelse return BitVecState.undefined_(width);
     const addr_state = circuit.readState(addr_comp.state_handle);
@@ -93,7 +93,7 @@ pub fn memoryReadOut(circuit: *const Circuit, comp: *const Component) BitVecStat
 /// Hosts and tools read contents through this, never through the pool.
 pub fn memoryCells(comp: *const Component) ?*const MemCells {
     return switch (comp.kind) {
-        .memory => |*m| &m.cells,
+        .memory => |m| &m.cells,
         else => null,
     };
 }
@@ -185,7 +185,7 @@ fn recalculateAndReschedule(
                 .width = width,
             };
         },
-        .memory => |*m| {
+        .memory => |m| {
             if (m.mode == .ram) {
                 // Edge detection runs in Phase 2, after every same-timestamp
                 // event has been committed, and may run several times per
@@ -459,6 +459,36 @@ pub const MemCells = struct {
 
 pub const MemoryError = error{ NotAMemory, AddressOutOfRange, BufferTooSmall, InvalidAddrWidth };
 
+/// The payload of a memory component, boxed so that `Component.Kind` (a
+/// union sized by its largest member) does not grow for every gate and
+/// wire in a circuit: an inline payload cost +56 bytes per component
+/// corpus-wide on the engine bench. Created through `memoryKind`, freed by
+/// `Component.deinit`. Cells live here (never in the pool); the pool slot
+/// holds the asynchronously read word on `out`. One driver per port, like
+/// `slice.from`; `din`/`we`/`clk` stay null on a rom because `connect`
+/// refuses to set them.
+pub const MemoryState = struct {
+    mode: MemoryMode,
+    cells: MemCells,
+    addr: ?*Component = null,
+    din: ?*Component = null,
+    we: ?*Component = null,
+    clk: ?*Component = null,
+    /// Last committed clk state, stored before acting on it. The initial
+    /// undefined means the first defined-high clk is not an edge.
+    prev_clk: BitVecState = BitVecState.undefined_(1),
+};
+
+/// Builds the `Kind` for a memory component. The planes are allocated by
+/// `Circuit.createComponent`, which also validates `addr_width`; a kind
+/// that never reaches `createComponent` leaks its box (the engine is
+/// arena-backed, so this only matters to tests that stop early).
+pub fn memoryKind(mode: MemoryMode, addr_width: u8) !Component.Kind {
+    const state = try memory.allocator.create(MemoryState);
+    state.* = .{ .mode = mode, .cells = .{ .addr_width = addr_width } };
+    return .{ .memory = state };
+}
+
 pub const ComponentPortReference = struct { *Component, []const u8 };
 
 pub const Component = struct {
@@ -501,22 +531,8 @@ pub const Component = struct {
         /// the engine ensures the slot is set at the right index.
         concat: struct { operands: std.ArrayList(*Component) = .{} },
         /// Native memory: one engine kind carrying a `mode`, while the wire
-        /// format keeps two kinds (rom=8, ram=9). Cells live on the payload;
-        /// the pool slot holds the asynchronously read word on `out`. One
-        /// driver per port, like `slice.from`; `din`/`we`/`clk` stay null on
-        /// a rom because `connect` refuses to set them.
-        memory: struct {
-            mode: MemoryMode,
-            cells: MemCells,
-            addr: ?*Component = null,
-            din: ?*Component = null,
-            we: ?*Component = null,
-            clk: ?*Component = null,
-            /// Last committed clk state, stored before acting on it. The
-            /// initial undefined means the first defined-high clk is not
-            /// an edge.
-            prev_clk: BitVecState = BitVecState.undefined_(1),
-        },
+        /// format keeps two kinds (rom=8, ram=9). Boxed — see `MemoryState`.
+        memory: *MemoryState,
     };
 
     pub fn init(id: u32, kind: Kind) !*Component {
@@ -539,9 +555,10 @@ pub const Component = struct {
             .input_pin_gate => |*g| g.inputs.deinit(memory.allocator),
             .slice => {},
             .concat => |*c| c.operands.deinit(memory.allocator),
-            .memory => |*m| {
+            .memory => |m| {
                 memory.allocator.free(m.cells.values);
                 memory.allocator.free(m.cells.defined);
+                memory.allocator.destroy(m);
             },
         }
         memory.allocator.destroy(self);
@@ -777,7 +794,7 @@ pub const Circuit = struct {
         const new_component = try Component.init(self.next_id, kind);
         errdefer new_component.deinit();
         switch (new_component.kind) {
-            .memory => |*m| {
+            .memory => |m| {
                 const addr_width = m.cells.addr_width;
                 if (addr_width < 1 or addr_width > MAX_ADDR_WIDTH) return error.InvalidAddrWidth;
                 // Planes are always allocated here; a caller-supplied slice
@@ -851,7 +868,7 @@ pub const Circuit = struct {
                 }
                 c.operands.items[idx] = fromComponent;
             },
-            .memory => |*m| {
+            .memory => |m| {
                 if (std.mem.eql(u8, toPort, ADDR_PORT_NAME)) {
                     m.addr = fromComponent;
                 } else if (m.mode == .ram and std.mem.eql(u8, toPort, DIN_PORT_NAME)) {
@@ -974,9 +991,9 @@ pub const Circuit = struct {
     // planes are reached only through these and memoryCells.
     // ------------------------------------------------------------------
 
-    fn memoryPayload(comp: *Component) MemoryError!*@TypeOf(comp.kind.memory) {
+    fn memoryPayload(comp: *Component) MemoryError!*MemoryState {
         return switch (comp.kind) {
-            .memory => |*m| m,
+            .memory => |m| m,
             else => error.NotAMemory,
         };
     }
@@ -1024,7 +1041,7 @@ pub const Circuit = struct {
     pub fn memoryStoreImage(self: *const Circuit, comp: *const Component, buf: []u8) MemoryError!usize {
         _ = self;
         const m = switch (comp.kind) {
-            .memory => |*m| m,
+            .memory => |m| m,
             else => return error.NotAMemory,
         };
         const width = comp.state_handle.tier;
@@ -2275,12 +2292,12 @@ test "engine: concat of mixed-width operands sums widths into output position" {
 // sections below once they land.
 // ============================================================================
 
-fn romKind(addr_width: u8) Component.Kind {
-    return .{ .memory = .{ .mode = .rom, .cells = .{ .addr_width = addr_width } } };
+fn romKind(addr_width: u8) !Component.Kind {
+    return memoryKind(.rom, addr_width);
 }
 
-fn ramKind(addr_width: u8) Component.Kind {
-    return .{ .memory = .{ .mode = .ram, .cells = .{ .addr_width = addr_width } } };
+fn ramKind(addr_width: u8) !Component.Kind {
+    return memoryKind(.ram, addr_width);
 }
 
 // Fills every cell with its own index, fully defined.
@@ -2298,7 +2315,7 @@ test "memory: unloaded cells read undefined" {
     defer circuit.deinit();
 
     const addr = try circuit.createComponent(.{ .input_pin_gate = .{} }, 4);
-    const rom = try circuit.createComponent(romKind(4), 8);
+    const rom = try circuit.createComponent(try romKind(4), 8);
     try circuit.connect(addr.port(OUT_PORT_NAME), rom.port(ADDR_PORT_NAME));
 
     try circuit.propagateEvent(addr, BitVecState.fromRaw(3, 0xF, 4));
@@ -2312,7 +2329,7 @@ test "memory: async read through undefined addr" {
     defer circuit.deinit();
 
     const addr = try circuit.createComponent(.{ .input_pin_gate = .{} }, 4);
-    const rom = try circuit.createComponent(romKind(4), 8);
+    const rom = try circuit.createComponent(try romKind(4), 8);
     const out = try circuit.createComponent(.{ .output_pin = .{} }, 8);
     try circuit.connect(addr.port(OUT_PORT_NAME), rom.port(ADDR_PORT_NAME));
     try circuit.connect(rom.port(OUT_PORT_NAME), out.port(OUTPUT_PIN_IN_PORT_NAME));
@@ -2336,8 +2353,8 @@ test "memory: connect policy per mode" {
     defer circuit.deinit();
 
     const src = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
-    const rom = try circuit.createComponent(romKind(2), 8);
-    const ram = try circuit.createComponent(ramKind(2), 8);
+    const rom = try circuit.createComponent(try romKind(2), 8);
+    const ram = try circuit.createComponent(try ramKind(2), 8);
 
     try circuit.connect(src.port(OUT_PORT_NAME), rom.port(ADDR_PORT_NAME));
     for ([_][]const u8{ DIN_PORT_NAME, WE_PORT_NAME, CLK_PORT_NAME, IN_PORT_NAME }) |port_name| {
@@ -2353,7 +2370,7 @@ test "memory: connect policy per mode" {
         try std.testing.expectError(error.InvalidInputPort, circuit.connect(src.port(OUT_PORT_NAME), ram.port(port_name)));
     }
 
-    const unwired = try circuit.createComponent(romKind(2), 8);
+    const unwired = try circuit.createComponent(try romKind(2), 8);
     try std.testing.expect(memoryReadOut(&circuit, unwired).equals(BitVecState.undefined_(8)));
     const wire = try circuit.createComponent(.{ .wire = .{} }, 1);
     try std.testing.expect(memoryCells(wire) == null);
@@ -2363,14 +2380,14 @@ test "memory: createComponent rejects addr_width out of range" {
     var circuit = try Circuit.init();
     defer circuit.deinit();
 
-    try std.testing.expectError(error.InvalidAddrWidth, circuit.createComponent(romKind(0), 8));
-    try std.testing.expectError(error.InvalidAddrWidth, circuit.createComponent(romKind(17), 8));
+    try std.testing.expectError(error.InvalidAddrWidth, circuit.createComponent(try romKind(0), 8));
+    try std.testing.expectError(error.InvalidAddrWidth, circuit.createComponent(try romKind(17), 8));
 
-    const narrow = try circuit.createComponent(romKind(1), 8);
+    const narrow = try circuit.createComponent(try romKind(1), 8);
     try std.testing.expectEqual(@as(usize, 2), narrow.kind.memory.cells.values.len);
     try std.testing.expectEqual(@as(usize, 2), narrow.kind.memory.cells.defined.len);
 
-    const wide = try circuit.createComponent(ramKind(16), 8);
+    const wide = try circuit.createComponent(try ramKind(16), 8);
     const cells = memoryCells(wide).?;
     try std.testing.expectEqual(@as(usize, 65536), cells.values.len);
     try std.testing.expectEqual(@as(usize, 65536), cells.defined.len);
@@ -2385,7 +2402,7 @@ test "memory: delay class is gate delay" {
     defer circuit.deinit();
 
     const addr = try circuit.createComponent(.{ .input_pin_gate = .{} }, 2);
-    const rom = try circuit.createComponent(romKind(2), 4);
+    const rom = try circuit.createComponent(try romKind(2), 4);
     try circuit.connect(addr.port(OUT_PORT_NAME), rom.port(ADDR_PORT_NAME));
     fillCellsWithIndex(rom);
 
@@ -2417,7 +2434,7 @@ const RamHarness = struct {
         const din = try circuit.createComponent(.{ .input_pin_gate = .{} }, data_width);
         const we = try circuit.createComponent(.{ .input_pin_gate = .{} }, we_width);
         const clk = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
-        const ram = try circuit.createComponent(ramKind(addr_width), data_width);
+        const ram = try circuit.createComponent(try ramKind(addr_width), data_width);
         try circuit.connect(addr.port(OUT_PORT_NAME), ram.port(ADDR_PORT_NAME));
         try circuit.connect(din.port(OUT_PORT_NAME), ram.port(DIN_PORT_NAME));
         try circuit.connect(we.port(OUT_PORT_NAME), ram.port(WE_PORT_NAME));
@@ -2494,7 +2511,7 @@ test "ram: same-step din is captured" {
     const x = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
     const we = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
     const addr = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
-    const ram = try circuit.createComponent(ramKind(1), 1);
+    const ram = try circuit.createComponent(try ramKind(1), 1);
     try circuit.connect(x.port(OUT_PORT_NAME), ram.port(CLK_PORT_NAME));
     try circuit.connect(x.port(OUT_PORT_NAME), ram.port(DIN_PORT_NAME));
     try circuit.connect(we.port(OUT_PORT_NAME), ram.port(WE_PORT_NAME));
@@ -2517,7 +2534,7 @@ test "ram: no double fire when clk and din change together" {
     const x = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
     const we = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
     const addr = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
-    const ram = try circuit.createComponent(ramKind(1), 1);
+    const ram = try circuit.createComponent(try ramKind(1), 1);
     try circuit.connect(x.port(OUT_PORT_NAME), ram.port(CLK_PORT_NAME));
     try circuit.connect(x.port(OUT_PORT_NAME), ram.port(DIN_PORT_NAME));
     try circuit.connect(we.port(OUT_PORT_NAME), ram.port(WE_PORT_NAME));
@@ -2604,7 +2621,7 @@ const RomHarness = struct {
         var circuit = try Circuit.init();
         errdefer circuit.deinit();
         const addr = try circuit.createComponent(.{ .input_pin_gate = .{} }, 4);
-        const rom = try circuit.createComponent(romKind(4), 8);
+        const rom = try circuit.createComponent(try romKind(4), 8);
         const out = try circuit.createComponent(.{ .output_pin = .{} }, 8);
         try circuit.connect(addr.port(OUT_PORT_NAME), rom.port(ADDR_PORT_NAME));
         try circuit.connect(rom.port(OUT_PORT_NAME), out.port(OUTPUT_PIN_IN_PORT_NAME));

@@ -84,10 +84,7 @@ pub fn initFromTopology(circuit: *engine.Circuit, payload: []const u8) !void {
                 offset += 1;
                 if (addr_width == 0 or addr_width > engine.MAX_ADDR_WIDTH) return error.InvalidMemoryRecord;
                 const mode: engine.MemoryMode = if (component_kind == .rom) .rom else .ram;
-                break :blk try circuit.createComponent(
-                    .{ .memory = .{ .mode = mode, .cells = .{ .addr_width = addr_width } } },
-                    width,
-                );
+                break :blk try circuit.createComponent(try engine.memoryKind(mode, addr_width), width);
             },
         };
         comp.id = id;

@@ -36,9 +36,17 @@ const full_serializer = @import("full_serializer");
 const truth_table_builder = @import("truth_table_builder");
 const engine = @import("circuit");
 
+/// A raw image loaded into a root-level memory before the vectors are
+/// driven, the way `--truth-table --mem=<name>=<path>` does it.
+const Preload = struct {
+    name: []const u8,
+    path: []const u8,
+};
+
 const Fixture = struct {
     name: []const u8,
     circ: []const u8,
+    preload: ?Preload = null,
 };
 
 /// Hand-maintained mapping from golden display name to its source `.circ`.
@@ -98,6 +106,12 @@ const fixtures = [_]Fixture{
     .{ .name = "primitive_led", .circ = "tests/fixtures/circuits/edge_single_component.circ" },
     .{ .name = "primitive_not", .circ = "tests/fixtures/circuits/single_gate.circ" },
     .{ .name = "primitive_wire", .circ = "tests/fixtures/circuits/wire_passthrough.circ" },
+    // A preloaded rom read by address: the memory kind's asynchronous read
+    // path (one recalc per address change, no gates in between). The 4-bit
+    // one is the single-primitive tier; the 8-bit one drives 256 vectors
+    // through a 256-word image so the cell-plane lookup dominates.
+    .{ .name = "rom_lookup", .circ = "tests/fixtures/circuits/rom_lookup.circ", .preload = .{ .name = "code", .path = "tests/fixtures/mem/rom_lookup.bin" } },
+    .{ .name = "rom_lookup_8bit", .circ = "tests/fixtures/circuits/rom_lookup_8bit.circ", .preload = .{ .name = "code", .path = "tests/fixtures/mem/rom_lookup_8bit.bin" } },
     .{ .name = "six_bit_adder", .circ = "tests/fixtures/circuits/six_bit_adder.circ" },
     // 1 input through 100 NOT gates in series, 2 vectors. Pure cascade-depth
     // probe: peak_queue stays small, but final_time grows linearly with
@@ -1297,7 +1311,18 @@ fn runFixture(
     const component_count = topology.components.len;
     const topology_hash = hashTopology(topology);
 
-    var table = try truth_table_builder.build(allocator, topology, .{});
+    // The image is read with the bench's own allocator, so it never shows
+    // up in the engine counters; applying it writes into planes the engine
+    // already allocated in createComponent.
+    var preloads: [1]truth_table_builder.Preload = undefined;
+    var preload_count: usize = 0;
+    if (fixture.preload) |p| {
+        preloads[0] = .{ .name = p.name, .bytes = try std.fs.cwd().readFileAlloc(allocator, p.path, 1 << 20) };
+        preload_count = 1;
+    }
+    defer if (fixture.preload != null) allocator.free(preloads[0].bytes);
+
+    var table = try truth_table_builder.build(allocator, topology, .{ .preloads = preloads[0..preload_count] });
     defer table.deinit();
 
     const alloc_after = engine.memory.snapshotAllocMetrics();

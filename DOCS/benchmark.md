@@ -6,7 +6,7 @@ The benchmark exists to answer one question: *does the simulation engine still d
 
 ## What it runs
 
-The bench walks 56 fixtures from the truth-table corpus. Coverage spans the full size range:
+The bench walks 58 fixtures from the truth-table corpus. Coverage spans the full size range:
 
 | Tier                     | Fixtures (examples)                                                | Vectors per circuit |
 | ------------------------ | ------------------------------------------------------------------ | ------------------- |
@@ -17,8 +17,11 @@ The bench walks 56 fixtures from the truth-table corpus. Coverage spans the full
 | Combinational structures | `mux_2to1` … `mux_5bit_2to1`, `demux_1to2` … `demux_4bit_1to2`     | 4 – 2048            |
 | Adders                   | `half_adder`, `full_adder`, `two/three/four/five/six/eight_bit_adder` | 4 – 65536        |
 | ALU                      | `alu_4bit` (14 inputs)                                             | 16384               |
+| Memories                 | `rom_lookup` (16 × 8-bit), `rom_lookup_8bit` (256 × 8-bit)         | 16 – 256            |
 
-Total: 98,660 input vectors driven through the engine in a single bench run; ~8.3M events popped, ~8.6k allocator calls totaling ~1.0 MB. Pop efficiency sits at ~100% corpus-wide after the `propagateEvent` no-op short-circuit (the harness's drive-all-inputs-per-vector pattern used to push it as low as 28% on the AND family). The wider adders (`five_bit_adder`, `six_bit_adder`, `eight_bit_adder`) characterize cascading-carry depth, and the 8-bit adder pushing 65k vectors and 3.9M events overtakes `alu_4bit` as the heaviest fixture by both vector count and event volume. The corpus totals above reflect the current engine state; the per-milestone evolution lives in `tests/fixtures/bench/engine.bench.golden.hist.md` (see [Historical evolution](#historical-evolution) below).
+The two memory rows are a preloaded `rom` read by address — the native memory kind's asynchronous read path, with no gates between the address input and the output — loaded from `tests/fixtures/mem/rom_lookup*.bin` the way `--truth-table --mem` loads an image (the `Fixture.preload` field in `tools/bench/main.zig`). A `ram` cannot be benched through this harness: the truth-table builder refuses stateful circuits by design, so RAM throughput would need a `--sim`-style driver.
+
+Total: 98,932 input vectors driven through the engine in a single bench run; ~8.3M events popped, ~8.7k allocator calls totaling ~1.1 MB. Pop efficiency sits at ~100% corpus-wide after the `propagateEvent` no-op short-circuit (the harness's drive-all-inputs-per-vector pattern used to push it as low as 28% on the AND family). The wider adders (`five_bit_adder`, `six_bit_adder`, `eight_bit_adder`) characterize cascading-carry depth, and the 8-bit adder pushing 65k vectors and 3.9M events overtakes `alu_4bit` as the heaviest fixture by both vector count and event volume. The corpus totals above reflect the current engine state; the per-milestone evolution lives in `tests/fixtures/bench/engine.bench.golden.hist.md` (see [Historical evolution](#historical-evolution) below).
 
 The fixture-to-circuit mapping is hand-maintained at `tools/bench/main.zig:36`. Most fixtures are 1:1 with their `.circ` source; a handful (`full_adder` → `full_adder_from_builtins.circ`, `primitive_and` → `and_gate.circ`, etc.) follow the same historical aliases used by the truth-table golden tests.
 
@@ -139,7 +142,7 @@ The `allocs` and `bytes` columns are the same delta values that get written to t
 
 ### Family rollup
 
-Pass `--rollup` to collapse the 53 per-fixture rows into ~14 per-family lines. Useful for a smell-check: scan whether one family's pop_eff or allocator pressure has shifted, instead of eyeballing every row. The family is inferred from the fixture name — suffix-match on `_adder` groups half/full/N-bit adders together, otherwise the prefix before the first underscore (so `and_4bit` → `and`, `primitive_led` → `primitive`).
+Pass `--rollup` to collapse the 58 per-fixture rows into ~15 per-family lines. Useful for a smell-check: scan whether one family's pop_eff or allocator pressure has shifted, instead of eyeballing every row. The family is inferred from the fixture name — suffix-match on `_adder` groups half/full/N-bit adders together, otherwise the prefix before the first underscore (so `and_4bit` → `and`, `primitive_led` → `primitive`).
 
 ```sh
 zig build bench -- --rollup
@@ -166,7 +169,7 @@ bench rollup: xnor          3 fix      336 vecs     9.28k events    2 peak      
 bench rollup: xor           4 fix    1.36k vecs    29.79k events    2 peak      776 allocs    92.06k bytes  100.0% pop       0.55 ms drv
 ```
 
-Rollup columns are always sums except `peak` which is the family max (depth is per-iteration, not additive) and `pop` which is computed from total committed / total popped. Pop efficiency reads 100% across every family today because `propagateEvent` short-circuits no-op enqueues (events the caller asks for that already match the component's current state, the dominant waste pattern under the bench harness). The family rows still make some patterns obvious that get lost across 56 fixtures: `alu` reaches the only peak_queue above 7, `fan` is the only family with peak_queue = 3 (one upstream feeding three independent downstreams), and `adder` accounts for ~half the corpus's events and allocator pressure thanks to `eight_bit_adder`.
+Rollup columns are always sums except `peak` which is the family max (depth is per-iteration, not additive) and `pop` which is computed from total committed / total popped. Pop efficiency reads 100% across every family today because `propagateEvent` short-circuits no-op enqueues (events the caller asks for that already match the component's current state, the dominant waste pattern under the bench harness). The family rows still make some patterns obvious that get lost across 58 fixtures: `alu` reaches the only peak_queue above 7, `fan` is the only family with peak_queue = 3 (one upstream feeding three independent downstreams), and `adder` accounts for ~half the corpus's events and allocator pressure thanks to `eight_bit_adder`.
 
 Rollup ignores `--sort` because the family-grouped output is always alphabetical for stable diffs.
 
@@ -373,6 +376,6 @@ The `.hist` file is checked in alongside the golden so the history travels with 
 | `lib/truth_table/builder.zig`                   | Drives the engine over `2^N` vectors; surfaces `circuit.metrics` and `drive_ns` on `Table` |
 | `lib/memory.zig`                                | Global allocator + counting wrapper (`Counter`) gated by `COLLECT_METRICS` |
 | `tools/bench/main.zig`                          | Bench runner: walks the corpus, prints wall-clock and derived columns, writes/compares golden, renders structured diff on mismatch, records milestones to `.hist` |
-| `tests/fixtures/bench/engine.bench.golden`      | The committed golden: 56 rows, one per fixture                             |
+| `tests/fixtures/bench/engine.bench.golden`      | The committed golden: 58 rows, one per fixture                             |
 | `tests/fixtures/bench/engine.bench.golden.hist.md` | Append-only historical milestone log: BASE snapshot + per-milestone deltas |
 | `build.zig`                                     | Parallel modules + `zig build bench` step                                  |

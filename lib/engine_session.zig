@@ -147,10 +147,7 @@ pub const Session = struct {
                     };
                     if (aux.addr_width == 0 or aux.addr_width > engine.MAX_ADDR_WIDTH) return error.InvalidTopology;
                     const mode: engine.MemoryMode = if (comp.kind == .rom) .rom else .ram;
-                    break :blk circuit.createComponent(
-                        .{ .memory = .{ .mode = mode, .cells = .{ .addr_width = aux.addr_width } } },
-                        comp.width,
-                    );
+                    break :blk circuit.createComponent(try engine.memoryKind(mode, aux.addr_width), comp.width);
                 },
             } catch return error.InvalidTopology;
             node.id = comp.id;

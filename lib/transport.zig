@@ -3,6 +3,7 @@ const std = @import("std");
 const Component = @import("circuit.zig").Component;
 const Circuit = @import("circuit.zig").Circuit;
 const BitVecState = @import("circuit.zig").BitVecState;
+const memoryKind = @import("circuit.zig").memoryKind;
 
 fn kindByte(kind: anytype) u8 {
     return switch (kind) {
@@ -81,8 +82,8 @@ test "transport: memory kind bytes" {
     var circuit = try Circuit.init();
     defer circuit.deinit();
 
-    const rom = try circuit.createComponent(.{ .memory = .{ .mode = .rom, .cells = .{ .addr_width = 1 } } }, 1);
-    const ram = try circuit.createComponent(.{ .memory = .{ .mode = .ram, .cells = .{ .addr_width = 1 } } }, 1);
+    const rom = try circuit.createComponent(try memoryKind(.rom, 1), 1);
+    const ram = try circuit.createComponent(try memoryKind(.ram, 1), 1);
     try std.testing.expectEqual(@as(u8, 8), kindByte(rom.kind));
     try std.testing.expectEqual(@as(u8, 9), kindByte(ram.kind));
 }

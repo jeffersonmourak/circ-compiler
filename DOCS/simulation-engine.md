@@ -4,7 +4,7 @@ Source: [lib/circuit.zig](../lib/circuit.zig)
 
 The engine is a pure Zig library: no WASM, no I/O, no JSON. It models a circuit as a directed graph and advances time with a min-heap event queue. The compiled `.wasm` runtime in `templates/main.zig` and the unit tests in `tests/` are both clients of this same `Circuit` API.
 
-All allocations route through `memory.allocator` from `lib/memory.zig`. There is no per-call allocator parameter on the engine itself. On a WASM target this is `std.heap.wasm_allocator`; on native (`zig build test`) it is a `GeneralPurposeAllocator`.
+All allocations route through `memory.allocator` from `lib/memory.zig`. There is no per-call allocator parameter on the engine itself. On every target it is an `ArenaAllocator` over `std.heap.page_allocator` (wrapped in a counting allocator when the bench's `collect_metrics` option is on), so nothing the engine allocates is ever freed individually — `deinit` calls exist for symmetry and for the counting allocator's bookkeeping.
 
 ## Why the storage and value layers are split
 
