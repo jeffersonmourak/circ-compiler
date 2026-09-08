@@ -1,6 +1,6 @@
 # circ-compiler
 
-`circ-compiler` compiles `.circ` digital-logic source files into self-contained WebAssembly modules. Each compiled `.wasm` embeds the simulation engine plus circuit-specific construction code and exposes a fixed pull-based runtime API (`init`, `run`, `setPin`, paired `getOutputValue` / `getOutputDefined`, …) usable from any host that supports WebAssembly. The compiler is written in Zig and ships as a single CLI: `circ-compile`.
+`circ-compiler` compiles `.circ` digital-logic source files into self-contained WebAssembly modules. Each compiled `.wasm` embeds the simulation engine plus circuit-specific construction code and exposes a fixed pull-based runtime API (`init`, `run`, `setPin`, paired `getOutputValue` / `getOutputDefined`, and a `memLoad` / `memStore` family for `rom` / `ram` contents, …) usable from any host that supports WebAssembly. The compiler is written in Zig and ships as a single CLI: `circ-compile`.
 
 ## What it does
 
@@ -12,7 +12,7 @@ not inv(in=a)
 output out(in=inv.out)
 ```
 
-`circ-compile inverter.circ -o inverter.wasm` produces a `.wasm` whose exported `setPin` / `run` / `getOutputValue` / `getOutputDefined` functions simulate that exact circuit. The two getters return paired `BitVecState` halves (value bits + defined-bits) crossed as `i64` / `BigInt`. Multi-file projects work the same way — the root file imports siblings and the compiler flattens every sub-circuit into a single ordered topology before serializing it into the `.wasm`:
+`circ-compile inverter.circ -o inverter.wasm` produces a `.wasm` whose exported `setPin` / `run` / `getOutputValue` / `getOutputDefined` functions simulate that exact circuit. The two getters return paired `BitVecState` halves (value bits + defined-bits) crossed as `i64` / `BigInt`. Circuits that declare `rom` / `ram` memories also export `getMemInfo`, `memBuffer`, `memLoad`, `memStore`, `memClear`, `setMemWord`, `getMemValue`, and `getMemDefined`, so the host loads and reads back memory contents at runtime (see `DOCS/wasm-api.md`). Multi-file projects work the same way — the root file imports siblings and the compiler flattens every sub-circuit into a single ordered topology before serializing it into the `.wasm`:
 
 ```text
 // half_adder.circ

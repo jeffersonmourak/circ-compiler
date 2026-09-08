@@ -119,7 +119,7 @@ The runtime template is the WASM shell that ships embedded inside every compiled
 
 The template:
 
-- Exports a fixed runtime API to JavaScript: `topology_alloc`, `init`, `run`, `setPin(id, value, defined)`, `getOutputValue(id)`, `getOutputDefined(id)` (see [wasm-api.md](wasm-api.md) for full signatures). The two getters return paired `BitVecState` halves crossed as `i64` / `BigInt`.
+- Exports a fixed runtime API to JavaScript: `topology_alloc`, `init`, `run`, `setPin(id, value, defined)`, `getOutputValue(id)`, `getOutputDefined(id)`, plus the memory export family (`getMemInfo`, `memBuffer`, `memLoad`, `memStore`, `memClear`, `setMemWord`, `getMemValue`, `getMemDefined`) for circuits that declare `rom`/`ram` (see [wasm-api.md](wasm-api.md) for full signatures). The two getters return paired `BitVecState` halves crossed as `i64` / `BigInt`.
 - Imports two log callbacks from the host (`debugEnabled`, `onDebugLog`) — that's it. There is no `onStateChange`; hosts poll `getOutputValue` / `getOutputDefined` after `run()`.
 - Reads the per-circuit topology from the buffer the host loaded via `topology_alloc`, then calls `interpreter.initFromTopology` to materialise the circuit using the engine in `lib/circuit.zig`.
 
