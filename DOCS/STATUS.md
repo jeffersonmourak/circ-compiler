@@ -656,3 +656,20 @@ A project row rolls its files' diagnostics up, so shutting a project does not hi
 2. **The guard's first draft failed on its own comment.** The rule's comment explains the trap by naming `grid-template-rows`, and the assertion read the prose as a declaration. Comments are stripped before matching now. This is the third time in this initiative that a source-scanning test has tripped over English — `file-tabs.ts` over the word `localStorage`, `doc-registry.test.ts` over the word `document`, and now this. A scan of source text should strip comments by default.
 3. **The remembered counts are a memory, not a cache.** They are session-scoped and deliberately not persisted: a count in the envelope would survive a reload with no analysis behind it, and the first thing a reader would do is trust it. Within a session it cannot go stale, because a project's source can only change while that project is the open one.
 4. **The diagnostics path was not at fault, and was checked rather than assumed.** Driving the committed `libcirc.wasm` over a two-file project shows the analysis reporting per-file diagnostics for the imported file, and `countsByFile` placing them on the right row: a non-active FILE inside the open project already kept its badge. Only the project level was wrong.
+
+## 2026-09-09 — Fix — the same layout bug, one level down
+
+**What shipped:** The editor still grew and shrank with the open file after the last fix, because the last fix only repaired the outer half of the problem. `[data-layout='app'] .pg` declared `grid-template-rows: auto minmax(0, 1fr) auto` for its banner, panes and status bar — but `.pg-banner` ships `hidden`, and a `display: none` element is not a grid item. Two items, three tracks: `.pg-panes` took the `auto` row and sized to its content while `.pg-statusbar` took the `1fr`. `.pg` is now a flex column and `.pg-panes` claims `flex: 1`, matching what `main` already does.
+
+**Files touched:** `site/src/styles/global.css`, `site/test/island-smoke.test.ts`, `site/test/app-layout.test.ts`.
+
+**Tests:** `bun test` 329 pass across 28 files, from 328. `bun --bun run typecheck` 0 errors. Build and `bun run bundle` green. `/playground` gzip 25.2 KB, unchanged.
+
+**Next slice:** none.
+
+**Notes:**
+
+1. **The guard is structural now, not a text match.** The previous one asserted that `main` must not use `grid-template-rows` — which would have passed `.pg` untouched, since it never looked there, and which forbids a perfectly good grid for the wrong reason. The new one walks the built DOM: for each shell container, a declared track count must equal the number of children that actually render, and anything else must be a flex column whose height-taking child claims `flex: 1`. Negative proof against both shipped bugs: restoring `.pg`'s three tracks fails with `Expected: 2, Received: 3`, and restoring `main`'s two fails with `Expected: 1, Received: 2`.
+2. **`[hidden]` and `<script>` are the whole trap.** Neither generates a box, so neither is a grid item, and a template written against the markup as read counts children that will never be there. The banner is hidden in the normal case, which is why this row mismatch was the steady state rather than an edge case.
+3. **I fixed the outer container and did not check the inner one.** The first report named both symptoms — not filling the page, and changing height per file — and repairing `main` addressed neither on its own. Enumerating the real grid items of every container in the chain, which is what found this in one step, should have been the first move rather than the second.
+4. **A build-free half of the guard stays in `app-layout`.** The structural test skips without `dist/`, so the source-level check that each link declares `min-height: 0` and each child `flex: 1` still runs in every slice.

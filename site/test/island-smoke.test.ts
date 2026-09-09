@@ -319,6 +319,68 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(fileRows()).toHaveLength(1);
   }));
 
+  test('every app-shell container hands its height to exactly one child', () => drive((doc) => {
+    // The bug this exists for, twice over: a container declared a fixed set of
+    // grid rows, and then the page turned out to have a different number of
+    // children than tracks — `main` after its header was deleted, and `.pg`
+    // whose banner is hidden in the normal case. Both times the pane that was
+    // supposed to fill the viewport quietly landed in an `auto` track and
+    // started sizing to its own content, with no error and every gate green.
+    //
+    // So the invariant is checked against the DOM as it actually renders, not
+    // against the CSS alone: a fixed track count must match the children that
+    // are really there, and anything else must be a flex column whose
+    // height-taking child says so.
+    const css = readFileSync(resolve(SITE, 'src', 'styles', 'global.css'), 'utf8');
+    const declarationsOf = (selector: string): string => {
+      const at = css.indexOf(selector);
+      expect(at === -1 ? `${selector} (no such rule)` : selector).toBe(selector);
+      const body = css.slice(at + selector.length);
+      return body.slice(0, body.indexOf('}')).replace(/\/\*[\s\S]*?\*\//g, '');
+    };
+    /** `auto minmax(0, 1fr) auto` is three tracks, not five words. */
+    const trackCount = (value: string): number =>
+      value.replace(/[a-z-]+\([^)]*\)/gi, 'X').trim().split(/\s+/).filter(Boolean).length;
+    /** A `<script>` and a `[hidden]` element generate no box, so neither is a
+     *  grid item. This is exactly what both bugs turned on. */
+    const rendered = (el: unknown): boolean => {
+      const e = el as { tagName: string; hasAttribute(n: string): boolean };
+      return e.tagName !== 'SCRIPT' && e.tagName !== 'STYLE' && !e.hasAttribute('hidden');
+    };
+
+    const chain: [string, string][] = [
+      ['main', '.pg'],
+      ['.pg', '.pg-panes'],
+    ];
+
+    for (const [selector, fills] of chain) {
+      const el = doc.querySelector(selector)!;
+      expect(el).not.toBeNull();
+      const kids = Array.from(el.children).filter(rendered);
+      const block = declarationsOf(`[data-layout='app'] ${selector} {`);
+
+      // A container that hands height down must be allowed to shrink first.
+      expect(block).toContain('min-height: 0');
+
+      const rows = block.match(/grid-template-rows:([^;]+);/);
+      if (rows) {
+        // Allowed, but only while the tracks and the real children agree.
+        expect(trackCount(rows[1])).toBe(kids.length);
+      } else {
+        expect(block).toContain('display: flex');
+        expect(block).toContain('flex-direction: column');
+        // …and the child that takes the leftover has to claim it.
+        expect(declarationsOf(`[data-layout='app'] ${fills} {`)).toContain('flex: 1');
+        expect(doc.querySelector(fills)?.parentElement).toBe(el);
+      }
+    }
+
+    // The editor's own chain is flex all the way down to CodeMirror, which
+    // sizes to its content unless something gives it a height.
+    expect(declarationsOf("[data-layout='app'] .pg-editor .pg-cm .cm-editor {")).toContain('height: 100%');
+    expect(declarationsOf("[data-layout='app'] .pg-editor .pg-cm .cm-scroller {")).toContain('overflow: auto');
+  }));
+
   test('the tour mounts one inert editor per step', async () => {
     const { doc, errors } = await runIsland('tour', 'LiveEditor.astro');
     expect(errors).toEqual([]);

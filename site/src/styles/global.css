@@ -1282,8 +1282,16 @@ a.install-line:hover {
      above it keeps its own. */
   flex: 1;
   min-height: 0;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  /* Flex for the same reason `main` is, and this one is worse: the three
+     tracks this used to declare — banner, panes, status bar — only lined up
+     when the banner was VISIBLE, which it almost never is. With it hidden
+     there were two items for three tracks, so the panes took the `auto` row
+     and sized to their content while the status bar took the 1fr. That is why
+     the editor grew and shrank with the line count of whichever file was
+     open. A column with one `flex: 1` child does not care how many of its
+     siblings are currently displayed. */
+  display: flex;
+  flex-direction: column;
 }
 /* The last good outputs stay on screen while the source is broken, dimmed
    rather than blanked — cleared only when the file set itself changes. */
@@ -1522,6 +1530,8 @@ a.install-line:hover {
 }
 
 [data-layout='app'] .pg-panes {
+  /* The one child of `.pg` that takes the leftover height. */
+  flex: 1;
   min-height: 0;
   /* Sidebar, then the editor's share of what the two panes have left after the
      divider itself, so the tracks always sum to exactly 100%. */

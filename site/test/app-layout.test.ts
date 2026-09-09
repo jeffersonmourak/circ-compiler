@@ -81,7 +81,7 @@ describe('app layout', () => {
     }
   });
 
-  test('the app shell gives its leftover height to the workbench, not to a fixed row', () => {
+  test('the app shell hands its height down to the workbench', () => {
     const css = read('src', 'styles', 'global.css');
     // Comments are stripped first: this rule's own comment explains the trap by
     // naming `grid-template-rows`, and an assertion that reads prose as if it
@@ -90,19 +90,20 @@ describe('app layout', () => {
       const body = css.slice(css.indexOf(from) + from.length);
       return body.slice(0, body.indexOf('}')).replace(/\/\*[\s\S]*?\*\//g, '');
     };
-    const block = declarations("[data-layout='app'] main {");
-    // This used to be `grid-template-rows: auto minmax(0, 1fr)` — one track for
-    // a page header and one for the workbench. Removing the header dropped
-    // `.pg` into the `auto` track, where it sized to its own content: the
-    // editor stopped filling the pane and changed height with every file
-    // switch, with no error anywhere. A fixed track count must not come back.
-    expect(block).toContain('display: flex');
-    expect(block).not.toContain('grid-template-rows');
-
-    // …and the workbench must be the child that claims the leftover.
-    const pgBlock = declarations("[data-layout='app'] .pg {");
-    expect(pgBlock).toContain('flex: 1');
-    expect(pgBlock).toContain('min-height: 0');
+    // The chain that carries viewport height down to the editor. Each link
+    // must be able to shrink, and the next one must claim the leftover.
+    //
+    // Both containers used to declare a fixed `grid-template-rows`, and both
+    // broke when the page turned out to have a different number of children
+    // than tracks. `island-smoke` checks tracks against the rendered DOM,
+    // which is the real invariant; this is the build-free half of it, and it
+    // runs in every slice rather than only after `bun --bun run build`.
+    for (const [container, fills] of [['main', '.pg'], ['.pg', '.pg-panes']] as const) {
+      expect(declarations(`[data-layout='app'] ${container} {`)).toContain('min-height: 0');
+      const child = declarations(`[data-layout='app'] ${fills} {`);
+      expect(child).toContain('flex: 1');
+      expect(child).toContain('min-height: 0');
+    }
   });
 
   test('the viewport lock has a 100vh fallback before 100dvh', () => {
