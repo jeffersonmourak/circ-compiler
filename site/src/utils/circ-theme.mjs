@@ -233,6 +233,32 @@ function spriteForSubcircuit(type) {
   }
 }
 
+/**
+ * A ring around a component's box, drawn when the pointer is over it or when
+ * the host highlighted it — the canvas feeds both through the same `hovered`
+ * flag, so one branch covers an editor cursor and a mouse alike.
+ *
+ * A ring rather than a fill: every skin below already uses fill and stroke to
+ * say what the component IS and what it is DOING, and a highlight must not
+ * overwrite either.
+ */
+const drawHoverRing = (ctx, cell, component, theme) => {
+  const pad = cell * 0.18;
+  const x = component.x * cell - pad;
+  const y = component.y * cell - pad;
+  const w = component.width * cell + pad * 2;
+  const h = component.height * cell + pad * 2;
+  const r = Math.min(cell * 0.4, w / 2, h / 2);
+  ctx.save();
+  ctx.strokeStyle = theme.colors.inputHover;
+  ctx.lineWidth = Math.max(1, cell * 0.09);
+  ctx.beginPath();
+  if (typeof ctx.roundRect === 'function') ctx.roundRect(x, y, w, h, r);
+  else ctx.rect(x, y, w, h);
+  ctx.stroke();
+  ctx.restore();
+};
+
 /* ───── skins ──────────────────────────────────────────────────────── */
 
 const drawInputPin = ({ ctx, cell, component, outputSignal, hovered, theme }) => {
@@ -270,7 +296,7 @@ const drawInputPin = ({ ctx, cell, component, outputSignal, hovered, theme }) =>
   drawTailDot(ctx, cell, tailEdge, portY, outputSignal, theme);
 };
 
-const drawOutputPin = ({ ctx, cell, component, inputSignals, theme }) => {
+const drawOutputPin = ({ ctx, cell, component, inputSignals, theme, hovered }) => {
   const x = component.x * cell;
   const y = component.y * cell;
   const w = component.width * cell;
@@ -303,9 +329,11 @@ const drawOutputPin = ({ ctx, cell, component, inputSignals, theme }) => {
   }
 
   if (slot) drawTailDot(ctx, cell, tailEdge, dotY, sig, theme);
+
+  if (hovered) drawHoverRing(ctx, cell, component, theme);
 };
 
-const drawLed = ({ ctx, cell, component, inputSignals, theme }) => {
+const drawLed = ({ ctx, cell, component, inputSignals, theme, hovered }) => {
   const cx = (component.x + component.width / 2) * cell;
   const cy = (component.y + component.height / 2) * cell;
   const r = Math.min(component.width, component.height) * cell * 0.4;
@@ -345,9 +373,11 @@ const drawLed = ({ ctx, cell, component, inputSignals, theme }) => {
   );
 
   if (slot) drawTailDot(ctx, cell, tailEdge, dotY, sig, theme);
+
+  if (hovered) drawHoverRing(ctx, cell, component, theme);
 };
 
-const drawNot = ({ ctx, cell, component, inputSignals, outputSignal, theme }) => {
+const drawNot = ({ ctx, cell, component, inputSignals, outputSignal, theme, hovered }) => {
   const x0 = component.x * cell;
   const y0 = component.y * cell;
   const w = component.width * cell;
@@ -398,9 +428,11 @@ const drawNot = ({ ctx, cell, component, inputSignals, outputSignal, theme }) =>
   drawTailDot(ctx, cell, rightEdge, outDotY, outputSignal, theme);
 
   drawNameBelow(ctx, cell, component.name, x0, y0, w, h, theme.colors.labelMuted, -cell * 15);
+
+  if (hovered) drawHoverRing(ctx, cell, component, theme);
 };
 
-const drawAnd = ({ ctx, cell, component, inputSignals, outputSignal, theme }) => {
+const drawAnd = ({ ctx, cell, component, inputSignals, outputSignal, theme, hovered }) => {
   const x0 = component.x * cell;
   const y0 = component.y * cell;
   const w = component.width * cell;
@@ -460,9 +492,11 @@ const drawAnd = ({ ctx, cell, component, inputSignals, outputSignal, theme }) =>
     ctx.textBaseline = 'middle';
     ctx.fillText(component.name, x0 + w / 2, y0 + h / 2);
   }
+
+  if (hovered) drawHoverRing(ctx, cell, component, theme);
 };
 
-const drawSubcircuit = ({ ctx, cell, component, inputSignals, outputSignal, theme }) => {
+const drawSubcircuit = ({ ctx, cell, component, inputSignals, outputSignal, theme, hovered }) => {
   const x0 = component.x * cell;
   const y0 = component.y * cell;
   const w = component.width * cell;
@@ -519,6 +553,8 @@ const drawSubcircuit = ({ ctx, cell, component, inputSignals, outputSignal, them
   drawTailDot(ctx, cell, rightEdge, outDotY, outputSignal, theme);
 
   drawNameBelow(ctx, cell, component.name, x0, y0, w, h, theme.colors.labelMuted);
+
+  if (hovered) drawHoverRing(ctx, cell, component, theme);
 };
 
 /* ───── theme objects ──────────────────────────────────────────────── */
