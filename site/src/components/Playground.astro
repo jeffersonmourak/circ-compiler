@@ -103,7 +103,15 @@ const initial = picks[0];
   import { joinConflicts, requestFor, rootOf, PLAYGROUND_DIR } from '../utils/split-files.ts';
   import { createSplitter } from '../scripts/splitter.ts';
   import { createStore, describeNote } from '../utils/playground-store.ts';
-  import { statusFor, type StatusInput } from '../scripts/pipeline.ts';
+  import {
+    ANALYZE_DEBOUNCE_MS,
+    BUILD_DEBOUNCE_MS,
+    Stage,
+    outputsShouldClear,
+    shouldCompile,
+    statusFor,
+    type StatusInput,
+  } from '../scripts/pipeline.ts';
   import {
     activeFile,
     addFile,
@@ -136,7 +144,6 @@ const initial = picks[0];
   interface TruthTable { inputs: string[]; outputs: string[]; rows: { in: (number | null)[]; out: (number | null)[] }[] }
 
   const UI_INPUT_BITS_CAP = 12;
-  const DEBOUNCE_MS = 250;
 
   const root = document.querySelector<HTMLElement>('.pg');
   if (root) init(root);
@@ -153,6 +160,7 @@ const initial = picks[0];
     const statusIdentity = el.querySelector<HTMLElement>('.pg-status-identity')!;
     const banner = el.querySelector<HTMLElement>('.pg-banner')!;
     const diagList = el.querySelector<HTMLUListElement>('.pg-diag')!;
+    const outputPane = el.querySelector<HTMLElement>('.pg-output')!;
     const previewEl = el.querySelector<HTMLElement>('.pg-preview')!;
     const tableEl = el.querySelector<HTMLElement>('.pg-table')!;
     const simNote = el.querySelector<HTMLElement>('.pg-sim-note')!;
@@ -168,9 +176,19 @@ const initial = picks[0];
     const picks = JSON.parse(el.querySelector('#pg-picks')!.textContent || '{}') as Record<string, string>;
     const supported = (el.dataset.supportedVersions || '').split(',').filter(Boolean).map(Number);
 
-    const client = new LibcircClient(el.dataset.libcircWasm!);
+    // One client per wasm URL, shared by every island on the page.
+    const client = getSharedClient(el.dataset.libcircWasm!);
+    // Two independent debounces, each with its own sequence counter.
+    const analyzeStage = new Stage(ANALYZE_DEBOUNCE_MS);
+    const buildStage = new Stage(BUILD_DEBOUNCE_MS);
+
     const state = {
-      gen: 0,
+      /** Bumped on every edit; the freshness key the two stages compare. */
+      doc: 0,
+      analyzedDoc: null as number | null,
+      /** The file NAME list as of the outputs currently on screen. */
+      renderedFiles: [] as string[],
+      stale: false,
       /** The pipeline's single source of truth: the file set and which tab is
        *  visible. The combined string is never stored — it is computed on
        *  demand with `toSource(state.tabs)`. Never read off the DOM. */
@@ -178,15 +196,17 @@ const initial = picks[0];
       analysis: null as Analysis | null,
       diagnostics: [] as Diagnostic[],
       /** `state.diagnostics` mapped onto absolute offsets in the combined
-       *  document. Refreshed by BOTH producers in `fire()`. */
+       *  document. Refreshed by BOTH producers in the pipeline. */
       mapped: [] as MappedRow[],
-      artifact: null as { bytes: Uint8Array; hash: number } | null,
+      artifact: null as { bytes: Uint8Array; hash: number; size: number } | null,
       tab: 'diagnostics' as Tab,
       version: null as LibcircVersion | null,
       simulateEnabled: true,
     };
     // Slice 8 attaches the simulator here.
-    const hooks = { onArtifact: null as null | ((bytes: Uint8Array | null) => void) };
+    const hooks = {
+      onArtifact: null as null | ((bytes: Uint8Array | null, reason: 'built' | 'files-changed') => void),
+    };
     (el as any).__playground = { state, hooks };
 
     // ---- tabs ----
@@ -194,8 +214,11 @@ const initial = picks[0];
       state.tab = tab;
       for (const b of tabs) b.setAttribute('aria-selected', String(b.dataset.tab === tab));
       for (const p of panels) p.hidden = p.dataset.panel !== tab;
-      if (tab === 'preview') void runPreview(state.gen);
-      if (tab === 'truth') void runTruth(state.gen);
+      // A tab switch re-uses the build stage's current sequence rather than
+      // claiming a new one, so a compile already in flight stays current and
+      // its artifact still lands.
+      if (tab === 'preview') void runPreview(buildStage.seq);
+      if (tab === 'truth') void runTruth(buildStage.seq);
     }
     for (const b of tabs) b.addEventListener('click', () => showTab(b.dataset.tab as Tab));
 
@@ -585,10 +608,13 @@ const initial = picks[0];
         schedule();
       }
     });
-    let timer: number | null = null;
+    /** Every edit arms both stages: the fast one paints squiggles, the slow one
+     *  builds. They never wait on each other. */
     function schedule() {
-      if (timer !== null) window.clearTimeout(timer);
-      timer = window.setTimeout(() => { timer = null; void fire(); }, DEBOUNCE_MS);
+      state.doc += 1;
+      state.stale = true;
+      analyzeStage.schedule((seq) => void runAnalyze(seq));
+      buildStage.schedule((seq) => void runBuild(seq));
     }
     // The fallback surface edits the COMBINED text; re-splitting on every
     // keystroke keeps one model for both surfaces.
@@ -601,7 +627,7 @@ const initial = picks[0];
       source.value = toSource(state.tabs);
       editor?.setDocuments(state.tabs.files.map((f) => f.body), state.tabs.active);
       renderFileTabs();
-      void fire();
+      schedule();
     });
 
     // ---- the CodeMirror island, loaded on idle ----
@@ -680,93 +706,141 @@ const initial = picks[0];
     }
 
     // ---- pipeline ----
-    async function fire() {
-      const gen = ++state.gen;
-      if (!(await ensureReady())) return;
-      if (gen !== state.gen) return;
-      // The document this run's offsets are computed against. `state.gen` only
-      // moves on the NEXT debounced run, so a reply can land after the reader
-      // has typed on; offsets computed here would then be silently wrong, and
-      // @codemirror/lint maps registered diagnostics forward through later
-      // changes with no way to know they were stale to begin with.
-      // Per-tab, because the offsets each reply carries are file-local now.
-      const snapshot = state.tabs.files.map((f) => f.body);
-      pipe.analyzing = true;
-      pipe.building = true;
-      pipe.failure = null;
-      renderStatus();
+    // Two stages, each guarded at EVERY await. Dropping a reply is not
+    // cancellation — the worker has no abort, so a stale call finishes and its
+    // result is discarded on arrival.
 
-      const an = await client.call('analyze', requestFor(state.tabs.files));
-      if (gen !== state.gen) return;
-      if (an.status !== 0) {
-        pipe.analyzing = false;
-        pipe.building = false;
-        pipe.failure = `analyze failed: ${an.error ?? an.status}`;
-        renderStatus();
+    /** The bodies this run's offsets are computed against, per tab. */
+    function snapshotBodies(): string[] {
+      return state.tabs.files.map((f) => f.body);
+    }
+
+    function setBusy(analyzing: boolean, building: boolean) {
+      pipe.analyzing = analyzing;
+      pipe.building = building;
+      renderStatus();
+    }
+
+    /** Dim the outputs, or clear them outright when the FILE SET changed —
+     *  the only case where the last good preview, table and canvas describe a
+     *  project that no longer exists. */
+    function markOutputs(nextFiles: string[]) {
+      if (outputsShouldClear(state.renderedFiles, nextFiles)) {
+        state.renderedFiles = nextFiles;
+        state.artifact = null;
+        state.stale = false;
+        pipe.artifactBytes = null;
+        previewEl.textContent = '';
+        tableEl.innerHTML = '';
+        outputPane.removeAttribute('data-stale');
+        hooks.onArtifact?.(null, 'files-changed');
         return;
       }
+      state.renderedFiles = nextFiles;
+    }
+
+    function setStale(stale: boolean) {
+      state.stale = stale;
+      pipe.stale = stale;
+      if (stale) outputPane.setAttribute('data-stale', '');
+      else outputPane.removeAttribute('data-stale');
+      renderStatus();
+    }
+
+    async function runAnalyze(seq: number) {
+      const doc = state.doc;
+      if (!(await ensureReady())) return;
+      if (!analyzeStage.isCurrent(seq)) return;
+      const snapshot = snapshotBodies();
+      setBusy(true, pipe.building);
+
+      const an = await client.call('analyze', requestFor(state.tabs.files));
+      if (!analyzeStage.isCurrent(seq)) return;
+      if (an.status !== 0) {
+        pipe.failure = `analyze failed: ${an.error ?? an.status}`;
+        setBusy(false, pipe.building);
+        return;
+      }
+      pipe.failure = null;
       state.analysis = JSON.parse(an.text!) as Analysis;
       state.diagnostics = state.analysis.diagnostics;
       publishDiagnostics(snapshot, state.analysis);
+      renderFileTabs();
 
       const errors = state.diagnostics.filter((d) => d.severity === 'error').length;
-      const warnings = state.diagnostics.length - errors;
-      if (errors > 0) {
-        state.artifact = null;
-        hooks.onArtifact?.(null);
-        pipe.analyzing = false;
-        pipe.building = false;
-        pipe.errors = errors;
-        pipe.warnings = warnings;
-        renderStatus();
-      } else {
-        const c = await client.call('compile', requestFor(state.tabs.files));
-        if (gen !== state.gen) return;
-        if (c.status === 0 && c.bytes) {
-          const hash = fnv1a(c.bytes);
-          if (!state.artifact || state.artifact.hash !== hash) {
-            state.artifact = { bytes: c.bytes, hash };
-            hooks.onArtifact?.(c.bytes);
-          }
-          // Captured before the buffer can be transferred onward: a detached
-          // view reports 0.
-          pipe.artifactBytes = c.bytes.length;
-          pipe.analyzing = false;
-          pipe.building = false;
-          pipe.errors = 0;
-          pipe.warnings = warnings;
-          renderStatus();
-        } else if (c.status === 1 && c.text) {
-          // A second, independent producer: the compile reply carries its own
-          // `files[]`, which the mapping needs, so map THAT analysis — not the
-          // analyze one, whose diagnostics this replaces.
-          const compileAnalysis = JSON.parse(c.text) as Analysis;
-          state.diagnostics = compileAnalysis.diagnostics;
-          publishDiagnostics(snapshot, compileAnalysis);
-          state.artifact = null;
-          hooks.onArtifact?.(null);
-          pipe.analyzing = false;
-          pipe.building = false;
-          pipe.errors = Math.max(1, state.diagnostics.filter((d) => d.severity === 'error').length);
-          renderStatus();
-        } else {
-          state.artifact = null;
-          hooks.onArtifact?.(null);
-          pipe.analyzing = false;
-          pipe.building = false;
-          pipe.failure = `compile failed: ${c.error ?? c.status}`;
-          renderStatus();
-        }
-      }
-      if (state.tab === 'preview') void runPreview(gen);
-      if (state.tab === 'truth') void runTruth(gen);
+      state.analyzedDoc = doc;
+      pipe.errors = errors;
+      pipe.warnings = state.diagnostics.length - errors;
+      setBusy(false, pipe.building);
     }
 
-    async function runPreview(gen: number) {
+    async function runBuild(seq: number) {
+      const doc = state.doc;
+      if (!(await ensureReady())) return;
+      if (!buildStage.isCurrent(seq)) return;
+
+      markOutputs(state.tabs.files.map((f) => f.name));
+      // Skip the compile only when a FRESH analysis already found errors; a
+      // stale or missing one builds anyway, so neither timer can wedge the
+      // other.
+      const fresh = state.analyzedDoc === doc ? { doc, errors: pipe.errors } : null;
+      if (!shouldCompile(fresh, doc)) {
+        setStale(state.artifact !== null);
+        setBusy(pipe.analyzing, false);
+        return;
+      }
+
+      const snapshot = snapshotBodies();
+      setBusy(pipe.analyzing, true);
+      const c = await client.call('compile', requestFor(state.tabs.files));
+      if (!buildStage.isCurrent(seq)) return;
+
+      if (c.status === 0 && c.bytes) {
+        // Captured now: the worker transfers the buffer, and a detached view
+        // reports 0.
+        const size = c.bytes.length;
+        const hash = fnv1a(c.bytes);
+        if (!state.artifact || state.artifact.hash !== hash) {
+          state.artifact = { bytes: c.bytes, hash, size };
+          hooks.onArtifact?.(c.bytes, 'built');
+        }
+        pipe.artifactBytes = size;
+        pipe.failure = null;
+        setStale(false);
+      } else if (c.status === 1 && c.text) {
+        // A second, independent producer: the compile reply carries its own
+        // `files[]`, which the mapping needs, so map THAT analysis.
+        const compileAnalysis = JSON.parse(c.text) as Analysis;
+        state.diagnostics = compileAnalysis.diagnostics;
+        publishDiagnostics(snapshot, compileAnalysis);
+        renderFileTabs();
+        pipe.errors = Math.max(1, state.diagnostics.filter((d) => d.severity === 'error').length);
+        // The artifact and the canvas are LEFT ALONE: the last good build stays
+        // on screen, dimmed, until the source builds again.
+        setStale(state.artifact !== null);
+      } else {
+        pipe.failure = `compile failed: ${c.error ?? c.status}`;
+        setStale(state.artifact !== null);
+      }
+      setBusy(pipe.analyzing, false);
+
+      if (state.tab === 'preview') await runPreview(seq);
+      if (state.tab === 'truth') await runTruth(seq);
+    }
+
+    async function runPreview(seq: number) {
       if (!state.tabs.files.length || !state.version) return;
       const r = await client.call('preview', requestFor(state.tabs.files, { color: 'never' }));
-      if (gen !== state.gen) return;
-      previewEl.textContent = r.status === 0 ? r.text! : messageOf(r);
+      // The follow-on call re-checks the SAME stage: this is the guard the
+      // langlang playground omits on its second stage.
+      if (!buildStage.isCurrent(seq)) return;
+      if (r.status === 0) {
+        previewEl.textContent = r.text!;
+        return;
+      }
+      // Leave the last good schematic in place and say so in the status bar.
+      pipe.failure = messageOf(r);
+      setStale(previewEl.textContent !== '');
     }
 
     function rootInputBits(): number | null {
@@ -777,7 +851,7 @@ const initial = picks[0];
       return a.symbols.filter((s) => s.file_id === rootId && s.kind === 'input').reduce((n, s) => n + s.width, 0);
     }
 
-    async function runTruth(gen: number) {
+    async function runTruth(seq: number) {
       if (!state.tabs.files.length || !state.version) return;
       const bits = rootInputBits();
       if (bits !== null && bits > UI_INPUT_BITS_CAP) {
@@ -786,12 +860,15 @@ const initial = picks[0];
         return;
       }
       const r = await client.call('truth_table', requestFor(state.tabs.files, { format: 'json', truth_table_cap: UI_INPUT_BITS_CAP }));
-      if (gen !== state.gen) return;
-      tableEl.innerHTML = '';
+      if (!buildStage.isCurrent(seq)) return;
       if (r.status !== 0) {
-        tableEl.textContent = messageOf(r);
+        // A refusal leaves the last good table on screen; the reason goes to
+        // the status bar rather than replacing what the reader was reading.
+        pipe.failure = messageOf(r);
+        setStale(tableEl.textContent !== '');
         return;
       }
+      tableEl.innerHTML = '';
       const table = JSON.parse(r.text!) as TruthTable;
       const t = document.createElement('table');
       const head = t.createTHead().insertRow();
@@ -1015,14 +1092,16 @@ const initial = picks[0];
       if (!sim.view) return;
       await buildSim();
     }
-    hooks.onArtifact = (bytes) => {
+    hooks.onArtifact = (bytes, reason) => {
       sim.bytes = bytes;
       if (!bytes) {
         sim.view?.destroy();
         sim.view = null;
         simMount.innerHTML = '';
         simMount.hidden = true;
-        simNote.textContent = state.simulateEnabled ? 'Fix the errors to simulate.' : simNote.textContent;
+        simNote.textContent = state.simulateEnabled
+          ? (reason === 'files-changed' ? 'Compile a circuit first.' : 'Fix the errors to simulate.')
+          : simNote.textContent;
         sim.renderedHash = -1;
         return;
       }

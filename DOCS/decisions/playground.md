@@ -100,3 +100,43 @@ The entries below record the decisions of the playground-v2 initiative (the site
 
 **Measured.** Across all 10 examples and all 7 tour steps, no diagnostic is ever blamed on a `<builtin>/…` path, so the list needs no filter today. That is kept as a regression case rather than assumed, because the compile route now resolves implicit builtins and those sources do appear in the analysis.
 
+### The playground is an `app` layout variant of `Base.astro`
+
+**Decision.** `Base.astro` takes `layout?: 'default' | 'app'` and stamps `data-layout="app"` on `<body>` for the app variant only, so every other page's markup is byte-identical to what it was before the prop existed. The app variant makes the body a `100dvh` grid of `auto 1fr auto` with `overflow: hidden`, strips `main`'s article padding and `max-width`, gives `main` its own `auto minmax(0, 1fr)` grid with `min-height: 0`, and compacts the footer without removing the row that carries the only theme toggle below 600px. Every rule in the block is scoped to the attribute, which a test enforces. Below 800px the lock is released, the panes stack, and the page scrolls again.
+
+**Rationale.** A workbench and an article want opposite things from the same layout: one fills the viewport and scrolls inside its panes, the other centres a column and scrolls the page. A variant on the existing layout keeps one nav, one footer and one theme pipeline, where a second layout file would fork all three. The `min-height: 0` is not decoration — a grid item defaults to `min-height: auto`, which lets the `1fr` row grow past the viewport, and with `overflow: hidden` on the body the bottom of the page then becomes unreachable with no scrollbar anywhere.
+
+**Alternatives.** A separate `AppBase.astro` (forks the nav, footer, theme script and head); making every page a grid (changes every page to serve one).
+
+### The splitter is one custom property and a WAI-ARIA separator
+
+**Decision.** The divider writes a single unitless CSS custom property holding the first pane's share of the space left over after the divider's own width, and exactly one grid rule reads it. It is a `role="separator"` element with `tabindex="0"`, live `aria-valuenow`/`min`/`max`/`text`, arrow and `Shift`-arrow stepping, `Home`/`End`, `Escape` to abandon a drag and double-click to reset. Pointer capture keeps a drag on the separator even over the simulation canvas. A `ResizeObserver` re-clamps what is rendered but never commits, so the rendered ratio and the reader's *intent* are separate: a narrow window borrows the position rather than overwriting the preference.
+
+**Rationale.** A percentage that ignored the divider's own width sums past 100%, and under the app layout's `overflow: hidden` body that clips invisibly instead of raising a scrollbar. Writing one property means a drag never re-lays-out the editor. The wrong-axis arrows deliberately return "not handled" so they keep scrolling the page, which is why the key helper returns a nullable number rather than a ratio.
+
+**Alternatives.** Two width percentages (drift, and the divider's width has to come out of one of them); a library (a dependency for 200 lines); re-laying out on every frame (the editor re-measures on every drag frame).
+
+### One localStorage key, one schema-versioned envelope
+
+**Decision.** Everything the playground remembers lives under `circ.playground.v1` in a single envelope with a `version`, and every read runs through `normalize`, which drops unknown keys, clamps every number and falls back key by key. A version mismatch or a parse failure resets to defaults with a note rather than migrating or guessing. Writes are debounced 500 ms and flushed on `pagehide` and on hide; the envelope is trimmed to a cap by evicting least-recently-updated projects before writing, a quota error evicts once more and retries exactly once, and a second failure disables persistence for the session while the page keeps working from memory. Storage is injected, so every one of those paths is driven by a test rather than hoped for.
+
+**Rationale.** One key means a reset is one `removeItem` and a schema change is one version bump. Dropping unknown keys is what guarantees a hand-edited envelope can never smuggle a field into a compiler options object, where an unknown key is a bad request rather than a silent default. The quota and private-window paths are silent in a browser and cannot be triggered on demand, so they are the paths most worth proving.
+
+**Alternatives.** A key per concern (a partial reset leaves an inconsistent set); no version (a shape change becomes a crash for every returning reader); copying langlang's `JSON.stringify(ws).includes("undefined")` corruption heuristic (it false-positives on any source containing the word).
+
+### The status bar is a pure function of one input record
+
+**Decision.** One `StatusInput` record goes in and one `{ kind, label, detail }` comes out, in a fixed precedence: a failure outranks everything, then the handshake, then work in flight, then diagnostics, then a good build. The island holds the record and calls one render. The label and the state dot are written only when the *kind* changes; the per-keystroke text lives in a non-live detail span, and a separate `role="status"` span is the only announcement channel, shared with the file-tab operations and the store's notes.
+
+**Rationale.** Status text assembled inline at eight call sites cannot be reasoned about — the interesting question is which state wins when several are true at once, and that is only answerable if the precedence lives in one place a test can drive. Keeping the live region quiet is the other half: a region that re-announces on every keystroke is worse than no region at all.
+
+**Alternatives.** Writing `textContent` at each site (the shipped behaviour before this phase; no precedence, no test); one live region for everything (announces the artifact size on every build).
+
+### Two debounces, a sequence counter per stage
+
+**Decision.** Analysis runs on a 120 ms debounce and the build on a 350 ms one, each stage owning its own monotonic counter. The counter is claimed when the timer *fires*, never when it is scheduled, and `isCurrent` is re-checked after **every** await — including the follow-on preview or truth-table call, which re-uses the build stage's sequence. The build consults but never waits on the analysis: it skips the compile only when a *fresh* analysis already reported errors, so no ordering between the two timers can wedge the pipeline. While the source does not build, the last good preview, table and canvas stay on screen dimmed; they are cleared only when the file NAME list changes, which is the one case where they describe a project that no longer exists.
+
+**Rationale.** One debounce forces a single tradeoff between squiggle latency and rebuild churn; two let squiggles feel instant while the schematic stays still. Claiming at fire time is what keeps a call in flight valid while the reader keeps typing. The second-stage guard is the one the langlang playground omits, and its absence shows as a stale table arriving after a newer one. Dropping a reply is not cancellation — the worker has no abort, so a stale call finishes and its result is discarded on arrival; the truth-table pre-flight cap remains the only real defence against a long enumeration.
+
+**Alternatives.** One debounce with one counter (the shipped behaviour before this phase); cancelling in the worker (there is no abort, and adding one means a session protocol); blanking the outputs on every failed build (the flicker this phase exists to remove).
+

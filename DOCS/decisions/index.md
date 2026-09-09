@@ -74,6 +74,11 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - The last file is the root; reorder is how you change it (no root field, `rootOf` is position)
 - One editor state per file is what makes undo per-file (state-per-file, the pure index registry, the theme fan-out)
 - Diagnostics are mapped once per tab, and listed once overall (file-local offsets, the total mapper, the per-tab staleness guard)
+- The playground is an `app` layout variant of `Base.astro` (one `data-layout` attribute, scoped rules, `min-height: 0`)
+- The splitter is one custom property and a WAI-ARIA separator (intent versus rendered ratio, pointer capture, nullable key handling)
+- One localStorage key, one schema-versioned envelope (`normalize` drops unknown keys, LRU eviction, retry once, session disable)
+- The status bar is a pure function of one input record (fixed precedence, the label written only on a kind change)
+- Two debounces, a sequence counter per stage (claimed at fire time, guarded at every await, last good output dimmed)
 
 ## Conventions
 

@@ -79,3 +79,25 @@ export class LibcircClient {
     this.initPromise = null;
   }
 }
+
+/**
+ * One client per wasm URL, shared by every island on the page.
+ *
+ * A page with several editors must not spawn several workers and instantiate
+ * `libcirc.wasm` several times. Requests are stateless request/response with
+ * replies matched by message id, so interleaving callers is safe.
+ *
+ * Construction spawns nothing: the worker starts on the first `send()`. A
+ * shared client is never `dispose()`d by a consumer — it outlives all of them.
+ */
+const shared = new Map<string, LibcircClient>();
+
+export function getSharedClient(wasmUrl: string): LibcircClient {
+  let client = shared.get(wasmUrl);
+  if (!client) {
+    client = new LibcircClient(wasmUrl);
+    shared.set(wasmUrl, client);
+  }
+  return client;
+}
+

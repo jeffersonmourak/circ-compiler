@@ -2,12 +2,14 @@
 // state wins when several are true at once — is provable without a browser.
 import { describe, expect, test } from 'bun:test';
 import {
+  Stage,
   formatBytes,
   outputsShouldClear,
   plural,
   shouldCompile,
   statusFor,
   type StatusInput,
+  type TimerLike,
 } from '../src/scripts/pipeline.ts';
 
 const base: StatusInput = {
@@ -103,5 +105,125 @@ describe('pipeline decisions', () => {
     expect(outputsShouldClear(files, ['root.circ', 'half_adder.circ'])).toBe(true);
     expect(outputsShouldClear(files, ['ha.circ', 'root.circ'])).toBe(true);
     expect(outputsShouldClear([], [])).toBe(false);
+  });
+});
+
+/** A clock a test advances by hand. */
+function fakeTimers() {
+  let next = 1;
+  const pending = new Map<number, () => void>();
+  const timers: TimerLike & { run(): number } = {
+    setTimeout(fn) {
+      const id = next++;
+      pending.set(id, fn);
+      return id;
+    },
+    clearTimeout(id) {
+      pending.delete(id);
+    },
+    run() {
+      const fns = [...pending.values()];
+      pending.clear();
+      for (const fn of fns) fn();
+      return fns.length;
+    },
+  };
+  return timers;
+}
+
+describe('pipeline Stage', () => {
+  test('five schedules inside the window run once', () => {
+    const timers = fakeTimers();
+    const stage = new Stage(120, timers);
+    const runs: number[] = [];
+    for (let i = 0; i < 5; i += 1) stage.schedule((seq) => runs.push(seq));
+    expect(runs).toEqual([]);
+    expect(stage.pending).toBe(true);
+    timers.run();
+    expect(runs).toEqual([1]);
+    expect(stage.pending).toBe(false);
+  });
+
+  test('the sequence is claimed at fire time, not at schedule time', () => {
+    const timers = fakeTimers();
+    const stage = new Stage(120, timers);
+    stage.schedule(() => {});
+    // Merely scheduling must not move the counter: a call in flight would be
+    // invalidated by a keystroke, and the panes would empty between builds.
+    expect(stage.seq).toBe(0);
+    timers.run();
+    expect(stage.seq).toBe(1);
+  });
+
+  test('an in-flight call stays current while a later timer is only pending', () => {
+    const timers = fakeTimers();
+    const stage = new Stage(120, timers);
+    let inFlight = -1;
+    stage.schedule((seq) => { inFlight = seq; });
+    timers.run();
+    expect(stage.isCurrent(inFlight)).toBe(true);
+
+    // A keystroke arrives: a new timer is armed but has not fired.
+    stage.schedule(() => {});
+    expect(stage.isCurrent(inFlight)).toBe(true);
+
+    // Once it fires, the older call is stale — at every await, not just one.
+    timers.run();
+    expect(stage.isCurrent(inFlight)).toBe(false);
+  });
+
+  test('a second-stage check fails even after the first one passed', () => {
+    const timers = fakeTimers();
+    const stage = new Stage(350, timers);
+    let seq = -1;
+    stage.schedule((s) => { seq = s; });
+    timers.run();
+    // First await boundary: still ours.
+    expect(stage.isCurrent(seq)).toBe(true);
+    // …a newer run lands between the two awaits…
+    stage.schedule(() => {});
+    timers.run();
+    // …and the follow-on call must be dropped too. This is the guard the
+    // langlang playground omits on its second stage.
+    expect(stage.isCurrent(seq)).toBe(false);
+  });
+
+  test('flush cancels the pending timer and runs now', () => {
+    const timers = fakeTimers();
+    const stage = new Stage(120, timers);
+    const runs: number[] = [];
+    stage.schedule((seq) => runs.push(seq));
+    stage.flush((seq) => runs.push(seq));
+    expect(runs).toEqual([1]);
+    expect(timers.run()).toBe(0);
+    expect(runs).toEqual([1]);
+  });
+
+  test('cancel runs nothing, and claim moves the counter with no timer', () => {
+    const timers = fakeTimers();
+    const stage = new Stage(120, timers);
+    let ran = false;
+    stage.schedule(() => { ran = true; });
+    stage.cancel();
+    expect(timers.run()).toBe(0);
+    expect(ran).toBe(false);
+    expect(stage.pending).toBe(false);
+
+    const before = stage.seq;
+    expect(stage.claim()).toBe(before + 1);
+    expect(stage.isCurrent(before)).toBe(false);
+  });
+
+  test('the two stages carry independent counters', () => {
+    const timers = fakeTimers();
+    const analyze = new Stage(120, timers);
+    const build = new Stage(350, timers);
+    analyze.schedule(() => {});
+    timers.run();
+    expect(analyze.seq).toBe(1);
+    // A tab switch re-uses build.seq rather than claiming, so a compile in
+    // flight stays current.
+    expect(build.seq).toBe(0);
+    expect(build.isCurrent(0)).toBe(true);
   });
 });

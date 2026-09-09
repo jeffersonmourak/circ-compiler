@@ -13,6 +13,78 @@ export interface TimerLike {
   clearTimeout(id: number): void;
 }
 
+const defaultTimers: TimerLike = {
+  setTimeout: (fn, ms) => globalThis.setTimeout(fn, ms) as unknown as number,
+  clearTimeout: (id) => globalThis.clearTimeout(id),
+};
+
+/**
+ * One debounce plus one monotonic sequence counter.
+ *
+ * The counter is claimed when the timer FIRES, never when it is scheduled. A
+ * keystroke arriving while a call is in flight must not invalidate that call,
+ * or the panes would go empty between builds — that is the "last good output
+ * stays" half of the design, and `isCurrent` is the "drop the stale reply"
+ * half.
+ *
+ * Dropping a reply is not cancellation: the worker has no abort, so a stale
+ * call finishes and its result is discarded on arrival.
+ */
+export class Stage {
+  private timer: number | null = null;
+  private counter = 0;
+
+  constructor(
+    readonly delayMs: number,
+    private readonly timers: TimerLike = defaultTimers,
+  ) {}
+
+  get seq(): number {
+    return this.counter;
+  }
+
+  get pending(): boolean {
+    return this.timer !== null;
+  }
+
+  /** (Re)start the debounce. `run` receives the sequence claimed at fire time. */
+  schedule(run: (seq: number) => void): void {
+    if (this.timer !== null) this.timers.clearTimeout(this.timer);
+    this.timer = this.timers.setTimeout(() => {
+      this.timer = null;
+      run(this.claim());
+    }, this.delayMs);
+  }
+
+  /** Cancel the pending run and fire now — an example pick, a first focus. */
+  flush(run: (seq: number) => void): void {
+    this.cancel();
+    run(this.claim());
+  }
+
+  cancel(): void {
+    if (this.timer === null) return;
+    this.timers.clearTimeout(this.timer);
+    this.timer = null;
+  }
+
+  /**
+   * Claim a sequence with no timer, for a run started outside `schedule` that
+   * must invalidate earlier ones. A tab switch deliberately does NOT claim: it
+   * re-uses the current sequence, so a compile already in flight stays current
+   * and its artifact still lands.
+   */
+  claim(): number {
+    this.counter += 1;
+    return this.counter;
+  }
+
+  /** The guard. Re-checked after EVERY await, in both stages. */
+  isCurrent(seq: number): boolean {
+    return seq === this.counter;
+  }
+}
+
 export type StatusKind = 'idle' | 'loading' | 'compiling' | 'live' | 'error';
 
 export interface StatusInput {

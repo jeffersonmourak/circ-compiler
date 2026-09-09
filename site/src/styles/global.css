@@ -1183,6 +1183,10 @@ a.install-line:hover {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
+/* The last good outputs stay on screen while the source is broken, dimmed
+   rather than blanked — cleared only when the file set itself changes. */
+.pg-output[data-stale] { opacity: 0.55; transition: opacity 120ms ease; }
+
 .pg-statusbar {
   display: flex;
   align-items: center;
