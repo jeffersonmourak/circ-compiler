@@ -38,6 +38,7 @@ confident summary.
 | `zig build e2e-linux-docker` | Runs `tests/e2e/linux-docker/run.sh`. Requires Docker. |
 | `zig build libcirc` | Builds the compiler front end as a static C library: `zig-out/lib/libcirc.a` + `zig-out/include/libcirc.h` (see `DOCS/libcirc-api.md`). |
 | `zig build libcirc-smoke` | Compiles `examples/c/analyze.c` against `libcirc.a` and runs it. |
+| `zig build libcirc-wasm` | Builds the same C ABI for `wasm32-freestanding`: `zig-out/lib/libcirc.wasm` (ten `circ_*` exports + `memory`; follows `-Dwasm-optimize`). Driven by `tests/e2e/libcirc_wasm_test.zig` through Node. |
 
 Both wasm artifacts (`zig-out/lib/circ-runtime.wasm` and `libcirc.wasm`) are built ReleaseSmall and stripped regardless of `-Doptimize`; `-Dwasm-optimize=Debug` keeps names and DWARF for bisecting.
 

@@ -534,3 +534,20 @@ test "libcirc.wasm: size gate" {
     const line_end = std.mem.indexOfScalarPos(u8, run.stdout, at, '\n') orelse run.stdout.len;
     std.debug.print("{s}\n", .{run.stdout[at..line_end]});
 }
+
+test "libcirc.wasm: doc example loads and compiles the inverter" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    if (try shouldSkip(a)) return;
+
+    // The fenced block after the marker line in DOCS/libcirc-api.md, verbatim.
+    const doc = try std.fs.cwd().readFileAlloc(a, "DOCS/libcirc-api.md", 1 << 20);
+    const marker = "// libcirc-api.md: Node example\n";
+    const start = std.mem.indexOf(u8, doc, marker) orelse return error.DocExampleMissing;
+    const end = std.mem.indexOfPos(u8, doc, start, "\n```") orelse return error.DocExampleUnterminated;
+    const example = doc[start + marker.len .. end];
+
+    const run = try runNode(a, example);
+    try std.testing.expect(std.mem.indexOf(u8, run.stdout, "PASS\n") != null);
+}

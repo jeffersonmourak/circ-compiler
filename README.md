@@ -55,7 +55,7 @@ This is the fast dev-loop suite. `zig build test-all` additionally runs the slow
 
 The embedded runtime (`zig-out/lib/circ-runtime.wasm`) is always ReleaseSmall and stripped; `-Dwasm-optimize=<mode>` changes that for both wasm artifacts without touching the CLI's own `-Doptimize`.
 
-The compiler front end is also available as a C library — `zig build libcirc` produces `zig-out/lib/libcirc.a` and `zig-out/include/libcirc.h`, and `zig build libcirc-smoke` builds and runs `examples/c/analyze.c` against it. See `DOCS/libcirc-api.md`.
+The compiler front end is also available as a C library — `zig build libcirc` produces `zig-out/lib/libcirc.a` and `zig-out/include/libcirc.h`, and `zig build libcirc-smoke` builds and runs `examples/c/analyze.c` against it; `zig build libcirc-wasm` builds the same API as a freestanding `zig-out/lib/libcirc.wasm` for browsers and Node. See `DOCS/libcirc-api.md`.
 
 ## Usage
 
