@@ -68,3 +68,5 @@ The artifact intentionally omits several exports that earlier drafts considered:
 - `freeBuffer()` — companion to the introspection exports above; not needed because no export currently returns an owned buffer.
 
 A richer surface (`getStateSnapshot`, `getFileInfo`, `freeBuffer`, …) still exists in `lib/emit/runtime.zig`, the experimental `--emit-zig` pipeline. That path is not on the default compile and its export contract is not stable.
+
+The `circ_alloc`/`circ_free`/`circ_version`/`circ_analyze`/`circ_compile`/`circ_preview`/`circ_truth_table`/`circ_result_ptr`/`circ_result_len`/`circ_reset` exports belong to the *library* module `libcirc.wasm` ([libcirc.md](libcirc.md)), never to a compiled artifact; an artifact's import set stays `env.debugEnabled`/`env.onDebugLog`.

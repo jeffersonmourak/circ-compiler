@@ -10,7 +10,7 @@
 
 ### Pipeline shape: parse → topology bytes → custom section append → wasm
 
-**Decision.** Compilation runs as `.circ source → langlang parse tree → resolved IR → `circ.topology.v0.{min,full}` binary payloads → custom sections appended to pre-built runtime blob → `.wasm``. No `zig` subprocess is spawned at circuit-compile time.
+**Decision.** Compilation runs as `.circ source → langlang-generated Zig parser (lib/parser/parser.zig) → resolved IR → `circ.topology.v0.{min,full}` binary payloads → custom sections appended to pre-built runtime blob → `.wasm``. No `zig` subprocess is spawned at circuit-compile time.
 
 **Rationale.** The previous pipeline required Zig installed on every user machine at circuit-compile time. Serializing the resolved IR into a compact binary format and appending it as a WASM custom section to a pre-built runtime blob removes that dependency entirely. The runtime is compiled exactly once at CLI build time and embedded via `@embedFile`. The host protocol (`topology_alloc` + `init()`) is simple enough to implement in any JS environment without SDK support.
 
@@ -28,7 +28,7 @@
 
 **Decision.** The runtime (simulation engine, WASM entry point with `topology_alloc`, `init`, `run`, `setPin`, `getOutputValue`, `getOutputDefined` exports) is compiled to `wasm32-freestanding` exactly once, at `zig build circ-compile` time, and embedded in the CLI binary via `@embedFile`.
 
-**Rationale.** The CLI is a single self-contained binary — no install prefix, no runtime path lookup, no version drift. Reproducibility is built in: the same CLI binary always embeds the same runtime version. Concurrent `circ-compile` invocations are safe by construction — there is no shared mutable filesystem state.
+**Rationale.** The CLI is a single self-contained binary — no install prefix, no runtime path lookup, no version drift. Reproducibility is built in: the same CLI binary always embeds the same runtime version. Concurrent `circ-compile` invocations are safe by construction — there is no shared mutable filesystem state. The runtime is built with `-Dwasm-optimize` (default `ReleaseSmall`, stripped) independently of `-Doptimize`, and the `libcirc` library embeds a wasm-target twin of the same bytes — see [libcirc.md](libcirc.md) "`-Dwasm-optimize` governs both wasm builds".
 
 **Alternatives.** Runtime located via env var or `--runtime-path` flag (rejected: moving part in packaging, runtime/CLI mismatch bugs). Recompiling the runtime at circuit-compile time (rejected: requires Zig at user runtime, the problem we are solving).
 
