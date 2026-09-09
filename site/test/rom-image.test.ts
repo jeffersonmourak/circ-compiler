@@ -13,6 +13,11 @@ import {
   maxWords,
   parseRomImage,
   romSymbols,
+  applyRomImages,
+  decodeMemInfo,
+  preloadsFor,
+  romPlan,
+  type MemoryHost,
   type MemorySymbol,
 } from '../src/utils/rom-image.ts';
 import { callOp, instantiateLibcirc, type LibcircExports } from '../src/scripts/libcirc-abi.ts';
@@ -245,5 +250,137 @@ describe.skipIf(skip)('against the committed module', () => {
     const out = callOp(w, 'truth_table', requestFor(files, optionsFor('truth_table', defaultSettings(), { nope: 'ff' })));
     expect(out.status).toBe(3);
     expect(new TextDecoder().decode(out.bytes)).toContain('nope');
+  });
+});
+
+describe('romPlan and preloadsFor', () => {
+  const roms = [rom(), rom({ name: 'other', width: 16, addrWidth: 2 })];
+
+  test('plans a write per valid image and reports the rest', () => {
+    const plan = romPlan(new Map([['code', '0102'], ['other', 'zz']]), roms);
+    expect(plan.writes.map((w) => w.name)).toEqual(['code']);
+    expect(plan.errors.get('other')).toContain('hex digit');
+  });
+
+  test('an empty image is a clear, not a missing write', () => {
+    const plan = romPlan(new Map([['code', '  ']]), roms);
+    expect(plan.writes).toEqual([{ name: 'code', bytes: null }]);
+  });
+
+  test('a ram is never written', () => {
+    const plan = romPlan(new Map([['data', '01']]), [rom({ name: 'data', kind: 'ram' })]);
+    expect(plan.writes).toEqual([]);
+  });
+
+  test('the text is re-validated against the CURRENT shape', () => {
+    // Three bytes is three words at W=8 and not a whole number at W=16.
+    const images = new Map([['code', '010203']]);
+    expect(romPlan(images, [rom({ width: 8 })]).writes).toHaveLength(1);
+    const narrowed = romPlan(images, [rom({ width: 16 })]);
+    expect(narrowed.writes).toHaveLength(0);
+    expect(narrowed.errors.get('code')).toContain('whole number');
+  });
+
+  test('a name no longer declared is skipped, not errored', () => {
+    const plan = romPlan(new Map([['gone', '01']]), roms);
+    expect(plan.writes).toEqual([]);
+    expect(plan.errors.size).toBe(0);
+  });
+
+  test('preloadsFor yields canonical hex per rom', () => {
+    expect(preloadsFor(new Map([['code', '0x01 0x02']]), roms)).toEqual({ code: '0102' });
+    expect(preloadsFor(new Map([['code', '']]), roms)).toEqual({ code: '' });
+    expect(preloadsFor(new Map(), roms)).toEqual({});
+  });
+});
+
+describe('applyRomImages', () => {
+  /** A host that records what it was told to do. */
+  function fakeHost(over: Partial<MemoryHost> = {}) {
+    const memory = { buffer: new ArrayBuffer(1024) };
+    const loads: { id: number; len: number }[] = [];
+    const clears: number[] = [];
+    const host: MemoryHost & { loads: typeof loads; clears: typeof clears; views: number } = {
+      memory,
+      views: 0,
+      loads,
+      clears,
+      getMemInfo: (id) => (id === 7 ? (8 << 16) | (8 << 8) | 4 : -1),
+      memBuffer: () => {
+        // Every real call may grow linear memory; a held view would detach.
+        host.views += 1;
+        return 16;
+      },
+      memLoad: (id, len) => {
+        loads.push({ id, len });
+        return 0;
+      },
+      memClear: (id) => {
+        clears.push(id);
+        return 0;
+      },
+      ...over,
+    };
+    return host;
+  }
+
+  const roms = [rom()];
+  const idOf = (name: string) => (name === 'code' ? 7 : null);
+
+  test('writes the bytes through the staging buffer', () => {
+    const host = fakeHost();
+    const plan = romPlan(new Map([['code', '01020304']]), roms);
+    const result = applyRomImages(host, plan, idOf, roms);
+    expect(result.applied).toEqual(['code']);
+    expect(result.errors.size).toBe(0);
+    expect(host.loads).toEqual([{ id: 7, len: 4 }]);
+    // The bytes really landed at the pointer.
+    expect(Array.from(new Uint8Array(host.memory!.buffer, 16, 4))).toEqual([1, 2, 3, 4]);
+  });
+
+  test('an empty image clears rather than loading nothing', () => {
+    const host = fakeHost();
+    const result = applyRomImages(host, romPlan(new Map([['code', '']]), roms), idOf, roms);
+    expect(result.applied).toEqual(['code']);
+    expect(host.clears).toEqual([7]);
+    expect(host.loads).toEqual([]);
+  });
+
+  test('a shape mismatch refuses rather than writing to the wrong memory', () => {
+    const host = fakeHost({ getMemInfo: () => (8 << 16) | (16 << 8) | 4 });
+    const result = applyRomImages(host, romPlan(new Map([['code', '0102']]), roms), idOf, roms);
+    expect(result.applied).toEqual([]);
+    expect(result.errors.get('code')).toContain('does not match');
+    expect(host.loads).toEqual([]);
+  });
+
+  test('a name absent from the artifact is reported', () => {
+    const host = fakeHost();
+    const result = applyRomImages(host, romPlan(new Map([['code', '01']]), roms), () => null, roms);
+    expect(result.errors.get('code')).toContain('not in the compiled circuit');
+  });
+
+  test('a non-zero load code is a failure, not a silent success', () => {
+    const host = fakeHost({ memLoad: () => 3 });
+    const result = applyRomImages(host, romPlan(new Map([['code', '01']]), roms), idOf, roms);
+    expect(result.applied).toEqual([]);
+    expect(result.errors.get('code')).toContain('code 3');
+  });
+
+  test('a host with no memory exports does nothing and throws nothing', () => {
+    const result = applyRomImages({}, romPlan(new Map([['code', '01']]), roms), idOf, roms);
+    expect(result.applied).toEqual([]);
+  });
+
+  test('parse errors survive into the apply result', () => {
+    const host = fakeHost();
+    const plan = romPlan(new Map([['code', 'zz']]), roms);
+    expect(applyRomImages(host, plan, idOf, roms).errors.get('code')).toContain('hex digit');
+  });
+
+  test('decodeMemInfo unpacks the packed triple', () => {
+    expect(decodeMemInfo((8 << 16) | (8 << 8) | 4)).toEqual({ kind: 8, width: 8, addrWidth: 4 });
+    expect(decodeMemInfo((9 << 16) | (64 << 8) | 16)).toEqual({ kind: 9, width: 64, addrWidth: 16 });
+    expect(decodeMemInfo(-1)).toBeNull();
   });
 });

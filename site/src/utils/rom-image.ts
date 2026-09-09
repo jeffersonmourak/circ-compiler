@@ -154,3 +154,138 @@ export function parseRomImage(text: string, mem: MemorySymbol): RomImageResult {
   const hex = Array.from(out, (b) => b.toString(16).padStart(2, '0')).join('');
   return { ok: true, bytes: out, words, hex };
 }
+
+// ---------------------------------------------------------------------------
+// Getting an image into a running circuit.
+// ---------------------------------------------------------------------------
+
+/** name → the reader's raw text, exactly as typed. */
+export type RomImageMap = ReadonlyMap<string, string>;
+
+export interface RomWrite {
+  name: string;
+  /** Null clears the memory: an empty image is a legal instruction, not a
+   *  missing one. */
+  bytes: Uint8Array | null;
+}
+
+export interface RomPlan {
+  writes: RomWrite[];
+  /** name → message, for images that no longer validate. */
+  errors: Map<string, string>;
+}
+
+/**
+ * What to write, re-derived from the CURRENT declarations.
+ *
+ * The reader's text is re-parsed rather than cached as bytes, so changing
+ * `rom code[8, 4]` to `rom code[16, 4]` re-validates the same text against the
+ * new shape instead of writing stale bytes into a memory that has changed
+ * underneath it. A name that is no longer a declared rom is skipped, and its
+ * text is kept by the caller — restoring the declaration restores the image.
+ */
+export function romPlan(images: RomImageMap, roms: readonly MemorySymbol[]): RomPlan {
+  const writes: RomWrite[] = [];
+  const errors = new Map<string, string>();
+  for (const mem of roms) {
+    if (mem.kind !== 'rom') continue; // a ram is driven by the circuit, not by us
+    const text = images.get(mem.name);
+    if (text === undefined) continue;
+    const parsed = parseRomImage(text, mem);
+    if (!parsed.ok) {
+      errors.set(mem.name, parsed.message);
+      continue;
+    }
+    writes.push({ name: mem.name, bytes: parsed.words === 0 ? null : parsed.bytes });
+  }
+  return { writes, errors };
+}
+
+/** name → canonical hex, for the request's preloads. Roms only. */
+export function preloadsFor(images: RomImageMap, roms: readonly MemorySymbol[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const { name, bytes } of romPlan(images, roms).writes) {
+    out[name] = bytes === null ? '' : Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  }
+  return out;
+}
+
+/** The runtime surface an image is written through. Every member is optional:
+ *  an artifact built before memories existed has none of them. */
+export interface MemoryHost {
+  memory?: { buffer: ArrayBufferLike };
+  getMemInfo?: (id: number) => number;
+  memBuffer?: (id: number) => number;
+  memLoad?: (id: number, len: number) => number;
+  memClear?: (id: number) => number;
+}
+
+export interface ApplyResult {
+  applied: string[];
+  errors: Map<string, string>;
+}
+
+/** `(kind << 16) | (W << 8) | A`, or -1. */
+export function decodeMemInfo(info: number): { kind: number; width: number; addrWidth: number } | null {
+  if (info < 0) return null;
+  return { kind: (info >> 16) & 0xff, width: (info >> 8) & 0xff, addrWidth: info & 0xff };
+}
+
+/**
+ * Write every planned image into a running circuit.
+ *
+ * The id join is by declared name, and each id is checked with `getMemInfo`
+ * before anything is written: a mismatch means the artifact and the analysis
+ * have drifted apart, and writing to the wrong memory is worse than not
+ * writing at all.
+ *
+ * `memBuffer` may grow linear memory, so the byte view is re-taken after every
+ * call — a view held across it is detached and writes into nothing.
+ */
+export function applyRomImages(
+  host: MemoryHost,
+  plan: RomPlan,
+  idOf: (name: string) => number | null,
+  roms: readonly MemorySymbol[],
+): ApplyResult {
+  const applied: string[] = [];
+  const errors = new Map(plan.errors);
+  if (!host.memory || !host.getMemInfo || !host.memBuffer || !host.memLoad) return { applied, errors };
+
+  for (const write of plan.writes) {
+    const id = idOf(write.name);
+    if (id === null) {
+      errors.set(write.name, `${write.name} is not in the compiled circuit.`);
+      continue;
+    }
+    const mem = roms.find((m) => m.name === write.name);
+    const info = decodeMemInfo(host.getMemInfo(id));
+    if (!info || !mem || info.width !== mem.width || info.addrWidth !== mem.addrWidth) {
+      // Writing to a memory whose shape is not the one that was validated
+      // against is worse than not writing.
+      errors.set(write.name, `${write.name} does not match the compiled circuit; not loaded.`);
+      continue;
+    }
+
+    if (write.bytes === null) {
+      if (host.memClear) host.memClear(id);
+      applied.push(write.name);
+      continue;
+    }
+    const ptr = host.memBuffer(id);
+    if (ptr < 0) {
+      errors.set(write.name, `${write.name} has no staging buffer.`);
+      continue;
+    }
+    // Re-taken here, after memBuffer, and never hoisted out of the loop.
+    new Uint8Array(host.memory.buffer).set(write.bytes, ptr);
+    const rc = host.memLoad(id, write.bytes.length);
+    if (rc !== 0) {
+      errors.set(write.name, `${write.name} was refused by the runtime (code ${rc}).`);
+      continue;
+    }
+    applied.push(write.name);
+  }
+  return { applied, errors };
+}
+
