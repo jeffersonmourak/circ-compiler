@@ -7,3 +7,4 @@ Components (1)
   Component type=bus width=[4] instance=w width=[4] [f0:2:1-2:15]
     Port in [f0:2:10-2:12]
       NamedRef a.out [f0:2:13-2:14]
+Errors (0)

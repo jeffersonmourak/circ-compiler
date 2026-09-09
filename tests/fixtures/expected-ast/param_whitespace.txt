@@ -11,3 +11,4 @@ Components (2)
   Component type=something instance=q width_args=[4, 8] [f0:4:1-4:29]
     Port in [f0:4:24-4:26]
       NamedRef b.out [f0:4:27-4:28]
+Errors (0)

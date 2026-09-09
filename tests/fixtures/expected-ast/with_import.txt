@@ -10,3 +10,4 @@ Components (1)
   Component type=dep instance=sub [f0:3:1-3:13]
     Port a [f0:3:9-3:10]
       NamedRef a.out [f0:3:11-3:12]
+Errors (0)

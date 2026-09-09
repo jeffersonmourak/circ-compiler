@@ -164,6 +164,33 @@ test "translate parse tree to typed ast fixtures" {
     }
 }
 
+test "errors: clean source has no marks" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const parsed = try translate.parseSource(allocator, 0, "input a\noutput o(in=a)\n");
+    try std.testing.expectEqual(@as(usize, 0), parsed.errors.len);
+}
+
+test "errors: truncated bus carries busvalue then busclose marks" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    // No trailing newline: the marks sit at the stall point on line 2. With a
+    // newline the Spacing before PortRef eats it and both marks move to 3:1.
+    const parsed = try translate.parseSource(allocator, 0, "input a\nand g(a=");
+    try std.testing.expectEqual(@as(usize, 0), parsed.components.len);
+    try std.testing.expectEqual(@as(usize, 2), parsed.errors.len);
+    try std.testing.expectEqualStrings("expected a signal reference after '='", parsed.errors[0].message);
+    try std.testing.expectEqualStrings("expected ')' to close the connection list", parsed.errors[1].message);
+    for (parsed.errors) |mark| {
+        try std.testing.expectEqual(@as(u32, 2), mark.span.start_line);
+        try std.testing.expectEqual(@as(u32, 9), mark.span.start_col);
+        try std.testing.expectEqual(@as(u32, 2), mark.span.end_line);
+        try std.testing.expectEqual(@as(u32, 9), mark.span.end_col);
+    }
+}
+
 test "edge: completely empty .circ fails parse" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();

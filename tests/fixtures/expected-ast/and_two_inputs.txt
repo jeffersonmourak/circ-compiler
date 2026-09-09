@@ -11,3 +11,4 @@ Components (1)
       NamedRef a.out [f0:2:13-2:14]
     Port b [f0:2:16-2:17]
       NamedRef b.out [f0:2:18-2:19]
+Errors (0)
