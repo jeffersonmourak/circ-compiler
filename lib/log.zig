@@ -9,7 +9,9 @@ extern fn debugEnabled() bool;
 
 const is_wasm = builtin.target.cpu.arch == .wasm32 or builtin.target.cpu.arch == .wasm64;
 
-var wasmLogArena = std.heap.ArenaAllocator.init(memory.allocator);
+// Backed by the page allocator, not `memory.allocator`: `memory.reset()` must
+// be free to drop the engine arena without dangling this one.
+var wasmLogArena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
 
 const PrintType = enum {
     Debug,

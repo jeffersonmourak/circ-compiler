@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 /// User-selectable color mode for `circ-compile preview` output.
 pub const ColorMode = enum {
@@ -57,6 +58,8 @@ pub fn shouldColor(
         .always => true,
         .never => false,
         .auto => blk: {
+            // No TTY exists on a freestanding target (the wasm library).
+            if (comptime builtin.os.tag == .freestanding) break :blk false;
             if (no_color_value != null) break :blk false;
             const handle = stdout_handle orelse break :blk false;
             break :blk std.posix.isatty(handle);

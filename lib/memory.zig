@@ -74,6 +74,20 @@ pub fn deinit() void {
     arena.deinit();
 }
 
+/// Releases every byte the engine arena holds and keeps the allocator
+/// usable. Legal only while no `Circuit`/`Session` is alive; a library host
+/// calls it between independent runs so a long-lived process does not grow
+/// without bound. The `COLLECT_METRICS` counters are not touched.
+pub fn reset() void {
+    _ = arena.reset(.free_all);
+}
+
+/// Bytes the engine arena currently holds. Test-only observability for
+/// `reset()`.
+pub fn arenaCapacityForTest() usize {
+    return arena.queryCapacity();
+}
+
 /// Returns a snapshot of cumulative allocation counters. Always zero when
 /// `COLLECT_METRICS` is false. The bench computes per-fixture deltas by
 /// snapshotting before and after `runFixture`; the global counter is never
