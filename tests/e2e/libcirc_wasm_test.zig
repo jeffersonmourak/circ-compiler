@@ -462,3 +462,75 @@ test "libcirc.wasm: bad request → 2, cap refusal → 3" {
     try std.testing.expect(std.mem.indexOf(u8, parsed.value.object.get("error").?.string, "17") != null);
     try std.testing.expectEqual(@as(u32, 0), run.get("wide_compile").?.status);
 }
+
+// ---- memory bound and size gate ----
+
+fn parseMemLine(stdout: []const u8, label: []const u8) !struct { after5: u64, after50: u64 } {
+    const prefix = try std.fmt.allocPrint(std.testing.allocator, "MEM {s} after5=", .{label});
+    defer std.testing.allocator.free(prefix);
+    const at = std.mem.indexOf(u8, stdout, prefix) orelse return error.MissingMemLine;
+    var it = std.mem.tokenizeAny(u8, stdout[at + prefix.len ..], " =\n");
+    const after5 = try std.fmt.parseInt(u64, it.next() orelse return error.MissingMemLine, 10);
+    _ = it.next(); // "after50"
+    const after50 = try std.fmt.parseInt(u64, it.next() orelse return error.MissingMemLine, 10);
+    return .{ .after5 = after5, .after50 = after50 };
+}
+
+test "libcirc.wasm: 50 repeated compiles and 50 repeated truth tables keep linear memory bounded" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    if (try shouldSkip(a)) return;
+
+    const chain = try fixtureFiles(a, "tests/fixtures/circuits/chain.circ");
+    const adder = try fixtureFiles(a, "tests/fixtures/circuits/four_bit_adder.circ");
+    const xor = try fixtureFiles(a, "tests/fixtures/circuits/builtin_xor.circ");
+    // compile loops a fast-path fixture; four_bit_adder goes through preview
+    // (project route, builtin macros expanded) so the whole front end churns.
+    const compile_req = try request(a, "/playground/main.circ", chain, null);
+    const preview_req = try request(a, "/playground/main.circ", adder, "{\"color\":\"never\"}");
+    const tt_req = try request(a, "/playground/main.circ", xor, "{\"format\":\"json\"}");
+    var script: std.ArrayList(u8) = .{};
+    try script.writer(a).print(
+        \\const loop = (label, op, req) => {{
+        \\  let after5 = 0;
+        \\  for (let i = 1; i <= 50; i++) {{
+        \\    const r = circ.call(op, req);
+        \\    if (r.status !== 0) throw new Error(label + " call " + i + " status " + r.status);
+        \\    if (i === 5) after5 = circ.memoryBytes();
+        \\  }}
+        \\  process.stdout.write("MEM " + label + " after5=" + after5 + " after50=" + circ.memoryBytes() + "\n");
+        \\}};
+        \\loop("compile", "compile", {s});
+        \\loop("preview", "preview", {s});
+        \\loop("truth_table", "truth_table", {s});
+        \\
+    , .{ compile_req, preview_req, tt_req });
+    const run = try runNode(a, script.items);
+
+    for ([_][]const u8{ "compile", "preview", "truth_table" }) |label| {
+        const mem = try parseMemLine(run.stdout, label);
+        std.debug.print("MEM {s} after5={d} after50={d}\n", .{ label, mem.after5, mem.after50 });
+        try std.testing.expect(mem.after50 <= mem.after5 + 65536);
+        try std.testing.expect(mem.after50 <= 64 * 1024 * 1024);
+    }
+}
+
+test "libcirc.wasm: size gate" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    const raw = embed.wasm.len;
+    if (raw > 3 * 1024 * 1024) {
+        std.debug.print("libcirc.wasm is {d} bytes, over the 3 MiB hard cap\n", .{raw});
+        return error.WasmTooLarge;
+    }
+    if (try shouldSkip(a)) return;
+    const run = try runNode(a,
+        \\process.stdout.write("SIZE raw=" + circ.bytes.length + " gzip=" + circ.gzipSize() + "\n");
+    );
+    const at = std.mem.indexOf(u8, run.stdout, "SIZE raw=") orelse return error.MissingSizeLine;
+    const line_end = std.mem.indexOfScalarPos(u8, run.stdout, at, '\n') orelse run.stdout.len;
+    std.debug.print("{s}\n", .{run.stdout[at..line_end]});
+}
