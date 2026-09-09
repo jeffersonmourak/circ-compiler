@@ -41,6 +41,7 @@ const initial = picks[0];
            so a reader never sees N tabs over one combined textarea. -->
       <div class="pg-files" hidden>
         <div class="pg-filetabs" role="tablist" aria-label="Project files" aria-orientation="horizontal"></div>
+        <button type="button" class="pg-file-add" aria-label="Add a file">+</button>
         <span class="pg-filetab-error" role="alert"></span>
       </div>
       <div class="pg-editor-wrap" id="pg-editor-panel" role="tabpanel">
@@ -81,7 +82,12 @@ const initial = picks[0];
   import { requestFor, rootOf, PLAYGROUND_DIR } from '../utils/split-files.ts';
   import {
     activeFile,
+    addFile,
+    canDelete,
+    deleteFile,
     fromSource,
+    nameError,
+    renameFile,
     rootIndex,
     select as selectTab,
     setBody,
@@ -127,6 +133,7 @@ const initial = picks[0];
     const fileStrip = el.querySelector<HTMLElement>('.pg-files')!;
     const fileTabList = el.querySelector<HTMLElement>('.pg-filetabs')!;
     const fileError = el.querySelector<HTMLElement>('.pg-filetab-error')!;
+    const fileAdd = el.querySelector<HTMLButtonElement>('.pg-file-add')!;
     const panels = Array.from(el.querySelectorAll<HTMLElement>('.pg-panel'));
     const picks = JSON.parse(el.querySelector('#pg-picks')!.textContent || '{}') as Record<string, string>;
     const supported = (el.dataset.supportedVersions || '').split(',').filter(Boolean).map(Number);
@@ -181,6 +188,120 @@ const initial = picks[0];
       fileTabList.querySelector<HTMLElement>(`[data-index="${index}"]`)?.focus();
     }
 
+    /** Index of the tab whose delete is armed, or null. A second Delete (or the
+     *  close control) removes it; anything else disarms. */
+    let confirmIndex: number | null = null;
+    let confirmTimer: number | null = null;
+
+    function disarm() {
+      if (confirmIndex === null) return;
+      confirmIndex = null;
+      if (confirmTimer !== null) window.clearTimeout(confirmTimer);
+      confirmTimer = null;
+      renderFileTabs();
+    }
+
+    function armOrDelete(index: number) {
+      if (!canDelete(state.tabs)) {
+        status.textContent = 'The last file cannot be deleted.';
+        return;
+      }
+      if (confirmIndex !== index) {
+        confirmIndex = index;
+        if (confirmTimer !== null) window.clearTimeout(confirmTimer);
+        confirmTimer = window.setTimeout(disarm, 4000);
+        renderFileTabs();
+        status.textContent = `Delete ${state.tabs.files[index].name}? Press Delete again, or the ×, to confirm.`;
+        return;
+      }
+      const name = state.tabs.files[index].name;
+      const wasRoot = index === rootIndex(state.tabs);
+      confirmIndex = null;
+      if (confirmTimer !== null) window.clearTimeout(confirmTimer);
+      confirmTimer = null;
+      state.tabs = deleteFile(state.tabs, index);
+      editor?.removeDocument(index);
+      editor?.showDocument(state.tabs.active);
+      renderFileTabs();
+      focusFileTab(state.tabs.active);
+      status.textContent = wasRoot
+        ? `Deleted ${name}. ${rootOf(state.tabs.files).name} is now the root.`
+        : `Deleted ${name}.`;
+      schedule();
+    }
+
+    function addNewFile() {
+      disarm();
+      state.tabs = addFile(state.tabs);
+      const index = state.tabs.active;
+      editor?.insertDocument(index, state.tabs.files[index].body);
+      editor?.showDocument(index);
+      renderFileTabs();
+      focusFileTab(index);
+      status.textContent = `Added ${state.tabs.files[index].name}.`;
+      schedule();
+    }
+
+    /** Swaps the tab's name span for an input. Committing needs a valid name;
+     *  Escape reverts, and a blur commits only if the name is legal. */
+    function startRename(index: number) {
+      disarm();
+      const tab = fileTabList.querySelector<HTMLElement>(`[data-index="${index}"]`);
+      const nameEl = tab?.querySelector<HTMLElement>('.pg-filetab-name');
+      if (!tab || !nameEl) return;
+      const input = document.createElement('input');
+      input.className = 'pg-filetab-input';
+      input.value = state.tabs.files[index].name;
+      input.setAttribute('aria-label', 'File name');
+      input.setAttribute('aria-invalid', 'false');
+      let done = false;
+
+      const finish = (commit: boolean) => {
+        if (done) return;
+        done = true;
+        fileError.textContent = '';
+        if (commit) {
+          const next = renameFile(state.tabs, index, input.value);
+          if (next !== state.tabs) {
+            state.tabs = next;
+            status.textContent =
+              `Renamed to ${input.value}. Imports are not rewritten — update them yourself if this file is imported.`;
+            renderFileTabs();
+            focusFileTab(index);
+            schedule();
+            return;
+          }
+        }
+        renderFileTabs();
+        focusFileTab(index);
+      };
+
+      input.addEventListener('keydown', (e) => {
+        e.stopPropagation(); // the strip's own arrow handling must not fire
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const problem = nameError(state.tabs, index, input.value);
+          if (problem) {
+            input.setAttribute('aria-invalid', 'true');
+            fileError.textContent = problem;
+            return;
+          }
+          finish(true);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          finish(false);
+        }
+      });
+      // A blur commits when the name is legal and reverts silently otherwise.
+      input.addEventListener('blur', () => finish(nameError(state.tabs, index, input.value) === null));
+
+      nameEl.replaceWith(input);
+      input.focus();
+      input.select();
+    }
+
+    fileAdd.addEventListener('click', addNewFile);
+
     function renderFileTabs() {
       fileTabList.innerHTML = '';
       const root = rootIndex(state.tabs);
@@ -195,7 +316,14 @@ const initial = picks[0];
         // Roving tabindex: one stop for the whole strip.
         tab.tabIndex = selected ? 0 : -1;
         tab.dataset.index = String(i);
-        tab.setAttribute('aria-label', `${file.name}${i === root ? ', root file' : ''}`);
+        const armed = confirmIndex === i;
+        if (armed) tab.dataset.confirm = 'true';
+        tab.setAttribute(
+          'aria-label',
+          armed
+            ? `Delete ${file.name}? Press Delete again to confirm`
+            : `${file.name}${i === root ? ', root file' : ''}`,
+        );
 
         const name = document.createElement('span');
         name.className = 'pg-filetab-name';
@@ -209,6 +337,21 @@ const initial = picks[0];
           badge.setAttribute('aria-hidden', 'true');
           tab.appendChild(badge);
         }
+
+        const close = document.createElement('button');
+        close.type = 'button';
+        close.className = 'pg-filetab-close';
+        // Pointer-only: `role="tab"` is on ARIA's presentational-children list,
+        // so a nested control may never be announced. The keyboard path is
+        // Delete on the tab itself, and both are named in `.pg-status`.
+        close.tabIndex = -1;
+        close.textContent = '\u00d7';
+        close.setAttribute('aria-label', `Delete ${file.name}`);
+        close.addEventListener('click', (e) => {
+          e.stopPropagation();
+          armOrDelete(i);
+        });
+        tab.appendChild(close);
 
         tab.addEventListener('click', () => showFile(i));
         fileTabList.appendChild(tab);
@@ -227,10 +370,24 @@ const initial = picks[0];
       else if (e.key === 'Home') next = 0;
       else if (e.key === 'End') next = last;
       else if (e.key === 'Enter' || e.key === ' ') next = index;
+      else if (e.key === 'F2') {
+        e.preventDefault();
+        startRename(index);
+        return;
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        armOrDelete(index);
+        return;
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        disarm();
+        return;
+      }
       if (next === null) return;
       // Every consumed key is prevented: Home/End would scroll the pane and
       // the arrows would move the caret in the editor behind the strip.
       e.preventDefault();
+      disarm();
       showFile(next);
     });
 

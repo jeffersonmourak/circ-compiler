@@ -5,14 +5,21 @@ import { describe, expect, test } from 'bun:test';
 import { resolve } from 'node:path';
 import {
   activeFile,
+  addFile,
+  canDelete,
+  deleteFile,
   fromSource,
+  nameError,
+  nextFileName,
+  renameFile,
   rootIndex,
+  seedBody,
   select,
   setBody,
   toSource,
   type FileTabsState,
 } from '../src/scripts/file-tabs.ts';
-import { joinConflicts, rootOf } from '../src/utils/split-files.ts';
+import { joinConflicts, requestFor, rootOf } from '../src/utils/split-files.ts';
 import { examples } from '../src/content/examples.ts';
 import { tour } from '../src/content/tour.ts';
 
@@ -91,5 +98,103 @@ describe('file tabs model', () => {
     const source = await Bun.file(resolve(import.meta.dir, '..', 'src', 'scripts', 'file-tabs.ts')).text();
     expect(source).not.toMatch(/@codemirror\//);
     expect(source).not.toMatch(/\bdocument\.|localStorage/);
+  });
+});
+
+describe('add, rename and delete', () => {
+  const two = () => fromSource(tour[5].source);
+
+  test('addFile lands before the root and seeds a joinable body', () => {
+    const next = addFile(two());
+    expect(next.files.map((f) => f.name)).toEqual(['half_adder.circ', 'file1.circ', 'root.circ']);
+    // The root does not move.
+    expect(rootOf(next.files).name).toBe('root.circ');
+    expect(rootIndex(next)).toBe(2);
+    // The new tab is the active one.
+    expect(next.active).toBe(1);
+    expect(activeFile(next).name).toBe('file1.circ');
+    // And the seeded body survives a round trip: non-blank, and not a marker.
+    expect(joinConflicts(next.files)).toEqual([]);
+    expect(fromSource(toSource(next)).files.map((f) => f.name)).toEqual(next.files.map((f) => f.name));
+  });
+
+  test('nextFileName skips names already taken', () => {
+    expect(nextFileName([])).toBe('file1.circ');
+    const one = addFile(two());
+    expect(nextFileName(one.files)).toBe('file2.circ');
+    expect(nextFileName([{ name: 'file1.circ', body: '' }, { name: 'file3.circ', body: '' }])).toBe('file2.circ');
+  });
+
+  test('seedBody is non-blank and is not itself a marker', () => {
+    const body = seedBody('file1.circ');
+    expect(body.trim().length).toBeGreaterThan(0);
+    // A marker needs the .circ suffix; the seed deliberately drops it, or the
+    // splitter would read the new file's own first line as a second file.
+    expect(fromSource(body).files).toHaveLength(1);
+  });
+
+  test('nameError enforces the marker name and uniqueness', () => {
+    const state = two();
+    for (const bad of ['', 'foo', 'foo.circ ', 'a/b.circ', '<builtin>/xor.circ', 'main']) {
+      expect(nameError(state, 0, bad)).not.toBeNull();
+    }
+    expect(nameError(state, 0, 'a-b_1.circ')).toBeNull();
+    // Renaming a file to the name it already has is not a duplicate.
+    expect(nameError(state, 0, 'half_adder.circ')).toBeNull();
+    // …but taking another file's name is.
+    expect(nameError(state, 0, 'root.circ')).not.toBeNull();
+  });
+
+  test('renameFile is a no-op on an invalid name', () => {
+    const state = two();
+    expect(renameFile(state, 0, 'foo')).toBe(state);
+    expect(renameFile(state, 0, 'root.circ')).toBe(state);
+    expect(renameFile(state, 9, 'ok.circ')).toBe(state);
+    expect(renameFile(state, 0, 'half_adder.circ')).toBe(state);
+
+    const renamed = renameFile(state, 0, 'ha.circ');
+    expect(renamed.files.map((f) => f.name)).toEqual(['ha.circ', 'root.circ']);
+    expect(renamed.files[0].body).toBe(state.files[0].body);
+    expect(renamed.active).toBe(state.active);
+    // The rename reaches the request, which is why an import can break.
+    expect(Object.keys(requestFor(renamed.files))).toContain('files');
+    expect(Object.keys(requestFor(renamed.files).files)).toEqual([
+      '/playground/ha.circ',
+      '/playground/root.circ',
+    ]);
+  });
+
+  test('deleteFile refuses the last remaining file', () => {
+    const one = fromSource('input a\n');
+    expect(canDelete(one)).toBe(false);
+    expect(deleteFile(one, 0)).toBe(one);
+    expect(canDelete(two())).toBe(true);
+  });
+
+  test('deleteFile promotes a new root and clamps active', () => {
+    // Deleting the root promotes the file before it.
+    const afterRoot = deleteFile(two(), 1);
+    expect(afterRoot.files.map((f) => f.name)).toEqual(['half_adder.circ']);
+    expect(rootOf(afterRoot.files).name).toBe('half_adder.circ');
+
+    const three = addFile(two()); // [half_adder, file1, root], active 1
+    // active > index: shifts down with it.
+    expect(deleteFile(three, 0).active).toBe(0);
+    // active === index: clamps to a surviving neighbour.
+    expect(deleteFile(three, 1).active).toBe(1);
+    // active < index: unchanged.
+    expect(deleteFile({ ...three, active: 0 }, 2).active).toBe(0);
+    // Deleting the last entry while it is active clamps into range.
+    const atEnd = { files: three.files, active: 2 };
+    expect(deleteFile(atEnd, 2).active).toBe(1);
+  });
+
+  test('every reducer leaves its input untouched', () => {
+    const state = two();
+    const before = JSON.stringify(state);
+    addFile(state);
+    renameFile(state, 0, 'ha.circ');
+    deleteFile(state, 0);
+    expect(JSON.stringify(state)).toBe(before);
   });
 });

@@ -683,6 +683,39 @@ hr {
   border-radius: 0.6rem;
   padding: 0 0.3rem;
 }
+.pg-filetab-close {
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0 0.15rem;
+  cursor: pointer;
+  opacity: 0.55;
+}
+.pg-filetab-close:hover { opacity: 1; }
+.pg-filetab[data-confirm='true'] { border-bottom-color: var(--accent); }
+.pg-filetab[data-confirm='true'] .pg-filetab-close { opacity: 1; color: var(--accent); }
+.pg-filetab-input {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  width: 9rem;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
+  padding: 0 0.2rem;
+}
+.pg-filetab-input[aria-invalid='true'] { border-color: var(--accent); }
+.pg-file-add {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0.2rem 0.4rem;
+  cursor: pointer;
+}
+.pg-file-add:hover { color: var(--fg); }
 .pg-filetab-error { color: var(--accent); font-size: 0.75rem; }
 
 .pg-tabs {

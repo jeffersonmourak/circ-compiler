@@ -8,6 +8,7 @@
 // purity case in `test/file-tabs.test.ts` scans this file's own source text,
 // so even a mention in a comment is a failure; that bluntness is deliberate.
 import {
+  isFileName,
   joinFiles,
   splitFiles,
   type NamedFile,
@@ -58,3 +59,69 @@ export function setBody(state: FileTabsState, index: number, body: string): File
   const files = state.files.map((f, i) => (i === index ? { name: f.name, body } : f));
   return { files, active: state.active };
 }
+
+/** The first free `file<N>.circ`, counting from 1. */
+export function nextFileName(files: readonly FileTab[]): string {
+  const taken = new Set(files.map((f) => f.name));
+  for (let n = 1; ; n += 1) {
+    const name = `file${n}.circ`;
+    if (!taken.has(name)) return name;
+  }
+}
+
+/**
+ * A new file's starting text: one comment line naming it.
+ *
+ * It must be non-blank, or the marker that ends this file would be swallowed
+ * as a comment and the next file would merge into it; and it must not itself
+ * look like a marker, or the splitter would read it as a second file. Dropping
+ * the `.circ` suffix satisfies the second condition, since the marker pattern
+ * requires it.
+ */
+export function seedBody(name: string): string {
+  return `// ${name.replace(/\.circ$/, '')}\n`;
+}
+
+/** Inserts before the root so the root stays last, and activates the new tab. */
+export function addFile(state: FileTabsState, name?: string): FileTabsState {
+  const chosen = name ?? nextFileName(state.files);
+  const at = rootIndex(state);
+  const files = [
+    ...state.files.slice(0, at),
+    { name: chosen, body: seedBody(chosen) },
+    ...state.files.slice(at),
+  ];
+  return { files, active: at };
+}
+
+/** Null when the rename is legal. Skips `index` itself, so renaming a file to
+ *  the name it already has is not a duplicate. */
+export function nameError(state: FileTabsState, index: number, name: string): string | null {
+  if (!isFileName(name)) {
+    return 'A file name must look like `name.circ` — letters, digits, dot, dash and underscore only.';
+  }
+  const clash = state.files.some((f, i) => i !== index && f.name === name);
+  return clash ? `There is already a file called ${name}.` : null;
+}
+
+/** No-op when `nameError` is non-null; the caller shows the message. */
+export function renameFile(state: FileTabsState, index: number, name: string): FileTabsState {
+  if (index < 0 || index >= state.files.length) return state;
+  if (nameError(state, index, name) !== null) return state;
+  if (state.files[index].name === name) return state;
+  const files = state.files.map((f, i) => (i === index ? { name, body: f.body } : f));
+  return { files, active: state.active };
+}
+
+export const canDelete = (state: FileTabsState): boolean => state.files.length > 1;
+
+/** No-op when only one file remains — the model's never-empty invariant. */
+export function deleteFile(state: FileTabsState, index: number): FileTabsState {
+  if (!canDelete(state)) return state;
+  if (index < 0 || index >= state.files.length) return state;
+  const files = state.files.filter((_, i) => i !== index);
+  const active =
+    state.active > index ? state.active - 1 : Math.min(state.active, files.length - 1);
+  return { files, active };
+}
+
