@@ -1,6 +1,7 @@
 ---
 import Base from '../layouts/Base.astro';
 import CodePreview from '../components/CodePreview.astro';
+import OpenInPlayground from '../components/OpenInPlayground.astro';
 import LiveCanvas from '../components/LiveCanvas.astro';
 import { examples } from '../content/examples.ts';
 import { GITHUB_REPO, GITHUB_PUBLIC, RENDERER_REPO } from '../utils/url.ts';
@@ -28,6 +29,7 @@ import { GITHUB_REPO, GITHUB_PUBLIC, RENDERER_REPO } from '../utils/url.ts';
         <p class="lede">{ex.lede}</p>
         <CodePreview source={ex.source} preview={ex.preview} />
         {ex.wasm && <LiveCanvas wasm={ex.wasm} />}
+        <OpenInPlayground id={`example:${ex.slug}`} />
         {ex.repoPath && GITHUB_PUBLIC && (
           <p class="source-link muted">
             Source: <a

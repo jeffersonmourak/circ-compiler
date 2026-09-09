@@ -320,3 +320,11 @@ Append-only log, one entry per shipped slice. Newest at the bottom. See `DOCS/PL
 **Tests:** the pure half is already covered by slice 1 — the cap refusal on both codec paths and `shareUrl` keeping path and query while replacing the fragment. Ran `bun test` (196 pass across 19 files), `bun --bun run build` (pass), `bun run bundle` (ok; `/playground` 18.7 KB gzip), and confirmed the served page carries the button.
 **Next slice:** Slice 7 — the Open in playground links on `/examples` and `/tour`.
 **Notes:** Manual checklist — **unrun** (no browser): copy a link, open it in a private window, get the same bytes in a new project.
+
+## 2026-09-09 — Phase 4 — Slice 7: Open in playground
+
+**What shipped:** `site/src/components/OpenInPlayground.astro` — a single `<a>` to `${url('/playground')}#pick=<id>` with no `<script>` at all, whose frontmatter throws when the id is not in `buildCatalogue(examples, tour)`. It is mounted on every card in `examples.astro` and every step in `tour.astro`, and `.oip` styling joins the stylesheet. The link goes through `url()`, so it survives a `BASE_PATH` prefix.
+**Files touched:** `site/src/components/OpenInPlayground.astro` (new), `site/src/pages/examples.astro`, `site/src/pages/tour.astro`, `site/src/styles/global.css`, `DOCS/STATUS.md`.
+**Tests:** the id contract is already covered by slice 2's `every catalogue id opens through #pick=` case, which asserts `readHash` reads each id back and `resolveSource` returns its shipped source byte-identically. Ran `bun test` (196 pass across 19 files), `bun --bun run build` (pass), `bun run bundle` — `/examples` 1.6 KB gzip and `/tour` 0 KB, both **unchanged**, so the links shipped no JavaScript to either page. Negative proof: pointing a mount at `tour:99` fails the build with `is not in the playground catalogue`; reverted.
+**Next slice:** Slice 8 — the decision entries and the phase close-out.
+**Notes:** The build is the gate on the ids, which is why there is no separate test for them: a renamed slug fails the build rather than shipping a link that silently opens the wrong circuit.

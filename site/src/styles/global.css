@@ -1408,3 +1408,16 @@ a.install-line:hover {
   [data-layout='app'] .pg-ws-body { max-height: 12rem; }
   [data-layout='app'] .pg-editor { border-radius: 6px; }
 }
+
+/* "Open in playground" — a plain link, no script, on the examples and tour
+   pages. Those pages must stay script-free, so nothing here needs one. */
+.oip {
+  display: inline-block;
+  margin-top: 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+.oip:hover { border-bottom-color: var(--accent); }
+
