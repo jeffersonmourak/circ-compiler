@@ -9,6 +9,7 @@ import {
   canDelete,
   deleteFile,
   fromSource,
+  moveFile,
   nameError,
   nextFileName,
   renameFile,
@@ -195,6 +196,61 @@ describe('add, rename and delete', () => {
     addFile(state);
     renameFile(state, 0, 'ha.circ');
     deleteFile(state, 0);
+    expect(JSON.stringify(state)).toBe(before);
+  });
+});
+
+describe('reorder', () => {
+  const three = () => addFile(fromSource(tour[5].source)); // [half_adder, file1, root], active 1
+
+  test('moving a tab to the end changes the root', () => {
+    const state = three();
+    expect(rootOf(state.files).name).toBe('root.circ');
+    const moved = moveFile(state, 0, 2);
+    expect(moved.files.map((f) => f.name)).toEqual(['file1.circ', 'root.circ', 'half_adder.circ']);
+    expect(rootOf(moved.files).name).toBe('half_adder.circ');
+    expect(requestFor(moved.files).root).toBe('/playground/half_adder.circ');
+  });
+
+  test('the previously active file stays active after any move', () => {
+    const state = three();
+    const activeName = state.files[state.active].name;
+    for (let from = 0; from < 3; from += 1) {
+      for (let to = 0; to < 3; to += 1) {
+        const moved = moveFile(state, from, to);
+        expect(moved.files[moved.active].name).toBe(activeName);
+        // …and the file set itself is only permuted.
+        expect([...moved.files.map((f) => f.name)].sort()).toEqual(
+          [...state.files.map((f) => f.name)].sort(),
+        );
+      }
+    }
+  });
+
+  test('out-of-range indices clamp', () => {
+    const state = three();
+    expect(moveFile(state, 0, 99).files.map((f) => f.name)).toEqual([
+      'file1.circ',
+      'root.circ',
+      'half_adder.circ',
+    ]);
+    expect(moveFile(state, -4, 0)).toBe(state); // src and dst both clamp to 0
+    expect(moveFile(state, 1, 1)).toBe(state);
+  });
+
+  test('toSource after a move re-emits the markers in the new order', () => {
+    const moved = moveFile(three(), 0, 2);
+    const back = fromSource(toSource(moved));
+    expect(back.files.map((f) => f.name)).toEqual(['file1.circ', 'root.circ', 'half_adder.circ']);
+    expect(rootOf(back.files).name).toBe('half_adder.circ');
+    // Bodies survive the reorder untouched.
+    expect(back.files.map((f) => f.body)).toEqual(moved.files.map((f) => f.body));
+  });
+
+  test('moveFile leaves its input untouched', () => {
+    const state = three();
+    const before = JSON.stringify(state);
+    moveFile(state, 0, 2);
     expect(JSON.stringify(state)).toBe(before);
   });
 });

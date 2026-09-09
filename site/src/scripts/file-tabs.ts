@@ -125,3 +125,31 @@ export function deleteFile(state: FileTabsState, index: number): FileTabsState {
   return { files, active };
 }
 
+/**
+ * Relocates one file; `to` clamps into range. The previously active FILE stays
+ * active wherever it lands, so a reorder never swaps the visible file out from
+ * under the reader.
+ *
+ * Moving a tab past the end is how the root changes — the root is a position,
+ * not a flag.
+ */
+export function moveFile(state: FileTabsState, from: number, to: number): FileTabsState {
+  const last = state.files.length - 1;
+  const src = Math.max(0, Math.min(from, last));
+  const dst = Math.max(0, Math.min(to, last));
+  if (src === dst) return state;
+
+  const files = [...state.files];
+  const [moved] = files.splice(src, 1);
+  files.splice(dst, 0, moved);
+
+  let active = state.active;
+  if (active === src) {
+    active = dst;
+  } else {
+    if (src < active) active -= 1;
+    if (dst <= active) active += 1;
+  }
+  return { files, active };
+}
+

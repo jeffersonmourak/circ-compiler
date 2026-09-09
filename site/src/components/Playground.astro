@@ -86,6 +86,7 @@ const initial = picks[0];
     canDelete,
     deleteFile,
     fromSource,
+    moveFile,
     nameError,
     renameFile,
     rootIndex,
@@ -300,6 +301,23 @@ const initial = picks[0];
       input.select();
     }
 
+    /** Reorder. Moving a tab past the end is how the root changes, so the move
+     *  is announced whenever the last position is involved. */
+    function reorder(from: number, to: number) {
+      disarm();
+      const next = moveFile(state.tabs, from, to);
+      if (next === state.tabs) return;
+      const wasRoot = rootOf(state.tabs.files).name;
+      state.tabs = next;
+      editor?.moveDocument(from, to);
+      editor?.showDocument(state.tabs.active);
+      renderFileTabs();
+      focusFileTab(state.tabs.active);
+      const nowRoot = rootOf(state.tabs.files).name;
+      if (nowRoot !== wasRoot) status.textContent = `${nowRoot} is now the root.`;
+      schedule();
+    }
+
     fileAdd.addEventListener('click', addNewFile);
 
     function renderFileTabs() {
@@ -354,6 +372,27 @@ const initial = picks[0];
         tab.appendChild(close);
 
         tab.addEventListener('click', () => showFile(i));
+
+        // Pointer reorder. Always an enhancement over Alt+Arrow, never the
+        // only path: a drag is impossible with a keyboard.
+        tab.draggable = true;
+        tab.addEventListener('dragstart', (e) => {
+          e.dataTransfer?.setData('text/plain', String(i));
+          if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+        });
+        tab.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+          tab.dataset.drop = 'true';
+        });
+        tab.addEventListener('dragleave', () => { delete tab.dataset.drop; });
+        tab.addEventListener('drop', (e) => {
+          e.preventDefault();
+          delete tab.dataset.drop;
+          const from = Number(e.dataTransfer?.getData('text/plain'));
+          if (Number.isInteger(from)) reorder(from, i);
+        });
+
         fileTabList.appendChild(tab);
       });
       editorWrap.setAttribute('aria-labelledby', `pg-filetab-${state.tabs.active}`);
@@ -364,6 +403,14 @@ const initial = picks[0];
       if (!target) return;
       const index = Number(target.dataset.index);
       const last = state.tabs.files.length - 1;
+      // Alt+Arrow moves the TAB. Checked before the plain arrows, and always
+      // prevented: Alt+ArrowLeft is Back on Windows and Linux, and this phase
+      // persists nothing, so one unhandled press would destroy the session.
+      if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        e.preventDefault();
+        reorder(index, e.key === 'ArrowRight' ? index + 1 : index - 1);
+        return;
+      }
       let next: number | null = null;
       if (e.key === 'ArrowRight') next = index === last ? 0 : index + 1;
       else if (e.key === 'ArrowLeft') next = index === 0 ? last : index - 1;

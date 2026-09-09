@@ -694,6 +694,7 @@ hr {
   opacity: 0.55;
 }
 .pg-filetab-close:hover { opacity: 1; }
+.pg-filetab[data-drop='true'] { background: var(--pane-label-bg); }
 .pg-filetab[data-confirm='true'] { border-bottom-color: var(--accent); }
 .pg-filetab[data-confirm='true'] .pg-filetab-close { opacity: 1; color: var(--accent); }
 .pg-filetab-input {
