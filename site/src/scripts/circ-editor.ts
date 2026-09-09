@@ -17,6 +17,7 @@ import {
   EditorSelection,
   EditorState,
   type Extension,
+  type StateEffect,
 } from '@codemirror/state';
 import {
   EditorView,
@@ -53,6 +54,7 @@ import {
   type CircTokenState,
 } from '../utils/circ-tokens.mjs';
 import { themeFor, type EditorPalette, type TagSpec, type ThemeMode } from '../utils/circ-editor-theme.ts';
+import { activeAfter, insert, move, remove } from './doc-registry.ts';
 
 export type { ThemeMode };
 
@@ -123,20 +125,41 @@ export interface EditorOptions {
    *  never needs a second consumer-driven change. */
   compact?: boolean;
   ariaLabel?: string;
-  onChange?: (doc: string) => void;
+  /** Fires for every user edit, never for `setDoc`. The index is APPENDED to
+   *  Phase 1's single-argument shape so a one-document consumer stays
+   *  source-compatible; without `setDocuments` it is always 0. */
+  onChange?: (doc: string, index: number) => void;
 }
 
 export interface EditorHandle {
   readonly view: EditorView;
+
+  // ---- the visible document (Phase 1's surface, unchanged in meaning) ----
   getDoc(): string;
-  /** Replaces the whole document without firing onChange. Keeps undo history. */
+  /** Replaces the visible document without firing onChange. Keeps undo history. */
   setDoc(next: string): void;
   setDiagnostics(list: readonly Diagnostic[]): void;
+  /** Rewrites EVERY stored document's theme, not only the visible one, so a
+   *  file shown after a theme flip is never left in the old palette. */
   setTheme(mode: ThemeMode): void;
-  /** Selects [from, to) and scrolls it into view. `to` defaults to `from`. */
+  /** Selects [from, to) in the visible document and scrolls it into view. */
   select(from: number, to?: number): void;
   focus(): void;
   destroy(): void;
+
+  // ---- the document registry: one state per file ----
+  /** Replaces the whole set. Each text gets its own state, and therefore its
+   *  own selection and its own undo history. */
+  setDocuments(texts: readonly string[], active: number): void;
+  /** Swaps the visible document synchronously, so a caller can select a range
+   *  in the incoming file on the very next statement. */
+  showDocument(index: number): void;
+  insertDocument(index: number, text: string): void;
+  removeDocument(index: number): void;
+  moveDocument(from: number, to: number): void;
+  textOf(index: number): string;
+  /** Stores diagnostics against one file, visible or not. */
+  setDiagnosticsFor(index: number, list: readonly Diagnostic[]): void;
 }
 
 /** Marks a transaction this module dispatched itself, so the update listener
@@ -245,12 +268,26 @@ export function createEditor(parent: HTMLElement, options: EditorOptions = {}): 
   } = options;
 
   const themeCompartment = new Compartment();
+  /** The compartment's current content, so a state created after a theme flip
+   *  is born in the new palette rather than the old one. */
+  let themeContent = themeExtension(theme);
 
-  const extensions: Extension[] = [];
-  if (!compact) {
-    extensions.push(lineNumbers(), highlightActiveLine(), highlightActiveLineGutter(), lintGutter());
+  /** One entry per file. `scroll` is a saved scroll snapshot: scroll position
+   *  is not part of an `EditorState`, so it is carried alongside. */
+  interface Doc {
+    state: EditorState;
+    scroll: StateEffect<unknown> | null;
   }
-  extensions.push(
+
+  let active = 0;
+
+  // Built once and shared by every state. Only the theme compartment is
+  // per-state, and it is seeded from `themeContent` at creation time.
+  const staticExtensions: Extension[] = [];
+  if (!compact) {
+    staticExtensions.push(lineNumbers(), highlightActiveLine(), highlightActiveLineGutter(), lintGutter());
+  }
+  staticExtensions.push(
     circLanguage,
     history(),
     keymap.of([...circKeymap]),
@@ -259,20 +296,44 @@ export function createEditor(parent: HTMLElement, options: EditorOptions = {}): 
     EditorView.lineWrapping,
     EditorView.contentAttributes.of({ 'aria-label': ariaLabel }),
     EditorView.updateListener.of((update) => {
+      // Keep the mirror fresh on EVERY update, not only document changes: a
+      // selection move or a lint transaction must not be lost when this file
+      // is swapped out.
+      if (docs[active]) docs[active].state = update.state;
       if (!update.docChanged) return;
       if (update.transactions.some((tr) => tr.annotation(external))) return;
-      onChange?.(update.state.doc.toString());
+      onChange?.(update.state.doc.toString(), active);
     }),
-    themeCompartment.of(themeExtension(theme)),
   );
-  if (readOnly) extensions.push(EditorState.readOnly.of(true), EditorView.editable.of(false));
+  if (readOnly) staticExtensions.push(EditorState.readOnly.of(true), EditorView.editable.of(false));
 
-  const view = new EditorView({ state: EditorState.create({ doc, extensions }), parent });
+  const makeState = (text: string): EditorState =>
+    EditorState.create({ doc: text, extensions: [staticExtensions, themeCompartment.of(themeContent)] });
 
-  const clamp = (n: number): number => Math.max(0, Math.min(n, view.state.doc.length));
+  const docs: Doc[] = [{ state: makeState(doc), scroll: null }];
+  const view = new EditorView({ state: docs[0].state, parent });
+
+  const clampOffset = (n: number): number => Math.max(0, Math.min(n, view.state.doc.length));
+  const clampIndex = (n: number): number => Math.max(0, Math.min(n, docs.length - 1));
+  /** The view owns the active state; the mirror can lag by one dispatch. */
+  const syncActive = (): void => {
+    if (docs[active]) docs[active].state = view.state;
+  };
+
+  const show = (index: number): void => {
+    const next = clampIndex(index);
+    if (next === active) return;
+    syncActive();
+    docs[active].scroll = view.scrollSnapshot();
+    active = next;
+    view.setState(docs[active].state);
+    const saved = docs[active].scroll;
+    if (saved) view.dispatch({ effects: saved });
+  };
 
   return {
     view,
+
     getDoc: () => view.state.doc.toString(),
     setDoc(next: string) {
       view.dispatch({
@@ -286,11 +347,20 @@ export function createEditor(parent: HTMLElement, options: EditorOptions = {}): 
       view.dispatch(lintSetDiagnostics(view.state, list));
     },
     setTheme(mode: ThemeMode) {
-      view.dispatch({ effects: themeCompartment.reconfigure(themeExtension(mode)) });
+      themeContent = themeExtension(mode);
+      const effects = themeCompartment.reconfigure(themeContent);
+      syncActive();
+      // Every hidden document too: a compartment reconfigure is a StateEffect
+      // and applies to one state only, so a file shown after the flip would
+      // otherwise still be painted in the previous palette.
+      docs.forEach((entry, i) => {
+        if (i !== active) entry.state = entry.state.update({ effects }).state;
+      });
+      view.dispatch({ effects });
     },
     select(from: number, to: number = from) {
-      const a = clamp(from);
-      const b = clamp(to);
+      const a = clampOffset(from);
+      const b = clampOffset(to);
       view.dispatch({
         selection: EditorSelection.create([EditorSelection.range(a, b)]),
         scrollIntoView: true,
@@ -302,6 +372,57 @@ export function createEditor(parent: HTMLElement, options: EditorOptions = {}): 
     },
     destroy() {
       view.destroy();
+    },
+
+    setDocuments(texts: readonly string[], nextActive: number) {
+      const list = texts.length > 0 ? texts : [''];
+      docs.length = 0;
+      for (const text of list) docs.push({ state: makeState(text), scroll: null });
+      active = Math.max(0, Math.min(nextActive, docs.length - 1));
+      view.setState(docs[active].state);
+    },
+    showDocument(index: number) {
+      show(index);
+    },
+    insertDocument(index: number, text: string) {
+      syncActive();
+      const at = Math.max(0, Math.min(index, docs.length));
+      const next = insert(docs, at, { state: makeState(text), scroll: null });
+      docs.length = 0;
+      docs.push(...next);
+      active = activeAfter(active, { kind: 'insert', at });
+    },
+    removeDocument(index: number) {
+      if (docs.length <= 1) return;
+      syncActive();
+      const length = docs.length;
+      const next = remove(docs, index);
+      if (next.length === length) return; // out of range: nothing removed
+      docs.length = 0;
+      docs.push(...next);
+      active = activeAfter(active, { kind: 'remove', at: index, length });
+      view.setState(docs[active].state);
+    },
+    moveDocument(from: number, to: number) {
+      syncActive();
+      const next = move(docs, from, to);
+      docs.length = 0;
+      docs.push(...next);
+      active = activeAfter(active, { kind: 'move', from, to });
+      // The visible state object is unchanged by a reorder, so no setState.
+    },
+    textOf(index: number): string {
+      if (index === active) return view.state.doc.toString();
+      return docs[index]?.state.doc.toString() ?? '';
+    },
+    setDiagnosticsFor(index: number, list: readonly Diagnostic[]) {
+      if (index === active) {
+        view.dispatch(lintSetDiagnostics(view.state, list));
+        return;
+      }
+      const entry = docs[index];
+      if (!entry) return;
+      entry.state = entry.state.update(lintSetDiagnostics(entry.state, list)).state;
     },
   };
 }
