@@ -177,9 +177,19 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
       doc.querySelectorAll('.pg-dock-tabs [role=tab]'),
       (b) => (b as unknown as { dataset: Record<string, string> }).dataset.dock,
     );
-    expect(dockTabs).toEqual(['diagnostics', 'settings']);
+    expect(dockTabs).toEqual(['diagnostics', 'settings', 'memory']);
     expect(doc.querySelector('.pg-dock-tab[data-dock="diagnostics"]')?.getAttribute('aria-selected')).toBe('true');
     expect(doc.querySelector('[data-dock-panel="settings"]')?.hasAttribute('hidden')).toBe(true);
+
+    // The memory tab exists in the markup but is hidden: the default pick
+    // declares no rom or ram, and a permanently empty tab is a worse answer
+    // than no tab. Its panel ships hidden with it.
+    expect(doc.querySelector('.pg-dock-tab[data-dock="memory"]')?.hasAttribute('hidden')).toBe(true);
+    expect(doc.querySelector('[data-dock-panel="memory"]')?.hasAttribute('hidden')).toBe(true);
+    expect(doc.querySelector('.pg-mem')?.textContent).toBe('');
+    // The rom image boxes left Settings for it, and left nothing behind.
+    expect(doc.querySelector('[data-dock-panel="settings"] .pg-rom-group')).toBeNull();
+    expect(doc.querySelector('[data-dock-panel="settings"] .pg-rom-box')).toBeNull();
 
     // Both moved OUT of the output pane. A duplicate left behind would give
     // the settings two sets of live controls bound to one store.

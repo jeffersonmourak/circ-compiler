@@ -694,3 +694,28 @@ Also carries the human's footer tweak: `margin-top: 0` on the app-layout footer.
 2. **A passing test was asserting the wrong thing and only luck kept it honest.** The file-operations test clicked `.pg-tree-file .pg-tree-action`, meaning "the first control on the row", which was the delete button until this change put rename ahead of it. It now names the button by its label. "The first control" was never a stable thing to mean.
 3. **`KeyboardEvent` was missing from the smoke harness.** The globals it installs carried `Event` and `CustomEvent` but not the keyboard, mouse, input or focus constructors, so no test could ever have pressed a key. All four are installed now, which is what let this one drive Enter, Escape and F2.
 4. **Negative proof on both halves.** Deleting the `✎` fails on the missing control; making `nameError` always return null — so an illegal name commits — fails the refusal case. Both reverted, both green.
+
+## 2026-09-09 — Feature — a Memory tab, present only when there is a memory
+
+**What shipped:** A third dock tab that appears exactly when the root file declares a `rom` or a `ram`, and disappears again when it stops. It holds everything to do with memory: the image editor that used to be a fieldset in Settings, a live dump of the contents, per-word editing, and Clear.
+
+A memory is the one thing in the playground the artifact does not carry. The compiled `.wasm` holds the shape and nothing else, so contents are runtime state read back a word at a time through `getMemValue`/`getMemDefined`. That shapes the whole panel:
+
+- **Contents need a running circuit.** With none, the panel still shows the declared shape and the pending image and says the contents appear once Simulate is open. The dock sits under the editor and the output pane beside it, so watching memory while clicking pins is one layout, not two.
+- **Only visible words are read.** A memory may declare 16 address bits, and reading 65,536 words across the wasm boundary on every repaint would stall the page. The dump pages 64 words at a time, and nothing is read unless the tab is open.
+- **Unknown is not zero.** A cell carries `(value, defined)`. Fully undefined renders as `?`; a partially defined word ignores the chosen format and renders in binary with `x` per unknown bit, because there is no honest hex digit for four bits of which two are unknown. Typing `?` into a cell is the only way to make a word unknown again.
+
+**Files touched:** `site/src/scripts/memory-panel.ts` (new), `site/test/memory-panel.test.ts` (new), `site/src/components/Playground.astro`, `site/src/utils/playground-store.ts`, `site/src/styles/global.css`, `site/test/island-smoke.test.ts`.
+
+**Tests:** `bun test` 363 pass across 29 files, from 330. `bun --bun run typecheck` 0 errors. Build and `bun run bundle` green. `/playground` gzip 27.6 KB against a 120 KB ceiling, up 2.4 KB.
+
+**Next slice:** none.
+
+**Notes:**
+
+1. **The tab's condition is gated against the real compiler, not against a fixture.** A test analyses all fifteen shipped examples through the committed `libcirc.wasm` and asserts that exactly `rom-lookup` and `ram-write-read` report a memory. That is the actual predicate the tab lives on, so it is checked the actual way rather than through a hand-built symbol list.
+2. **The read and write path is driven against a running artifact.** Four tests compile a rom circuit, instantiate it, and go through the same two getters the panel uses: an unloaded rom reads as `?` rather than as zeros, a loaded image reads back word for word in two formats, a typed word is written and `?` takes it back, and Clear returns every word to unknown.
+3. **The selection steps aside rather than being rewritten.** A dock stored on `memory` for a circuit that declares none selects diagnostics **without touching the store**, and steps back to memory as soon as an analysis says there is one. Writing the fallback would have quietly lost the reader's choice on every reload of a circuit whose analysis had not landed yet.
+4. **`showDockTab` had to split.** It both moves the selection and writes the store, and the availability check needed the first without the second — calling the whole thing from inside a render recursed back into it. `selectDockPanel` is now the DOM half.
+5. **A ram refreshes on a pin toggle, and only then.** A toggled pin can clock a ram, so the panel redraws from `onPinToggle` — but only while it is actually on screen, since every visible word is a call across the boundary. The rest of the time it is Refresh, a page turn, or an edit.
+6. **Negative proof on both halves.** Making `formatWord` render an unknown cell's value bits fails 14 tests; showing the tab unconditionally fails the island smoke test. Both reverted, both green.

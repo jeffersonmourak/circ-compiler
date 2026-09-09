@@ -837,8 +837,27 @@ hr {
 .pg-settings-group label { display: inline-flex; align-items: center; gap: 0.3rem; }
 .pg-settings-group input[type='number'] { width: 4rem; }
 .pg-settings-hint { color: var(--muted); font-size: 0.7rem; flex-basis: 100%; }
-.pg-rom { display: flex; flex-direction: column; gap: 0.25rem; flex-basis: 100%; }
-.pg-rom textarea {
+.pg-rom-meta { color: var(--muted); font-size: 0.7rem; }
+.pg-rom-error { color: var(--danger); font-size: 0.72rem; }
+
+/* ---------- the memory panel ----------
+   A rom or ram keeps its contents as runtime state, so this panel is a live
+   window onto a running circuit rather than a view of the artifact. */
+.pg-mem { display: flex; flex-direction: column; gap: 1rem; }
+.pg-mem-item { display: flex; flex-direction: column; gap: 0.4rem; }
+.pg-mem-item + .pg-mem-item { border-top: 1px solid var(--border); padding-top: 0.8rem; }
+.pg-mem-head { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
+.pg-mem-name { margin: 0; font-family: var(--font-mono); font-size: 0.85rem; }
+.pg-mem-shape { color: var(--muted); font-family: var(--font-mono); font-size: 0.7rem; }
+.pg-mem-controls { display: flex; flex-direction: column; gap: 0.3rem; }
+.pg-mem-imglabel {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.pg-rom-box {
   font-family: var(--font-mono);
   font-size: 0.75rem;
   min-height: 3.5rem;
@@ -846,9 +865,84 @@ hr {
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--fg);
+  width: 100%;
 }
-.pg-rom-meta { color: var(--muted); font-size: 0.7rem; }
-.pg-rom-error { color: var(--danger); font-size: 0.72rem; }
+.pg-mem-buttons { display: flex; gap: 0.35rem; }
+.pg-mem-btn {
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.15rem 0.45rem;
+  cursor: pointer;
+}
+.pg-mem-btn:hover:not(:disabled) { color: var(--fg); border-color: var(--accent); }
+.pg-mem-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.pg-mem-idle { color: var(--muted); font-size: 0.75rem; margin: 0; }
+.pg-mem-nav { display: flex; align-items: center; gap: 0.35rem; }
+.pg-mem-range { font-family: var(--font-mono); font-size: 0.7rem; color: var(--muted); }
+.pg-mem-jump {
+  width: 5rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
+  padding: 0.1rem 0.3rem;
+}
+/* The dump. It scrolls on its own axis: a 64-bit word in binary is 64
+   characters, and eight of those across must not widen the dock. */
+.pg-mem-table {
+  border-collapse: collapse;
+  font-family: var(--font-mono-strict);
+  font-size: 0.72rem;
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
+.pg-mem-addr {
+  text-align: right;
+  color: var(--muted);
+  font-weight: normal;
+  padding: 0.1rem 0.5rem 0.1rem 0;
+  position: sticky;
+  left: 0;
+  background: var(--pane-bg);
+}
+.pg-mem-cell {
+  padding: 0.1rem 0.35rem;
+  cursor: text;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.pg-mem-cell:hover { border-color: var(--border); }
+.pg-mem-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* A word nothing has written is not a zero, and must not read like one. */
+.pg-mem-cell[data-unknown='true'] { color: var(--muted); opacity: 0.6; }
+.pg-mem-input {
+  width: 100%;
+  min-width: 3rem;
+  font: inherit;
+  font-family: var(--font-mono-strict);
+  border: 1px solid var(--accent);
+  background: var(--bg);
+  color: var(--fg);
+  padding: 0;
+}
+/* The count beside the tab label, so a collapsed dock still says how many. */
+.pg-dock-count {
+  font-size: 0.68rem;
+  line-height: 1;
+  padding: 0.15rem 0.35rem;
+  border-radius: 999px;
+  background: var(--border);
+  color: var(--fg);
+}
+.pg-dock-count[hidden] { display: none; }
+.pg-dock-tab[hidden] { display: none; }
 
 /* Source linking: the span in the editor the canvas is pointing at. A
    background, not a border, so it never shifts the text by a pixel. */

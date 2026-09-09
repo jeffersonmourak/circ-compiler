@@ -126,6 +126,21 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
               aria-selected="false"
               aria-controls="pg-dock-panel-settings"
             >Settings</button>
+            {/* Present but hidden until the circuit declares a rom or a ram.
+                A memory's contents are runtime state rather than part of the
+                artifact, so there is nothing to show for a circuit that has
+                none, and a permanently empty tab would be a worse answer than
+                no tab. The island unhides it from the analysis. */}
+            <button
+              type="button"
+              role="tab"
+              class="pg-dock-tab"
+              id="pg-dock-tab-memory"
+              data-dock="memory"
+              aria-selected="false"
+              aria-controls="pg-dock-panel-memory"
+              hidden
+            >Memory<span class="pg-dock-count" hidden></span></button>
           </div>
           <button
             type="button"
@@ -142,6 +157,14 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
             role="tabpanel"
             aria-labelledby="pg-dock-tab-diagnostics"
           ><ul class="pg-diag"></ul></div>
+          <div
+            class="pg-dock-panel"
+            id="pg-dock-panel-memory"
+            data-dock-panel="memory"
+            role="tabpanel"
+            aria-labelledby="pg-dock-tab-memory"
+            hidden
+          ><div class="pg-mem"></div></div>
           <div
             class="pg-dock-panel"
             id="pg-dock-panel-settings"
@@ -177,10 +200,6 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
               <fieldset class="pg-settings-group">
                 <legend>Compile</legend>
                 <label><input type="checkbox" data-setting="warningsAsErrors" /> Treat warnings as errors</label>
-              </fieldset>
-              <fieldset class="pg-settings-group pg-rom-group" hidden>
-                <legend>ROM images</legend>
-                <div class="pg-roms"></div>
               </fieldset>
             </div>
           </div>
@@ -247,12 +266,25 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
   import { mountSettingsDrawer, optionsFor, truthTableRefusal } from '../scripts/settings-drawer.ts';
   import {
     applyRomImages,
+    decodeMemInfo,
+    maxWords,
     parseRomImage,
     preloadsFor,
     romPlan,
     romSymbols,
     type MemorySymbol,
   } from '../utils/rom-image.ts';
+  import {
+    clampWindow,
+    dumpRows,
+    formatAddress,
+    pageContaining,
+    pageCount,
+    parseAddress,
+    parseWord,
+    type AddressWindow,
+    type Cell,
+  } from '../scripts/memory-panel.ts';
   import {
     declarationAt,
     declsFor,
@@ -330,7 +362,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
   } from '../scripts/circ-diagnostics.ts';
 
   type Tab = 'preview' | 'truth' | 'simulate';
-  type DockTab = 'diagnostics' | 'settings';
+  type DockTab = 'diagnostics' | 'settings' | 'memory';
   /** A mapped diagnostic plus the file tab it belongs to; `null` when the
    *  compiler blamed a file with no tab (a `<builtin>/…` source, or a stale
    *  path from a reply that outlived a rename). */
@@ -376,6 +408,9 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     const dockPanels = Array.from(el.querySelectorAll<HTMLElement>('.pg-dock-panel'));
     const dockToggle = el.querySelector<HTMLButtonElement>('.pg-dock-toggle')!;
     const dockBadge = el.querySelector<HTMLElement>('.pg-dock-badge')!;
+    const memTab = el.querySelector<HTMLButtonElement>('.pg-dock-tab[data-dock="memory"]')!;
+    const memCount = el.querySelector<HTMLElement>('.pg-dock-count')!;
+    const memPanel = el.querySelector<HTMLElement>('.pg-mem')!;
     const truthTab = el.querySelector<HTMLButtonElement>('.pg-tabs [data-tab="truth"]')!;
     const truthTip = el.querySelector<HTMLElement>('#pg-tab-tip-truth')!;
     const catalogue = JSON.parse(el.querySelector('#pg-picks')!.textContent || '[]') as CatalogueItem[];
@@ -489,10 +524,20 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     }
 
     // ---- the editor's dock ----
-    function showDockTab(tab: DockTab, opts: { persist?: boolean } = {}) {
+    /** Move the selection. DOM only — no store write and no re-render, so the
+     *  memory tab's own availability check can use it without recursing back
+     *  through the render that called it. */
+    function selectDockPanel(tab: DockTab) {
       for (const b of dockTabs) b.setAttribute('aria-selected', String(b.dataset.dock === tab));
       for (const p of dockPanels) p.hidden = p.dataset.dockPanel !== tab;
+    }
+
+    function showDockTab(tab: DockTab, opts: { persist?: boolean } = {}) {
+      selectDockPanel(tab);
       if (opts.persist !== false) store.update((draft) => { draft.dock.tab = tab; });
+      // Reading a memory is deferred until someone is looking at it, so
+      // arriving on the tab is when the contents are actually fetched.
+      if (tab === 'memory') renderMemory();
     }
 
     function setDockOpen(open: boolean, opts: { persist?: boolean } = {}) {
@@ -512,6 +557,8 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           setDockOpen(false);
           return;
         }
+        // Picking a tab by hand outranks any pending restore.
+        memDeferred = false;
         showDockTab(tab);
         setDockOpen(true);
       });
@@ -1255,51 +1302,145 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     };
     const preloads = () => preloadsFor(romImages, currentRoms());
 
-    const romGroup = el.querySelector<HTMLElement>('.pg-rom-group')!;
-    const romList = el.querySelector<HTMLElement>('.pg-roms')!;
+    // ---- the memory panel ----
+    // A rom or ram keeps its contents as RUNTIME STATE: the artifact carries
+    // the shape and nothing else, so everything shown here is read back from a
+    // running circuit one word at a time. That is also why the tab only exists
+    // when something is declared — for a circuit with no memory there is not
+    // an empty table to show, there is nothing at all.
 
-    /** One box per declared memory. A ram gets an explanation instead of a
-     *  box: preloads are rom-only, and a ram is driven by the circuit. */
-    function renderRoms() {
+    /** How many words one page of the dump holds, and how many per row. */
+    const MEM_PAGE = 64;
+    const MEM_PER_ROW = 8;
+    /** Where each memory's dump is scrolled to, by declared name. */
+    const memWindows = new Map<string, number>();
+
+    /** The running circuit's exports, or null when nothing is simulating.
+     *  Contents can only be read while the Simulate tab has built a view. */
+    function memHost(): Record<string, unknown> | null {
+      const raw = sim.view?.runtime.raw;
+      return raw && typeof raw.getMemValue === 'function' ? raw : null;
+    }
+
+    /** The component id of a declared memory in the running circuit, checked
+     *  against `getMemInfo` so a drifted artifact reads nothing rather than
+     *  reading the wrong memory. */
+    function memIdOf(mem: MemorySymbol): number | null {
+      const view = sim.view;
+      const host = memHost();
+      if (!view || !host) return null;
+      const c = view.runtime.topology.components.find(
+        (x) => x.name === mem.name && (x.origin?.length ?? 0) === 0,
+      );
+      if (!c) return null;
+      const info = decodeMemInfo((host.getMemInfo as (id: number) => number)(c.id));
+      if (!info || info.width !== mem.width || info.addrWidth !== mem.addrWidth) return null;
+      return c.id;
+    }
+
+    function readCell(host: Record<string, unknown>, id: number, addr: number): Cell {
+      const value = (host.getMemValue as (i: number, a: number) => bigint)(id, addr);
+      const defined = (host.getMemDefined as (i: number, a: number) => bigint)(id, addr);
+      return { value: BigInt(value), defined: BigInt(defined) };
+    }
+
+    /** The tab appears and disappears with the declared set. */
+    function updateMemTab() {
       const mems = currentRoms();
-      romGroup.hidden = mems.length === 0;
+      memTab.hidden = mems.length === 0;
+      memCount.hidden = mems.length === 0;
+      memCount.textContent = String(mems.length);
+      memTab.setAttribute(
+        'aria-label',
+        `Memory, ${mems.length} declared`,
+      );
+      // A dock left on a tab that no longer exists would show a blank panel
+      // with no tab selected, so the selection steps aside — WITHOUT writing
+      // the store, because the circuit may get its memory back on the next
+      // keystroke, and because a reader who reloaded onto this tab should land
+      // back on it once the analysis says it exists.
+      if (mems.length === 0 && currentDockTab() === 'memory') {
+        memDeferred = true;
+        selectDockPanel('diagnostics');
+      } else if (mems.length > 0 && memDeferred) {
+        memDeferred = false;
+        selectDockPanel('memory');
+      }
+    }
+
+    /** Set when the memory tab was the stored choice but nothing was declared
+     *  yet, so the selection can go back to it once something is. */
+    let memDeferred = false;
+
+    /** True only when the memory dump is actually on screen. Every visible
+     *  word is a call across the wasm boundary, so nothing reads one otherwise. */
+    function memVisible(): boolean {
+      return dock.dataset.open === 'true' && currentDockTab() === 'memory' && !memTab.hidden;
+    }
+
+    function currentDockTab(): DockTab {
+      const selected = dockTabs.find((b) => b.getAttribute('aria-selected') === 'true');
+      return (selected?.dataset.dock as DockTab) ?? 'diagnostics';
+    }
+
+    /** Rebuild the whole panel. Cheap: the number of declared memories is
+     *  small, and only one page of one memory is ever read. */
+    function renderMemory() {
+      updateMemTab();
+      const mems = currentRoms();
       if (mems.length === 0) {
-        romList.innerHTML = '';
+        memPanel.innerHTML = '';
         return;
       }
-      // Rebuild only when the declared set changed, so typing in a box does
-      // not destroy the box being typed into.
+      // Typing in a rom box must not destroy the box being typed into, so the
+      // rebuild is skipped while the panel holds focus and nothing structural
+      // changed. The status lines still refresh.
       const signature = mems.map((m) => `${m.name}:${m.kind}:${m.width}:${m.addrWidth}`).join('|');
-      if (romList.dataset.signature === signature) {
+      const focusHeld = memPanel.contains(document.activeElement);
+      if (memPanel.dataset.signature === signature && focusHeld) {
         for (const mem of mems) updateRomStatus(mem);
         return;
       }
-      romList.dataset.signature = signature;
-      romList.innerHTML = '';
+      memPanel.dataset.signature = signature;
+      memPanel.innerHTML = '';
+      for (const mem of mems) memPanel.appendChild(renderOneMemory(mem));
+    }
 
-      for (const mem of mems) {
-        const wrap = document.createElement('div');
-        wrap.className = 'pg-rom';
-        wrap.dataset.name = mem.name;
+    function renderOneMemory(mem: MemorySymbol): HTMLElement {
+      const total = maxWords(mem.addrWidth);
+      const wrap = document.createElement('section');
+      wrap.className = 'pg-mem-item';
+      wrap.dataset.name = mem.name;
 
-        const id = `pg-rom-${mem.name}`;
+      const head = document.createElement('div');
+      head.className = 'pg-mem-head';
+      const title = document.createElement('h3');
+      title.className = 'pg-mem-name';
+      title.textContent = mem.name;
+      head.appendChild(title);
+      const shape = document.createElement('span');
+      shape.className = 'pg-mem-shape';
+      shape.textContent = `${mem.kind} [${mem.width}, ${mem.addrWidth}] · ${total} word${total === 1 ? '' : 's'}`;
+      head.appendChild(shape);
+      wrap.appendChild(head);
+
+      const host = memHost();
+      const id = host ? memIdOf(mem) : null;
+
+      // --- controls
+      const controls = document.createElement('div');
+      controls.className = 'pg-mem-controls';
+
+      if (mem.kind === 'rom') {
+        const boxId = `pg-rom-${mem.name}`;
         const label = document.createElement('label');
-        label.htmlFor = id;
-        label.textContent = `${mem.name} — ${mem.kind} [${mem.width}, ${mem.addrWidth}]`;
-        wrap.appendChild(label);
-
-        if (mem.kind === 'ram') {
-          const note = document.createElement('div');
-          note.className = 'pg-rom-meta';
-          note.textContent =
-            'A ram is written by the circuit through its clk and we pins, so there is nothing to preload.';
-          wrap.appendChild(note);
-          romList.appendChild(wrap);
-          continue;
-        }
-
+        label.className = 'pg-mem-imglabel';
+        label.htmlFor = boxId;
+        label.textContent = 'Image';
+        controls.appendChild(label);
         const box = document.createElement('textarea');
-        box.id = id;
+        box.id = boxId;
+        box.className = 'pg-rom-box';
         box.spellcheck = false;
         box.value = romImages.get(mem.name) ?? '';
         box.placeholder = `hex bytes, little-endian, ${(mem.width + 7) >> 3} per word`;
@@ -1309,35 +1450,257 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           applyToView();
           void runTruth(buildStage.seq);
         });
-        wrap.appendChild(box);
-
-        const meta = document.createElement('div');
-        meta.className = 'pg-rom-meta';
-        wrap.appendChild(meta);
-        const err = document.createElement('div');
-        err.className = 'pg-rom-error';
-        wrap.appendChild(err);
-        romList.appendChild(wrap);
-        updateRomStatus(mem);
+        controls.appendChild(box);
+      } else {
+        const note = document.createElement('div');
+        note.className = 'pg-rom-meta';
+        note.textContent =
+          'A ram is written by the circuit through its clk and we pins, so there is nothing to preload.';
+        controls.appendChild(note);
       }
+
+      const buttons = document.createElement('div');
+      buttons.className = 'pg-mem-buttons';
+      const clear = document.createElement('button');
+      clear.type = 'button';
+      clear.className = 'pg-mem-btn';
+      clear.textContent = 'Clear';
+      clear.title = 'Make every word unknown again';
+      clear.disabled = id === null;
+      clear.addEventListener('click', () => clearMemory(mem));
+      buttons.appendChild(clear);
+
+      const refresh = document.createElement('button');
+      refresh.type = 'button';
+      refresh.className = 'pg-mem-btn';
+      refresh.textContent = 'Refresh';
+      refresh.title = 'Read the contents again';
+      refresh.disabled = id === null;
+      refresh.addEventListener('click', () => renderMemory());
+      buttons.appendChild(refresh);
+      controls.appendChild(buttons);
+
+      const meta = document.createElement('div');
+      meta.className = 'pg-rom-meta';
+      controls.appendChild(meta);
+      const err = document.createElement('div');
+      err.className = 'pg-rom-error';
+      controls.appendChild(err);
+      wrap.appendChild(controls);
+
+      // --- the dump
+      if (host === null || id === null) {
+        const idle = document.createElement('p');
+        idle.className = 'pg-mem-idle';
+        idle.textContent =
+          host === null
+            ? 'Contents appear once the circuit is running — open the Simulate tab.'
+            : `${mem.name} is not in the compiled circuit yet.`;
+        wrap.appendChild(idle);
+        if (mem.kind === 'rom') updateRomStatus(mem);
+        return wrap;
+      }
+
+      const win = clampWindow(memWindows.get(mem.name) ?? 0, MEM_PAGE, total);
+      const nav = document.createElement('div');
+      nav.className = 'pg-mem-nav';
+      const pages = pageCount(MEM_PAGE, total);
+      if (pages > 1) {
+        const back = document.createElement('button');
+        back.type = 'button';
+        back.className = 'pg-mem-btn';
+        back.textContent = '◀';
+        back.setAttribute('aria-label', 'Previous page');
+        back.disabled = win.start === 0;
+        back.addEventListener('click', () => {
+          memWindows.set(mem.name, Math.max(0, win.start - MEM_PAGE));
+          renderMemory();
+        });
+        nav.appendChild(back);
+      }
+      const range = document.createElement('span');
+      range.className = 'pg-mem-range';
+      range.textContent =
+        `${formatAddress(win.start, mem.addrWidth)}–${formatAddress(win.start + win.count - 1, mem.addrWidth)}`;
+      nav.appendChild(range);
+      if (pages > 1) {
+        const fwd = document.createElement('button');
+        fwd.type = 'button';
+        fwd.className = 'pg-mem-btn';
+        fwd.textContent = '▶';
+        fwd.setAttribute('aria-label', 'Next page');
+        fwd.disabled = win.start + win.count >= total;
+        fwd.addEventListener('click', () => {
+          memWindows.set(mem.name, win.start + MEM_PAGE);
+          renderMemory();
+        });
+        nav.appendChild(fwd);
+
+        const jump = document.createElement('input');
+        jump.className = 'pg-mem-jump';
+        jump.setAttribute('aria-label', `Go to an address in ${mem.name}`);
+        jump.placeholder = 'addr';
+        jump.addEventListener('keydown', (e) => {
+          e.stopPropagation();
+          if (e.key !== 'Enter') return;
+          e.preventDefault();
+          const addr = parseAddress(jump.value, mem.addrWidth);
+          if (addr === null) {
+            status.textContent = `Not an address in ${mem.name}. Hex, or d for decimal.`;
+            return;
+          }
+          memWindows.set(mem.name, pageContaining(addr, MEM_PAGE, total).start);
+          renderMemory();
+        });
+        nav.appendChild(jump);
+      }
+      wrap.appendChild(nav);
+      wrap.appendChild(dumpTable(mem, host, id, win, total));
+      if (mem.kind === 'rom') updateRomStatus(mem);
+      return wrap;
     }
 
-    /** Say what the current text amounts to, or why it does not. */
+    function dumpTable(
+      mem: MemorySymbol,
+      host: Record<string, unknown>,
+      id: number,
+      win: AddressWindow,
+      total: number,
+    ): HTMLElement {
+      const table = document.createElement('table');
+      table.className = 'pg-mem-table';
+      const body = document.createElement('tbody');
+      const rows = dumpRows(
+        (addr) => readCell(host, id, addr),
+        win,
+        MEM_PER_ROW,
+        mem.width,
+        settings().valueFormat,
+      );
+      for (const row of rows) {
+        const tr = document.createElement('tr');
+        const th = document.createElement('th');
+        th.scope = 'row';
+        th.className = 'pg-mem-addr';
+        th.textContent = formatAddress(row.base, mem.addrWidth);
+        tr.appendChild(th);
+        for (const c of row.cells) {
+          const td = document.createElement('td');
+          td.className = 'pg-mem-cell';
+          td.textContent = c.text;
+          if (!c.known) td.dataset.unknown = 'true';
+          td.tabIndex = 0;
+          td.setAttribute('role', 'button');
+          td.setAttribute(
+            'aria-label',
+            `${mem.name} at ${formatAddress(c.addr, mem.addrWidth)} is ${c.text}. Activate to change it.`,
+          );
+          const edit = () => editCell(td, mem, id, c.addr, total);
+          td.addEventListener('dblclick', edit);
+          td.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            e.preventDefault();
+            e.stopPropagation();
+            edit();
+          });
+          tr.appendChild(td);
+        }
+        body.appendChild(tr);
+      }
+      table.appendChild(body);
+      return table;
+    }
+
+    /** Swap one cell for an input. Enter writes it through `setMemWord`;
+     *  Escape leaves the word alone. */
+    function editCell(td: HTMLElement, mem: MemorySymbol, id: number, addr: number, total: number) {
+      const host = memHost();
+      if (!host || typeof host.setMemWord !== 'function') return;
+      const previous = td.textContent ?? '';
+      const input = document.createElement('input');
+      input.className = 'pg-mem-input';
+      input.value = previous === '?' ? '' : previous;
+      input.setAttribute('aria-label', `${mem.name} at ${formatAddress(addr, mem.addrWidth)}`);
+      let done = false;
+
+      const finish = (commit: boolean) => {
+        if (done) return;
+        done = true;
+        if (!commit) {
+          renderMemory();
+          return;
+        }
+        const parsed = parseWord(input.value, mem.width, settings().valueFormat);
+        if (!parsed.ok) {
+          status.textContent = parsed.message;
+          renderMemory();
+          return;
+        }
+        const rc = (host.setMemWord as (i: number, a: number, v: bigint, d: bigint) => number)(
+          id,
+          addr,
+          parsed.value,
+          parsed.defined,
+        );
+        if (rc !== 0) status.textContent = `${mem.name} refused the write (code ${rc}).`;
+        else {
+          status.textContent =
+            `${mem.name}[${formatAddress(addr, mem.addrWidth)}] = ${parsed.defined === 0n ? 'unknown' : input.value.trim()}.`;
+        }
+        // A memory mutator re-presents its own output, so the canvas is
+        // already correct; it just has to be told to repaint.
+        sim.view?.view.refreshState();
+        renderMemory();
+      };
+
+      input.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+        else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+      });
+      input.addEventListener('blur', () => finish(true));
+      td.textContent = '';
+      td.appendChild(input);
+      input.focus();
+      input.select();
+      void total;
+    }
+
+    function clearMemory(mem: MemorySymbol) {
+      const host = memHost();
+      const id = memIdOf(mem);
+      if (!host || id === null || typeof host.memClear !== 'function') return;
+      const rc = (host.memClear as (i: number) => number)(id);
+      status.textContent = rc === 0
+        ? `${mem.name} cleared; every word is unknown.`
+        : `${mem.name} refused the clear (code ${rc}).`;
+      sim.view?.view.refreshState();
+      renderMemory();
+    }
+
+    /** Say what the current rom text amounts to, or why it does not. */
     function updateRomStatus(mem: MemorySymbol) {
-      const wrap = romList.querySelector<HTMLElement>(`.pg-rom[data-name="${mem.name}"]`);
+      const wrap = memPanel.querySelector<HTMLElement>(`.pg-mem-item[data-name="${CSS.escape(mem.name)}"]`);
       if (!wrap) return;
       const meta = wrap.querySelector<HTMLElement>('.pg-rom-meta');
       const err = wrap.querySelector<HTMLElement>('.pg-rom-error');
-      if (!meta || !err) return;
+      if (!meta || !err || mem.kind !== 'rom') return;
       const text = romImages.get(mem.name) ?? '';
       const parsed = parseRomImage(text, mem);
       if (parsed.ok) {
         err.textContent = '';
-        meta.textContent = `${parsed.words} of ${2 ** mem.addrWidth} words`;
+        meta.textContent = text.trim() === ''
+          ? 'No image; the rom starts undefined.'
+          : `${parsed.words} of ${maxWords(mem.addrWidth)} words`;
       } else {
         meta.textContent = '';
         err.textContent = parsed.message;
       }
+    }
+
+    /** The name the rest of the island already calls. */
+    function renderRoms() {
+      renderMemory();
     }
 
     /** Push every valid image into the running canvas. Called after a rebuild
@@ -2112,6 +2475,10 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           // the fallback that keeps the by-name pin map current either way.
           onPinToggle: (id: number, sig: Signal) => {
             for (const [name, pid] of rootInputs(view)) if (pid === id) sim.pins.set(name, sig);
+            // A toggled pin can clock a ram, so whatever the panel is showing
+            // is now a picture of the past. Only redrawn while it is actually
+            // on screen: each visible word costs a call across the boundary.
+            if (memVisible()) renderMemory();
           },
           // Fires only on a change, so this needs no debounce of its own.
           onHover: (id: number | null) => {
@@ -2127,6 +2494,8 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         // Images are session state, so a rebuilt canvas starts empty and has
         // to be re-loaded before the reader sees it.
         applyToView();
+        // The panel was drawn against no running circuit; there is one now.
+        renderMemory();
         simMount.appendChild(view.canvas);
         simMount.hidden = false;
         simNote.textContent = simNoteBase;

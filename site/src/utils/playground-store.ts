@@ -29,8 +29,10 @@ export const WRITE_DEBOUNCE_MS = 500;
  */
 export type OutputTab = 'preview' | 'truth' | 'simulate';
 
-/** The editor dock's two panels. */
-export type DockTab = 'diagnostics' | 'settings';
+/** The editor dock's panels. `memory` only exists while the circuit declares
+ *  a rom or a ram; a stored `memory` for a circuit that has none is treated
+ *  like any other unreachable tab and falls back at render time. */
+export type DockTab = 'diagnostics' | 'settings' | 'memory';
 
 /** Which rows of the workspace explorer the reader has open. Ids, not
  *  indices: a group or project keeps its expansion across a content change
@@ -117,7 +119,7 @@ export interface TimerLike {
 }
 
 const OUTPUT_TABS: readonly OutputTab[] = ['preview', 'truth', 'simulate'];
-const DOCK_TABS: readonly DockTab[] = ['diagnostics', 'settings'];
+const DOCK_TABS: readonly DockTab[] = ['diagnostics', 'settings', 'memory'];
 // Shut. The dock holds diagnostics, and the explorer now carries the per-file
 // error badge, so a reader sees that something is wrong without it — opening it
 // is for reading the messages, which is a deliberate act.
