@@ -850,6 +850,29 @@ pub fn build(b: *std.Build) void {
     run_libcirc_driver_tests.step.dependOn(&install_runtime.step);
     test_step.dependOn(&run_libcirc_driver_tests.step);
 
+    // The C ABI over libcirc: root of libcirc.a (slice 7) and of the wasm
+    // module (Phase 3). Tested by calling the exports directly.
+    const libcirc_c_api_mod = b.createModule(.{
+        .root_source_file = b.path("lib/libcirc/c_api.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    libcirc_c_api_mod.addImport("libcirc", fe.libcirc);
+    const libcirc_c_api_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/libcirc/c_api_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    libcirc_c_api_tests_mod.addImport("libcirc_c_api", libcirc_c_api_mod);
+    libcirc_c_api_tests_mod.addImport("libcirc", fe.libcirc);
+    const libcirc_c_api_tests = b.addTest(.{
+        .name = "libcirc_c_api_tests",
+        .root_module = libcirc_c_api_tests_mod,
+    });
+    const run_libcirc_c_api_tests = b.addRunArtifact(libcirc_c_api_tests);
+    run_libcirc_c_api_tests.step.dependOn(&install_runtime.step);
+    test_step.dependOn(&run_libcirc_c_api_tests.step);
+
     const section_writer_tests = b.addTest(.{
         .root_module = section_writer_mod,
     });
