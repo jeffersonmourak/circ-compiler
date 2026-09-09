@@ -145,6 +145,31 @@ const fixtures = [_]Fixture{
         .source_path = "tests/fixtures/circuits/portref_concat_whitespace.circ",
         .expected_ast_path = "tests/fixtures/expected-ast/portref_concat_whitespace.txt",
     },
+    .{
+        .name = "recovery-busvalue-eof",
+        .source_path = "tests/fixtures/circuits/recovery_busvalue_eof.circ",
+        .expected_ast_path = "tests/fixtures/expected-ast/recovery_busvalue_eof.txt",
+    },
+    .{
+        .name = "recovery-busvalue-newline",
+        .source_path = "tests/fixtures/circuits/recovery_busvalue_newline.circ",
+        .expected_ast_path = "tests/fixtures/expected-ast/recovery_busvalue_newline.txt",
+    },
+    .{
+        .name = "recovery-busclose-midline",
+        .source_path = "tests/fixtures/circuits/recovery_busclose_midline.circ",
+        .expected_ast_path = "tests/fixtures/expected-ast/recovery_busclose_midline.txt",
+    },
+    .{
+        .name = "recovery-busclose-newline",
+        .source_path = "tests/fixtures/circuits/recovery_busclose_newline.circ",
+        .expected_ast_path = "tests/fixtures/expected-ast/recovery_busclose_newline.txt",
+    },
+    .{
+        .name = "recovery-empty-ports",
+        .source_path = "tests/fixtures/circuits/recovery_empty_ports.circ",
+        .expected_ast_path = "tests/fixtures/expected-ast/recovery_empty_ports.txt",
+    },
 };
 
 test "translate parse tree to typed ast fixtures" {
@@ -189,6 +214,25 @@ test "errors: truncated bus carries busvalue then busclose marks" {
         try std.testing.expectEqual(@as(u32, 2), mark.span.end_line);
         try std.testing.expectEqual(@as(u32, 9), mark.span.end_col);
     }
+}
+
+test "edge: whitespace-only .circ is InvalidProgram" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    // The root payload is a bare String when nothing but Spacing matched.
+    const parsed = translate.parseSource(allocator, 0, "\n  \n");
+    try std.testing.expectError(error.InvalidProgram, parsed);
+}
+
+test "recovery: busvalue_eof fixture has no trailing newline" {
+    // Editors add a final newline silently; with one, both marks in the
+    // golden move from 2:9 to 3:1 (see recovery_busvalue_newline).
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const source = try std.fs.cwd().readFileAlloc(allocator, "tests/fixtures/circuits/recovery_busvalue_eof.circ", 1024);
+    try std.testing.expectEqual(@as(u8, '='), source[source.len - 1]);
 }
 
 test "edge: completely empty .circ fails parse" {

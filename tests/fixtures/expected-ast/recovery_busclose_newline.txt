@@ -1,0 +1,13 @@
+File [f0:1:1-4:1]
+Imports (0)
+Inputs (1)
+  Input a [f0:1:1-1:8]
+Outputs (1)
+  Output o [f0:3:1-3:19]
+    NamedRef g.out [f0:3:13-3:18]
+Components (1)
+  Component type=and instance=g [f0:2:1-3:1]
+    Port a [f0:2:7-2:8]
+      NamedRef a.out [f0:2:9-3:1]
+Errors (1)
+  Error "expected ')' to close the connection list" [f0:3:1-3:1]
