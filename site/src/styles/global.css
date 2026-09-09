@@ -1484,3 +1484,52 @@ a.install-line:hover {
 }
 .oip:hover { border-bottom-color: var(--accent); }
 
+/* ---------- Live editors in the docs ----------
+   A snippet a reader can type into. It ships inert and looks like a code
+   block until it is touched, so a page costs nothing to read. */
+.le {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  margin: 1.5rem 0 2rem;
+  background: var(--pane-bg);
+}
+.le-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.25rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--pane-label-bg);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.le-expand { text-decoration: none; }
+.le-expand:hover { text-decoration: underline; }
+.le-expand:not([href]) { opacity: 0.5; cursor: not-allowed; }
+.le-editor-wrap { height: var(--le-height, 14rem); overflow: auto; }
+.le-editor { height: 100%; }
+.le-editor .cm-editor { height: 100%; }
+.le-editor .cm-scroller { overflow: auto; }
+.le-source {
+  margin: 0;
+  padding: 0.6rem 0.85rem;
+  font-family: var(--font-mono-strict, var(--font-mono));
+  font-size: 0.8rem;
+  white-space: pre;
+  cursor: text;
+}
+.le-output { border-top: 1px solid var(--border); }
+.le-output:empty { display: none; }
+.le-preview {
+  margin: 0;
+  padding: 0.6rem 0.85rem;
+  font-family: var(--font-mono-strict, var(--font-mono));
+  font-size: 0.75rem;
+  line-height: 1;
+  overflow-x: auto;
+}
+.le[data-stale] .le-output { opacity: 0.55; }
+

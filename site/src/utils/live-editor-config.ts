@@ -6,6 +6,9 @@
 // the single-source rule exists to prevent.
 import { encodeShare, webStreamsCodec } from './share-link.ts';
 
+/** `simulate` is parseable but unused: a poster frame needs a committed
+ *  artifact, and the tour's are deliberately untracked. Kept in the type so
+ *  the parser's fall-back behaviour stays honest and tested. */
 export type LiveEditorOutput = 'preview' | 'simulate';
 
 export interface LiveEditorConfig {

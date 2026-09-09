@@ -2,6 +2,7 @@
 import Base from '../layouts/Base.astro';
 import CodePreview from '../components/CodePreview.astro';
 import OpenInPlayground from '../components/OpenInPlayground.astro';
+import LiveEditor from '../components/LiveEditor.astro';
 import { tour } from '../content/tour.ts';
 ---
 <Base
@@ -24,7 +25,7 @@ import { tour } from '../content/tour.ts';
         {step.title}
       </h2>
       <p class="tour-prose">{step.prose}</p>
-      <CodePreview source={step.source} preview={step.preview} />
+      <LiveEditor source={step.source} pick={`tour:${i + 1}`} />
       <OpenInPlayground id={`tour:${i + 1}`} />
     </section>
   ))}
