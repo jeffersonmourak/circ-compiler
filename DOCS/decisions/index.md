@@ -68,6 +68,7 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - The editor is CodeMirror 6 with a hand-written StreamLanguage (six exact-pinned packages, no meta-package, no autocomplete/search)
 - The editor chunk loads on idle, not on interaction (dynamic `import()` after paint, textarea fallback, ungated lazy chunk)
 - One token table, two consumers (`circ-tokens.mjs` feeds the TextMate grammar and the CodeMirror tokenizer; `rom`/`ram` were the bug)
+- The editor palette is derived from the shiki themes (one `TAG_SCOPES` table, last-scope-wins, the TextMate `fontStyle` split into real CSS properties)
 
 ## Conventions
 

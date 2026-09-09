@@ -7,11 +7,10 @@
 // It imports nothing playground-specific.
 //
 // Phase 1 slice 1 stood up the surface: the extension set, the theme
-// compartment (seeded with an empty spec whose `{ dark }` flag alone selects
-// CodeMirror's dark base variant) and the handle. Slice 2 added the circ
-// `StreamLanguage` over `../utils/circ-tokens.mjs`; the derived palette
-// (slice 3) and `lintGutter()` (slice 4) fill in behind the same surface
-// without changing it.
+// compartment and the handle. Slice 2 added the circ `StreamLanguage` over
+// `../utils/circ-tokens.mjs`. Slice 3 filled the compartment with the palette
+// derived from the shiki themes; `lintGutter()` (slice 4) fills in behind the
+// same surface without changing it.
 import {
   Annotation,
   Compartment,
@@ -28,8 +27,10 @@ import {
   type KeyBinding,
 } from '@codemirror/view';
 import {
+  HighlightStyle,
   StreamLanguage,
   indentUnit,
+  syntaxHighlighting,
   type StreamParser,
   type StringStream,
 } from '@codemirror/language';
@@ -44,12 +45,16 @@ import {
   undo,
 } from '@codemirror/commands';
 import { setDiagnostics as lintSetDiagnostics, type Diagnostic } from '@codemirror/lint';
+import { tags, type Tag } from '@lezer/highlight';
 import {
   copyState,
   nextToken,
   startState,
   type CircTokenState,
 } from '../utils/circ-tokens.mjs';
+import { themeFor, type EditorPalette, type TagSpec, type ThemeMode } from '../utils/circ-editor-theme.ts';
+
+export type { ThemeMode };
 
 /**
  * The keymap, hand-rolled from individual commands instead of `defaultKeymap`
@@ -109,10 +114,6 @@ export const circStreamParser: StreamParser<CircTokenState> = {
 export const circLanguage: StreamLanguage<CircTokenState> =
   StreamLanguage.define(circStreamParser);
 
-/** Slice 3 moves this declaration into `circ-editor-theme.ts` and re-exports it
- *  from here, so no consumer's import ever changes. */
-export type ThemeMode = 'light' | 'dark';
-
 export interface EditorOptions {
   doc?: string;
   theme?: ThemeMode;
@@ -149,12 +150,68 @@ export function currentThemeMode(): ThemeMode {
   return document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
 }
 
-/** The compartment's content. Slice 3 fills the spec and adds
- *  `syntaxHighlighting(HighlightStyle.define(...))` beside it; the `{ dark }`
- *  flag is what keeps the editor from being a light box in a dark pane until
- *  then. */
+/**
+ * `'variableName.function'` → `tags.function(tags.variableName)`. The base is a
+ * plain key of `tags`; every dotted suffix is a modifier, which `tags` exposes
+ * as a function. Naming tags as strings is what keeps `circ-editor-theme.ts`
+ * free of any CodeMirror import, and therefore testable without a DOM.
+ */
+function resolveTag(name: string): Tag {
+  const [base, ...modifiers] = name.split('.');
+  const table = tags as unknown as Record<string, unknown>;
+  let tag = table[base];
+  if (typeof tag !== 'object' || tag === null) throw new Error(`unknown highlight tag '${base}'`);
+  for (const modifier of modifiers) {
+    const apply = table[modifier];
+    if (typeof apply !== 'function') throw new Error(`unknown highlight tag modifier '${modifier}'`);
+    tag = (apply as (t: unknown) => unknown)(tag);
+  }
+  return tag as Tag;
+}
+
+/** A `TagSpec`'s CSS half, verbatim: `color` plus whichever of `fontStyle` /
+ *  `fontWeight` / `textDecoration` the theme derivation set. style-mod
+ *  kebab-cases each key, which is why the TextMate→CSS split happens in
+ *  `circ-editor-theme.ts` and never here. */
+function tagStyle(spec: TagSpec) {
+  return {
+    tag: resolveTag(spec.tag),
+    color: spec.color,
+    ...(spec.fontStyle ? { fontStyle: spec.fontStyle } : {}),
+    ...(spec.fontWeight ? { fontWeight: spec.fontWeight } : {}),
+    ...(spec.textDecoration ? { textDecoration: spec.textDecoration } : {}),
+  };
+}
+
+/** The editor chrome, as an `EditorView.theme` spec. The selection is styled
+ *  through `::selection` because `drawSelection()` is not in the extension set,
+ *  so `.cm-selectionBackground` never exists in the DOM. */
+function chromeSpec(palette: EditorPalette): Record<string, Record<string, string>> {
+  return {
+    '&': { backgroundColor: palette.background, color: palette.foreground },
+    '.cm-content': { caretColor: palette.caret },
+    '.cm-cursor, .cm-dropCursor': { borderLeftColor: palette.caret },
+    '.cm-content ::selection': { backgroundColor: palette.selection },
+    '.cm-content::selection': { backgroundColor: palette.selection },
+    '.cm-gutters': {
+      backgroundColor: palette.gutterBackground,
+      color: palette.gutterForeground,
+      borderRight: `1px solid ${palette.gutterBorder}`,
+    },
+    '.cm-activeLine': { backgroundColor: palette.activeLine },
+    '.cm-activeLineGutter': { backgroundColor: palette.activeLine, color: palette.foreground },
+  };
+}
+
+/** The compartment's content: the chrome and the token colours together, so one
+ *  `reconfigure` flips both. The view is never destroyed for a theme change —
+ *  unlike the simulation canvas, which captures its theme at construction. */
 function themeExtension(mode: ThemeMode): Extension {
-  return EditorView.theme({}, { dark: mode === 'dark' });
+  const { specs, palette } = themeFor(mode);
+  return [
+    EditorView.theme(chromeSpec(palette), { dark: mode === 'dark' }),
+    syntaxHighlighting(HighlightStyle.define(specs.map(tagStyle))),
+  ];
 }
 
 export function createEditor(parent: HTMLElement, options: EditorOptions = {}): EditorHandle {
