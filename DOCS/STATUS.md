@@ -507,3 +507,42 @@ Append-only log, one entry per shipped slice. Newest at the bottom. See `DOCS/PL
 **Notes:**
 1. **Slice 5, `output="simulate"`, is not shipped, and the reason is structural.** Its poster frame needs a committed artifact, and the tour's seven `tour-<N>.wasm` files are deliberately **untracked** — the plan's own trap says to expect them in `git status` and never stage them. So there is nothing for a tour snippet to render, and `/examples` already has a live canvas of its own. The component's prop is narrowed to `preview` and the dead mount is removed rather than left as markup that never fills. The `simulate` value stays in the parser's type so its fall-back behaviour remains tested.
 2. **`/tour` costs 5.6 KB gzip, not the 20 KB the plan reserved.** The plan expected to add `routes["/tour"]` and `routes["/examples"]` at 20 KB; neither is needed, because the editor chunk is reached only through a dynamic import and stays off the eager graph. Both pages sit under the **default** 10 KB ceiling, so no budget row is added and the stricter default keeps applying.
+
+## 2026-09-09 — Phase 7 — Slice 7: the budget proof and the decisions
+
+**What shipped:** Two `###` entries in `DOCS/decisions/playground.md`, registered in `DOCS/decisions/index.md`: a live editor shipping inert and sharing one worker, and the expand link carrying a reference when it can and a source when it must. `site/bundle-budget.json` is **unchanged**: the plan expected to add 20 KB rows for `/tour` and `/examples`, and neither is needed.
+**Files touched:** `DOCS/decisions/playground.md`, `DOCS/decisions/index.md`, `DOCS/STATUS.md`.
+**Tests:** `bun test` (284 pass across 25 files), `bun --bun run typecheck` (0 errors), `bun --bun run build` (pass), `bun run bundle` (ok). The final table, for the record:
+
+```
+route                          files      raw         gzip     ceiling(gzip)  status
+/download                          0     0.0 KB     0.0 KB      10.0 KB  ok
+/examples                          2     3.0 KB     1.6 KB      10.0 KB  ok
+/                                  2     3.0 KB     1.6 KB      10.0 KB  ok
+/playground                        3    61.0 KB    23.1 KB     120.0 KB  ok
+/reference/circuit-format          0     0.0 KB     0.0 KB      10.0 KB  ok
+/reference/getting-started         0     0.0 KB     0.0 KB      10.0 KB  ok
+/reference                         0     0.0 KB     0.0 KB      10.0 KB  ok
+/reference/preview                 0     0.0 KB     0.0 KB      10.0 KB  ok
+/reference/wasm-api                0     0.0 KB     0.0 KB      10.0 KB  ok
+/tour                              3    12.1 KB     5.6 KB      10.0 KB  ok
+
+lazy chunks (import() only; informational, not gated):
+  _astro/circ-editor.*.js    306.6 KB    99.6 KB
+  _astro/circ-theme.*.js      27.4 KB    16.5 KB
+  _astro/index.*.js           17.2 KB     6.4 KB
+inline <script> bytes across all pages: 23909
+```
+
+**Next slice:** none — Phase 7 is complete, and with it the playground-v2 initiative.
+**Notes:** No ceiling was raised in any phase of this initiative, and no budget row was ever added beyond Phase 0's `/playground` entry.
+
+## 2026-09-09 — Phase 7 — close-out, and the initiative's
+
+**What shipped:** Phase 7 in four commits (`915a377`, `cc065e4`, and this one, over slices 1-4, 6 and 7). Slice 5 is **not shipped**, structurally: `output="simulate"` needs a committed artifact for its poster frame and the tour's are deliberately untracked.
+
+The initiative is complete across eight phases: the compile fast path resolves implicit builtins and a per-page JavaScript budget gates every route; the playground has a CodeMirror editor with real diagnostics, files as tabs with per-file undo, a viewport-locked workbench with a persisted divider and a two-stage pipeline, a workspace with forking projects and share links, source-to-picture linking in four directions, a settings drawer with ROM images, and editable snippets in every tour step.
+**Files touched:** none beyond the slices.
+**Tests:** `bun test` 284 pass across 25 files, from 20 at the start of Phase 1; plus 23 in `circ-renderer`. `bun --bun run typecheck` 0 errors. `bun --bun run build` and `bun run bundle` green. `zig build test-all` green.
+**Next slice:** none. Open work, all recorded above rather than left to be found: the whole manual checklist for Phases 1-7 is **unrun**, because no browser has ever been available in a session on this branch; the `TODO(phase4)` browser confirmation that the fragment scrub beats analytics is still open by design; pointing at a `rom` or `ram` highlights nothing, since the site registers no memory skin; declarations inside a macro stay unresolvable while the renderer draws one collapsed box per instance; and `output="simulate"` on a live editor awaits committed artifacts.
+**Notes:** The branch is `playground`, stacked on `libcirc` (PR #80). Nothing in this repository has been pushed. The one remote write in the whole initiative was `circ-renderer`'s `host-pin-api` branch, pushed on the human's explicit instruction at Phase 5's hard stop.

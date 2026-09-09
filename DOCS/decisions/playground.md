@@ -212,3 +212,19 @@ The entries below record the decisions of the playground-v2 initiative (the site
 
 **Alternatives.** Persisting images (evicts real work to store a file the reader still has); trusting the library's refusal alone (a round trip and a less specific message); a generic memory editor (a `ram` is written by the circuit, and offering to poke it invites a reader to fight the simulation).
 
+### A live editor ships inert and shares one worker
+
+**Decision.** A `<LiveEditor>` in the docs renders as an ordinary code block with a working expand link and nothing loaded. The editor, the compiler and the diagnostics arrive on the first `pointerdown` or `focusin`, not on sight and not on load. Every instance on a page shares one compiler client, and the editor package is reached only through a dynamic import, so it never enters any page's eager module graph. Each instance runs its own two debounced stages at the same intervals the playground uses, guarded at every await, and keeps its last good schematic dimmed rather than blanking it while the source is broken.
+
+**Rationale.** A tour page is something people read; most readers will never type into a snippet, and they should not pay for the possibility. Touch-activation rather than visibility means scrolling past costs nothing at all. One shared worker matters more than it sounds: seven snippets each spawning a worker would mean seven copies of the compiler resident on a page whose point is prose. Measured, a tour page with seven editors costs 5.6 KB gzipped — under the 10 KB default every other page holds to, so no budget row was needed.
+
+**Alternatives.** Activating on an intersection observer (loads for readers who never type); one client per editor (seven compiler instances); a static import of the editor (puts a 100 KB chunk in front of a page of prose).
+
+### An expand link carries a reference when it can, and a source when it must
+
+**Decision.** The expand link on a live editor points at `#pick=<id>` while the snippet is unedited, and at the encoded source once it has been changed. When an edit is too long to carry, the link falls back to the id **and says so in its title**, because a reader who follows it would otherwise find their work silently gone. With no id to fall back to, the link refuses rather than pretending. The unedited path never calls the encoder at all.
+
+**Rationale.** An unedited snippet is shipped content, and pointing at it by name keeps the URL short and makes the playground open the content rather than a copy that will go stale. The degrade case is the one worth being careful about: dropping an edit is defensible, dropping it silently is not.
+
+**Alternatives.** Always encoding the source (long URLs for text the site already ships, and a copy that never tracks a content edit); always using the id (throws away the reader's edit with no warning at all).
+

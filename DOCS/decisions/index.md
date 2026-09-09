@@ -88,6 +88,8 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - Settings are the envelope's sixth field, and the option names are the wire's (per-op projection, no second normaliser)
 - One field is the truth-table cap, read by the pre-flight and by the request (decision 13's two enforcement points, merged)
 - ROM images are session state, and the page refuses what the library would (same checks, same order; a ram gets no box)
+- A live editor ships inert and shares one worker (touch-activated, one client per page, the editor chunk stays lazy)
+- An expand link carries a reference when it can, and a source when it must (id while unedited; a told-about degrade over the cap)
 
 ## Conventions
 
