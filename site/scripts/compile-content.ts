@@ -31,6 +31,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { examples } from '../src/content/examples.ts';
 import { tour } from '../src/content/tour.ts';
+import { splitFiles, rootOf } from '../src/utils/split-files.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, '..', '..');
@@ -52,30 +53,12 @@ mkdirSync(wasmOut, { recursive: true });
 type Compiled = { wasm: string; preview: string };
 const results: Record<string, Compiled | { error: string }> = {};
 
-function splitFiles(source: string): { name: string; body: string }[] {
-  const lines = source.split('\n');
-  const files: { name: string; body: string[] }[] = [];
-  let cur: { name: string; body: string[] } | null = null;
-  for (const line of lines) {
-    const m = line.match(/^\/\/\s+([\w_.-]+\.circ)\s*$/);
-    if (m && (!cur || cur.body.some((l) => l.trim().length > 0))) {
-      if (cur) files.push(cur);
-      cur = { name: m[1], body: [] };
-    } else {
-      cur ??= { name: 'main.circ', body: [] };
-      cur.body.push(line);
-    }
-  }
-  if (cur) files.push(cur);
-  return files.map((f) => ({ name: f.name, body: f.body.join('\n') }));
-}
-
 function compile(slug: string, source: string): Compiled | { error: string } {
   const dir = `${tmpRoot}/${slug}`;
   mkdirSync(dir, { recursive: true });
   const files = splitFiles(source);
   for (const f of files) writeFileSync(`${dir}/${f.name}`, f.body);
-  const rootName = files[files.length - 1].name;
+  const rootName = rootOf(files).name;
   const root = `${dir}/${rootName}`;
 
   const wasmName = `${slug}.wasm`;

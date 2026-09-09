@@ -92,3 +92,49 @@ describe.skipIf(skip)('libcirc.wasm', () => {
     expect(syntax.range).toEqual({ start_line: 3, start_col: 1, end_line: 3, end_col: 2 });
   });
 });
+
+describe.skipIf(skip)('libcirc.wasm modes', () => {
+  const rtrimLines = (s: string) => s.replace(/\n+$/, '').split('\n').map((l) => l.replace(/\s+$/, '')).join('\n');
+
+  test('preview text equals the examples\' preview fields', async () => {
+    const w = await lib();
+    for (const ex of examples) {
+      const out = callOp(w, 'preview', requestFor(splitFiles(ex.source), { color: 'never' }));
+      expect(out.status).toBe(0);
+      // The compiler right-pads rows; the committed previews are trimmed.
+      expect(rtrimLines(text(out.bytes))).toBe(rtrimLines(ex.preview));
+    }
+  });
+
+  test('half-adder truth table as JSON', async () => {
+    const w = await lib();
+    const half = examples.find((e) => e.slug === 'half-adder')!;
+    const out = callOp(w, 'truth_table', requestFor(splitFiles(half.source), { format: 'json' }));
+    expect(out.status).toBe(0);
+    const table = JSON.parse(text(out.bytes));
+    expect(table.inputs).toEqual(['a', 'b']);
+    expect(table.outputs).toEqual(['sum', 'carry']);
+    expect(table.rows.length).toBe(4);
+    const row = table.rows.find((r: any) => r.in[0] === 1 && r.in[1] === 1);
+    expect(row.out).toEqual([0, 1]);
+  });
+
+  test('a truth table over the cap is refused with status 3', async () => {
+    const w = await lib();
+    const out = callOp(w, 'truth_table', {
+      ...single('input[13] a\noutput[13] o(in=a)\n'),
+      options: { truth_table_cap: 12 },
+    });
+    expect(out.status).toBe(3);
+    expect(JSON.parse(text(out.bytes)).error).toContain('13 input bits');
+  });
+
+  test('repeated compiles keep linear memory bounded', async () => {
+    const w = await lib();
+    const req = single(examples[0].source);
+    callOp(w, 'compile', req);
+    const first = w.memory.buffer.byteLength;
+    for (let i = 0; i < 50; i++) expect(callOp(w, 'compile', req).status).toBe(0);
+    expect(w.memory.buffer.byteLength).toBeLessThanOrEqual(first * 2);
+  });
+});
