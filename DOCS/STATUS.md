@@ -25,3 +25,11 @@ Append-only log, one entry per shipped slice. Newest at the bottom. See `DOCS/PL
 **Tests:** extended `driver: compile equals the CLI artifact byte for byte` (the in-process CLI now exits 0 on the import-free builtin root and `libcirc.compile` returns identical bytes) and `libcirc.wasm: compile inverter, slice_basic, four_bit_adder, chain, full_adder project and drive expected-wasm vectors` (the wasm build's artifact drives all 256 committed vectors in Node). Ran `zig build test-all` (pass); `bun test` and `bun --bun run build` unaffected (no site file touched) and green at the slice 2 tree.
 **Next slice:** Slice 4 — the browser-module case in `site/test/libcirc.test.ts`.
 **Notes:** The drive case runs locally only: CI sets `SKIP_WASM_E2E=1` (`.github/workflows/pr-tests.yml`), so only the native driver test covers the route change there.
+
+## 2026-09-09 — Phase 0 — Slice 4: prove the browser module
+
+**What shipped:** One new case in `site/test/libcirc.test.ts`, `compiles a builtin-using single file with no import`: tour step 5's half-adder with its `import xor` line deleted compiles through the committed `site/public/wasm/libcirc.wasm` with status 0 and both custom sections. No `.wasm` touched — the module was regenerated in slice 2.
+**Files touched:** `site/test/libcirc.test.ts`, `DOCS/STATUS.md`.
+**Tests:** added the case above; ran `bun test` in `site/` (17 pass, `circ_version matches the committed manifest` and the renderer pin still green), `bun --bun run build` (pass); `git status` shows no modified `.wasm`. `zig build test-all` unaffected (no Zig file touched) and green at the slice 3 tree.
+**Next slice:** Slice 5 — `bun run bundle`: the dist walker and the committed budget.
+**Notes:** Manual browser checklist — open `/playground`, pick tour step 5, delete the `import xor "<builtin>/xor.circ"` line, confirm the status line no longer says "Compile reported diagnostics." and Simulate renders a canvas — **unrun** (no browser in this session).

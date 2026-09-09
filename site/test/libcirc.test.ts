@@ -80,6 +80,20 @@ describe.skipIf(skip)('libcirc.wasm', () => {
     expect(full).toContain('half_adder');
   });
 
+  test('compiles a builtin-using single file with no import', async () => {
+    // Tour step 5's half-adder with its `import xor` line deleted: the compile
+    // fast path is usage-aware, so the implicit builtin resolves.
+    const w = await lib();
+    const source = tour[4].source.replace(/^import xor .*\n/m, '');
+    expect(source).not.toContain('import');
+    expect(source).toContain('xor s(');
+    const out = callOp(w, 'compile', single(source));
+    expect(out.status).toBe(0);
+    const mod = await WebAssembly.compile(out.bytes);
+    expect(WebAssembly.Module.customSections(mod, 'circ.topology.v0.min').length).toBe(1);
+    expect(WebAssembly.Module.customSections(mod, 'circ.topology.v0.full').length).toBe(1);
+  });
+
   test('a broken source yields status 1 with a syntax diagnostic', async () => {
     const w = await lib();
     const out = callOp(w, 'compile', single('input a\nnot n(in=a\n'));
