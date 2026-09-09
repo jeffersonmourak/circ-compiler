@@ -249,7 +249,7 @@ describe('playground store', () => {
   test('nothing left to evict disables rather than looping', () => {
     const storage = fakeStorage({ failWrites: 'always' });
     const result = writeEnvelope(defaultEnvelope(), storage);
-    expect(result).toEqual({ ok: false, note: { kind: 'disabled', reason: 'quota' } });
+    expect(result).toEqual({ ok: false, note: { kind: 'disabled', reason: 'quota' }, skipped: [] });
   });
 
   test('a non-quota write error disables as unavailable', () => {
@@ -261,6 +261,7 @@ describe('playground store', () => {
     expect(writeEnvelope(defaultEnvelope(), storage)).toEqual({
       ok: false,
       note: { kind: 'disabled', reason: 'unavailable' },
+      skipped: [],
     });
   });
 

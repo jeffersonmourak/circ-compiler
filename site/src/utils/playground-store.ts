@@ -8,6 +8,8 @@
 // defaults so later phases fill them without a second key and without a
 // version bump.
 
+import type { DecodeResult, HashIntent, ShareKey } from './share-link.ts';
+
 export const STORE_KEY = 'circ.playground.v1';
 export const STORE_VERSION = 1;
 export const MAX_SCRATCH = 16;
@@ -69,6 +71,9 @@ export interface PlaygroundEnvelope {
 export type StoreNote =
   | { kind: 'reset'; reason: 'version' | 'corrupt' }
   | { kind: 'evicted'; names: string[] }
+  /** Sources over `MAX_SOURCE_BYTES`: kept in memory so the reader keeps
+   *  typing, omitted from what is written. */
+  | { kind: 'skipped'; names: string[] }
   | { kind: 'disabled'; reason: 'quota' | 'unavailable' };
 
 /** Injected so a test never touches a global. */
@@ -222,13 +227,21 @@ export function readEnvelope(storage: StorageLike | null): {
   }
 }
 
-/** Removes the least-recently-updated project; returns its name, or null. */
-export function evictOldest(env: PlaygroundEnvelope): string | null {
-  if (env.scratch.length === 0) return null;
-  let oldest = 0;
-  for (let i = 1; i < env.scratch.length; i += 1) {
-    if (env.scratch[i].updatedAt < env.scratch[oldest].updatedAt) oldest = i;
+/**
+ * Removes the least-recently-updated project and returns its name, or null
+ * when there is nothing left to remove.
+ *
+ * `keep` is never evicted — it is the project the reader is typing into, and
+ * losing that one to make room for older ones is the worst possible trade.
+ * When only `keep` remains this returns null and the caller stops.
+ */
+export function evictOldest(env: PlaygroundEnvelope, keep?: PickId | null): string | null {
+  let oldest = -1;
+  for (let i = 0; i < env.scratch.length; i += 1) {
+    if (keep && env.scratch[i].id === keep) continue;
+    if (oldest === -1 || env.scratch[i].updatedAt < env.scratch[oldest].updatedAt) oldest = i;
   }
+  if (oldest === -1) return null;
   const [removed] = env.scratch.splice(oldest, 1);
   return removed.name;
 }
@@ -252,16 +265,27 @@ function isQuotaError(err: unknown): boolean {
 export function writeEnvelope(
   env: PlaygroundEnvelope,
   storage: StorageLike | null,
-): { ok: boolean; note: StoreNote | null } {
-  if (!storage) return { ok: false, note: { kind: 'disabled', reason: 'unavailable' } };
-  const evicted: string[] = [];
+  keep?: PickId | null,
+): { ok: boolean; note: StoreNote | null; skipped: ScratchProject[] } {
+  if (!storage) {
+    return { ok: false, note: { kind: 'disabled', reason: 'unavailable' }, skipped: [] };
+  }
+  // A source over the per-source cap is omitted WHOLE from what is written —
+  // never as a record with a missing source, which `normalize` would drop on
+  // the next read with no note at all. It stays in memory, so the reader keeps
+  // typing and only loses persistence for that one project.
+  const skipped = env.scratch.filter((p) => utf8Bytes(p.source) > MAX_SOURCE_BYTES);
+  const skippedIds = new Set(skipped.map((p) => p.id));
+  const serialize = () =>
+    JSON.stringify({ ...env, scratch: env.scratch.filter((p) => !skippedIds.has(p.id)) });
 
-  let text = JSON.stringify(env);
-  while (utf8Bytes(text) > MAX_ENVELOPE_BYTES && env.scratch.length > 0) {
-    const name = evictOldest(env);
+  const evicted: string[] = [];
+  let text = serialize();
+  while (utf8Bytes(text) > MAX_ENVELOPE_BYTES) {
+    const name = evictOldest(env, keep);
     if (name === null) break;
     evicted.push(name);
-    text = JSON.stringify(env);
+    text = serialize();
   }
 
   const evictedNote = (): StoreNote | null =>
@@ -269,17 +293,19 @@ export function writeEnvelope(
 
   try {
     storage.setItem(STORE_KEY, text);
-    return { ok: true, note: evictedNote() };
+    return { ok: true, note: evictedNote(), skipped };
   } catch (err) {
-    if (!isQuotaError(err)) return { ok: false, note: { kind: 'disabled', reason: 'unavailable' } };
-    const name = evictOldest(env);
-    if (name === null) return { ok: false, note: { kind: 'disabled', reason: 'quota' } };
+    if (!isQuotaError(err)) {
+      return { ok: false, note: { kind: 'disabled', reason: 'unavailable' }, skipped };
+    }
+    const name = evictOldest(env, keep);
+    if (name === null) return { ok: false, note: { kind: 'disabled', reason: 'quota' }, skipped };
     evicted.push(name);
     try {
-      storage.setItem(STORE_KEY, JSON.stringify(env));
-      return { ok: true, note: evictedNote() };
+      storage.setItem(STORE_KEY, serialize());
+      return { ok: true, note: evictedNote(), skipped };
     } catch {
-      return { ok: false, note: { kind: 'disabled', reason: 'quota' } };
+      return { ok: false, note: { kind: 'disabled', reason: 'quota' }, skipped };
     }
   }
 }
@@ -306,6 +332,8 @@ export function describeNote(note: StoreNote): string {
       return note.reason === 'version'
         ? 'Saved playground settings were from an older version and have been reset.'
         : 'Saved playground settings could not be read and have been reset.';
+    case 'skipped':
+      return `${note.names.length === 1 ? 'One project is' : `${note.names.length} projects are`} too large to save (${note.names.join(', ')}); they stay open but will not survive a reload.`;
     case 'evicted':
       return `Storage was full, so ${note.names.length === 1 ? 'the oldest saved project' : 'the oldest saved projects'} (${note.names.join(', ')}) ${note.names.length === 1 ? 'was' : 'were'} removed.`;
     case 'disabled':
@@ -356,11 +384,15 @@ export function createStore(opts: {
   emit(initial.note);
   if (initial.note?.kind === 'disabled') enabled = false;
 
+  /** Never evict the project the reader is in. */
   const writeNow = () => {
     if (!enabled) return;
-    const result = writeEnvelope(envelope, storage);
+    const result = writeEnvelope(envelope, storage, envelope.activeId);
     if (!result.ok) enabled = false;
     emit(result.note);
+    if (result.skipped.length > 0) {
+      emit({ kind: 'skipped', names: result.skipped.map((p) => p.name) });
+    }
   };
 
   return {
@@ -393,3 +425,241 @@ export function createStore(opts: {
     },
   };
 }
+
+// ---------------------------------------------------------------------------
+// The workspace: content projects by id, scratch projects by value.
+// ---------------------------------------------------------------------------
+
+export type ProjectKind = 'example' | 'tour' | 'scratch';
+
+/**
+ * One row of the workspace. The sidebar, the page's embedded catalogue blob and
+ * the "Open in playground" links all come from one `buildCatalogue` call, so
+ * they cannot drift from each other or from the shipped content.
+ */
+export interface CatalogueItem {
+  id: PickId;
+  label: string;
+  group: 'Examples' | 'Tour';
+  source: string;
+}
+
+export function buildCatalogue(
+  examples: readonly { slug: string; title: string; source: string }[],
+  tour: readonly { title: string; source: string }[],
+): CatalogueItem[] {
+  return [
+    ...examples.map((e) => ({
+      id: `example:${e.slug}`,
+      label: e.title,
+      group: 'Examples' as const,
+      source: e.source,
+    })),
+    ...tour.map((t, i) => ({
+      id: `tour:${i + 1}`,
+      label: `${i + 1}. ${t.title}`,
+      group: 'Tour' as const,
+      source: t.source,
+    })),
+  ];
+}
+
+/** What a fresh project starts as. */
+export const NEW_PROJECT_SOURCE = 'input a\nnot n(in=a)\noutput out(in=n.out)\n';
+
+export function idKind(id: PickId): ProjectKind | null {
+  if (id.startsWith('example:')) return 'example';
+  if (id.startsWith('tour:')) return 'tour';
+  if (id.startsWith('scratch:')) return 'scratch';
+  return null;
+}
+
+/** `now` and `rand` are injected so a test is deterministic and no `crypto`
+ *  global is required — `randomUUID` is absent on older Safari and on any
+ *  non-secure origin. */
+export function newScratchId(now: number, rand: () => number = Math.random): PickId {
+  const salt = Math.floor(rand() * 0x100000).toString(36);
+  return `scratch:${now.toString(36)}${salt}`;
+}
+
+/** `base`, or the first free `base N`. */
+export function uniqueName(base: string, taken: readonly string[]): string {
+  if (!taken.includes(base)) return base;
+  for (let n = 2; ; n += 1) {
+    const candidate = `${base} ${n}`;
+    if (!taken.includes(candidate)) return candidate;
+  }
+}
+
+export interface ScratchEdit {
+  list: ScratchProject[];
+  evicted: ScratchProject[];
+  /** Refused for exceeding `MAX_SOURCE_BYTES`. Kept by the caller in memory,
+   *  never written. */
+  skipped: ScratchProject[];
+}
+
+/** Trim to `MAX_SCRATCH` by dropping the least recently updated, never `keep`. */
+function trimToMax(list: ScratchProject[], keep?: PickId | null): { list: ScratchProject[]; evicted: ScratchProject[] } {
+  const evicted: ScratchProject[] = [];
+  const out = [...list];
+  while (out.length > MAX_SCRATCH) {
+    let oldest = -1;
+    for (let i = 0; i < out.length; i += 1) {
+      if (keep && out[i].id === keep) continue;
+      if (oldest === -1 || out[i].updatedAt < out[oldest].updatedAt) oldest = i;
+    }
+    if (oldest === -1) break;
+    evicted.push(out.splice(oldest, 1)[0]);
+  }
+  return { list: out, evicted };
+}
+
+export function createScratch(
+  list: readonly ScratchProject[],
+  init: { name: string; source: string; now: number; keep?: PickId | null; rand?: () => number },
+): ScratchEdit & { created: ScratchProject | null } {
+  const created: ScratchProject = {
+    id: newScratchId(init.now, init.rand),
+    name: uniqueName(init.name, list.map((p) => p.name)),
+    source: init.source,
+    updatedAt: init.now,
+  };
+  if (utf8Bytes(created.source) > MAX_SOURCE_BYTES) {
+    // Over the per-source cap at birth: report it rather than storing
+    // something the next read would silently drop.
+    return { list: [...list], evicted: [], skipped: [created], created: null };
+  }
+  const trimmed = trimToMax([...list, created], init.keep ?? created.id);
+  return { ...trimmed, skipped: [], created };
+}
+
+export function duplicateScratch(
+  list: readonly ScratchProject[],
+  id: PickId,
+  init: { now: number; rand?: () => number },
+): (ScratchEdit & { created: ScratchProject | null }) | null {
+  const source = list.find((p) => p.id === id);
+  if (!source) return null;
+  return createScratch(list, { name: source.name, source: source.source, now: init.now, rand: init.rand });
+}
+
+export function renameScratch(list: readonly ScratchProject[], id: PickId, name: string): ScratchProject[] {
+  const trimmed = name.trim();
+  if (trimmed === '') return [...list];
+  return list.map((p) => (p.id === id ? { ...p, name: trimmed } : p));
+}
+
+export function deleteScratch(list: readonly ScratchProject[], id: PickId): ScratchProject[] {
+  return list.filter((p) => p.id !== id);
+}
+
+/**
+ * Record an edit. An over-size body is refused **at the source**: the list
+ * comes back unchanged with the offending project in `skipped`, so nothing
+ * over the cap ever reaches the envelope and no second fitting pass is needed.
+ */
+export function touchScratch(
+  list: readonly ScratchProject[],
+  id: PickId,
+  source: string,
+  now: number,
+): ScratchEdit {
+  const existing = list.find((p) => p.id === id);
+  if (!existing) return { list: [...list], evicted: [], skipped: [] };
+  if (utf8Bytes(source) > MAX_SOURCE_BYTES) {
+    return { list: [...list], evicted: [], skipped: [{ ...existing, source }] };
+  }
+  return {
+    list: list.map((p) => (p.id === id ? { ...p, source, updatedAt: now } : p)),
+    evicted: [],
+    skipped: [],
+  };
+}
+
+/** The text behind an id: a catalogue entry's shipped source, or a scratch
+ *  project's stored one. Null when the id names neither. */
+export function resolveSource(
+  id: PickId,
+  catalogue: readonly CatalogueItem[],
+  scratch: readonly ScratchProject[],
+): string | null {
+  const item = catalogue.find((c) => c.id === id);
+  if (item) return item.source;
+  const project = scratch.find((p) => p.id === id);
+  return project ? project.source : null;
+}
+
+export type LoadOutcome =
+  | { kind: 'share'; source: string; key: ShareKey }
+  | { kind: 'pick'; id: PickId; source: string }
+  | { kind: 'active'; id: PickId; source: string }
+  | { kind: 'default'; id: PickId; source: string };
+
+/**
+ * What to open, walked one rule at a time: a share fragment, then a `#pick=`,
+ * then the project the reader last had open, then the first catalogue entry.
+ *
+ * Each failure falls through to the NEXT rule rather than straight to the
+ * default, which is why the hash intent keeps every key it found instead of
+ * resolving to one.
+ */
+export function resolveInitial(input: {
+  intent: HashIntent;
+  decoded: DecodeResult | null;
+  env: PlaygroundEnvelope;
+  catalogue: readonly CatalogueItem[];
+  defaultId: PickId;
+}): { outcome: LoadOutcome; note: string | null } {
+  const { intent, decoded, env, catalogue, defaultId } = input;
+  const hadIntent = Boolean(intent.src || intent.pick || (intent.unknown && intent.unknown.length > 0));
+  let failed = false;
+
+  if (intent.src) {
+    if (decoded && decoded.ok) {
+      return { outcome: { kind: 'share', source: decoded.source, key: decoded.key }, note: null };
+    }
+    failed = true;
+  }
+
+  if (intent.pick) {
+    const source = resolveSource(intent.pick, catalogue, env.scratch);
+    if (source !== null) {
+      return {
+        outcome: { kind: 'pick', id: intent.pick, source },
+        note: failed ? 'That share link could not be decoded; opened the linked example instead.' : null,
+      };
+    }
+    failed = true;
+  }
+
+  if (env.activeId) {
+    const source = resolveSource(env.activeId, catalogue, env.scratch);
+    if (source !== null) {
+      return {
+        outcome: { kind: 'active', id: env.activeId, source },
+        note: failed || (intent.unknown && intent.unknown.length > 0)
+          ? (intent.src
+              ? 'That share link could not be decoded; opened the last project instead.'
+              : 'Unknown example id in the link; opened the last project instead.')
+          : null,
+      };
+    }
+    failed = true;
+  }
+
+  const fallbackId = catalogue.some((c) => c.id === defaultId) ? defaultId : (catalogue[0]?.id ?? defaultId);
+  return {
+    outcome: {
+      kind: 'default',
+      id: fallbackId,
+      source: resolveSource(fallbackId, catalogue, env.scratch) ?? '',
+    },
+    note: hadIntent
+      ? (intent.src && failed
+          ? 'That share link could not be decoded; opened the first example instead.'
+          : 'Unknown example id in the link; opened the first example instead.')
+      : null,
+  };
+}
+
