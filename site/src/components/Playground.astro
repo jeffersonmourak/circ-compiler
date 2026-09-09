@@ -20,6 +20,8 @@ const initial = picks[0];
   data-libcirc-wasm={wasmHref}
   data-supported-versions={supportedVersions.join(',')}
   data-manifest-full-version={manifest.full_version.toString()}
+  data-manifest-version={manifest.version}
+  data-manifest-revision={manifest.revision}
 >
   <div class="pg-banner" hidden></div>
   <div class="pg-panes">
@@ -56,7 +58,6 @@ const initial = picks[0];
           rows="18"
         >{initial.source}</textarea>
       </div>
-      <div class="pg-status" aria-live="polite">Type to compile.</div>
     </section>
     <div
       class="pg-splitter"
@@ -82,6 +83,18 @@ const initial = picks[0];
       </div>
     </section>
   </div>
+  <div class="pg-statusbar">
+    <span class="pg-dot" data-state="idle" aria-hidden="true"></span>
+    <span class="pg-status-label">Idle</span>
+    <span class="pg-status-detail">Type to compile.</span>
+    <span class="pg-status-spacer"></span>
+    {/* Rendered from the committed manifest so the bar is never blank before
+        the version handshake resolves; the island overwrites it after. */}
+    <span class="pg-status-identity">circ {manifest.version} · {manifest.revision} · CIRF v{manifest.full_version}</span>
+    <span class="pg-status-actions"></span>
+    {/* The announcement channel: file-tab operations and store notes. */}
+    <span class="pg-status" role="status" aria-live="polite"></span>
+  </div>
   <script type="application/json" id="pg-picks" set:html={JSON.stringify(Object.fromEntries(picks.map((p) => [p.id, p.source])))} />
 </div>
 
@@ -90,6 +103,7 @@ const initial = picks[0];
   import { joinConflicts, requestFor, rootOf, PLAYGROUND_DIR } from '../utils/split-files.ts';
   import { createSplitter } from '../scripts/splitter.ts';
   import { createStore, describeNote } from '../utils/playground-store.ts';
+  import { statusFor, type StatusInput } from '../scripts/pipeline.ts';
   import {
     activeFile,
     addFile,
@@ -133,6 +147,10 @@ const initial = picks[0];
     const editorHost = el.querySelector<HTMLElement>('#pg-editor')!;
     const pick = el.querySelector<HTMLSelectElement>('#pg-pick')!;
     const status = el.querySelector<HTMLElement>('.pg-status')!;
+    const dot = el.querySelector<HTMLElement>('.pg-dot')!;
+    const statusLabel = el.querySelector<HTMLElement>('.pg-status-label')!;
+    const statusDetail = el.querySelector<HTMLElement>('.pg-status-detail')!;
+    const statusIdentity = el.querySelector<HTMLElement>('.pg-status-identity')!;
     const banner = el.querySelector<HTMLElement>('.pg-banner')!;
     const diagList = el.querySelector<HTMLUListElement>('.pg-diag')!;
     const previewEl = el.querySelector<HTMLElement>('.pg-preview')!;
@@ -180,6 +198,33 @@ const initial = picks[0];
       if (tab === 'truth') void runTruth(state.gen);
     }
     for (const b of tabs) b.addEventListener('click', () => showTab(b.dataset.tab as Tab));
+
+    // ---- the status bar ----
+    // One record in, one view out. The label is written only when the state
+    // KIND changes, so the bar does not churn per keystroke; the per-keystroke
+    // text lives in the non-live detail span, and the separate `.pg-status`
+    // span stays the only announcement channel.
+    const pipe: StatusInput = {
+      ready: false,
+      loading: false,
+      analyzing: false,
+      building: false,
+      errors: 0,
+      warnings: 0,
+      artifactBytes: null,
+      stale: false,
+      failure: null,
+    };
+    let lastKind = '';
+    function renderStatus() {
+      const view = statusFor(pipe);
+      if (view.kind !== lastKind) {
+        statusLabel.textContent = view.label;
+        dot.dataset.state = view.kind;
+        lastKind = view.kind;
+      }
+      statusDetail.textContent = view.detail;
+    }
 
     // ---- persistence ----
     // One key, one envelope. Phase 3 populates layout.ratios only; the other
@@ -607,13 +652,22 @@ const initial = picks[0];
     // ---- version handshake ----
     async function ensureReady(): Promise<boolean> {
       if (state.version) return true;
-      status.textContent = 'Loading the compiler…';
+      pipe.loading = true;
+      renderStatus();
       try {
         state.version = await client.init();
       } catch (err) {
-        status.textContent = `Could not load libcirc.wasm: ${(err as Error).message}`;
+        pipe.loading = false;
+        pipe.failure = `Could not load libcirc.wasm: ${(err as Error).message}`;
+        renderStatus();
         return false;
       }
+      pipe.loading = false;
+      pipe.ready = true;
+      pipe.failure = null;
+      const v = state.version;
+      statusIdentity.textContent = `circ ${v.version} · ${v.revision} · CIRF v${v.full_version}`;
+      renderStatus();
       if (!supported.includes(state.version.full_version)) {
         banner.textContent =
           `libcirc.wasm emits topology v${state.version.full_version} but the bundled circ-renderer reads v${supported.join('/')}; ` +
@@ -637,12 +691,18 @@ const initial = picks[0];
       // changes with no way to know they were stale to begin with.
       // Per-tab, because the offsets each reply carries are file-local now.
       const snapshot = state.tabs.files.map((f) => f.body);
-      status.textContent = 'Compiling…';
+      pipe.analyzing = true;
+      pipe.building = true;
+      pipe.failure = null;
+      renderStatus();
 
       const an = await client.call('analyze', requestFor(state.tabs.files));
       if (gen !== state.gen) return;
       if (an.status !== 0) {
-        status.textContent = `analyze failed: ${an.error ?? an.status}`;
+        pipe.analyzing = false;
+        pipe.building = false;
+        pipe.failure = `analyze failed: ${an.error ?? an.status}`;
+        renderStatus();
         return;
       }
       state.analysis = JSON.parse(an.text!) as Analysis;
@@ -654,7 +714,11 @@ const initial = picks[0];
       if (errors > 0) {
         state.artifact = null;
         hooks.onArtifact?.(null);
-        status.textContent = `${errors} error${errors === 1 ? '' : 's'}${warnings ? `, ${warnings} warning${warnings === 1 ? '' : 's'}` : ''}.`;
+        pipe.analyzing = false;
+        pipe.building = false;
+        pipe.errors = errors;
+        pipe.warnings = warnings;
+        renderStatus();
       } else {
         const c = await client.call('compile', requestFor(state.tabs.files));
         if (gen !== state.gen) return;
@@ -664,7 +728,14 @@ const initial = picks[0];
             state.artifact = { bytes: c.bytes, hash };
             hooks.onArtifact?.(c.bytes);
           }
-          status.textContent = `Compiled: ${c.bytes.length} bytes${warnings ? `, ${warnings} warning${warnings === 1 ? '' : 's'}` : ''}.`;
+          // Captured before the buffer can be transferred onward: a detached
+          // view reports 0.
+          pipe.artifactBytes = c.bytes.length;
+          pipe.analyzing = false;
+          pipe.building = false;
+          pipe.errors = 0;
+          pipe.warnings = warnings;
+          renderStatus();
         } else if (c.status === 1 && c.text) {
           // A second, independent producer: the compile reply carries its own
           // `files[]`, which the mapping needs, so map THAT analysis — not the
@@ -674,11 +745,17 @@ const initial = picks[0];
           publishDiagnostics(snapshot, compileAnalysis);
           state.artifact = null;
           hooks.onArtifact?.(null);
-          status.textContent = 'Compile reported diagnostics.';
+          pipe.analyzing = false;
+          pipe.building = false;
+          pipe.errors = Math.max(1, state.diagnostics.filter((d) => d.severity === 'error').length);
+          renderStatus();
         } else {
           state.artifact = null;
           hooks.onArtifact?.(null);
-          status.textContent = `compile failed: ${c.error ?? c.status}`;
+          pipe.analyzing = false;
+          pipe.building = false;
+          pipe.failure = `compile failed: ${c.error ?? c.status}`;
+          renderStatus();
         }
       }
       if (state.tab === 'preview') void runPreview(gen);

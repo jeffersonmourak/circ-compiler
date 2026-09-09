@@ -338,6 +338,8 @@ hr {
 @media (prefers-reduced-motion: reduce) {
   .heart { animation: none; }
   .pg-splitter::before { transition: none; }
+  .pg-dot[data-state='compiling'] { animation: none; }
+  .pg-output[data-stale] { transition: none; }
 }
 
 /* Responsive theme-toggle placement: top nav on desktop, footer on mobile.
@@ -1181,6 +1183,40 @@ a.install-line:hover {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
+.pg-statusbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.5rem;
+  border-top: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--muted);
+  min-height: 1.9rem;
+  flex-wrap: wrap;
+}
+.pg-status-spacer { flex: 1; }
+.pg-status-label { color: var(--fg); }
+.pg-status-identity { opacity: 0.75; }
+.pg-status { color: var(--accent); }
+.pg-status:empty { display: none; }
+.pg-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--muted);
+  flex: none;
+}
+.pg-dot[data-state='live'] { background: var(--accent); }
+.pg-dot[data-state='error'] { background: var(--danger); }
+.pg-dot[data-state='compiling'] {
+  background: var(--accent-soft);
+  animation: pg-pulse 1s ease-in-out infinite;
+}
+@keyframes pg-pulse {
+  50% { opacity: 0.35; }
+}
+
 [data-layout='app'] .pg-panes {
   min-height: 0;
   /* The first pane's share of the space left over after the divider itself,
