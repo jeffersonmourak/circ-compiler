@@ -275,6 +275,8 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     type MemorySymbol,
   } from '../utils/rom-image.ts';
   import {
+    UNKNOWN,
+    cellWidth,
     clampWindow,
     dumpRows,
     formatAddress,
@@ -449,7 +451,11 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     const hooks = {
       onArtifact: null as null | ((bytes: Uint8Array | null, reason: 'built' | 'files-changed') => void),
     };
-    (el as any).__playground = { state, hooks };
+    // `renderMemory` is a deliberate test seam alongside the two above: the
+    // memory panel only exists once an analysis reports a rom or a ram, and no
+    // headless harness can run the worker that produces one. The smoke test
+    // sets `state.analysis` and calls this.
+    (el as any).__playground = { state, hooks, renderMemory: () => renderMemory({ force: true }) };
 
     // ---- tabs ----
     /**
@@ -1408,9 +1414,14 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       // just made.
       const signature = mems.map((m) => `${m.name}:${m.kind}:${m.width}:${m.addrWidth}`).join('|');
       const active = document.activeElement;
+      // Only a field that is being TYPED INTO can be destroyed mid-keystroke.
+      // This used to say "any INPUT", which included the checkbox that opens
+      // the hex editor — so the click that ticked it also suppressed the
+      // redraw that was supposed to show what it opened, and it did nothing.
       const typing = active !== null
         && memPanel.contains(active)
-        && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT');
+        && (active.tagName === 'TEXTAREA'
+          || (active.tagName === 'INPUT' && (active as HTMLInputElement).type === 'text'));
       if (!opts.force && memPanel.dataset.signature === signature && typing) {
         for (const mem of mems) updateRomStatus(mem);
         return;
@@ -1497,6 +1508,11 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       const pages = pageCount(MEM_PAGE, total);
       if (pages > 1) wrap.appendChild(pageNav(mem, win, total));
       wrap.appendChild(gridTable(mem, source, win));
+      const gridError = document.createElement('p');
+      gridError.className = 'pg-mem-error';
+      gridError.id = memErrorId(mem);
+      gridError.setAttribute('role', 'alert');
+      wrap.appendChild(gridError);
 
       if (source.note) {
         const note = document.createElement('p');
@@ -1543,10 +1559,10 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         box.addEventListener('change', () => {
           if (box.checked) hexOpen.add(mem.name);
           else hexOpen.delete(mem.name);
-          renderMemory();
+          renderMemory({ force: true });
         });
         toggle.appendChild(box);
-        toggle.appendChild(document.createTextNode(' Edit as hex'));
+        toggle.appendChild(document.createTextNode(' Load image'));
         buttons.appendChild(toggle);
       }
       controls.appendChild(buttons);
@@ -1736,41 +1752,99 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
 
     /** Swap one cell for an input. Enter writes it; Escape leaves it alone. */
     function editCell(td: HTMLElement, mem: MemorySymbol, addr: number) {
+      const format = settings().valueFormat;
       const previous = td.textContent ?? '';
       const input = document.createElement('input');
       input.className = 'pg-mem-input';
-      input.value = previous === '?' ? '' : previous;
+      input.type = 'text';
+      input.value = previous === UNKNOWN ? '' : previous;
       input.setAttribute('aria-label', `${mem.name} at ${formatAddress(addr, mem.addrWidth)}`);
+      input.setAttribute('aria-invalid', 'false');
+      input.setAttribute('aria-describedby', memErrorId(mem));
+      input.autocomplete = 'off';
+      input.spellcheck = false;
+      // A generous cap rather than a tight one: the longest legal input is not
+      // the widest rendering, because `0x` and `_` are both allowed.
+      input.maxLength = cellWidth(mem.width, format) + 4;
       let done = false;
+
+      const complain = (message: string) => {
+        input.setAttribute('aria-invalid', 'true');
+        setMemError(mem, message);
+        // Stay open. A refusal that closes the editor throws away what the
+        // reader typed and makes them find the cell again to try once more.
+        input.focus();
+        input.select();
+      };
 
       const finish = (commit: boolean) => {
         if (done) return;
-        done = true;
         if (!commit) {
+          done = true;
+          setMemError(mem, '');
           renderMemory({ force: true });
           return;
         }
-        const parsed = parseWord(input.value, mem.width, settings().valueFormat);
+        const parsed = parseWord(input.value, mem.width, format);
         if (!parsed.ok) {
-          status.textContent = parsed.message;
-          renderMemory({ force: true });
+          complain(parsed.message);
           return;
         }
+        done = true;
+        setMemError(mem, '');
         const unknown = parsed.defined === 0n;
         if (mem.kind === 'rom') writeRomWord(mem, addr, unknown ? null : parsed.value);
         else writeLiveWord(mem, addr, parsed.value, parsed.defined);
       };
+
+      // Characters that cannot begin any legal word never make it in, so the
+      // only refusals left are about VALUE — too large for the width, or the
+      // wrong base — which cannot be prevented by filtering.
+      input.addEventListener('input', () => {
+        const cleaned = input.value.replace(/[^0-9a-fA-FxX_?]/g, '');
+        if (cleaned !== input.value) {
+          const at = input.selectionStart ?? cleaned.length;
+          input.value = cleaned;
+          const back = Math.max(0, at - 1);
+          input.setSelectionRange(back, back);
+        }
+        // Typing again is the reader answering the complaint; drop it.
+        if (input.getAttribute('aria-invalid') === 'true') {
+          input.setAttribute('aria-invalid', 'false');
+          setMemError(mem, '');
+        }
+      });
 
       input.addEventListener('keydown', (e) => {
         e.stopPropagation();
         if (e.key === 'Enter') { e.preventDefault(); finish(true); }
         else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
       });
-      input.addEventListener('blur', () => finish(true));
+      // Clicking away from a word that will not parse abandons it rather than
+      // trapping focus in the cell, the way a file rename does.
+      input.addEventListener('blur', () => {
+        if (done) return;
+        const parsed = parseWord(input.value, mem.width, format);
+        finish(parsed.ok);
+        if (!parsed.ok) {
+          done = true;
+          setMemError(mem, '');
+          renderMemory({ force: true });
+        }
+      });
       td.textContent = '';
       td.appendChild(input);
       input.focus();
       input.select();
+    }
+
+    const memErrorId = (mem: MemorySymbol) => `pg-mem-err-${mem.name}`;
+
+    /** The line under a memory's grid. Cleared by the next keystroke. */
+    function setMemError(mem: MemorySymbol, message: string) {
+      const wrap = memPanel.querySelector<HTMLElement>(`.pg-mem-item[data-name="${CSS.escape(mem.name)}"]`);
+      const line = wrap?.querySelector<HTMLElement>('.pg-mem-error');
+      if (line) line.textContent = message;
     }
 
     /** A rom is edited through its IMAGE, so the truth table and the canvas

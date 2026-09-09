@@ -744,3 +744,23 @@ The hex textarea is now behind an "Edit as hex" checkbox, alongside a file picke
 2. **The prefix rule is proved against a real circuit, not just in the abstract.** Three tests edit a word through `editWord`, load the resulting image into a compiled artifact, and read it back: words 0 through 4 are real zeros in the circuit rather than unknowns, word 5 holds what was typed, word 6 is still unknown, and taking word 5 back empties the image and the circuit with it. A binary file and the equivalent typed hex are shown to land identically.
 3. **`implied` cannot be derived, so it is carried.** The image cannot tell a zero the reader chose from a zero the format had to invent, so the set of filled addresses lives beside the text. Pasting hex or loading a file clears it: a reader who supplied the whole image meant all of it.
 4. **Negative proof.** Dropping the gap from the implied set — the mark quietly disappearing — fails 12 tests across the two files.
+
+## 2026-09-09 — Fix — a cell edit that refuses without closing, and a checkbox that worked
+
+**What shipped:** Two defects the human found in the browser, both mine from the last commit.
+
+**A refused word threw the edit away.** Typing a value the memory could not hold closed the editor, discarded what had been typed, and put the reason in the status bar at the foot of the page — so the reader had to find the cell again to try once more. A refusal now keeps the editor open holding its text, marks it `aria-invalid`, and writes the reason on a line directly under the grid. The next keystroke clears it. Characters that cannot begin any legal word are filtered as they are typed, and the field is length-capped, so the only refusals left are about the value itself: too large for the width, or the wrong base. Clicking away from a word that will not parse still abandons it, the way a file rename does.
+
+**"Edit as hex" did nothing.** The panel skips its rebuild while a field inside it has focus, so that typing in the hex box is not interrupted. The guard said "any INPUT", and a checkbox is an INPUT — so the click that ticked the box was itself what suppressed the redraw that would have shown what it opened. The guard now names text fields only, the handler forces the rebuild, and the control is relabelled **Load image**, which is what it does: it reveals the hex textarea and the binary file picker together.
+
+**Files touched:** `site/src/components/Playground.astro`, `site/src/styles/global.css`, `site/test/island-smoke.test.ts`.
+
+**Tests:** `bun test` 393 pass across 30 files, from 392. `bun --bun run typecheck` 0 errors. Build, `bun run bundle` and `zig build test-all` green. `/playground` gzip 29.3 KB against a 120 KB ceiling.
+
+**Next slice:** none.
+
+**Notes:**
+
+1. **The memory panel now has a test seam, because nothing else could reach it.** The panel exists only once an analysis reports a memory, and no headless harness can run the worker that produces one. `__playground` already exposed `state` and `hooks`; it exposes `renderMemory` alongside them, and the smoke test hands the island a hand-built analysis declaring `rom code[8, 4]` and drives the real grid.
+2. **My first draft of the test was wrong, not the code.** It typed `100` expecting an overflow, but the shipped default value format is **binary**, where `100` is a perfectly good three-bit word that committed exactly as it should. The overflow case for an eight-bit word in binary is nine digits. Worth remembering: the value format is a setting, so a test that hard-codes a literal has to say which base it is in.
+3. **The checkbox proof only worked once the test focused before clicking.** Setting `checked` from outside and firing `change` leaves the document focused elsewhere, and the defect cannot reproduce — the bug is entirely about the checkbox holding focus at the moment of the redraw. Restoring the broad guard now fails the test; before the focus call it passed with the bug in place, which would have been a green light on a broken build.

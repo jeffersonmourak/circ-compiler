@@ -907,6 +907,10 @@ hr {
 .pg-mem-btn:hover:not(:disabled) { color: var(--fg); border-color: var(--accent); }
 .pg-mem-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .pg-mem-idle { color: var(--muted); font-size: 0.75rem; margin: 0; }
+/* The refusal line, directly under the grid so it sits beside the cell that
+   was refused rather than in the status bar at the bottom of the page. */
+.pg-mem-error { color: var(--danger); font-size: 0.72rem; margin: 0; }
+.pg-mem-error:empty { display: none; }
 .pg-mem-nav { display: flex; align-items: center; gap: 0.35rem; }
 .pg-mem-range { font-family: var(--font-mono); font-size: 0.7rem; color: var(--muted); }
 .pg-mem-jump {
@@ -965,6 +969,11 @@ hr {
   background: var(--bg);
   color: var(--fg);
   padding: 0;
+}
+/* A refused word keeps its editor open, so the cell has to say so itself. */
+.pg-mem-input[aria-invalid='true'] {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, var(--bg));
 }
 /* The count beside the tab label, so a collapsed dock still says how many. */
 .pg-dock-count {

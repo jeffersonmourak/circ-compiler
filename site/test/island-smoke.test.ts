@@ -384,6 +384,102 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(labelOf(fileRows()[0])).toBe('renamed.circ');
   }));
 
+  test('the memory grid refuses a bad word without closing, and Load image opens', () => drive((doc) => {
+    // The panel exists only once an analysis reports a memory, and no headless
+    // harness can run the worker that produces one — so the island's own seam
+    // is handed a minimal analysis declaring `rom code[8, 4]`.
+    const island = (doc.querySelector('.pg') as unknown as {
+      __playground: { state: Record<string, unknown>; renderMemory(): void };
+    }).__playground;
+    const files = (island.state.tabs as { files: { name: string }[] }).files;
+    const rootName = files[files.length - 1].name;
+    island.state.analysis = {
+      files: [{ file_id: 0, path: `/playground/${rootName}` }],
+      diagnostics: [],
+      symbols: [{ file_id: 0, kind: 'rom', name: 'code', width: 8, addr_width: 4, range: {} }],
+      references: [],
+    };
+    island.renderMemory();
+
+    const click = (el: unknown) => (el as { click(): void }).click();
+    const press = (el: unknown, key: string) =>
+      (el as { dispatchEvent(e: unknown): void }).dispatchEvent(
+        new (globalThis as unknown as { KeyboardEvent: new (t: string, o: unknown) => unknown })
+          .KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }),
+      );
+    const fire = (el: unknown, type: string) =>
+      (el as { dispatchEvent(e: unknown): void }).dispatchEvent(
+        new (globalThis as unknown as { Event: new (t: string, o: unknown) => unknown })
+          .Event(type, { bubbles: true }),
+      );
+    const cells = () => Array.from(doc.querySelectorAll('.pg-mem-cell'));
+    const errorLine = () => doc.querySelector('.pg-mem-error')?.textContent ?? '';
+
+    // The tab is no longer hidden, and the grid is the memory's exact size.
+    expect(doc.querySelector('.pg-dock-tab[data-dock="memory"]')?.hasAttribute('hidden')).toBe(false);
+    expect(cells()).toHaveLength(16);
+    expect(cells().every((c) => (c as unknown as { textContent: string }).textContent === '?')).toBe(true);
+
+    // Open a cell.
+    const cell = cells()[0] as unknown as { dispatchEvent(e: unknown): void };
+    fire(cell, 'dblclick');
+    const input = () => doc.querySelector('.pg-mem-input') as unknown as
+      { value: string; maxLength: number; getAttribute(n: string): string | null } | null;
+    expect(input()).not.toBeNull();
+
+    // Characters that cannot begin any legal word never land.
+    const box = input()!;
+    box.value = 'zqg!';
+    fire(doc.querySelector('.pg-mem-input'), 'input');
+    expect(input()!.value).toBe('');
+
+    // The shipped default value format is binary, so nine binary digits is the
+    // overflow case for an eight-bit word. A word too wide is refused IN
+    // PLACE: the editor stays open holding what was typed, and the reason
+    // appears under the grid rather than in the status bar at the page foot.
+    box.value = '100000000';
+    press(doc.querySelector('.pg-mem-input'), 'Enter');
+    expect(input()).not.toBeNull();
+    expect(input()!.value).toBe('100000000');
+    expect(input()!.getAttribute('aria-invalid')).toBe('true');
+    expect(errorLine()).toContain('255');
+
+    // Typing again is the reader answering the complaint, so it clears.
+    box.value = '11111111';
+    fire(doc.querySelector('.pg-mem-input'), 'input');
+    expect(input()!.getAttribute('aria-invalid')).toBe('false');
+    expect(errorLine()).toBe('');
+
+    // …and a legal word commits and closes.
+    press(doc.querySelector('.pg-mem-input'), 'Enter');
+    expect(doc.querySelector('.pg-mem-input')).toBeNull();
+    expect((cells()[0] as unknown as { textContent: string }).textContent).toBe('11111111');
+
+    // "Load image" actually opens the hex box and the file picker. It did
+    // nothing before: a checkbox is an INPUT, and the panel's own guard against
+    // redrawing a field being typed into swallowed the redraw.
+    expect(doc.querySelector('.pg-mem-hex')).toBeNull();
+    const toggle = doc.querySelector('.pg-mem-hextoggle input') as unknown as
+      { checked: boolean; focus(): void; click(): void };
+    expect(doc.querySelector('.pg-mem-hextoggle')?.textContent).toContain('Load image');
+    // Focused and clicked, not just `checked = true`: a real click focuses the
+    // box, and the focus is the whole bug. Setting the property from outside
+    // leaves the document focused elsewhere and the defect cannot reproduce.
+    toggle.focus();
+    toggle.click();
+    expect(toggle.checked).toBe(true);
+    expect(doc.querySelector('.pg-mem-hex')).not.toBeNull();
+    expect(doc.querySelector('.pg-rom-box')).not.toBeNull();
+    expect(doc.querySelector('.pg-mem-file')?.getAttribute('type')).toBe('file');
+    // The hex reflects the word just written through the grid.
+    expect((doc.querySelector('.pg-rom-box') as unknown as { value: string }).value).toBe('ff');
+
+    // Unticking closes it again.
+    (doc.querySelector('.pg-mem-hextoggle input') as unknown as { focus(): void; click(): void }).focus();
+    (doc.querySelector('.pg-mem-hextoggle input') as unknown as { click(): void }).click();
+    expect(doc.querySelector('.pg-mem-hex')).toBeNull();
+  }));
+
   test('every app-shell container hands its height to exactly one child', () => drive((doc) => {
     // The bug this exists for, twice over: a container declared a fixed set of
     // grid rows, and then the page turned out to have a different number of
