@@ -73,15 +73,15 @@ const initial = picks[0];
   import { LibcircClient, type LibcircVersion, type WorkerReply } from '../scripts/libcirc-client.ts';
   import { splitFiles, requestFor, PLAYGROUND_DIR, type SplitFile } from '../utils/split-files.ts';
   import { byteColToUtf16, caretOffset } from '../utils/columns.ts';
+  import {
+    mapDiagnostics,
+    toLintDiagnostics,
+    type Analysis,
+    type AnalyzeDiagnostic as Diagnostic,
+    type MappedDiagnostic,
+  } from '../scripts/circ-diagnostics.ts';
 
   type Tab = 'diagnostics' | 'preview' | 'truth' | 'simulate';
-  interface Range { start_line: number; start_col: number; end_line: number; end_col: number }
-  interface Diagnostic { file_id: number; severity: string; code: string; range: Range; message: string }
-  interface Analysis {
-    files: { file_id: number; path: string }[];
-    diagnostics: Diagnostic[];
-    symbols: { file_id: number; name: string; kind: string; width: number }[];
-  }
   interface TruthTable { inputs: string[]; outputs: string[]; rows: { in: (number | null)[]; out: (number | null)[] }[] }
 
   const UI_INPUT_BITS_CAP = 12;
@@ -116,6 +116,9 @@ const initial = picks[0];
       files: [] as SplitFile[],
       analysis: null as Analysis | null,
       diagnostics: [] as Diagnostic[],
+      /** `state.diagnostics` mapped onto absolute offsets in the combined
+       *  document. Refreshed by BOTH producers in `fire()`. */
+      mapped: [] as MappedDiagnostic[],
       artifact: null as { bytes: Uint8Array; hash: number } | null,
       tab: 'diagnostics' as Tab,
       version: null as LibcircVersion | null,
@@ -227,7 +230,13 @@ const initial = picks[0];
       const gen = ++state.gen;
       if (!(await ensureReady())) return;
       if (gen !== state.gen) return;
-      state.files = splitFiles(state.source);
+      // The document this run's offsets are computed against. `state.gen` only
+      // moves on the NEXT debounced run, so a reply can land after the reader
+      // has typed on; offsets computed here would then be silently wrong, and
+      // @codemirror/lint maps registered diagnostics forward through later
+      // changes with no way to know they were stale to begin with.
+      const snapshot = state.source;
+      state.files = splitFiles(snapshot);
       status.textContent = 'Compiling…';
 
       const an = await client.call('analyze', requestFor(state.files));
@@ -238,7 +247,7 @@ const initial = picks[0];
       }
       state.analysis = JSON.parse(an.text!) as Analysis;
       state.diagnostics = state.analysis.diagnostics;
-      renderDiagnostics();
+      publishDiagnostics(snapshot, state.analysis);
 
       const errors = state.diagnostics.filter((d) => d.severity === 'error').length;
       const warnings = state.diagnostics.length - errors;
@@ -257,8 +266,12 @@ const initial = picks[0];
           }
           status.textContent = `Compiled: ${c.bytes.length} bytes${warnings ? `, ${warnings} warning${warnings === 1 ? '' : 's'}` : ''}.`;
         } else if (c.status === 1 && c.text) {
-          state.diagnostics = (JSON.parse(c.text) as Analysis).diagnostics;
-          renderDiagnostics();
+          // A second, independent producer: the compile reply carries its own
+          // `files[]`, which the mapping needs, so map THAT analysis — not the
+          // analyze one, whose diagnostics this replaces.
+          const compileAnalysis = JSON.parse(c.text) as Analysis;
+          state.diagnostics = compileAnalysis.diagnostics;
+          publishDiagnostics(snapshot, compileAnalysis);
           state.artifact = null;
           hooks.onArtifact?.(null);
           status.textContent = 'Compile reported diagnostics.';
@@ -334,6 +347,17 @@ const initial = picks[0];
     }
 
     // ---- diagnostics ----
+    /** Map one analysis onto `snapshot`, render the list, and push the spans
+     *  into the editor — the last step only while the document has not moved
+     *  on, since a fresher run is already scheduled and will map correctly.
+     *  The list itself always renders: it carries file-local positions, which
+     *  do not go stale the same way. */
+    function publishDiagnostics(snapshot: string, analysis: Analysis) {
+      state.mapped = mapDiagnostics(snapshot, splitFiles(snapshot), analysis);
+      renderDiagnostics();
+      if (snapshot === state.source) editor?.setDiagnostics(toLintDiagnostics(state.mapped));
+    }
+
     function locate(d: Diagnostic): { line0: number; col: number } | null {
       const path = state.analysis?.files.find((f) => f.file_id === d.file_id)?.path;
       const name = path?.startsWith(`${PLAYGROUND_DIR}/`) ? path.slice(PLAYGROUND_DIR.length + 1) : null;

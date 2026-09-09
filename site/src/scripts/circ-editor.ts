@@ -9,8 +9,8 @@
 // Phase 1 slice 1 stood up the surface: the extension set, the theme
 // compartment and the handle. Slice 2 added the circ `StreamLanguage` over
 // `../utils/circ-tokens.mjs`. Slice 3 filled the compartment with the palette
-// derived from the shiki themes; `lintGutter()` (slice 4) fills in behind the
-// same surface without changing it.
+// derived from the shiki themes, and slice 4 added `lintGutter()` and the
+// rebuilt squiggle underlines — all behind the same handle.
 import {
   Annotation,
   Compartment,
@@ -44,7 +44,7 @@ import {
   toggleTabFocusMode,
   undo,
 } from '@codemirror/commands';
-import { setDiagnostics as lintSetDiagnostics, type Diagnostic } from '@codemirror/lint';
+import { lintGutter, setDiagnostics as lintSetDiagnostics, type Diagnostic } from '@codemirror/lint';
 import { tags, type Tag } from '@lezer/highlight';
 import {
   copyState,
@@ -183,6 +183,20 @@ function tagStyle(spec: TagSpec) {
   };
 }
 
+/**
+ * `@codemirror/lint` bakes its squiggle colours into SVG data URIs, not into
+ * CSS colour properties, so a `color` or `textDecorationColor` override is a
+ * silent no-op — the underline has to be rebuilt. This is the package's own
+ * `underline()` (`@codemirror/lint/dist/index.js:642-647`) with the palette's
+ * colour substituted: same path, same stroke width, same encoding.
+ *
+ * Exported so a test can prove the colour reaches the CSS without a browser.
+ */
+export function underline(color: string): string {
+  const path = `<path d="m0 2.5 l2 -1.5 l1 0 l2 1.5 l1 0" stroke="${color}" fill="none" stroke-width=".7"/>`;
+  return `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="6" height="3">${encodeURIComponent(path)}</svg>')`;
+}
+
 /** The editor chrome, as an `EditorView.theme` spec. The selection is styled
  *  through `::selection` because `drawSelection()` is not in the extension set,
  *  so `.cm-selectionBackground` never exists in the DOM. */
@@ -200,6 +214,12 @@ function chromeSpec(palette: EditorPalette): Record<string, Record<string, strin
     },
     '.cm-activeLine': { backgroundColor: palette.activeLine },
     '.cm-activeLineGutter': { backgroundColor: palette.activeLine, color: palette.foreground },
+    // A theme spec outranks a package `baseTheme`, so no `!important` is
+    // needed. The lint GUTTER markers keep their defaults: their colours are
+    // baked into both a `fill` and a `stroke` inside a `content:` data URI,
+    // and the palette carries one hex per severity, not two.
+    '.cm-lintRange-error': { backgroundImage: underline(palette.errorUnderline) },
+    '.cm-lintRange-warning': { backgroundImage: underline(palette.warningUnderline) },
   };
 }
 
@@ -228,7 +248,7 @@ export function createEditor(parent: HTMLElement, options: EditorOptions = {}): 
 
   const extensions: Extension[] = [];
   if (!compact) {
-    extensions.push(lineNumbers(), highlightActiveLine(), highlightActiveLineGutter());
+    extensions.push(lineNumbers(), highlightActiveLine(), highlightActiveLineGutter(), lintGutter());
   }
   extensions.push(
     circLanguage,
