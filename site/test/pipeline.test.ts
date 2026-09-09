@@ -97,6 +97,18 @@ describe('pipeline decisions', () => {
     expect(shouldCompile({ doc: 4, errors: 2 }, 5)).toBe(true);
   });
 
+  test('warningsAsErrors makes a warning block the compile too', () => {
+    // With the option on the library refuses the same build, so spending the
+    // compile only to be told so is pure latency.
+    expect(shouldCompile({ doc: 5, errors: 0, warnings: 1 }, 5, false)).toBe(true);
+    expect(shouldCompile({ doc: 5, errors: 0, warnings: 1 }, 5, true)).toBe(false);
+    // A clean analysis is unaffected either way.
+    expect(shouldCompile({ doc: 5, errors: 0, warnings: 0 }, 5, true)).toBe(true);
+    expect(shouldCompile({ doc: 5, errors: 0 }, 5, true)).toBe(true);
+    // …and a stale one still compiles, whatever the flag says.
+    expect(shouldCompile({ doc: 4, errors: 0, warnings: 3 }, 5, true)).toBe(true);
+  });
+
   test('outputsShouldClear only on a file-name change', () => {
     const files = ['half_adder.circ', 'root.circ'];
     expect(outputsShouldClear(files, ['half_adder.circ', 'root.circ'])).toBe(false);

@@ -172,10 +172,17 @@ export function statusFor(input: StatusInput): StatusView {
  * compiles anyway, so no ordering assumption between the two debounces can
  * wedge the pipeline.
  */
-export function shouldCompile(analysis: { doc: number; errors: number } | null, doc: number): boolean {
+export function shouldCompile(
+  analysis: { doc: number; errors: number; warnings?: number } | null,
+  doc: number,
+  warningsAsErrors = false,
+): boolean {
   if (!analysis) return true;
   if (analysis.doc !== doc) return true;
-  return analysis.errors === 0;
+  if (analysis.errors > 0) return false;
+  // With the option on, the library refuses the same build, so spending the
+  // compile only to be told so is pure latency.
+  return !(warningsAsErrors && (analysis.warnings ?? 0) > 0);
 }
 
 /**
