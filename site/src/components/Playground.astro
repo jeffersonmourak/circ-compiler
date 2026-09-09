@@ -23,7 +23,7 @@ const initial = picks[0];
 >
   <div class="pg-banner" hidden></div>
   <div class="pg-panes">
-    <section class="pg-editor">
+    <section class="pg-editor" id="pg-pane-editor">
       <div class="pg-pane-label">
         <label for="pg-pick">source</label>
         <select id="pg-pick" class="pg-pick">
@@ -58,7 +58,15 @@ const initial = picks[0];
       </div>
       <div class="pg-status" aria-live="polite">Type to compile.</div>
     </section>
-    <section class="pg-output">
+    <div
+      class="pg-splitter"
+      role="separator"
+      tabindex="0"
+      aria-orientation="vertical"
+      aria-label="Resize the editor and output panes"
+      aria-controls="pg-pane-editor pg-pane-output"
+    ></div>
+    <section class="pg-output" id="pg-pane-output">
       <div class="pg-tabs" role="tablist">
         <button type="button" role="tab" data-tab="diagnostics" aria-selected="true">Diagnostics</button>
         <button type="button" role="tab" data-tab="preview" aria-selected="false">Preview</button>
@@ -80,6 +88,7 @@ const initial = picks[0];
 <script>
   import { LibcircClient, type LibcircVersion, type WorkerReply } from '../scripts/libcirc-client.ts';
   import { joinConflicts, requestFor, rootOf, PLAYGROUND_DIR } from '../utils/split-files.ts';
+  import { createSplitter } from '../scripts/splitter.ts';
   import {
     activeFile,
     addFile,
@@ -170,6 +179,16 @@ const initial = picks[0];
       if (tab === 'truth') void runTruth(state.gen);
     }
     for (const b of tabs) b.addEventListener('click', () => showTab(b.dataset.tab as Tab));
+
+    // ---- the pane divider ----
+    const panes = el.querySelector<HTMLElement>('.pg-panes')!;
+    const separator = el.querySelector<HTMLElement>('.pg-splitter')!;
+    const splitter = createSplitter({
+      container: panes,
+      separator,
+      initial: 0.5,
+      labels: ['editor', 'output'],
+    });
 
     // ---- file tabs ----
     function showFile(index: number) {

@@ -337,6 +337,7 @@ hr {
 }
 @media (prefers-reduced-motion: reduce) {
   .heart { animation: none; }
+  .pg-splitter::before { transition: none; }
 }
 
 /* Responsive theme-toggle placement: top nav on desktop, footer on mobile.
@@ -1180,7 +1181,38 @@ a.install-line:hover {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
-[data-layout='app'] .pg-panes { min-height: 0; }
+[data-layout='app'] .pg-panes {
+  min-height: 0;
+  /* The first pane's share of the space left over after the divider itself,
+     so the three tracks always sum to exactly 100%. */
+  --pg-split-w: 8px;
+  grid-template-columns:
+    minmax(0, calc(var(--pg-split-main, 0.5) * (100% - var(--pg-split-w))))
+    var(--pg-split-w)
+    minmax(0, 1fr);
+  gap: 0;
+}
+.pg-splitter {
+  align-self: stretch;
+  background: transparent;
+  border: 0;
+  cursor: col-resize;
+  /* Or a touch drag is stolen by the page's own scrolling. */
+  touch-action: none;
+  position: relative;
+}
+.pg-splitter::before {
+  content: '';
+  position: absolute;
+  inset: 0 3px;
+  background: var(--border);
+  border-radius: 1px;
+  transition: background 120ms ease;
+}
+.pg-splitter:hover::before,
+.pg-splitter:focus-visible::before { background: var(--accent); }
+.pg-splitter:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.pg-splitter[hidden] { display: none; }
 [data-layout='app'] .pg-editor,
 [data-layout='app'] .pg-output {
   min-height: 0;
@@ -1205,4 +1237,3 @@ a.install-line:hover {
     min-height: 60vh;
   }
 }
-
