@@ -38,11 +38,17 @@ export async function instantiateLibcirc(
     } catch {
       const resp = await (source as Promise<Response>);
       const bytes = await resp.arrayBuffer();
-      const r = await WebAssembly.instantiate(bytes, LIBCIRC_IMPORTS);
+      const r = (await WebAssembly.instantiate(
+        bytes,
+        LIBCIRC_IMPORTS,
+      )) as unknown as WebAssembly.WebAssemblyInstantiatedSource;
       return r.instance.exports as unknown as LibcircExports;
     }
   }
-  const r = await WebAssembly.instantiate(source as BufferSource, LIBCIRC_IMPORTS);
+  const r = (await WebAssembly.instantiate(
+    source as BufferSource,
+    LIBCIRC_IMPORTS,
+  )) as unknown as WebAssembly.WebAssemblyInstantiatedSource;
   return r.instance.exports as unknown as LibcircExports;
 }
 

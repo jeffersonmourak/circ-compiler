@@ -140,7 +140,7 @@ const initial = catalogue[0];
 </div>
 
 <script>
-  import { LibcircClient, type LibcircVersion, type WorkerReply } from '../scripts/libcirc-client.ts';
+  import { getSharedClient, type LibcircVersion, type WorkerReply } from '../scripts/libcirc-client.ts';
   import { joinConflicts, requestFor, rootOf, PLAYGROUND_DIR } from '../utils/split-files.ts';
   import { createSplitter } from '../scripts/splitter.ts';
   import { decodeShare, encodeShare, readHash, shareUrl, webStreamsCodec } from '../utils/share-link.ts';
@@ -1293,7 +1293,7 @@ const initial = catalogue[0];
      *  FILE-LOCAL position. A combined-document line number means nothing to a
      *  reader who is looking at `half_adder.circ`; the jump target keeps using
      *  the absolute span, so nothing about clicking changes. */
-    function diagnosticLabel(m: MappedDiagnostic): string {
+    function diagnosticLabel(m: TabbedDiagnostic): string {
       return `${m.fileName}:${m.line}:${m.column} ${m.code} ${m.message}`;
     }
 

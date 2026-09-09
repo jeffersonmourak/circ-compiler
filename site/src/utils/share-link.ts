@@ -17,11 +17,14 @@ export const SHARE_CAP = 8192;
 export type ShareKey = 'src' | 'src0';
 
 export interface DeflateCodec {
-  deflateRaw(bytes: Uint8Array): Promise<Uint8Array>;
-  inflateRaw(bytes: Uint8Array): Promise<Uint8Array>;
+  deflateRaw(bytes: Uint8Array<ArrayBufferLike>): Promise<Uint8Array>;
+  inflateRaw(bytes: Uint8Array<ArrayBufferLike>): Promise<Uint8Array>;
 }
 
-async function throughStream(bytes: Uint8Array, stream: ReadableWritablePair<Uint8Array, Uint8Array>): Promise<Uint8Array> {
+async function throughStream(
+  bytes: Uint8Array<ArrayBufferLike>,
+  stream: ReadableWritablePair<Uint8Array, Uint8Array>,
+): Promise<Uint8Array> {
   const source = new Blob([bytes as BlobPart]).stream() as unknown as ReadableStream<Uint8Array>;
   const piped = source.pipeThrough(stream);
   const buffer = await new Response(piped as unknown as BodyInit).arrayBuffer();
@@ -93,7 +96,9 @@ export async function encodeShare(
 ): Promise<EncodeResult> {
   const utf8 = new TextEncoder().encode(source);
   let key: ShareKey = 'src0';
-  let bytes = utf8;
+  // Widened on purpose: a codec may hand back a view over any buffer kind, and
+  // the encoder's own output is narrower than that.
+  let bytes: Uint8Array<ArrayBufferLike> = utf8;
   if (codec) {
     try {
       bytes = await codec.deflateRaw(utf8);

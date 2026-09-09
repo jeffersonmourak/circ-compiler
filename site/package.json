@@ -11,7 +11,8 @@
     "llm-mirror": "bun run scripts/build-llm-mirror.ts",
     "libcirc": "bun run scripts/build-libcirc.ts",
     "bundle": "bun run scripts/check-bundle.ts",
-    "test": "bun test"
+    "test": "bun test",
+    "typecheck": "astro check"
   },
   "dependencies": {
     "@codemirror/commands": "6.11.0",
@@ -24,6 +25,8 @@
     "circ-renderer": "github:jeffersonmourak/circ-renderer#6f31ea1"
   },
   "devDependencies": {
+    "@astrojs/check": "0.9.4",
+    "@types/bun": "1.2.10",
     "typescript": "^5.5.0"
   }
 }
