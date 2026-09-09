@@ -85,6 +85,9 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - The first edit forks a shipped example into your own project (fork on change, not on diff; a shared link arrives as your own project)
 - The renderer exposes three host hooks, and the highlight reuses `hovered` (`onHover`, `setHighlight`, `getLayout`; two ids kept apart)
 - Source and picture are joined by declared name, never by span (root file only, top-level boxes only, no snapshotted ranges)
+- Settings are the envelope's sixth field, and the option names are the wire's (per-op projection, no second normaliser)
+- One field is the truth-table cap, read by the pre-flight and by the request (decision 13's two enforcement points, merged)
+- ROM images are session state, and the page refuses what the library would (same checks, same order; a ram gets no box)
 
 ## Conventions
 

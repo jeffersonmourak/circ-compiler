@@ -473,3 +473,19 @@ Append-only log, one entry per shipped slice. Newest at the bottom. See `DOCS/PL
 **Notes:**
 1. ROM images are deliberately **not persisted**. A full image at `[64, 16]` is 512 KiB raw and over a megabyte once hex-encoded, against a 256 KB envelope ceiling, so persisting one would evict every project the reader has. They live in the island and are lost on reload, and the same size argument keeps them out of share links.
 2. Manual checklist — **unrun** (no browser): declare a `rom`, paste sixteen bytes, and read them out of both the truth table and the simulation.
+
+## 2026-09-09 — Phase 6 — Slice 7: decisions and close-out
+
+**What shipped:** Three `###` entries in `DOCS/decisions/playground.md`, registered in `DOCS/decisions/index.md`: settings as the envelope's sixth field with the two vocabularies kept apart; the single truth-table cap read by both enforcement points; and ROM images as session state validated the way the compiler validates them. Documentation only.
+**Files touched:** `DOCS/decisions/playground.md`, `DOCS/decisions/index.md`, `DOCS/STATUS.md`.
+**Tests:** `bun test` (270 pass across 23 files) and `bun --bun run build` unchanged green.
+**Next slice:** none — Phase 6 is complete. Phase 7 (`DOCS/PLANS/PHASE_7_live_editors.md`) is the last one.
+**Notes:** none.
+
+## 2026-09-09 — Phase 6 — close-out
+
+**What shipped:** Phase 6 is complete in seven slices across five commits (`64a2869`, `f70f1f4`, `5c7f0a6`, `a5e7ac9`, `40501e3`, and this one). A reader can open a settings drawer and change six compiler options, all persisted; the truth-table cap is one field the pre-flight and the request both read; and a declared `rom` gets a box that validates an image exactly as the compiler does and loads it into both the truth table and the live simulation.
+**Files touched:** none beyond the seven slices; this entry is the phase's measurement of record.
+**Tests:** `bun test` 270 pass across 23 files, up from 222 at the end of Phase 5. `bun --bun run typecheck` 0 errors; `bun --bun run build` green; `bun run bundle` green with `/playground` at 22.5 KB gzip against its 120 KB ceiling. No ceiling raised. `zig build test-all` untouched by this phase.
+**Next slice:** Phase 7 — the live editors in the docs.
+**Notes:** The manual checklist is **unrun**, as in every phase before it. Two things are deliberately absent and recorded rather than forgotten: ROM images are not persisted and not shareable, because one full image outweighs the entire storage budget; and pointing at a `rom` or `ram` still highlights nothing, the gap Phase 5 pinned — this phase gives a reader a reason to point at one, but the site still registers no memory skin, so that remains open for whoever wants it.

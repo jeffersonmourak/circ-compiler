@@ -188,3 +188,27 @@ The entries below record the decisions of the playground-v2 initiative (the site
 
 **Alternatives.** Embedding spans in the topology (a format change for a tooling convenience, and it would still be stale on the dimmed canvas); joining on position within the layout (meaningless — layout order is not source order); resolving into macros by turning on expand mode (a behaviour change that also requires relaxing the top-level filter, and it belongs to whichever initiative wants it).
 
+### Settings are the envelope's sixth field, and the option names are the wire's
+
+**Decision.** Every reader-facing compiler option lives in `settings`, one field of the existing envelope — no new key, no version bump. The stored names are camelCase and the wire names are snake_case, and one module translates between them: `optionsFor(op, settings, preloads?)` returns only the keys the library documents for that operation, so analyze gets nothing, compile gets one key, preview gets the two expansions plus a pinned `color: 'never'`, and the truth table gets its four plus preloads when there are any. The store owns clamping and fall-back; the projection re-validates nothing and defines no second normaliser.
+
+**Rationale.** An unknown or mistyped option key is a bad request, not a silent default, so a whole build fails on a typo. Keeping the two vocabularies apart is what makes it impossible to spread a stored envelope into a request, and projecting per operation means a key that means nothing to an operation is never sent — which matters because sending it is indistinguishable from sending a typo.
+
+**Alternatives.** Storing snake_case directly and spreading it (one stray key away from a failed build); one option object for every operation (sends keys the operation does not accept); validating in both the store and the projection (two rules that can disagree).
+
+### One field is the truth-table cap, read by the pre-flight and by the request
+
+**Decision.** `settings.truthTableCap` is the only cap. The page's pre-flight refusal reads it through `capRefusal(bits, settings)` and the request carries it as `truth_table_cap` through `optionsFor`, and a test asserts that raising it moves both. The reader can raise it to the library's own maximum of 24; the page default stays 12, which is why the option is always sent explicitly rather than left to the library's default of 16.
+
+**Rationale.** These were two constants in two places, and the plan named their drift as a live risk: raising one alone produces a silent refusal with no table. The pre-flight is not decoration — an enumeration cannot be stopped once started, because the worker has no abort, so refusing before the request is the only real defence.
+
+**Alternatives.** Deriving the pre-flight from the request options (the same thing, later, and harder to test); no pre-flight at all (a 2^24-row enumeration with no way back).
+
+### ROM images are session state, and the page refuses what the library would
+
+**Decision.** A ROM image is held in the island for the life of the page and is never written to the envelope or to a share link. The page parses tolerantly — whitespace, commas, `0x`, comments — and validates strictly, checking the same three things the compiler checks in the same order, so an image the page accepts is one the library accepts. Images reach the truth table as `preloads` and the canvas through `getMemInfo` → `memBuffer` → re-view → `memLoad`, with the id checked against the analysis's declared shape before anything is written. A `ram` gets no box at all, only a sentence saying the circuit writes it.
+
+**Rationale.** A full image at the largest legal shape is over a megabyte once hex-encoded, against a 256 KB envelope ceiling and an 8 KB share cap: persisting one would evict every project the reader has. Validating in the same order as the compiler means the page's message is the one the library would have given, before a request is spent. Checking the shape before writing matters because the alternative is loading bytes into whichever memory happens to hold that id.
+
+**Alternatives.** Persisting images (evicts real work to store a file the reader still has); trusting the library's refusal alone (a round trip and a less specific message); a generic memory editor (a `ram` is written by the circuit, and offering to poke it invites a reader to fight the simulation).
+
