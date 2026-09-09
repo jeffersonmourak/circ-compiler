@@ -966,9 +966,18 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           const fileIndex = node.index;
           const armed = confirmIndex === fileIndex;
           if (armed) row.dataset.confirm = 'true';
-          row.appendChild(
+          // Same shape as a project row's controls, so a file is renamed the
+          // way a project is rather than only through F2 — which is reachable
+          // but undiscoverable, and unusable without a keyboard.
+          const fileActions = document.createElement('span');
+          fileActions.className = 'pg-tree-actions';
+          fileActions.appendChild(
+            iconButton('pg-tree-action', '✎', `Rename ${node.label}`, () => startRename(fileIndex)),
+          );
+          fileActions.appendChild(
             iconButton('pg-tree-action', '×', `Delete ${node.label}`, () => armOrDelete(fileIndex)),
           );
+          row.appendChild(fileActions);
 
           // Pointer reorder, an enhancement over Alt+Arrow and never the only
           // path: a drag is impossible with a keyboard.

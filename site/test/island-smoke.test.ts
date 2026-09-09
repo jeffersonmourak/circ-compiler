@@ -58,7 +58,8 @@ function installGlobals(window: Window): () => void {
     'document', 'window', 'location', 'history', 'navigator', 'matchMedia',
     'requestAnimationFrame', 'ResizeObserver', 'MutationObserver', 'HTMLElement',
     'HTMLInputElement', 'HTMLSelectElement', 'HTMLTextAreaElement', 'HTMLAnchorElement',
-    'HTMLButtonElement', 'Node', 'Element', 'Event', 'CustomEvent', 'localStorage',
+    'HTMLButtonElement', 'Node', 'Element', 'Event', 'CustomEvent', 'KeyboardEvent',
+    'MouseEvent', 'InputEvent', 'FocusEvent', 'localStorage',
     'getComputedStyle', 'DOMException', 'CSS',
   ];
   for (const k of keys) {
@@ -305,18 +306,72 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     click(fileRows()[1]);
     expect(labelOf(doc.querySelector('.pg-tree-file[aria-current="true"]'))).toBe(firstName);
 
-    // Delete is two presses, as it was on the strip: the first only arms.
-    const del = (doc.querySelector('.pg-tree-file .pg-tree-action') as unknown as { click(): void });
-    click(del);
+    // Delete is two presses, as it was on the strip: the first only arms. The
+    // button is named rather than taken by position — a file row carries a
+    // rename control too, and "the first action" is not a stable thing to mean.
+    const deleteOn = (sel: string) => doc.querySelector(`${sel} .pg-tree-action[aria-label^="Delete"]`);
+    click(deleteOn('.pg-tree-file'));
     expect(fileRows()).toHaveLength(2);
     expect(doc.querySelector('.pg-tree-file[data-confirm="true"]')).not.toBeNull();
-    click(doc.querySelector('.pg-tree-file[data-confirm="true"] .pg-tree-action'));
+    click(deleteOn('.pg-tree-file[data-confirm="true"]'));
     expect(fileRows()).toHaveLength(1);
 
     // …and the last remaining file refuses to go, so a project always has one.
-    click(doc.querySelector('.pg-tree-file .pg-tree-action'));
-    click(doc.querySelector('.pg-tree-file .pg-tree-action'));
+    click(deleteOn('.pg-tree-file'));
+    click(deleteOn('.pg-tree-file'));
     expect(fileRows()).toHaveLength(1);
+  }));
+
+  test('a file is renamed from the tree, and a bad name is refused', () => drive((doc) => {
+    const fileRows = () => Array.from(doc.querySelectorAll('.pg-tree-file'));
+    const labelOf = (r: unknown): string =>
+      (r as { querySelector(s: string): { textContent: string } | null })
+        .querySelector('.pg-tree-label')?.textContent ?? '';
+    const click = (el: unknown) => (el as { click(): void }).click();
+    const press = (el: unknown, key: string) =>
+      (el as { dispatchEvent(e: unknown): void }).dispatchEvent(
+        new (globalThis as unknown as { KeyboardEvent: new (t: string, o: unknown) => unknown })
+          .KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }),
+      );
+
+    const before = labelOf(fileRows()[0]);
+    const renameBtn = doc.querySelector('.pg-tree-file .pg-tree-action[aria-label^="Rename"]');
+    expect(renameBtn).not.toBeNull();
+
+    // The label is swapped for an input carrying the current name.
+    click(renameBtn);
+    let input = doc.querySelector('.pg-tree-file .pg-ws-input') as unknown as
+      { value: string; getAttribute(n: string): string | null; blur(): void };
+    expect(input).not.toBeNull();
+    expect(input.value).toBe(before);
+
+    // A name the marker format cannot represent is refused in place: the input
+    // stays, and the reason lands in the tree's error line.
+    input.value = 'not a file name!';
+    press(doc.querySelector('.pg-tree-file .pg-ws-input'), 'Enter');
+    expect(doc.querySelector('.pg-tree-file .pg-ws-input')).not.toBeNull();
+    expect(doc.querySelector('.pg-ws-error')?.textContent ?? '').not.toBe('');
+    expect(labelOf(fileRows()[0])).toBe('');
+
+    // Escape reverts, leaving the original name and clearing the complaint.
+    press(doc.querySelector('.pg-tree-file .pg-ws-input'), 'Escape');
+    expect(doc.querySelector('.pg-tree-file .pg-ws-input')).toBeNull();
+    expect(labelOf(fileRows()[0])).toBe(before);
+    expect(doc.querySelector('.pg-ws-error')?.textContent ?? '').toBe('');
+
+    // A legal name commits, and the row shows it.
+    click(doc.querySelector('.pg-tree-file .pg-tree-action[aria-label^="Rename"]'));
+    input = doc.querySelector('.pg-tree-file .pg-ws-input') as never;
+    input.value = 'renamed.circ';
+    press(doc.querySelector('.pg-tree-file .pg-ws-input'), 'Enter');
+    expect(doc.querySelector('.pg-tree-file .pg-ws-input')).toBeNull();
+    expect(labelOf(fileRows()[0])).toBe('renamed.circ');
+
+    // F2 opens the same editor, so the keyboard path did not go away.
+    press(fileRows()[0], 'F2');
+    expect(doc.querySelector('.pg-tree-file .pg-ws-input')).not.toBeNull();
+    press(doc.querySelector('.pg-tree-file .pg-ws-input'), 'Escape');
+    expect(labelOf(fileRows()[0])).toBe('renamed.circ');
   }));
 
   test('every app-shell container hands its height to exactly one child', () => drive((doc) => {

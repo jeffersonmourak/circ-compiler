@@ -1272,7 +1272,7 @@ a.install-line:hover {
   display: flex;
   flex-direction: column;
 }
-[data-layout='app'] .site-footer { padding: 0.4rem 1rem; font-size: 0.75rem; }
+[data-layout='app'] .site-footer { padding: 0.4rem 1rem; margin-top: 0; font-size: 0.75rem; }
 [data-layout='app'] .site-footer-row { margin: 0; }
 
 
@@ -1407,6 +1407,10 @@ a.install-line:hover {
 }
 .pg-tree-action:hover { color: var(--fg); }
 .pg-tree-row[data-confirm='true'] { border-left-color: var(--danger); }
+/* An armed row shows its controls whether or not it is hovered — the reader
+   has to be able to reach the second press. The wrapper has to be shown too:
+   a `display: flex` child of a `display: none` parent is still not rendered. */
+.pg-tree-row[data-confirm='true'] .pg-tree-actions { display: flex; }
 .pg-tree-row[data-confirm='true'] > .pg-tree-action,
 .pg-tree-row[data-confirm='true'] .pg-tree-action[aria-label^='Delete'] {
   display: flex;
@@ -1662,4 +1666,3 @@ a.install-line:hover {
   overflow-x: auto;
 }
 .le[data-stale] .le-output { opacity: 0.55; }
-

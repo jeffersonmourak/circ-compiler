@@ -673,3 +673,24 @@ A project row rolls its files' diagnostics up, so shutting a project does not hi
 2. **`[hidden]` and `<script>` are the whole trap.** Neither generates a box, so neither is a grid item, and a template written against the markup as read counts children that will never be there. The banner is hidden in the normal case, which is why this row mismatch was the steady state rather than an edge case.
 3. **I fixed the outer container and did not check the inner one.** The first report named both symptoms — not filling the page, and changing height per file — and repairing `main` addressed neither on its own. Enumerating the real grid items of every container in the chain, which is what found this in one step, should have been the first move rather than the second.
 4. **A build-free half of the guard stays in `app-layout`.** The structural test skips without `dist/`, so the source-level check that each link declares `min-height: 0` and each child `flex: 1` still runs in every slice.
+
+## 2026-09-09 — Feature — renaming a file from the explorer
+
+**What shipped:** A file row now carries a `✎` beside its `×`, in the same controls wrapper a project row uses. The rename machinery already existed and was already bound to F2 when the tab strip was retired, but F2 alone is both undiscoverable and unreachable without a keyboard, so the feature was effectively missing for most readers.
+
+The flow is the project rename's: the label is swapped for an input holding the current name, Enter commits, Escape reverts, and a blur commits only when the name is legal. An illegal name is refused in place — the input stays, `aria-invalid` goes true, and the reason lands in the tree's error line — rather than being silently dropped. Committing says plainly that imports are not rewritten.
+
+Also carries the human's footer tweak: `margin-top: 0` on the app-layout footer.
+
+**Files touched:** `site/src/components/Playground.astro`, `site/src/styles/global.css`, `site/test/island-smoke.test.ts`.
+
+**Tests:** `bun test` 330 pass across 28 files, from 329. `bun --bun run typecheck` 0 errors. Build, `bun run bundle` and `zig build test-all` green. `/playground` gzip 25.2 KB, unchanged.
+
+**Next slice:** none.
+
+**Notes:**
+
+1. **An armed row needed a CSS fix to stay reachable.** File controls now sit inside `.pg-tree-actions`, which is `display: none` until the row is hovered or focused. The existing armed-row rule set `display: flex` on the *button*, and a shown child of a hidden parent is still not rendered — so the second press of a two-press delete would have had nothing to click. The wrapper is shown too now.
+2. **A passing test was asserting the wrong thing and only luck kept it honest.** The file-operations test clicked `.pg-tree-file .pg-tree-action`, meaning "the first control on the row", which was the delete button until this change put rename ahead of it. It now names the button by its label. "The first control" was never a stable thing to mean.
+3. **`KeyboardEvent` was missing from the smoke harness.** The globals it installs carried `Event` and `CustomEvent` but not the keyboard, mouse, input or focus constructors, so no test could ever have pressed a key. All four are installed now, which is what let this one drive Enter, Escape and F2.
+4. **Negative proof on both halves.** Deleting the `✎` fails on the missing control; making `nameError` always return null — so an illegal name commits — fails the refusal case. Both reverted, both green.
