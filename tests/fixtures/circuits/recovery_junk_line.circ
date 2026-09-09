@@ -1,0 +1,4 @@
+input a
+%%% junk %%%
+and g(a=a, b=a)
+output o(in=g.out)

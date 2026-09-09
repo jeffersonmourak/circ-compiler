@@ -1,0 +1,2 @@
+input a
+andx g(a=a, b=a)
