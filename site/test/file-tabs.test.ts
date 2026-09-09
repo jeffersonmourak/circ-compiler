@@ -7,6 +7,7 @@ import {
   activeFile,
   addFile,
   canDelete,
+  countsByFile,
   deleteFile,
   fromSource,
   moveFile,
@@ -252,5 +253,70 @@ describe('reorder', () => {
     const before = JSON.stringify(state);
     moveFile(state, 0, 2);
     expect(JSON.stringify(state)).toBe(before);
+  });
+});
+
+describe('countsByFile', () => {
+  const files = [
+    { name: 'half_adder.circ', body: '' },
+    { name: 'root.circ', body: '' },
+  ];
+  const analysis = (diagnostics: { file_id: number; severity: string }[]) => ({
+    files: [
+      { file_id: 0, path: '/playground/half_adder.circ' },
+      { file_id: 1, path: '/playground/root.circ' },
+      { file_id: 2, path: '<builtin>/xor.circ' },
+      { file_id: 3, path: '/playground/gone.circ' },
+    ],
+    diagnostics,
+  });
+
+  test('splits errors and warnings across tabs', () => {
+    const counts = countsByFile(
+      files,
+      analysis([
+        { file_id: 0, severity: 'error' },
+        { file_id: 0, severity: 'warning' },
+        { file_id: 1, severity: 'error' },
+        { file_id: 1, severity: 'error' },
+      ]),
+    );
+    expect(counts).toEqual([
+      { errors: 1, warnings: 1 },
+      { errors: 2, warnings: 0 },
+    ]);
+  });
+
+  test('skips builtins and paths naming no current tab', () => {
+    const counts = countsByFile(
+      files,
+      analysis([
+        { file_id: 2, severity: 'error' }, // <builtin>/xor.circ
+        { file_id: 3, severity: 'error' }, // a file that was renamed away
+        { file_id: 9, severity: 'error' }, // an id the analysis never listed
+      ]),
+    );
+    // A late reply degrades to no badge rather than to a wrong one.
+    expect(counts).toEqual([
+      { errors: 0, warnings: 0 },
+      { errors: 0, warnings: 0 },
+    ]);
+  });
+
+  test('an unknown severity counts as a warning', () => {
+    const counts = countsByFile(files, analysis([{ file_id: 0, severity: 'note' }]));
+    expect(counts[0]).toEqual({ errors: 0, warnings: 1 });
+  });
+
+  test('a null analysis and an empty diagnostic list are all zeros', () => {
+    expect(countsByFile(files, null)).toEqual([
+      { errors: 0, warnings: 0 },
+      { errors: 0, warnings: 0 },
+    ]);
+    expect(countsByFile(files, analysis([]))).toEqual([
+      { errors: 0, warnings: 0 },
+      { errors: 0, warnings: 0 },
+    ]);
+    expect(countsByFile([], null)).toEqual([]);
   });
 });

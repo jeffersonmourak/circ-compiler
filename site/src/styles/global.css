@@ -717,6 +717,17 @@ hr {
   cursor: pointer;
 }
 .pg-file-add:hover { color: var(--fg); }
+.pg-filetab-badge {
+  font-size: 0.65rem;
+  min-width: 1.05rem;
+  text-align: center;
+  border-radius: 0.6rem;
+  padding: 0 0.25rem;
+  background: var(--pane-label-bg);
+  border: 1px solid var(--border);
+}
+.pg-filetab-badge[data-severity='error'] { color: var(--accent); border-color: var(--accent); }
+.pg-filetab-conflict { color: var(--accent); font-size: 0.75rem; }
 .pg-filetab-error { color: var(--accent); font-size: 0.75rem; }
 
 .pg-tabs {

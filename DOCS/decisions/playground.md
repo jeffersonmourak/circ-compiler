@@ -84,3 +84,19 @@ The entries below record the decisions of the playground-v2 initiative (the site
 
 **Alternatives.** A `root` boolean on each tab (two things to keep in sync); a context-menu "set as root" (a hidden mode, invisible in the tab order, and still a second source of truth).
 
+### One editor state per file is what makes undo per-file
+
+**Decision.** The editor keeps one `EditorState` per open file and swaps the visible one with `setState`, rather than rewriting a single document on every tab switch. Undo history and selection are state fields, so per-file undo and a remembered cursor come for free; lint diagnostics ride a state field too, so a hidden file's squiggles are computed and stored while it is hidden and are already on screen the moment it is shown. The index bookkeeping — insert, remove, move, and where the active index lands after each — is a separate DOM-free module so a test can reach it, and the theme compartment fans out over every stored state on a flip, since a compartment reconfigure applies to one state only.
+
+**Rationale.** With one shared document, `Ctrl-Z` after a tab switch rewrites the other file's text into this one. That is precisely the behaviour the plan defers rather than invites, and it is silent: nothing throws, the reader simply loses work. The cost of the alternative is bounded — one extension array shared by every state, each state holding only its own text and field values.
+
+**Alternatives.** One document plus a saved-text map (loses undo and selection, and needs its own bookkeeping anyway); one editor view per file (multiplies DOM and defeats the point of a single mount).
+
+### Diagnostics are mapped once per tab, and listed once overall
+
+**Decision.** With files as tabs, each analyze reply is mapped once per tab against a synthetic single-file array, so the offsets are file-local and address that tab's own document. The mapper is total by contract — one entry per analyze diagnostic, every time — so every per-tab call returns the whole list. Each tab keeps only the rows it could place, and the placeless rows are emitted exactly once from a single extra pass. The staleness guard is re-based per tab: the whole push is skipped when the file count changed in flight, and per tab when that body has moved on since the request was sent.
+
+**Rationale.** The obvious loop lists every unplaceable diagnostic once per tab, so a two-file project shows every builtin-blamed row twice and a five-file project five times. Making the flat list total-and-deduplicated is the only shape where the count in the panel equals the count the compiler reported, which is what a test can assert.
+
+**Measured.** Across all 10 examples and all 7 tour steps, no diagnostic is ever blamed on a `<builtin>/…` path, so the list needs no filter today. That is kept as a regression case rather than assumed, because the compile route now resolves implicit builtins and those sources do appear in the analysis.
+

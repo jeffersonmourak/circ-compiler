@@ -72,6 +72,8 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - Analyze offsets are mapped in a pure module (byte columns + `SplitFile.startLine` → absolute UTF-16 offsets; both producers; the snapshot guard)
 - The marker format does not fork; `joinFiles` is its inverse (`isFileName`, `joinConflicts`, `NamedFile`, the three normalisations)
 - The last file is the root; reorder is how you change it (no root field, `rootOf` is position)
+- One editor state per file is what makes undo per-file (state-per-file, the pure index registry, the theme fan-out)
+- Diagnostics are mapped once per tab, and listed once overall (file-local offsets, the total mapper, the per-tab staleness guard)
 
 ## Conventions
 

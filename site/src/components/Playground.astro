@@ -79,11 +79,12 @@ const initial = picks[0];
 
 <script>
   import { LibcircClient, type LibcircVersion, type WorkerReply } from '../scripts/libcirc-client.ts';
-  import { requestFor, rootOf, PLAYGROUND_DIR } from '../utils/split-files.ts';
+  import { joinConflicts, requestFor, rootOf, PLAYGROUND_DIR } from '../utils/split-files.ts';
   import {
     activeFile,
     addFile,
     canDelete,
+    countsByFile,
     deleteFile,
     fromSource,
     moveFile,
@@ -188,6 +189,14 @@ const initial = picks[0];
     function focusFileTab(index: number) {
       fileTabList.querySelector<HTMLElement>(`[data-index="${index}"]`)?.focus();
     }
+
+    /** What each join conflict means for the reader, in one line. */
+    const CONFLICT_TEXT: Record<string, string> = {
+      'blank-body': 'this file is empty, so the next file would merge into it',
+      'marker-in-body': 'a `// name.circ` line after code starts a new file here',
+      'illegal-name': 'this name cannot be written as a file marker',
+      'duplicate-name': 'another tab has this name, so one of them is dropped',
+    };
 
     /** Index of the tab whose delete is armed, or null. A second Delete (or the
      *  close control) removes it; anything else disarms. */
@@ -323,6 +332,8 @@ const initial = picks[0];
     function renderFileTabs() {
       fileTabList.innerHTML = '';
       const root = rootIndex(state.tabs);
+      const counts = countsByFile(state.tabs.files, state.analysis);
+      const conflicts = new Map(joinConflicts(state.tabs.files).map((c) => [c.index, c.reason]));
       state.tabs.files.forEach((file, i) => {
         const selected = i === state.tabs.active;
         const tab = document.createElement('div');
@@ -336,11 +347,20 @@ const initial = picks[0];
         tab.dataset.index = String(i);
         const armed = confirmIndex === i;
         if (armed) tab.dataset.confirm = 'true';
+        const count = counts[i];
+        const conflict = conflicts.get(i);
+        const parts = [file.name];
+        if (i === root) parts.push('root file');
+        if (count.errors || count.warnings) {
+          if (count.errors) parts.push(`${count.errors} error${count.errors === 1 ? '' : 's'}`);
+          if (count.warnings) parts.push(`${count.warnings} warning${count.warnings === 1 ? '' : 's'}`);
+        } else {
+          parts.push('no diagnostics');
+        }
+        if (conflict) parts.push(`unsaveable: ${CONFLICT_TEXT[conflict]}`);
         tab.setAttribute(
           'aria-label',
-          armed
-            ? `Delete ${file.name}? Press Delete again to confirm`
-            : `${file.name}${i === root ? ', root file' : ''}`,
+          armed ? `Delete ${file.name}? Press Delete again to confirm` : parts.join(', '),
         );
 
         const name = document.createElement('span');
@@ -354,6 +374,24 @@ const initial = picks[0];
           badge.textContent = 'root';
           badge.setAttribute('aria-hidden', 'true');
           tab.appendChild(badge);
+        }
+
+        // The visible badges duplicate what the accessible name already says,
+        // so they are hidden from the accessibility tree.
+        if (count.errors || count.warnings) {
+          const badge = document.createElement('span');
+          badge.className = 'pg-filetab-badge';
+          badge.dataset.severity = count.errors ? 'error' : 'warning';
+          badge.textContent = String(count.errors || count.warnings);
+          badge.setAttribute('aria-hidden', 'true');
+          tab.appendChild(badge);
+        }
+        if (conflict) {
+          const mark = document.createElement('span');
+          mark.className = 'pg-filetab-conflict';
+          mark.textContent = '\u26a0';
+          mark.setAttribute('aria-hidden', 'true');
+          tab.appendChild(mark);
         }
 
         const close = document.createElement('button');
@@ -396,6 +434,13 @@ const initial = picks[0];
         fileTabList.appendChild(tab);
       });
       editorWrap.setAttribute('aria-labelledby', `pg-filetab-${state.tabs.active}`);
+
+      // One line names the first unrepresentable file, so the reader learns
+      // why a tab is marked rather than only that it is.
+      const first = joinConflicts(state.tabs.files)[0];
+      fileError.textContent = first
+        ? `${state.tabs.files[first.index].name}: ${CONFLICT_TEXT[first.reason]}`
+        : '';
     }
 
     fileTabList.addEventListener('keydown', (e) => {
@@ -716,20 +761,25 @@ const initial = picks[0];
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.textContent = diagnosticLabel(m);
-        // A row for the ACTIVE tab jumps; a row for another file is inert until
-        // slice 6 adds the tab switch, so no slice ever mis-places the caret.
-        if (m.from !== null && m.to !== null && m.tab === state.tabs.active) {
-          const { from, to } = m;
+        // Any row with a span jumps, switching tabs first when the compiler
+        // blamed another file. `showDocument` is synchronous, so the select on
+        // the next statement lands in the file that just became visible.
+        if (m.from !== null && m.to !== null && m.tab !== null) {
+          const { from, to, tab } = m;
           btn.addEventListener('click', () => {
             if (editor) {
+              if (tab !== state.tabs.active) {
+                state.tabs = selectTab(state.tabs, tab);
+                editor.showDocument(tab);
+                renderFileTabs();
+              }
               editor.select(from, to);
             } else {
+              // The fallback surface holds every file in one buffer, so the
+              // file-local offsets do not address it; focus it and stop.
               source.focus();
-              source.setSelectionRange(from, to);
             }
           });
-        } else if (m.from !== null && m.tab !== null) {
-          btn.disabled = true;
         } else {
           // A file with no editor buffer (`<builtin>/…`): the row stays, so the
           // count and the message are still visible, but there is nowhere to go.

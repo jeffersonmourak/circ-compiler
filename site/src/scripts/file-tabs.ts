@@ -8,6 +8,7 @@
 // purity case in `test/file-tabs.test.ts` scans this file's own source text,
 // so even a mention in a comment is a failure; that bluntness is deliberate.
 import {
+  PLAYGROUND_DIR,
   isFileName,
   joinFiles,
   splitFiles,
@@ -151,5 +152,49 @@ export function moveFile(state: FileTabsState, from: number, to: number): FileTa
     if (dst <= active) active += 1;
   }
   return { files, active };
+}
+
+export interface TabCounts {
+  errors: number;
+  warnings: number;
+}
+
+/**
+ * Per-tab diagnostic counts.
+ *
+ * The analysis parameter is structural rather than the mapper's `Analysis`
+ * interface, so this module stays independent of where that type lives.
+ *
+ * A file id counts only when its path is under the playground directory AND
+ * names a tab that currently exists. Everything else is dropped: the builtin
+ * macro sources, and any path left over from a reply that outlived a rename or
+ * a delete. A late reply therefore degrades to NO badge rather than to a badge
+ * on the wrong tab.
+ */
+export function countsByFile(
+  files: readonly FileTab[],
+  analysis: {
+    files: readonly { file_id: number; path: string }[];
+    diagnostics: readonly { file_id: number; severity: string }[];
+  } | null,
+): TabCounts[] {
+  const counts: TabCounts[] = files.map(() => ({ errors: 0, warnings: 0 }));
+  if (!analysis) return counts;
+
+  const tabOf = new Map<number, number>();
+  for (const entry of analysis.files) {
+    if (!entry.path.startsWith(`${PLAYGROUND_DIR}/`)) continue;
+    const name = entry.path.slice(PLAYGROUND_DIR.length + 1);
+    const index = files.findIndex((f) => f.name === name);
+    if (index >= 0) tabOf.set(entry.file_id, index);
+  }
+
+  for (const d of analysis.diagnostics) {
+    const index = tabOf.get(d.file_id);
+    if (index === undefined) continue;
+    if (d.severity === 'error') counts[index].errors += 1;
+    else counts[index].warnings += 1;
+  }
+  return counts;
 }
 
