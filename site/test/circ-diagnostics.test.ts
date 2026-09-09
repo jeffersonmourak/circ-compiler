@@ -182,6 +182,20 @@ describe('circ diagnostics mapping', () => {
     });
   });
 
+  test('the rendered row string is the file-local label', () => {
+    // Pins the exact text the list shows, which deliberately replaced the old
+    // combined-document `<line>:<col>` label carrying no filename.
+    const doc = tour[5].source;
+    const files = splitFiles(doc);
+    const analysis = analysisOf(
+      [`${PLAYGROUND_DIR}/half_adder.circ`, `${PLAYGROUND_DIR}/root.circ`],
+      [diag(1, range(1, 1, 1, 6), { code: 'E004', message: "required input 'in' is unconnected" })],
+    );
+    const m = mapDiagnostics(doc, files, analysis)[0];
+    const label = `${m.fileName}:${m.line}:${m.column} ${m.code} ${m.message}`;
+    expect(label).toBe("root.circ:1:1 E004 required input 'in' is unconnected");
+  });
+
   test('a status-1 compile body maps like the same diagnostics from analyze', () => {
     const doc = 'input a\nnot n(in=b)\noutput o(in=n.out)\n';
     const files = splitFiles(doc);

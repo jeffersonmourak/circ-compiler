@@ -72,7 +72,6 @@ const initial = picks[0];
 <script>
   import { LibcircClient, type LibcircVersion, type WorkerReply } from '../scripts/libcirc-client.ts';
   import { splitFiles, requestFor, PLAYGROUND_DIR, type SplitFile } from '../utils/split-files.ts';
-  import { byteColToUtf16, caretOffset } from '../utils/columns.ts';
   import {
     mapDiagnostics,
     toLintDiagnostics,
@@ -110,8 +109,8 @@ const initial = picks[0];
     const state = {
       gen: 0,
       /** The pipeline's single source of truth. Initialised from the server-
-       *  rendered textarea, written by the editor's onChange, read by fire(),
-       *  locate() and renderDiagnostics(). Never read off the DOM. */
+       *  rendered textarea, written by the editor's onChange, read by fire()
+       *  and renderDiagnostics(). Never read off the DOM. */
       source: source.value,
       files: [] as SplitFile[],
       analysis: null as Analysis | null,
@@ -358,42 +357,52 @@ const initial = picks[0];
       if (snapshot === state.source) editor?.setDiagnostics(toLintDiagnostics(state.mapped));
     }
 
-    function locate(d: Diagnostic): { line0: number; col: number } | null {
-      const path = state.analysis?.files.find((f) => f.file_id === d.file_id)?.path;
-      const name = path?.startsWith(`${PLAYGROUND_DIR}/`) ? path.slice(PLAYGROUND_DIR.length + 1) : null;
-      const file = state.files.find((f) => f.name === name);
-      if (!file) return null;
-      const line0 = file.startLine + d.range.start_line - 1;
-      const line = state.source.split('\n')[line0] ?? '';
-      return { line0, col: byteColToUtf16(line, d.range.start_col) };
+    /** `<file>:<line>:<col> <code> <message>`, with the compiler's own
+     *  FILE-LOCAL position. A combined-document line number means nothing to a
+     *  reader who is looking at `half_adder.circ`; the jump target keeps using
+     *  the absolute span, so nothing about clicking changes. */
+    function diagnosticLabel(m: MappedDiagnostic): string {
+      return `${m.fileName}:${m.line}:${m.column} ${m.code} ${m.message}`;
     }
+
     function renderDiagnostics() {
       diagList.innerHTML = '';
-      if (state.diagnostics.length === 0) {
+      if (state.mapped.length === 0) {
         const li = document.createElement('li');
         li.className = 'pg-diag-ok';
         li.textContent = 'No diagnostics.';
         diagList.appendChild(li);
         return;
       }
-      for (const d of state.diagnostics) {
+
+      const errors = state.mapped.filter((m) => m.severity === 'error').length;
+      const warnings = state.mapped.length - errors;
+      const counts = document.createElement('li');
+      counts.className = 'pg-diag-counts';
+      counts.textContent =
+        `${errors} error${errors === 1 ? '' : 's'}, ${warnings} warning${warnings === 1 ? '' : 's'}`;
+      diagList.appendChild(counts);
+
+      for (const m of state.mapped) {
         const li = document.createElement('li');
-        li.className = `pg-diag-${d.severity}`;
-        const loc = locate(d);
-        const where = loc ? `${loc.line0 + 1}:${loc.col}` : `${d.range.start_line}:${d.range.start_col}`;
+        li.className = `pg-diag-${m.severity}`;
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.textContent = `${where} ${d.code} ${d.message}`;
-        if (loc) {
+        btn.textContent = diagnosticLabel(m);
+        if (m.from !== null && m.to !== null) {
+          const { from, to } = m;
           btn.addEventListener('click', () => {
-            const off = caretOffset(state.source, loc.line0, loc.col);
             if (editor) {
-              editor.select(off, off);
+              editor.select(from, to);
             } else {
               source.focus();
-              source.setSelectionRange(off, off);
+              source.setSelectionRange(from, to);
             }
           });
+        } else {
+          // A file with no editor buffer (`<builtin>/…`): the row stays, so the
+          // count and the message are still visible, but there is nowhere to go.
+          btn.disabled = true;
         }
         li.appendChild(btn);
         diagList.appendChild(li);

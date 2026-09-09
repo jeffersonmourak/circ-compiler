@@ -672,6 +672,9 @@ hr {
 }
 .pg-diag button:hover { text-decoration: underline; }
 .pg-diag-error button { color: var(--accent); }
+.pg-diag-warning button { color: var(--muted); }
+.pg-diag button:disabled { color: var(--muted); cursor: default; text-decoration: none; }
+.pg-diag-counts { color: var(--muted); margin-bottom: 0.5rem; }
 .pg-diag-ok { color: var(--muted); }
 .pg-preview {
   margin: 0;
