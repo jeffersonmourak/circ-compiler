@@ -79,6 +79,10 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - One localStorage key, one schema-versioned envelope (`normalize` drops unknown keys, LRU eviction, retry once, session disable)
 - The status bar is a pure function of one input record (fixed precedence, the label written only on a kind change)
 - Two debounces, a sequence counter per stage (claimed at fire time, guarded at every await, last good output dimmed)
+- A share link carries the source in the fragment, under two keys (`#src=` deflate, `#src0=` plain, an 8 KB cap, failures as values)
+- The fragment is scrubbed at parse time, before anything can read it (a classic inline script beats every deferred module; one-rule-at-a-time precedence)
+- Scratch projects are flat, capped three ways, and never hold shipped text (ids for content, LRU eviction that spares the active project)
+- The first edit forks a shipped example into your own project (fork on change, not on diff; a shared link arrives as your own project)
 
 ## Conventions
 

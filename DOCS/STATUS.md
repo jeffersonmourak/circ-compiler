@@ -328,3 +328,19 @@ Append-only log, one entry per shipped slice. Newest at the bottom. See `DOCS/PL
 **Tests:** the id contract is already covered by slice 2's `every catalogue id opens through #pick=` case, which asserts `readHash` reads each id back and `resolveSource` returns its shipped source byte-identically. Ran `bun test` (196 pass across 19 files), `bun --bun run build` (pass), `bun run bundle` — `/examples` 1.6 KB gzip and `/tour` 0 KB, both **unchanged**, so the links shipped no JavaScript to either page. Negative proof: pointing a mount at `tour:99` fails the build with `is not in the playground catalogue`; reverted.
 **Next slice:** Slice 8 — the decision entries and the phase close-out.
 **Notes:** The build is the gate on the ids, which is why there is no separate test for them: a renamed slug fails the build rather than shipping a link that silently opens the wrong circuit.
+
+## 2026-09-09 — Phase 4 — Slice 8: decisions and close-out
+
+**What shipped:** Four `###` entries in `DOCS/decisions/playground.md`, registered under *Topics* in `DOCS/decisions/index.md`: the two-key share encoding and its cap; the parse-time scrub and the one-rule-at-a-time load precedence; the flat scratch model, its three limits and the `keep` rule; and copy-on-write forking. Documentation only.
+**Files touched:** `DOCS/decisions/playground.md`, `DOCS/decisions/index.md`, `DOCS/STATUS.md`.
+**Tests:** `bun test` (196 pass across 19 files) and `bun --bun run build` unchanged green.
+**Next slice:** none — Phase 4 is complete. Phase 5 (`DOCS/PLANS/PHASE_5_source_linking.md`) is next and needs the human's go-ahead. It is the phase whose first slice changes `circ-renderer` in a sibling repository and ends in a hard stop for a human push.
+**Notes:** none.
+
+## 2026-09-09 — Phase 4 — close-out
+
+**What shipped:** Phase 4 is complete in eight commits (`f5429d8`, `86bdabc`, `bd0f711`, `893dbdb`, `8727d2a`, `397cdc4`, `31a11ad`, and this one). `/playground` has a workspace sidebar listing the ten examples, the seven tour steps and the reader's own projects; editing an example forks it rather than overwriting it; the active project, the active file and the output tab survive a reload in the one `circ.playground.v1` envelope; a Share button puts the current circuit in a URL fragment that is scrubbed from the address bar the moment it is read; and every example card and tour step links into the playground by id with no JavaScript added to either page.
+**Files touched:** none beyond the eight slices; this entry is the phase's measurement of record.
+**Tests:** `bun test` 196 pass across 19 files, up from 152 at the end of Phase 3. `bun --bun run build` green; `bun run bundle` green with `/playground` at 18.7 KB gzip against its 120 KB ceiling and `/examples`, `/tour` and every `/reference/*` page byte-unchanged. No ceiling raised. `zig build test-all` untouched by this phase.
+**Next slice:** Phase 5, on the human's go-ahead.
+**Notes:** The manual checklist is **unrun** in full — no browser has been available in any session on this branch. Nobody has clicked a workspace row, watched an example fork, opened a share link in a private window, or seen the sidebar stack below 800px. Every model function, the whole share codec, all ten load-precedence cases and every storage failure path are proven under `bun test`; the wiring between them and the DOM is not. One open item is deliberately still open: the browser confirmation that the parse-time scrub beats analytics. Its configuration half was struck on a structural argument recorded in `DOCS/PLANS_PROMPT.md`, but the measurement the plan asked for has not been taken, and closing an item on an argument rather than its stated measurement is what that rule forbids.

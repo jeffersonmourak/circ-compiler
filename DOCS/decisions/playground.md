@@ -140,3 +140,35 @@ The entries below record the decisions of the playground-v2 initiative (the site
 
 **Alternatives.** One debounce with one counter (the shipped behaviour before this phase); cancelling in the worker (there is no abort, and adding one means a session protocol); blanking the outputs on every failed build (the flicker this phase exists to remove).
 
+### A share link carries the source in the fragment, under two keys
+
+**Decision.** Sharing is a URL fragment and nothing else — no service, no network, no shortener. `#src=` carries deflate-raw plus base64url; `#src0=` carries plain base64url for a browser with no `CompressionStream`. Past 8192 characters of payload the Share button refuses the link and copies the raw source instead, naming both the count and the limit. The codec is injected rather than reached for, so both paths are driven by tests even though both compression globals are absent under bun. Nothing in the codec throws: every malformed fragment — bad alphabet, bad deflate, invalid UTF-8, a share key with no codec to read it — comes back as a value, because a fragment is something a stranger can hand you.
+
+**Rationale.** The fragment never leaves the browser, which is what lets the page keep its "nothing leaves the page" promise while still being shareable. Two keys rather than a version byte means the reader's browser picks the one it can read, and an old link keeps working when the codec changes. Measured over all 17 shipped sources, deflate is the shorter key every time and the largest lands at 390 characters, so nothing shipped comes close to the cap.
+
+**Alternatives.** A version byte inside one key (a decoder must then parse before it can reject); a short-link service (network, storage, and an outage that breaks every link ever shared); base64 without the URL-safe alphabet (`+` and `/` need escaping in a fragment).
+
+### The fragment is scrubbed at parse time, before anything can read it
+
+**Decision.** A classic inline script at the top of the playground markup stashes the fragment on a global and immediately calls `history.replaceState` to remove it, inside `try/catch`. The island reads the stashed copy. Load precedence is then walked one rule at a time — a share fragment, a `#pick=` id, the project last open, the first catalogue entry — with each failure falling through to the *next* rule and posting a note, never skipping to the default.
+
+**Rationale.** The page promises in its own prose that nothing leaves it, and analytics is mounted on every page. A classic inline script runs during parsing while a hoisted module script is deferred until after it, so the fragment is gone from `location.href` before any analytics init can read it — a structural guarantee rather than a configuration one. Scrubbing also keeps a reader's source out of the address bar and out of their own browser history. The one-rule-at-a-time fall-through is why the hash intent keeps every key it found instead of resolving to one: a share link that fails to decode should still open the `#pick=` beside it.
+
+**Alternatives.** Configuring the analytics client to sanitise properties (depends on a key name in a snippet loaded at runtime from a CDN, and fails open); scrubbing in the island (too late — the island is a deferred module); not scrubbing (the source lives in the address bar and in history).
+
+### Scratch projects are flat, capped three ways, and never hold shipped text
+
+**Decision.** The workspace is three flat groups — Examples, Tour and Yours — with no folders and no nesting. An example or tour step is stored **by id**; only the reader's own projects are stored by value, under Phase 3's three limits: at most 16 projects, 32 KB per source, 256 KB per envelope. Eviction is least-recently-updated and never touches the project the reader is currently typing into. A source over the per-source cap is omitted **whole** from what is written, stays in memory so the reader keeps typing, and is reported.
+
+**Rationale.** Storing a copy of an example means a reader who returns after the example changes sees the old one forever, with no way to tell. Storing ids means the shipped content is always the shipped content. The `keep` id is the difference between an eviction that frees space and one that deletes the thing you were working on. Omitting an over-size project whole, rather than writing a record with a missing source, matters because a record with a missing source is silently dropped by the next read with no note at all.
+
+**Alternatives.** Folders (langlang's tree walkers were deliberately not ported — three fixed groups is the whole model); truncating an over-size source (loses work silently); no cap (one runaway project evicts every other one).
+
+### The first edit forks a shipped example into your own project
+
+**Decision.** Editing an example or a tour step does not overwrite it. The first change event creates a scratch project named after the shipped title, numbering it when the name is taken, moves the active id to the fork and says so in the status line. Every later edit updates that fork in place. A shared circuit arriving by link is likewise created as a project of the reader's own, named by the site's own name generator, so editing it needs no second fork.
+
+**Rationale.** A reader who opens an example, types one character and comes back tomorrow should find both their edit and the pristine example. Forking on the first change rather than on a diff means the rule is one the reader can predict: touch it and it is yours. The consequence — editing back to the original text leaves you forked — is accepted, because a diff-based rule would silently discard a project the reader believes they have.
+
+**Alternatives.** Overwriting the example in place (loses the shipped text for that reader forever); prompting before forking (a dialogue in front of the first keystroke); forking only on a real diff (unpredictable, and it deletes projects).
+
