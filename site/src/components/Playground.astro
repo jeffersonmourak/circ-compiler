@@ -36,15 +36,18 @@ const initial = picks[0];
           ))}
         </select>
       </div>
-      <textarea
-        id="pg-source"
-        class="pg-source"
-        spellcheck="false"
-        autocomplete="off"
-        autocapitalize="off"
-        aria-label="circ source"
-        rows="18"
-      >{initial.source}</textarea>
+      <div class="pg-editor-wrap">
+        <div id="pg-editor" class="pg-cm" hidden></div>
+        <textarea
+          id="pg-source"
+          class="pg-source"
+          spellcheck="false"
+          autocomplete="off"
+          autocapitalize="off"
+          aria-label="circ source"
+          rows="18"
+        >{initial.source}</textarea>
+      </div>
       <div class="pg-status" aria-live="polite">Type to compile.</div>
     </section>
     <section class="pg-output">
@@ -89,6 +92,8 @@ const initial = picks[0];
 
   function init(el: HTMLElement) {
     const source = el.querySelector<HTMLTextAreaElement>('#pg-source')!;
+    const editorWrap = el.querySelector<HTMLElement>('.pg-editor-wrap')!;
+    const editorHost = el.querySelector<HTMLElement>('#pg-editor')!;
     const pick = el.querySelector<HTMLSelectElement>('#pg-pick')!;
     const status = el.querySelector<HTMLElement>('.pg-status')!;
     const banner = el.querySelector<HTMLElement>('.pg-banner')!;
@@ -104,6 +109,10 @@ const initial = picks[0];
     const client = new LibcircClient(el.dataset.libcircWasm!);
     const state = {
       gen: 0,
+      /** The pipeline's single source of truth. Initialised from the server-
+       *  rendered textarea, written by the editor's onChange, read by fire(),
+       *  locate() and renderDiagnostics(). Never read off the DOM. */
+      source: source.value,
       files: [] as SplitFile[],
       analysis: null as Analysis | null,
       diagnostics: [] as Diagnostic[],
@@ -127,10 +136,13 @@ const initial = picks[0];
     for (const b of tabs) b.addEventListener('click', () => showTab(b.dataset.tab as Tab));
 
     // ---- editor ----
+    // The textarea is the fallback editing surface: it edits and compiles on
+    // its own, and it is removed from the DOM only once CodeMirror has mounted.
     source.addEventListener('keydown', (e) => {
       if (e.key === 'Tab') {
         e.preventDefault();
         source.setRangeText('  ', source.selectionStart, source.selectionEnd, 'end');
+        state.source = source.value;
         schedule();
       }
     });
@@ -139,10 +151,54 @@ const initial = picks[0];
       if (timer !== null) window.clearTimeout(timer);
       timer = window.setTimeout(() => { timer = null; void fire(); }, DEBOUNCE_MS);
     }
-    source.addEventListener('input', schedule);
+    source.addEventListener('input', () => {
+      state.source = source.value;
+      schedule();
+    });
     pick.addEventListener('change', () => {
-      source.value = picks[pick.value] ?? '';
+      state.source = picks[pick.value] ?? '';
+      source.value = state.source;
+      editor?.setDoc(state.source);
       void fire();
+    });
+
+    // ---- the CodeMirror island, loaded on idle ----
+    // A deliberate, recorded exception to "nothing heavy loads before
+    // interaction": on /playground the editor IS the page, so a first-focus
+    // gate would show a bare textarea to every visitor who reads before
+    // typing. It does not extend to libcirc.wasm, whose ensureReady() gate
+    // sits on the editor host's focusin below.
+    type EditorMod = typeof import('../scripts/circ-editor.ts');
+    let editorMod: EditorMod | null = null;
+    let editor: ReturnType<EditorMod['createEditor']> | null = null;
+    let editorPromise: Promise<EditorMod> | null = null;
+    const loadEditor = () => (editorPromise ??= import('../scripts/circ-editor.ts'));
+
+    function mountEditor(mod: EditorMod) {
+      editorMod = mod;
+      editor = mod.createEditor(editorHost, {
+        doc: state.source,
+        theme: mod.currentThemeMode(),
+        ariaLabel: 'circ source',
+        onChange: (doc) => {
+          state.source = doc;
+          schedule();
+        },
+      });
+      editorHost.hidden = false;
+      source.remove();
+    }
+
+    const whenIdle = (fn: () => void) => {
+      const ric = (window as unknown as { requestIdleCallback?: (cb: () => void) => number })
+        .requestIdleCallback;
+      if (typeof ric === 'function') ric(fn);
+      else window.setTimeout(fn, 0);
+    };
+    whenIdle(() => {
+      void loadEditor().then(mountEditor, () => {
+        status.textContent = 'Rich editor unavailable; using the plain text box.';
+      });
     });
 
     // ---- version handshake ----
@@ -171,7 +227,7 @@ const initial = picks[0];
       const gen = ++state.gen;
       if (!(await ensureReady())) return;
       if (gen !== state.gen) return;
-      state.files = splitFiles(source.value);
+      state.files = splitFiles(state.source);
       status.textContent = 'Compiling…';
 
       const an = await client.call('analyze', requestFor(state.files));
@@ -284,7 +340,7 @@ const initial = picks[0];
       const file = state.files.find((f) => f.name === name);
       if (!file) return null;
       const line0 = file.startLine + d.range.start_line - 1;
-      const line = source.value.split('\n')[line0] ?? '';
+      const line = state.source.split('\n')[line0] ?? '';
       return { line0, col: byteColToUtf16(line, d.range.start_col) };
     }
     function renderDiagnostics() {
@@ -306,9 +362,13 @@ const initial = picks[0];
         btn.textContent = `${where} ${d.code} ${d.message}`;
         if (loc) {
           btn.addEventListener('click', () => {
-            const off = caretOffset(source.value, loc.line0, loc.col);
-            source.focus();
-            source.setSelectionRange(off, off);
+            const off = caretOffset(state.source, loc.line0, loc.col);
+            if (editor) {
+              editor.select(off, off);
+            } else {
+              source.focus();
+              source.setSelectionRange(off, off);
+            }
           });
         }
         li.appendChild(btn);
@@ -448,13 +508,18 @@ const initial = picks[0];
       });
     }
     void showTabBase;
-    // Theme flips: circ-renderer captures the theme at construction.
-    new MutationObserver(() => { void rebuildSim(); }).observe(document.documentElement, {
+    // Theme flips: circ-renderer captures the theme at construction, so the
+    // canvas is rebuilt; the editor reconfigures its theme compartment in place.
+    new MutationObserver(() => {
+      if (editorMod) editor?.setTheme(editorMod.currentThemeMode());
+      void rebuildSim();
+    }).observe(document.documentElement, {
       attributes: true,
       attributeFilter: ['data-theme'],
     });
 
-    // Nothing heavy loads until the reader interacts.
-    source.addEventListener('focus', () => { void ensureReady(); }, { once: true });
+    // libcirc.wasm still loads only on interaction. `focusin` bubbles, so this
+    // one listener covers the CodeMirror mount and the fallback textarea both.
+    editorWrap.addEventListener('focusin', () => { void ensureReady(); }, { once: true });
   }
 </script>

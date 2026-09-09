@@ -65,6 +65,8 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 ### [playground.md](playground.md)
 - The compile fast path resolves implicit builtins (usage-aware `.project_if_imports`; `--inspect` unchanged)
 - The JavaScript budget is per page and gzip is the gate (`bun run bundle`, `bundle-budget.json`, the build-free CodeMirror tripwire)
+- The editor is CodeMirror 6 with a hand-written StreamLanguage (six exact-pinned packages, no meta-package, no autocomplete/search)
+- The editor chunk loads on idle, not on interaction (dynamic `import()` after paint, textarea fallback, ungated lazy chunk)
 
 ## Conventions
 

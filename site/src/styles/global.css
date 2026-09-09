@@ -594,6 +594,38 @@ hr {
   tab-size: 2;
   outline: none;
 }
+/* The editing surface: the CodeMirror mount and the fallback textarea share
+   one flex column so either one fills the pane. Geometry only — the editor's
+   colours come from its own EditorView.theme compartment, never from here. */
+.pg-editor-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 18rem;
+}
+.pg-cm {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 18rem;
+  overflow: hidden;
+}
+/* display:flex above outranks the UA stylesheet's [hidden] { display: none },
+   the same trap .lc-mount[hidden] documents further up this file. */
+.pg-cm[hidden] { display: none; }
+.pg-cm .cm-editor {
+  flex: 1;
+  min-height: 0;
+}
+.pg-cm .cm-scroller {
+  font-family: var(--font-mono-strict);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  overflow: auto;
+}
+.pg-cm .cm-content { padding: 0.75rem 0; }
+.pg-cm .cm-line { padding: 0 0.85rem; }
 .pg-status {
   padding: 0.4rem 0.85rem;
   border-top: 1px solid var(--border);
