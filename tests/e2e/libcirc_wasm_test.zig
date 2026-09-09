@@ -251,14 +251,14 @@ const DriveCase = struct { name: []const u8, root: []const u8, sources: []const 
 const drive_cases = [_]DriveCase{
     .{ .name = "inverter", .root = "/playground/main.circ", .sources = &.{"tests/fixtures/circuits/inverter.circ"}, .keys = &.{"/playground/main.circ"}, .vectors = "tests/fixtures/expected-wasm/inverter.txt" },
     .{ .name = "slice_basic", .root = "/playground/main.circ", .sources = &.{"tests/fixtures/circuits/slice_basic.circ"}, .keys = &.{"/playground/main.circ"}, .vectors = "tests/fixtures/expected-wasm/slice_basic.txt" },
-    // four_bit_adder is deliberately absent: `compile` takes the import-free
-    // fast path, which does not resolve implicit builtins (`xor`), exactly as
-    // the CLI does; the full_adder project below covers macro expansion.
+    // An import-free root that uses `xor` and `or`: the compile fast path is
+    // usage-aware, so the wasm build resolves the implicit builtins too.
+    .{ .name = "four_bit_adder", .root = "/playground/main.circ", .sources = &.{"tests/fixtures/circuits/four_bit_adder.circ"}, .keys = &.{"/playground/main.circ"}, .vectors = "tests/fixtures/expected-wasm/four_bit_adder.txt" },
     .{ .name = "chain", .root = "/playground/main.circ", .sources = &.{"tests/fixtures/circuits/chain.circ"}, .keys = &.{"/playground/main.circ"}, .vectors = "tests/fixtures/expected-wasm/chain.txt" },
     .{ .name = "full_adder", .root = "/playground/root.circ", .sources = &.{ "tests/fixtures/projects/full_adder/root.circ", "tests/fixtures/projects/full_adder/half_adder.circ" }, .keys = &.{ "/playground/root.circ", "/playground/half_adder.circ" }, .vectors = "tests/fixtures/expected-wasm/projects/full_adder.txt" },
 };
 
-test "libcirc.wasm: compile inverter, slice_basic, chain, full_adder project and drive expected-wasm vectors" {
+test "libcirc.wasm: compile inverter, slice_basic, four_bit_adder, chain, full_adder project and drive expected-wasm vectors" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
