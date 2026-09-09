@@ -463,3 +463,13 @@ Append-only log, one entry per shipped slice. Newest at the bottom. See `DOCS/PL
 **Tests:** no new cases — the projection and the cap are slice 1's twelve, and the drawer's wiring is DOM. Ran `bun test` (270 pass across 23 files), `bun --bun run typecheck` (0 errors), `bun --bun run build` (pass), `bun run bundle` (ok; `/playground` 21.6 KB gzip against its 120 KB ceiling), and confirmed the served page carries the drawer and all six controls.
 **Next slice:** Slice 5 — the ROM loader UI and truth-table preloads.
 **Notes:** Changing a setting re-runs both output panes and re-schedules the pipeline, because preview, the table and the compile each read one. Manual checklist — **unrun** (no browser).
+
+## 2026-09-09 — Phase 6 — Slices 5 and 6: the ROM loader UI and the canvas wiring
+
+**What shipped:** A fourth fieldset renders one box per declared root memory, from `romSymbols` over Phase 5's `rootFileId` — no second root-file lookup exists in this codebase. A `rom` gets a textarea, a live word count against its capacity and its refusal message; a `ram` gets a sentence saying it is written by the circuit through its clock and write-enable pins and so has nothing to preload, rather than a box that would do nothing. The list is rebuilt only when the **declared set** changes, so typing does not destroy the box being typed into. Editing an image re-applies it to the running canvas and re-runs the truth table; the truth-table request carries `preloadsFor(...)`, and a rebuilt canvas is re-loaded before the reader sees it, because images are session state and a fresh runtime starts empty. `applyToView` joins ids by name over top-level components only and calls `refreshState` once, after all writes.
+**Files touched:** `site/src/components/Playground.astro`, `DOCS/STATUS.md`.
+**Tests:** no new cases — the plan, the validation and the write sequence are slices 2 and 3's 35, driven against both a recording host and the committed module. Ran `bun test` (270 pass across 23 files), `bun --bun run typecheck` (0 errors), `bun --bun run build` (pass), `bun run bundle` (ok; `/playground` 22.6 KB gzip against its 120 KB ceiling).
+**Next slice:** Slice 7 — decisions and the phase close-out.
+**Notes:**
+1. ROM images are deliberately **not persisted**. A full image at `[64, 16]` is 512 KiB raw and over a megabyte once hex-encoded, against a 256 KB envelope ceiling, so persisting one would evict every project the reader has. They live in the island and are lost on reload, and the same size argument keeps them out of share links.
+2. Manual checklist — **unrun** (no browser): declare a `rom`, paste sixteen bytes, and read them out of both the truth table and the simulation.

@@ -178,7 +178,14 @@ const initial = catalogue[0];
   import { joinConflicts, requestFor, rootOf, PLAYGROUND_DIR } from '../utils/split-files.ts';
   import { createSplitter } from '../scripts/splitter.ts';
   import { capRefusal, mountSettingsDrawer, optionsFor } from '../scripts/settings-drawer.ts';
-  import { preloadsFor, romSymbols, type MemorySymbol } from '../utils/rom-image.ts';
+  import {
+    applyRomImages,
+    parseRomImage,
+    preloadsFor,
+    romPlan,
+    romSymbols,
+    type MemorySymbol,
+  } from '../utils/rom-image.ts';
   import {
     declarationAt,
     declsFor,
@@ -721,6 +728,114 @@ const initial = catalogue[0];
       return romSymbols(a.symbols, rootFileId(a.files, rootPathFor(rootOf(state.tabs.files).name)));
     };
     const preloads = () => preloadsFor(romImages, currentRoms());
+
+    const romGroup = el.querySelector<HTMLElement>('.pg-rom-group')!;
+    const romList = el.querySelector<HTMLElement>('.pg-roms')!;
+
+    /** One box per declared memory. A ram gets an explanation instead of a
+     *  box: preloads are rom-only, and a ram is driven by the circuit. */
+    function renderRoms() {
+      const mems = currentRoms();
+      romGroup.hidden = mems.length === 0;
+      if (mems.length === 0) {
+        romList.innerHTML = '';
+        return;
+      }
+      // Rebuild only when the declared set changed, so typing in a box does
+      // not destroy the box being typed into.
+      const signature = mems.map((m) => `${m.name}:${m.kind}:${m.width}:${m.addrWidth}`).join('|');
+      if (romList.dataset.signature === signature) {
+        for (const mem of mems) updateRomStatus(mem);
+        return;
+      }
+      romList.dataset.signature = signature;
+      romList.innerHTML = '';
+
+      for (const mem of mems) {
+        const wrap = document.createElement('div');
+        wrap.className = 'pg-rom';
+        wrap.dataset.name = mem.name;
+
+        const id = `pg-rom-${mem.name}`;
+        const label = document.createElement('label');
+        label.htmlFor = id;
+        label.textContent = `${mem.name} — ${mem.kind} [${mem.width}, ${mem.addrWidth}]`;
+        wrap.appendChild(label);
+
+        if (mem.kind === 'ram') {
+          const note = document.createElement('div');
+          note.className = 'pg-rom-meta';
+          note.textContent =
+            'A ram is written by the circuit through its clk and we pins, so there is nothing to preload.';
+          wrap.appendChild(note);
+          romList.appendChild(wrap);
+          continue;
+        }
+
+        const box = document.createElement('textarea');
+        box.id = id;
+        box.spellcheck = false;
+        box.value = romImages.get(mem.name) ?? '';
+        box.placeholder = `hex bytes, little-endian, ${(mem.width + 7) >> 3} per word`;
+        box.addEventListener('input', () => {
+          romImages.set(mem.name, box.value);
+          updateRomStatus(mem);
+          applyToView();
+          void runTruth(buildStage.seq);
+        });
+        wrap.appendChild(box);
+
+        const meta = document.createElement('div');
+        meta.className = 'pg-rom-meta';
+        wrap.appendChild(meta);
+        const err = document.createElement('div');
+        err.className = 'pg-rom-error';
+        wrap.appendChild(err);
+        romList.appendChild(wrap);
+        updateRomStatus(mem);
+      }
+    }
+
+    /** Say what the current text amounts to, or why it does not. */
+    function updateRomStatus(mem: MemorySymbol) {
+      const wrap = romList.querySelector<HTMLElement>(`.pg-rom[data-name="${mem.name}"]`);
+      if (!wrap) return;
+      const meta = wrap.querySelector<HTMLElement>('.pg-rom-meta');
+      const err = wrap.querySelector<HTMLElement>('.pg-rom-error');
+      if (!meta || !err) return;
+      const text = romImages.get(mem.name) ?? '';
+      const parsed = parseRomImage(text, mem);
+      if (parsed.ok) {
+        err.textContent = '';
+        meta.textContent = `${parsed.words} of ${2 ** mem.addrWidth} words`;
+      } else {
+        meta.textContent = '';
+        err.textContent = parsed.message;
+      }
+    }
+
+    /** Push every valid image into the running canvas. Called after a rebuild
+     *  and after an edit, because both change what is loaded. */
+    function applyToView() {
+      const view = sim.view;
+      if (!view) return;
+      const mems = currentRoms();
+      const plan = romPlan(romImages, mems);
+      const idOf = (name: string) => {
+        const c = view.runtime.topology.components.find(
+          (x) => x.name === name && (x.origin?.length ?? 0) === 0,
+        );
+        return c ? c.id : null;
+      };
+      const result = applyRomImages(
+        view.runtime.raw ?? {},
+        plan,
+        idOf,
+        mems,
+      );
+      for (const mem of mems) updateRomStatus(mem);
+      if (result.applied.length > 0) view.view.refreshState();
+    }
 
     mountSettingsDrawer(el, {
       get: settings,
@@ -1293,6 +1408,7 @@ const initial = catalogue[0];
       publishDiagnostics(snapshot, state.analysis);
       renderFileTabs();
       link.decls = declsFor(state.analysis, rootPathFor(rootOf(state.tabs.files).name));
+      renderRoms();
 
       const errors = state.diagnostics.filter((d) => d.severity === 'error').length;
       state.analyzedDoc = doc;
@@ -1561,7 +1677,13 @@ const initial = catalogue[0];
     // ---- simulate ----
     type Signal = 0 | 1;
     type CircView = {
-      runtime: { topology: { components: { id: number; kind: number; name: string; origin: unknown[] }[] }; setPinSignal(id: number, s: Signal): void; run(): void };
+      runtime: {
+        topology: { components: { id: number; kind: number; name: string; origin: unknown[] }[] };
+        setPinSignal(id: number, s: Signal): void;
+        run(): void;
+        /** The artifact's own exports; the memory family lives here. */
+        raw?: Record<string, unknown>;
+      };
       view: {
         refreshState(): void;
         setInputSignal?(id: number, s: Signal): void;
@@ -1630,6 +1752,9 @@ const initial = catalogue[0];
         link.table = view.view.getLayout
           ? linkLayout(link.decls, view.view.getLayout())
           : null;
+        // Images are session state, so a rebuilt canvas starts empty and has
+        // to be re-loaded before the reader sees it.
+        applyToView();
         simMount.appendChild(view.canvas);
         simMount.hidden = false;
         simNote.textContent = simNoteBase;
