@@ -29,7 +29,7 @@ const sources = [...examples.map((e) => e.source), ...tour.map((t) => t.source)]
 
 describe('file tabs model', () => {
   test('fromSource/toSource round-trip every content source', () => {
-    expect(sources).toHaveLength(17);
+    expect(sources).toHaveLength(22);
     for (const source of sources) expect(toSource(fromSource(source))).toBe(source);
   });
 

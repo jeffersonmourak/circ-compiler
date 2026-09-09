@@ -420,6 +420,9 @@ hr {
   flex: 1;
   font-size: 0.88rem;
   line-height: 1.55;
+  /* The pane clips, so the scroll has to live here. A four-bit adder's
+     schematic is far wider than half a column and must stay reachable. */
+  overflow-x: auto;
 }
 /* ASCII previews need wider line-height for diagrams to read clearly, and a
    strict system mono so box-drawing glyphs stay on the character grid. */
@@ -942,6 +945,14 @@ a.install-line:hover {
 
 /* ---------- examples ---------- */
 .examples-intro { max-width: var(--measure); margin: 0 0 2.5rem; }
+.examples-tier { margin-top: 3.5rem; }
+.examples-tier:first-of-type { margin-top: 0; }
+.examples-tier > h2 {
+  margin: 0 0 0.3rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid var(--border);
+}
+.examples-tier-blurb { max-width: var(--measure); margin: 0 0 2rem; }
 .examples-grid {
   display: flex;
   flex-direction: column;
@@ -957,6 +968,7 @@ a.install-line:hover {
   padding-top: 0;
   border-top: none;
 }
+.examples-tier + .examples-tier { border-top: none; }
 .example-card h3 {
   margin: 0 0 0.4rem;
   font-size: 1.2rem;

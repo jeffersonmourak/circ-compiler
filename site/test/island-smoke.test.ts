@@ -10,6 +10,9 @@
 // `bun --bun run build` first; the standing gate order already does.
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { CATALOGUE_GROUPS, buildCatalogue } from '../src/utils/playground-store.ts';
+import { examples } from '../src/content/examples.ts';
+import { tour } from '../src/content/tour.ts';
 import { resolve } from 'node:path';
 import { Window } from 'happy-dom';
 
@@ -95,8 +98,13 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(doc.querySelector('#pg-source')).toBeNull();
     expect(doc.querySelector('.cm-content')?.textContent?.length ?? 0).toBeGreaterThan(0);
 
-    // Ten examples plus seven tour steps, and at least the root file tab.
-    expect(doc.querySelectorAll('.pg-ws-row').length).toBeGreaterThanOrEqual(17);
+    // One row per catalogue item, and at least the root file tab. The count is
+    // derived, so adding an example cannot leave a tier missing from the picker.
+    const catalogue = buildCatalogue(examples, tour);
+    expect(doc.querySelectorAll('.pg-ws-row')).toHaveLength(catalogue.length);
+    // Every non-empty group renders its heading, plus "Yours" for scratch.
+    const headings = Array.from(doc.querySelectorAll('.pg-ws-group'), (h) => (h as { textContent: string }).textContent);
+    expect(headings).toEqual([...CATALOGUE_GROUPS.filter((g) => catalogue.some((c) => c.group === g)), 'Yours']);
     expect(doc.querySelectorAll('.pg-filetab').length).toBeGreaterThanOrEqual(1);
     expect(doc.querySelector('.pg-files')?.hasAttribute('hidden')).toBe(false);
 

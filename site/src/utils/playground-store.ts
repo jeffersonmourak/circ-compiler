@@ -9,6 +9,10 @@
 // version bump.
 
 import type { DecodeResult, HashIntent, ShareKey } from './share-link.ts';
+/** The content owns the tier vocabulary; this module only maps it to a
+ *  heading. A type import is erased, so the store still pulls no content
+ *  into the playground bundle. */
+import type { ExampleLevel } from '../content/examples.ts';
 
 export const STORE_KEY = 'circ.playground.v1';
 export const STORE_VERSION = 1;
@@ -437,24 +441,58 @@ export type ProjectKind = 'example' | 'tour' | 'scratch';
  * the "Open in playground" links all come from one `buildCatalogue` call, so
  * they cannot drift from each other or from the shipped content.
  */
+export type CatalogueGroup = 'Introduction' | 'Building blocks' | 'Advanced' | 'Tour';
+
+/**
+ * The heading each example level sits under. The levels are a content
+ * judgement and the headings are a reader-facing label, so the two are mapped
+ * here rather than being the same string — renaming a heading must not mean
+ * rewriting fifteen content entries.
+ */
+export const GROUP_OF_LEVEL: Record<ExampleLevel, CatalogueGroup> = {
+  intro: 'Introduction',
+  medium: 'Building blocks',
+  advanced: 'Advanced',
+};
+
+/**
+ * Every group the workspace can show, shallow end first and the tour last.
+ * The sidebar iterates this rather than a literal pair, so adding a level
+ * cannot leave a group of examples unreachable in the picker.
+ */
+export const CATALOGUE_GROUPS: readonly CatalogueGroup[] = [
+  'Introduction',
+  'Building blocks',
+  'Advanced',
+  'Tour',
+];
+
 export interface CatalogueItem {
   id: PickId;
   label: string;
-  group: 'Examples' | 'Tour';
+  group: CatalogueGroup;
   source: string;
 }
 
 export function buildCatalogue(
-  examples: readonly { slug: string; title: string; source: string }[],
+  examples: readonly { slug: string; title: string; level: ExampleLevel; source: string }[],
   tour: readonly { title: string; source: string }[],
 ): CatalogueItem[] {
+  // Grouped by level rather than taken in file order, so the catalogue stays
+  // tiered even if the content array is ever reordered.
+  const tier = (level: ExampleLevel) =>
+    examples
+      .filter((e) => e.level === level)
+      .map((e) => ({
+        id: `example:${e.slug}`,
+        label: e.title,
+        group: GROUP_OF_LEVEL[level],
+        source: e.source,
+      }));
   return [
-    ...examples.map((e) => ({
-      id: `example:${e.slug}`,
-      label: e.title,
-      group: 'Examples' as const,
-      source: e.source,
-    })),
+    ...tier('intro'),
+    ...tier('medium'),
+    ...tier('advanced'),
     ...tour.map((t, i) => ({
       id: `tour:${i + 1}`,
       label: `${i + 1}. ${t.title}`,

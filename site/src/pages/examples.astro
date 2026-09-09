@@ -3,8 +3,31 @@ import Base from '../layouts/Base.astro';
 import CodePreview from '../components/CodePreview.astro';
 import OpenInPlayground from '../components/OpenInPlayground.astro';
 import LiveCanvas from '../components/LiveCanvas.astro';
-import { examples } from '../content/examples.ts';
+import { examples, type ExampleLevel } from '../content/examples.ts';
 import { GITHUB_REPO, GITHUB_PUBLIC, RENDERER_REPO } from '../utils/url.ts';
+
+// Three tiers, shallow end first. Each carries a one-line brief so a reader
+// landing mid-page knows what they are looking at without scrolling back up.
+const TIERS: { level: ExampleLevel; title: string; blurb: string }[] = [
+  {
+    level: 'intro',
+    title: 'Introduction',
+    blurb: 'One idea each: gates and wiring, the built-in macros, and the bit-shape syntax.',
+  },
+  {
+    level: 'medium',
+    title: 'Building blocks',
+    blurb: 'The standard combinational parts, each built from the primitives above.',
+  },
+  {
+    level: 'advanced',
+    title: 'Advanced',
+    blurb: 'Where width, state and macros meet — multi-bit arithmetic, feedback and memory.',
+  },
+];
+const tiers = TIERS.map((t) => ({ ...t, items: examples.filter((e) => e.level === t.level) })).filter(
+  (t) => t.items.length > 0,
+);
 ---
 <Base
   title="Examples — circ"
@@ -13,8 +36,11 @@ import { GITHUB_REPO, GITHUB_PUBLIC, RENDERER_REPO } from '../utils/url.ts';
   <h1>Examples</h1>
 
   <p class="examples-intro">
-    A gallery of <code>circ</code> circuits — small to medium, primitives to
-    multi-bit arithmetic and stateful latches. Each card shows the source on
+    A gallery of <code>circ</code> circuits in three tiers: an
+    <a href="#intro">introduction</a> that adds one language feature at a time,
+    the <a href="#medium">building blocks</a> those primitives compose into, and
+    <a href="#advanced">advanced</a> circuits where width, state and macros meet.
+    Each card shows the source on
     the left and the <code>--preview</code> output on the right. Where you see
     a <strong>▶ Run interactively</strong> button, click it to load
     <a href={RENDERER_REPO} rel="noreferrer noopener"><code>circ-renderer</code></a>
@@ -22,8 +48,12 @@ import { GITHUB_REPO, GITHUB_PUBLIC, RENDERER_REPO } from '../utils/url.ts';
     and watch the simulation propagate.
   </p>
 
-  <div class="examples-grid">
-    {examples.map((ex) => (
+  {tiers.map((tier) => (
+  <section class="examples-tier">
+    <h2 id={tier.level}>{tier.title}</h2>
+    <p class="muted examples-tier-blurb">{tier.blurb}</p>
+    <div class="examples-grid">
+    {tier.items.map((ex) => (
       <article class="example-card" id={ex.slug}>
         <h3>{ex.title}</h3>
         <p class="lede">{ex.lede}</p>
@@ -40,5 +70,7 @@ import { GITHUB_REPO, GITHUB_PUBLIC, RENDERER_REPO } from '../utils/url.ts';
         )}
       </article>
     ))}
-  </div>
+    </div>
+  </section>
+  ))}
 </Base>

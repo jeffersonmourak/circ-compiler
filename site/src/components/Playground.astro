@@ -2,7 +2,7 @@
 import { url } from '../utils/url.ts';
 import { examples } from '../content/examples.ts';
 import { tour } from '../content/tour.ts';
-import { buildCatalogue } from '../utils/playground-store.ts';
+import { CATALOGUE_GROUPS, buildCatalogue } from '../utils/playground-store.ts';
 
 interface Props {
   manifest: { version: string; revision: string; full_version: number };
@@ -14,6 +14,14 @@ const wasmHref = url('/wasm/libcirc.wasm');
 // they cannot drift from each other or from the shipped content.
 const catalogue = buildCatalogue(examples, tour);
 const initial = catalogue[0];
+// Only the groups that actually have rows, so an empty tier renders no heading.
+// The slug is what the heading's id is built from: a group label may contain a
+// space, and an id may not.
+const groups = CATALOGUE_GROUPS.map((group) => ({
+  group,
+  slug: group.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+  items: catalogue.filter((c) => c.group === group),
+})).filter((g) => g.items.length > 0);
 ---
 <div
   class="pg"
@@ -55,11 +63,11 @@ const initial = catalogue[0];
       >Workspace</button>
       <button type="button" class="pg-ws-new" aria-label="New project">+</button>
       <div class="pg-ws-body" id="pg-ws-body">
-        {(['Examples', 'Tour'] as const).map((group) => (
+        {groups.map(({ group, slug, items }) => (
           <section class="pg-ws-section">
-            <h2 class="pg-ws-group" id={`pg-ws-h-${group}`}>{group}</h2>
-            <ul class="pg-ws-list" aria-labelledby={`pg-ws-h-${group}`}>
-              {catalogue.filter((c) => c.group === group).map((c) => (
+            <h2 class="pg-ws-group" id={`pg-ws-h-${slug}`}>{group}</h2>
+            <ul class="pg-ws-list" aria-labelledby={`pg-ws-h-${slug}`}>
+              {items.map((c) => (
                 <li>
                   <button type="button" class="pg-ws-row" data-pick={c.id}>{c.label}</button>
                 </li>

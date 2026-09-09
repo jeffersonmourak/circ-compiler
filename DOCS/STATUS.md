@@ -557,3 +557,31 @@ The initiative is complete across eight phases: the compile fast path resolves i
 1. **What it does not cover, stated plainly.** The worker cannot load outside a browser, so anything reached only after a compile — `fnv1a`, the preview and truth-table renderers, the simulate path — is not executed. Removing the `fnv1a` import passes this test and is caught by the typecheck instead. The two gates are complementary and neither is sufficient.
 2. It skips without `dist/`, so it is only meaningful after `bun --bun run build`. The standing gate order already runs the build.
 3. **Investigating the reported breakage, this harness found nothing wrong.** Against the current build the island initialises with no throw, CodeMirror mounts with the source in it, the textarea is removed, the file tab, the seventeen workspace rows, the splitter, the status bar and the settings drawer all render, the panes grid has its four children in order, and the worker chunk is emitted and referenced. The only errors are the harness's own. Whatever the reader is seeing is therefore either visual — a layout problem no headless DOM can show — or on a path this harness cannot reach.
+
+## 2026-09-09 — Content — the examples gallery in three tiers
+
+**What shipped:** The workspace repeated itself. Three of its ten examples were the same circuit as a tour step, byte for byte — `example:inverter` was `tour:1`, `example:and-not` was `tour:4`, `example:feedback-chain` was `tour:7` — so a reader browsing the picker met the same schematic twice under two names. Those three are gone, eight new ones are in, and the set is now graded rather than flat.
+
+`Example` gained a `level` of `intro | medium | advanced`, and fifteen entries sit in three tiers of five:
+
+- **Introduction** — `inverter-chain`, `fan-out`, `builtin-xor`, `slice-and-concat`, `wide-not`. One idea each: wiring, fan-out, the auto-imported macros, the bit-shape syntax, and width.
+- **Building blocks** — `half-adder`, `mux-2to1`, `demux-1to2`, `full-adder`, `rom-lookup`.
+- **Advanced** — `two-bit-adder`, `four-bit-adder`, `sr-latch`, `ram-write-read`, `alu-4bit`. 153 and 171 components at the top end, plus feedback and both memory kinds.
+
+Eight of the fifteen are now lifted verbatim from `tests/fixtures/circuits/` and say so: each carries a `repoPath`, and a test asserts the shipped copy still matches that fixture byte for byte. The gallery link therefore cannot come to point at different code than the card shows.
+
+The grouping is real, not cosmetic. `buildCatalogue` derives each item's group from its level through `GROUP_OF_LEVEL`, `CATALOGUE_GROUPS` names the four groups in order, and both the playground sidebar and `/examples` iterate that list rather than a hardcoded pair — so a new tier cannot leave a group of examples unreachable in the picker.
+
+**Files touched:** `site/src/content/examples.ts` (rewritten), `site/src/utils/playground-store.ts`, `site/src/components/Playground.astro`, `site/src/pages/examples.astro`, `site/src/styles/global.css`, `site/.gitignore`, `site/test/content-artifacts.test.ts` (new), and the six tests that counted the old corpus (`workspace`, `share-link`, `split-files`, `file-tabs`, `circ-tokens`, `circ-diagnostics`, `island-smoke`). Artifacts: eight added under `site/public/wasm/`, three removed.
+
+**Tests:** `bun test` 294 pass across 27 files, from 289. `bun --bun run typecheck` 0 errors. `bun --bun run build`, `bun run bundle` and `zig build test-all` all green. `/playground` gzip is unchanged at 23.1 KB — the catalogue grew by five rows of text, not by code.
+
+**Next slice:** none.
+
+**Notes:**
+
+1. **A new gate, because nothing checked this.** `site/test/content-artifacts.test.ts` asserts that every `wasm:` a content entry names exists, starts with the WebAssembly magic bytes, and is **tracked by git** — and, in the reverse direction, that no committed artifact is orphaned. The build copies `public/` without reading it and the bundle budget only walks emitted JavaScript, so before this an entry naming an artifact that was compiled locally and never staged would have shipped a "Run interactively" button that 404s, with every gate green. Negative proof: on first run it failed on exactly the eight unstaged artifacts and the three orphans, and passed once they were staged and removed.
+2. **The two wide previews were being clipped.** `.cp-pane` sets `overflow: hidden`, and the four-bit adder's schematic is 143 columns against the alu's 253 — every existing preview had fit under 73. `.cp-pane pre` now scrolls on its own axis. Worth knowing before adding any wide example.
+3. **`public/wasm/tour-*.wasm` is now in `.gitignore`.** Those seven are a byproduct of `scripts/compile-content.ts`; the tour renders its steps inert and ships none of them. They have been sitting untracked and manually avoided on every commit of this initiative, which is a rule that works right up until it doesn't.
+4. **Memory, slice and concat draw in the renderer's default styling, not the site's.** `src/utils/circ-theme.mjs` overrides five kinds plus `subcircuit`; `pickSkin` falls back to `defaultSkins` for the rest, and those read their colours through a `color(theme, key, fallback)` that degrades to a hardcoded value. So `rom-lookup`, `ram-write-read`, `slice-and-concat` and `alu-4bit` all render — they just do not match the hand-drawn gates beside them. This is the same gap as the "no memory skin" note in the Phase 7 close-out, now visible on four cards instead of none.
+5. **One correction against my own earlier measurement.** A first pass at filling the previews used a regex that matched across entry boundaries, so eight entries received another entry's schematic while reporting success. The sizes recorded in that pass were wrong — `alu-4bit` is 37 lines by 253 columns, not the 11 by 41 first measured. The fill was redone per entry, and all fifteen previews are now verified byte-exact against `scripts/.compiled.json`.

@@ -155,7 +155,7 @@ describe('readHash', () => {
     expect(both.src).toEqual({ key: 'src', payload: 'A' });
     expect(both.pick).toBe('tour:5');
     // A leading # is optional.
-    expect(readHash('pick=example:inverter')).toEqual({ pick: 'example:inverter' });
+    expect(readHash('pick=example:half-adder')).toEqual({ pick: 'example:half-adder' });
     // Nothing this phase reads.
     expect(readHash('')).toEqual({});
     expect(readHash('#')).toEqual({});
@@ -190,7 +190,7 @@ describe('webStreamsCodec', () => {
 
 describe('every shipped source survives a share round-trip under the cap', () => {
   test('through #src= and through #src0=', async () => {
-    expect(sources).toHaveLength(17);
+    expect(sources).toHaveLength(22);
     for (const source of sources) {
       const deflated = await encodeShare(source, zlibCodec);
       expect(deflated.ok).toBe(true);

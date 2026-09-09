@@ -8,6 +8,8 @@ import {
   MAX_ENVELOPE_BYTES,
   NEW_PROJECT_SOURCE,
   STORE_KEY,
+  CATALOGUE_GROUPS,
+  GROUP_OF_LEVEL,
   buildCatalogue,
   createScratch,
   createStore,
@@ -76,9 +78,11 @@ const project = (id: string, updatedAt: number, source = 'input a\n'): ScratchPr
 });
 
 describe('catalogue', () => {
-  test('buildCatalogue yields the 17 shipped items with the expected ids', () => {
-    expect(catalogue).toHaveLength(17);
-    expect(catalogue.filter((c) => c.group === 'Examples')).toHaveLength(10);
+  test('buildCatalogue yields the 22 shipped items with the expected ids', () => {
+    expect(catalogue).toHaveLength(22);
+    expect(catalogue.filter((c) => c.group === 'Introduction')).toHaveLength(5);
+    expect(catalogue.filter((c) => c.group === 'Building blocks')).toHaveLength(5);
+    expect(catalogue.filter((c) => c.group === 'Advanced')).toHaveLength(5);
     expect(catalogue.filter((c) => c.group === 'Tour')).toHaveLength(7);
     expect(catalogue.map((c) => c.id)).toEqual([
       ...examples.map((e) => `example:${e.slug}`),
@@ -86,7 +90,31 @@ describe('catalogue', () => {
     ]);
     // Labels are the shipped titles, numbered for the tour.
     expect(catalogue[0].label).toBe(examples[0].title);
-    expect(catalogue[10].label).toBe(`1. ${tour[0].title}`);
+    expect(catalogue[examples.length].label).toBe(`1. ${tour[0].title}`);
+  });
+
+  test('every group is one of the declared ones, in the declared order', () => {
+    for (const item of catalogue) expect(CATALOGUE_GROUPS).toContain(item.group);
+    // The catalogue is grouped, not interleaved: each group occupies one run.
+    const runs = catalogue.map((c) => c.group).filter((g, i, a) => g !== a[i - 1]);
+    expect(runs).toEqual([...new Set(runs)]);
+    expect(runs).toEqual(CATALOGUE_GROUPS.filter((g) => catalogue.some((c) => c.group === g)));
+  });
+
+  test('every example carries a level and every level maps to a group', () => {
+    for (const e of examples) {
+      expect(Object.keys(GROUP_OF_LEVEL)).toContain(e.level);
+      expect(catalogue.find((c) => c.id === `example:${e.slug}`)!.group).toBe(GROUP_OF_LEVEL[e.level]);
+    }
+  });
+
+  test('no example repeats a tour step, and no slug appears twice', () => {
+    // The gallery is a reference and the tour is a lesson; meeting the same
+    // circuit twice in one workspace is what this whole tier split undid.
+    const tourSources = new Set(tour.map((t) => t.source.trim()));
+    for (const e of examples) expect(tourSources.has(e.source.trim())).toBe(false);
+    expect(new Set(examples.map((e) => e.slug)).size).toBe(examples.length);
+    expect(new Set(examples.map((e) => e.title)).size).toBe(examples.length);
   });
 
   test('resolveSource returns the shipped source byte for byte', () => {
@@ -104,7 +132,7 @@ describe('catalogue', () => {
   });
 
   test('idKind classifies the three id shapes', () => {
-    expect(idKind('example:inverter')).toBe('example');
+    expect(idKind('example:half-adder')).toBe('example');
     expect(idKind('tour:5')).toBe('tour');
     expect(idKind('scratch:abc')).toBe('scratch');
     expect(idKind('nope')).toBeNull();
@@ -310,7 +338,7 @@ describe('resolveInitial', () => {
     const r = resolveInitial({
       intent: readHash('#pick=tour:5'),
       decoded: null,
-      env: env({ activeId: 'example:inverter' }),
+      env: env({ activeId: 'example:half-adder' }),
       catalogue,
       defaultId,
     });
@@ -323,7 +351,7 @@ describe('resolveInitial', () => {
     const r = resolveInitial({
       intent: readHash('#src=AAA&pick=tour:5'),
       decoded: badDecode,
-      env: env({ activeId: 'example:inverter' }),
+      env: env({ activeId: 'example:half-adder' }),
       catalogue,
       defaultId,
     });
@@ -336,7 +364,7 @@ describe('resolveInitial', () => {
     const r = resolveInitial({
       intent: readHash('#src=AAA'),
       decoded: badDecode,
-      env: env({ activeId: 'example:inverter' }),
+      env: env({ activeId: 'example:half-adder' }),
       catalogue,
       defaultId,
     });
@@ -348,7 +376,7 @@ describe('resolveInitial', () => {
     const r = resolveInitial({
       intent: readHash('#pick=example:nope'),
       decoded: null,
-      env: env({ activeId: 'example:inverter' }),
+      env: env({ activeId: 'example:half-adder' }),
       catalogue,
       defaultId,
     });
