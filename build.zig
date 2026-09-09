@@ -919,6 +919,27 @@ pub fn build(b: *std.Build) void {
     linkParserArchive(b, analyze_tests, build_archive_cmd);
     analyze_tests.linkLibC();
     const run_analyze_tests = b.addRunArtifact(analyze_tests);
+
+    const analyze_golden_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/analyze/analyze_golden_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    analyze_golden_tests_mod.addImport("analyze", analyze_mod);
+    analyze_golden_tests_mod.addImport("golden", b.createModule(.{
+        .root_source_file = b.path("tests/helpers/golden.zig"),
+        .target = target,
+        .optimize = optimize,
+    }));
+    const analyze_golden_tests = b.addTest(.{
+        .name = "analyze_golden_tests",
+        .root_module = analyze_golden_tests_mod,
+    });
+    analyze_golden_tests.addIncludePath(b.path("."));
+    analyze_golden_tests.addIncludePath(b.path("./lib"));
+    linkParserArchive(b, analyze_golden_tests, build_archive_cmd);
+    analyze_golden_tests.linkLibC();
+    const run_analyze_golden_tests = b.addRunArtifact(analyze_golden_tests);
     const validator_project_passes_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/validator/project_passes_test.zig"),
         .target = target,
@@ -976,6 +997,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_validator_run_tests.step);
     test_step.dependOn(&run_validator_codes_snapshot_tests.step);
     test_step.dependOn(&run_analyze_tests.step);
+    test_step.dependOn(&run_analyze_golden_tests.step);
     test_step.dependOn(&run_emit_build_fn_tests.step);
     test_step.dependOn(&run_emit_metadata_tests.step);
     test_step.dependOn(&run_emit_full_tests.step);
