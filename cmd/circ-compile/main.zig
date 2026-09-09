@@ -40,7 +40,6 @@ const serializer = @import("serializer");
 const full_serializer = @import("full_serializer");
 const section_writer = @import("section_writer");
 const runtime_embed = @import("runtime_embed");
-const preview_dump = @import("preview_dump");
 const layout_orchestrator = @import("layout_orchestrator");
 const preview_render = @import("preview_render");
 const truth_table_builder = @import("truth_table_builder");

@@ -2,16 +2,6 @@ const std = @import("std");
 
 const GRAMMAR_FILE = "lib/grammar/proto-circ.peg";
 
-// The parser is a langlang-generated, vendored Zig file (lib/parser/parser.zig):
-// the pasted VM runtime plus the grammar's bytecode tables. One module per
-// target, so a wasm consumer can mint its own twin with the same literal.
-fn createParserModule(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Module {
-    return b.createModule(.{
-        .root_source_file = b.path("lib/parser/parser.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-}
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -43,6 +33,175 @@ pub fn build(b: *std.Build) void {
 
     parser_gen.dependOn(&generate_parser_cmd.step);
 
+    // --- Pre-built Runtime WASM ---
+    const wasm_target = b.resolveTargetQuery(.{
+        .cpu_arch = .wasm32,
+        .os_tag = .freestanding,
+    });
+    
+    // We create a dummy compiled.zig file for the runtime embed
+    const write_dummy_compiled = b.addWriteFiles();
+    const dummy_compiled_file = write_dummy_compiled.add("compiled.zig", "pub const is_prebuilt_runtime = true;\n");
+
+    const runtime_module = b.createModule(.{
+        .root_source_file = b.path("templates/main.zig"),
+        .target = wasm_target,
+        .optimize = optimize, // Usually ReleaseSmall or ReleaseFast for WASM, but follow global optimize option
+    });
+    
+    runtime_module.addImport("compiled.zig", b.createModule(.{
+        .root_source_file = dummy_compiled_file,
+        .target = wasm_target,
+        .optimize = optimize,
+    }));
+    
+    // build_options with collect_metrics=false for non-bench circuit consumers.
+    // The bench step creates its own options with collect_metrics=true and a
+    // parallel circuit module that imports them — see `zig build bench` below.
+    //
+    // The options step is materialized into a Module exactly once. Both
+    // circuit_mod_for_wasm and memory_mod_for_wasm import that same module
+    // by name. Calling `addOptions("build_options", step)` twice with the
+    // same step would create two distinct anonymous build_options modules
+    // pointing at the same file, which Zig rejects with
+    // "file exists in modules 'build_options' and 'build_options0'".
+    const circuit_options_default = b.addOptions();
+    circuit_options_default.addOption(bool, "collect_metrics", false);
+    const circuit_options_default_mod = circuit_options_default.createModule();
+
+    const circuit_mod_for_wasm = b.createModule(.{
+        .root_source_file = b.path("lib/circuit.zig"),
+        .target = wasm_target,
+        .optimize = optimize,
+    });
+    circuit_mod_for_wasm.addImport("build_options", circuit_options_default_mod);
+
+    const memory_mod_for_wasm = b.createModule(.{
+        .root_source_file = b.path("lib/memory.zig"),
+        .target = wasm_target,
+        .optimize = optimize,
+    });
+    // memory.zig now imports build_options for the COLLECT_METRICS gate. The
+    // WASM runtime keeps it off (zero overhead), same as every non-bench path.
+    memory_mod_for_wasm.addImport("build_options", circuit_options_default_mod);
+    
+    const transport_mod_for_wasm = b.createModule(.{
+        .root_source_file = b.path("lib/transport.zig"),
+        .target = wasm_target,
+        .optimize = optimize,
+    });
+    
+    const log_mod_for_wasm = b.createModule(.{
+        .root_source_file = b.path("lib/log.zig"),
+        .target = wasm_target,
+        .optimize = optimize,
+    });
+    
+    log_mod_for_wasm.addImport("memory.zig", memory_mod_for_wasm);
+    
+    circuit_mod_for_wasm.addImport("memory.zig", memory_mod_for_wasm);
+    circuit_mod_for_wasm.addImport("log.zig", log_mod_for_wasm);
+    circuit_mod_for_wasm.addImport("transport.zig", transport_mod_for_wasm);
+    
+    transport_mod_for_wasm.addImport("circuit.zig", circuit_mod_for_wasm);
+    
+    const interpreter_mod_for_wasm = b.createModule(.{
+        .root_source_file = b.path("templates/interpreter.zig"),
+        .target = wasm_target,
+        .optimize = optimize,
+    });
+    
+    const format_mod_for_wasm = b.createModule(.{
+        .root_source_file = b.path("lib/topology/format.zig"),
+        .target = wasm_target,
+        .optimize = optimize,
+    });
+    
+    interpreter_mod_for_wasm.addImport("format", format_mod_for_wasm);
+    interpreter_mod_for_wasm.addImport("circuit.zig", circuit_mod_for_wasm);
+    
+    runtime_module.addImport("circuit.zig", circuit_mod_for_wasm);
+    runtime_module.addImport("memory.zig", memory_mod_for_wasm);
+    runtime_module.addImport("interpreter.zig", interpreter_mod_for_wasm);
+    
+    const runtime_artifact = b.addExecutable(.{
+        .name = "circ-runtime",
+        .root_module = runtime_module,
+    });
+    runtime_artifact.entry = .disabled;
+    runtime_artifact.rdynamic = true;
+    
+    // We install the WASM so we can use it as a dependency for the CLI embed
+    const install_runtime = b.addInstallArtifact(runtime_artifact, .{
+        .dest_dir = .{ .override = .{ .custom = "lib" } },
+    });
+    
+    const embed_write_files = b.addWriteFiles();
+    _ = embed_write_files.addCopyFile(runtime_artifact.getEmittedBin(), "circ-runtime.wasm");
+    const embed_zig_file = embed_write_files.add("runtime_embed.zig", 
+        \\pub const runtime_wasm = @embedFile("circ-runtime.wasm");
+    );
+    
+    const runtime_embed_mod = b.createModule(.{
+        .root_source_file = embed_zig_file,
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // Version (from the VERSION file) and HEAD revision (git, at configure
+    // time) exposed to the CLI's --version flag. A missing file or git
+    // failure degrades to "unknown" rather than breaking the build.
+    const build_info = b.addOptions();
+    {
+        const version_raw = b.build_root.handle.readFileAlloc(b.allocator, "VERSION", 256) catch "unknown";
+        const version = std.mem.trim(u8, version_raw, " \t\r\n");
+        const revision = blk: {
+            const result = std.process.Child.run(.{
+                .allocator = b.allocator,
+                .argv = &.{ "git", "rev-parse", "--short", "HEAD" },
+                .cwd = b.build_root.path,
+            }) catch break :blk "unknown";
+            if (result.term != .Exited or result.term.Exited != 0) break :blk "unknown";
+            const trimmed = std.mem.trim(u8, result.stdout, " \t\r\n");
+            break :blk if (trimmed.len == 0) "unknown" else trimmed;
+        };
+        // sha256 of the grammar and of the runtime pasted into the generated
+        // parser (its header line 3): the skew signals a library host reads
+        // through circ_version.
+        const grammar_sha256 = blk: {
+            const peg = b.build_root.handle.readFileAlloc(b.allocator, GRAMMAR_FILE, 1 << 20) catch break :blk "unknown";
+            var digest: [32]u8 = undefined;
+            std.crypto.hash.sha2.Sha256.hash(peg, &digest, .{});
+            break :blk b.fmt("{x}", .{digest});
+        };
+        const parser_runtime_sha256 = blk: {
+            const file = b.build_root.handle.openFile("lib/parser/parser.zig", .{}) catch break :blk "unknown";
+            defer file.close();
+            const buf = b.allocator.alloc(u8, 4096) catch break :blk "unknown";
+            const n = file.readAll(buf) catch break :blk "unknown";
+            const head = buf[0..n];
+            const key = "sha256=";
+            const at = std.mem.indexOf(u8, head, key) orelse break :blk "unknown";
+            const hex = head[at + key.len ..];
+            if (hex.len < 64) break :blk "unknown";
+            break :blk hex[0..64];
+        };
+        build_info.addOption([]const u8, "version", version);
+        build_info.addOption([]const u8, "revision", revision);
+        build_info.addOption([]const u8, "grammar_sha256", grammar_sha256);
+        build_info.addOption([]const u8, "parser_runtime_sha256", parser_runtime_sha256);
+    }
+
+    // The compiler front end, one module graph shared by the CLI, the
+    // libcirc library, and the per-module test artifacts below.
+    const fe = @import("build/frontend_modules.zig").create(b, .{
+        .target = target,
+        .optimize = optimize,
+        .build_options_mod = circuit_options_default_mod,
+        .build_info = build_info,
+        .runtime_embed = runtime_embed_mod,
+    });
+
     const golden_tests = b.addTest(.{
         .root_module = b.createModule(.{
             .root_source_file = b.path("tests/helpers/golden_test.zig"),
@@ -60,13 +219,8 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    const translate_mod = b.createModule(.{
-        .root_source_file = b.path("lib/syntax/translate.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    const parser_mod = createParserModule(b, target, optimize);
-    translate_mod.addImport("parser", parser_mod);
+    const translate_mod = fe.translate;
+    const parser_mod = fe.parser;
     // Runs the generated file's own `langlang tables` test (verifyTables).
     const parser_tests = b.addTest(.{
         .name = "parser_tests",
@@ -89,22 +243,12 @@ pub fn build(b: *std.Build) void {
         .root_module = translate_tests_mod,
     });
     const run_translate_tests = b.addRunArtifact(translate_tests);
-    const ir_types_mod = b.createModule(.{
-        .root_source_file = b.path("lib/ir/types.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
+    const ir_types_mod = fe.ir_types;
     const ir_types_tests = b.addTest(.{
         .root_module = ir_types_mod,
     });
     const run_ir_types_tests = b.addRunArtifact(ir_types_tests);
-    const resolver_mod = b.createModule(.{
-        .root_source_file = b.path("lib/ir/resolver.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    resolver_mod.addImport("translate", translate_mod);
-    resolver_mod.addImport("ir_types", ir_types_mod);
+    const resolver_mod = fe.resolver;
     const resolver_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/ir/resolver_test.zig"),
         .target = target,
@@ -126,17 +270,8 @@ pub fn build(b: *std.Build) void {
         .root_module = resolver_tests_mod,
     });
     const run_resolver_tests = b.addRunArtifact(resolver_tests);
-    const validator_codes_mod = b.createModule(.{
-        .root_source_file = b.path("lib/validator/codes.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    const validator_diagnostics_mod = b.createModule(.{
-        .root_source_file = b.path("lib/validator/diagnostics.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    validator_diagnostics_mod.addImport("codes", validator_codes_mod);
+    const validator_codes_mod = fe.validator_codes;
+    const validator_diagnostics_mod = fe.diagnostics;
     const validator_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/validator/diagnostics_test.zig"),
         .target = target,
@@ -148,101 +283,15 @@ pub fn build(b: *std.Build) void {
         .root_module = validator_tests_mod,
     });
     const run_validator_tests = b.addRunArtifact(validator_tests);
-    const name_resolution_mod = b.createModule(.{
-        .root_source_file = b.path("lib/validator/passes/name_resolution.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    name_resolution_mod.addImport("diagnostics", validator_diagnostics_mod);
-    name_resolution_mod.addImport("ir_types", ir_types_mod);
-    const name_collision_mod = b.createModule(.{
-        .root_source_file = b.path("lib/validator/passes/name_collision.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    name_collision_mod.addImport("diagnostics", validator_diagnostics_mod);
-    name_collision_mod.addImport("ir_types", ir_types_mod);
-    const port_validation_mod = b.createModule(.{
-        .root_source_file = b.path("lib/validator/passes/port_validation.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    port_validation_mod.addImport("diagnostics", validator_diagnostics_mod);
-    port_validation_mod.addImport("ir_types", ir_types_mod);
-    const multi_driver_mod = b.createModule(.{
-        .root_source_file = b.path("lib/validator/passes/multi_driver.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    multi_driver_mod.addImport("diagnostics", validator_diagnostics_mod);
-    multi_driver_mod.addImport("ir_types", ir_types_mod);
-    const required_input_mod = b.createModule(.{
-        .root_source_file = b.path("lib/validator/passes/required_input.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    required_input_mod.addImport("diagnostics", validator_diagnostics_mod);
-    required_input_mod.addImport("ir_types", ir_types_mod);
-    const output_assignment_mod = b.createModule(.{
-        .root_source_file = b.path("lib/validator/passes/output_assignment.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    output_assignment_mod.addImport("diagnostics", validator_diagnostics_mod);
-    output_assignment_mod.addImport("ir_types", ir_types_mod);
-    const combinational_loop_mod = b.createModule(.{
-        .root_source_file = b.path("lib/validator/passes/combinational_loop.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    combinational_loop_mod.addImport("diagnostics", validator_diagnostics_mod);
-    combinational_loop_mod.addImport("ir_types", ir_types_mod);
-    const dead_code_mod = b.createModule(.{
-        .root_source_file = b.path("lib/validator/passes/dead_code.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    dead_code_mod.addImport("diagnostics", validator_diagnostics_mod);
-    dead_code_mod.addImport("ir_types", ir_types_mod);
-    const unused_import_mod = b.createModule(.{
-        .root_source_file = b.path("lib/validator/passes/unused_import.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    unused_import_mod.addImport("diagnostics", validator_diagnostics_mod);
-    unused_import_mod.addImport("ir_types", ir_types_mod);
-    const validator_run_mod = b.createModule(.{
-        .root_source_file = b.path("lib/validator/run.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    validator_run_mod.addImport("diagnostics", validator_diagnostics_mod);
-    validator_run_mod.addImport("ir_types", ir_types_mod);
-    validator_run_mod.addImport("name_resolution", name_resolution_mod);
-    validator_run_mod.addImport("name_collision", name_collision_mod);
-    validator_run_mod.addImport("port_validation", port_validation_mod);
-    validator_run_mod.addImport("multi_driver", multi_driver_mod);
-    validator_run_mod.addImport("required_input", required_input_mod);
-    validator_run_mod.addImport("output_assignment", output_assignment_mod);
-    validator_run_mod.addImport("combinational_loop", combinational_loop_mod);
-    validator_run_mod.addImport("dead_code", dead_code_mod);
-    validator_run_mod.addImport("unused_import", unused_import_mod);
-    const sub_circuit_validation_mod = b.createModule(.{
-        .root_source_file = b.path("lib/validator/passes/sub_circuit_validation.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    sub_circuit_validation_mod.addImport("diagnostics", validator_diagnostics_mod);
-    sub_circuit_validation_mod.addImport("ir_types", ir_types_mod);
-    const validator_run_project_mod = b.createModule(.{
-        .root_source_file = b.path("lib/validator/run_project.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    validator_run_project_mod.addImport("diagnostics", validator_diagnostics_mod);
-    validator_run_project_mod.addImport("ir_types", ir_types_mod);
-    validator_run_project_mod.addImport("validator_run", validator_run_mod);
-    validator_run_project_mod.addImport("sub_circuit_validation", sub_circuit_validation_mod);
+    const name_resolution_mod = fe.name_resolution;
+    const name_collision_mod = fe.name_collision;
+    const port_validation_mod = fe.port_validation;
+    const multi_driver_mod = fe.multi_driver;
+    const required_input_mod = fe.required_input;
+    const output_assignment_mod = fe.output_assignment;
+    const combinational_loop_mod = fe.combinational_loop;
+    const validator_run_mod = fe.validator_run;
+    const validator_run_project_mod = fe.validator_run_project;
     const validator_name_passes_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/validator/name_passes_test.zig"),
         .target = target,
@@ -462,23 +511,14 @@ pub fn build(b: *std.Build) void {
     emit_behavior_tests.linkLibC();
     const run_emit_behavior_tests = b.addRunArtifact(emit_behavior_tests);
     // Phase 3 slice 1: color resolution module (depends only on std, used by cli_args).
-    const preview_render_color_mod = b.createModule(.{
-        .root_source_file = b.path("lib/preview/render/color.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
+    const preview_render_color_mod = fe.preview_render_color;
     const preview_render_color_tests = b.addTest(.{
         .root_module = preview_render_color_mod,
     });
     const run_preview_render_color_tests = b.addRunArtifact(preview_render_color_tests);
 
     // Phase 3 slice 2: Canvas — in-memory cell grid with per-cell color tags.
-    const preview_render_canvas_mod = b.createModule(.{
-        .root_source_file = b.path("lib/preview/render/canvas.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    preview_render_canvas_mod.addImport("color", preview_render_color_mod);
+    const preview_render_canvas_mod = fe.preview_render_canvas;
     const preview_render_canvas_tests = b.addTest(.{
         .root_module = preview_render_canvas_mod,
     });
@@ -511,26 +551,9 @@ pub fn build(b: *std.Build) void {
         .root_module = cli_integration_tests_mod,
     });
     const run_cli_integration_tests = b.addRunArtifact(cli_integration_tests);
-    const resolver_file_loader_mod = b.createModule(.{
-        .root_source_file = b.path("lib/resolver/file_loader.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    const resolver_builtins_mod = b.createModule(.{
-        .root_source_file = b.path("lib/resolver/builtins.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    resolver_file_loader_mod.addImport("builtins", resolver_builtins_mod);
-    const resolver_scan_imports_mod = b.createModule(.{
-        .root_source_file = b.path("lib/resolver/scan_imports.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    resolver_scan_imports_mod.addImport("translate", translate_mod);
-    resolver_scan_imports_mod.addImport("diagnostics", validator_diagnostics_mod);
-    resolver_scan_imports_mod.addImport("file_loader", resolver_file_loader_mod);
-    resolver_scan_imports_mod.addImport("builtins", resolver_builtins_mod);
+    const resolver_file_loader_mod = fe.file_loader;
+    const resolver_builtins_mod = fe.builtins;
+    const resolver_scan_imports_mod = fe.scan_imports;
     const resolver_scan_imports_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/resolver/scan_imports_test.zig"),
         .target = target,
@@ -543,14 +566,7 @@ pub fn build(b: *std.Build) void {
         .root_module = resolver_scan_imports_tests_mod,
     });
     const run_resolver_scan_imports_tests = b.addRunArtifact(resolver_scan_imports_tests);
-    const resolver_import_cycle_mod = b.createModule(.{
-        .root_source_file = b.path("lib/resolver/import_cycle.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    resolver_import_cycle_mod.addImport("diagnostics", validator_diagnostics_mod);
-    resolver_import_cycle_mod.addImport("scan_imports", resolver_scan_imports_mod);
-    resolver_import_cycle_mod.addImport("file_loader", resolver_file_loader_mod);
+    const resolver_import_cycle_mod = fe.import_cycle;
     const resolver_import_cycle_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/resolver/import_cycle_test.zig"),
         .target = target,
@@ -563,17 +579,7 @@ pub fn build(b: *std.Build) void {
         .root_module = resolver_import_cycle_tests_mod,
     });
     const run_resolver_import_cycle_tests = b.addRunArtifact(resolver_import_cycle_tests);
-    const resolver_resolve_bodies_mod = b.createModule(.{
-        .root_source_file = b.path("lib/resolver/resolve_bodies.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    resolver_resolve_bodies_mod.addImport("translate", translate_mod);
-    resolver_resolve_bodies_mod.addImport("resolver", resolver_mod);
-    resolver_resolve_bodies_mod.addImport("ir_types", ir_types_mod);
-    resolver_resolve_bodies_mod.addImport("scan_imports", resolver_scan_imports_mod);
-    resolver_resolve_bodies_mod.addImport("file_loader", resolver_file_loader_mod);
-    resolver_resolve_bodies_mod.addImport("diagnostics", validator_diagnostics_mod);
+    const resolver_resolve_bodies_mod = fe.resolve_bodies;
     const resolver_resolve_bodies_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/resolver/resolve_bodies_test.zig"),
         .target = target,
@@ -611,130 +617,11 @@ pub fn build(b: *std.Build) void {
     });
     const run_resolver_file_loader_tests = b.addRunArtifact(resolver_file_loader_tests);
 
-    // --- Pre-built Runtime WASM ---
-    const wasm_target = b.resolveTargetQuery(.{
-        .cpu_arch = .wasm32,
-        .os_tag = .freestanding,
-    });
-    
-    // We create a dummy compiled.zig file for the runtime embed
-    const write_dummy_compiled = b.addWriteFiles();
-    const dummy_compiled_file = write_dummy_compiled.add("compiled.zig", "pub const is_prebuilt_runtime = true;\n");
-
-    const runtime_module = b.createModule(.{
-        .root_source_file = b.path("templates/main.zig"),
-        .target = wasm_target,
-        .optimize = optimize, // Usually ReleaseSmall or ReleaseFast for WASM, but follow global optimize option
-    });
-    
-    runtime_module.addImport("compiled.zig", b.createModule(.{
-        .root_source_file = dummy_compiled_file,
-        .target = wasm_target,
-        .optimize = optimize,
-    }));
-    
-    // build_options with collect_metrics=false for non-bench circuit consumers.
-    // The bench step creates its own options with collect_metrics=true and a
-    // parallel circuit module that imports them — see `zig build bench` below.
-    //
-    // The options step is materialized into a Module exactly once. Both
-    // circuit_mod_for_wasm and memory_mod_for_wasm import that same module
-    // by name. Calling `addOptions("build_options", step)` twice with the
-    // same step would create two distinct anonymous build_options modules
-    // pointing at the same file, which Zig rejects with
-    // "file exists in modules 'build_options' and 'build_options0'".
-    const circuit_options_default = b.addOptions();
-    circuit_options_default.addOption(bool, "collect_metrics", false);
-    const circuit_options_default_mod = circuit_options_default.createModule();
-
-    const circuit_mod_for_wasm = b.createModule(.{
-        .root_source_file = b.path("lib/circuit.zig"),
-        .target = wasm_target,
-        .optimize = optimize,
-    });
-    circuit_mod_for_wasm.addImport("build_options", circuit_options_default_mod);
-
-    const memory_mod_for_wasm = b.createModule(.{
-        .root_source_file = b.path("lib/memory.zig"),
-        .target = wasm_target,
-        .optimize = optimize,
-    });
-    // memory.zig now imports build_options for the COLLECT_METRICS gate. The
-    // WASM runtime keeps it off (zero overhead), same as every non-bench path.
-    memory_mod_for_wasm.addImport("build_options", circuit_options_default_mod);
-    
-    const transport_mod_for_wasm = b.createModule(.{
-        .root_source_file = b.path("lib/transport.zig"),
-        .target = wasm_target,
-        .optimize = optimize,
-    });
-    
-    const log_mod_for_wasm = b.createModule(.{
-        .root_source_file = b.path("lib/log.zig"),
-        .target = wasm_target,
-        .optimize = optimize,
-    });
-    
-    log_mod_for_wasm.addImport("memory.zig", memory_mod_for_wasm);
-    
-    circuit_mod_for_wasm.addImport("memory.zig", memory_mod_for_wasm);
-    circuit_mod_for_wasm.addImport("log.zig", log_mod_for_wasm);
-    circuit_mod_for_wasm.addImport("transport.zig", transport_mod_for_wasm);
-    
-    transport_mod_for_wasm.addImport("circuit.zig", circuit_mod_for_wasm);
-    
-    const interpreter_mod_for_wasm = b.createModule(.{
-        .root_source_file = b.path("templates/interpreter.zig"),
-        .target = wasm_target,
-        .optimize = optimize,
-    });
-    
-    const format_mod_for_wasm = b.createModule(.{
-        .root_source_file = b.path("lib/topology/format.zig"),
-        .target = wasm_target,
-        .optimize = optimize,
-    });
-    
-    interpreter_mod_for_wasm.addImport("format", format_mod_for_wasm);
-    interpreter_mod_for_wasm.addImport("circuit.zig", circuit_mod_for_wasm);
-    
-    runtime_module.addImport("circuit.zig", circuit_mod_for_wasm);
-    runtime_module.addImport("memory.zig", memory_mod_for_wasm);
-    runtime_module.addImport("interpreter.zig", interpreter_mod_for_wasm);
-    
-    const runtime_artifact = b.addExecutable(.{
-        .name = "circ-runtime",
-        .root_module = runtime_module,
-    });
-    runtime_artifact.entry = .disabled;
-    runtime_artifact.rdynamic = true;
-    
-    // We install the WASM so we can use it as a dependency for the CLI embed
-    const install_runtime = b.addInstallArtifact(runtime_artifact, .{
-        .dest_dir = .{ .override = .{ .custom = "lib" } },
-    });
-    
-    const embed_write_files = b.addWriteFiles();
-    _ = embed_write_files.addCopyFile(runtime_artifact.getEmittedBin(), "circ-runtime.wasm");
-    const embed_zig_file = embed_write_files.add("runtime_embed.zig", 
-        \\pub const runtime_wasm = @embedFile("circ-runtime.wasm");
-    );
-    
-    const runtime_embed_mod = b.createModule(.{
-        .root_source_file = embed_zig_file,
-        .target = target,
-        .optimize = optimize,
-    });
 
     // Native build of the simulation engine. Used by the topology interpreter
     // tests and by the truth-table mode (which drives the engine on the host
     // to enumerate input vectors).
-    const circuit_mod = b.createModule(.{
-        .root_source_file = b.path("lib/circuit.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    circuit_mod.addOptions("build_options", circuit_options_default);
+    const circuit_mod = fe.circuit;
 
     const topology_protocol_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/e2e/topology_protocol_test.zig"),
@@ -749,40 +636,8 @@ pub fn build(b: *std.Build) void {
     const run_topology_protocol_tests = b.addRunArtifact(topology_protocol_tests);
     run_topology_protocol_tests.step.dependOn(&install_runtime.step);
 
-    const analyze_mod = b.createModule(.{
-        .root_source_file = b.path("lib/analyze/analyze.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    analyze_mod.addImport("scan_imports", resolver_scan_imports_mod);
-    analyze_mod.addImport("import_cycle", resolver_import_cycle_mod);
-    analyze_mod.addImport("resolve_bodies", resolver_resolve_bodies_mod);
-    analyze_mod.addImport("validator_run_project", validator_run_project_mod);
-    analyze_mod.addImport("diagnostics", validator_diagnostics_mod);
-    analyze_mod.addImport("ir_types", ir_types_mod);
-    analyze_mod.addImport("translate", translate_mod);
-    analyze_mod.addImport("file_loader", resolver_file_loader_mod);
+    const analyze_mod = fe.analyze;
 
-    // Version (from the VERSION file) and HEAD revision (git, at configure
-    // time) exposed to the CLI's --version flag. A missing file or git
-    // failure degrades to "unknown" rather than breaking the build.
-    const build_info = b.addOptions();
-    {
-        const version_raw = b.build_root.handle.readFileAlloc(b.allocator, "VERSION", 256) catch "unknown";
-        const version = std.mem.trim(u8, version_raw, " \t\r\n");
-        const revision = blk: {
-            const result = std.process.Child.run(.{
-                .allocator = b.allocator,
-                .argv = &.{ "git", "rev-parse", "--short", "HEAD" },
-                .cwd = b.build_root.path,
-            }) catch break :blk "unknown";
-            if (result.term != .Exited or result.term.Exited != 0) break :blk "unknown";
-            const trimmed = std.mem.trim(u8, result.stdout, " \t\r\n");
-            break :blk if (trimmed.len == 0) "unknown" else trimmed;
-        };
-        build_info.addOption([]const u8, "version", version);
-        build_info.addOption([]const u8, "revision", revision);
-    }
 
     const circ_compile_mod = b.createModule(.{
         .root_source_file = b.path("cmd/circ-compile/main.zig"),
@@ -803,7 +658,8 @@ pub fn build(b: *std.Build) void {
     circ_compile_mod.addImport("ir_types", ir_types_mod);
     circ_compile_mod.addImport("runtime_embed", runtime_embed_mod);
     circ_compile_mod.addImport("analyze", analyze_mod);
-    circ_compile_mod.addOptions("build_info", build_info);
+    circ_compile_mod.addImport("build_info", fe.build_info);
+    circ_compile_mod.addImport("libcirc", fe.libcirc);
     const circ_compile_exe = b.addExecutable(.{
         .name = "circ-compile",
         .root_module = circ_compile_mod,
@@ -818,6 +674,13 @@ pub fn build(b: *std.Build) void {
     });
     const run_circ_compile_tests = b.addRunArtifact(circ_compile_tests);
     run_circ_compile_tests.step.dependOn(&install_runtime.step);
+
+    const libcirc_tests = b.addTest(.{
+        .name = "libcirc_tests",
+        .root_module = fe.libcirc,
+    });
+    const run_libcirc_tests = b.addRunArtifact(libcirc_tests);
+    run_libcirc_tests.step.dependOn(&install_runtime.step);
 
     const analyze_tests = b.addTest(.{
         .root_module = analyze_mod,
@@ -898,6 +761,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_preview_render_color_tests.step);
     test_step.dependOn(&run_preview_render_canvas_tests.step);
     test_step.dependOn(&run_circ_compile_tests.step);
+    test_step.dependOn(&run_libcirc_tests.step);
     test_step.dependOn(&circ_compile_exe.step);
     test_step.dependOn(&run_cli_integration_tests.step);
     test_step.dependOn(&run_resolver_scan_imports_tests.step);
@@ -952,35 +816,21 @@ pub fn build(b: *std.Build) void {
     const run_project_behavior_tests = b.addRunArtifact(project_behavior_tests);
     // Detached from `test`; wired into `test-emit` near the end of build().
 
-    const topology_format_tests_mod = b.createModule(.{
-        .root_source_file = b.path("lib/topology/format.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
+    const topology_format_tests_mod = fe.format;
     const topology_format_tests = b.addTest(.{
         .root_module = topology_format_tests_mod,
     });
     const run_topology_format_tests = b.addRunArtifact(topology_format_tests);
     test_step.dependOn(&run_topology_format_tests.step);
 
-    const topology_serializer_tests_mod = b.createModule(.{
-        .root_source_file = b.path("lib/topology/serializer.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    topology_serializer_tests_mod.addImport("format", topology_format_tests_mod);
-    topology_serializer_tests_mod.addImport("ir_types", ir_types_mod);
+    const topology_serializer_tests_mod = fe.serializer;
     const topology_serializer_tests = b.addTest(.{
         .root_module = topology_serializer_tests_mod,
     });
     const run_topology_serializer_tests = b.addRunArtifact(topology_serializer_tests);
     test_step.dependOn(&run_topology_serializer_tests.step);
 
-    const section_writer_mod = b.createModule(.{
-        .root_source_file = b.path("lib/topology/section_writer.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
+    const section_writer_mod = fe.section_writer;
 
     // Wire serializer and section_writer into the circ-compile binary
     circ_compile_mod.addImport("serializer", topology_serializer_tests_mod);
@@ -999,25 +849,14 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_section_writer_tests.step);
 
     // Phase 0 slice 3: circ.topology.v0.full schema + encoder + decoder
-    const topology_full_format_mod = b.createModule(.{
-        .root_source_file = b.path("lib/topology/full_format.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    topology_full_format_mod.addImport("format", topology_format_tests_mod);
+    const topology_full_format_mod = fe.full_format;
     const topology_full_format_tests = b.addTest(.{
         .root_module = topology_full_format_mod,
     });
     const run_topology_full_format_tests = b.addRunArtifact(topology_full_format_tests);
     test_step.dependOn(&run_topology_full_format_tests.step);
 
-    const topology_full_serializer_mod = b.createModule(.{
-        .root_source_file = b.path("lib/topology/full_serializer.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    topology_full_serializer_mod.addImport("full_format", topology_full_format_mod);
-    topology_full_serializer_mod.addImport("ir_types", ir_types_mod);
+    const topology_full_serializer_mod = fe.full_serializer;
     circ_compile_mod.addImport("full_serializer", topology_full_serializer_mod);
     const topology_full_serializer_tests = b.addTest(.{
         .root_module = topology_full_serializer_mod,
@@ -1052,12 +891,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_topology_full_roundtrip_tests.step);
 
     // Phase 2 slice 1: layout public types + sizing constants
-    const preview_layout_mod = b.createModule(.{
-        .root_source_file = b.path("lib/preview/layout.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    preview_layout_mod.addImport("full_format", topology_full_format_mod);
+    const preview_layout_mod = fe.preview_layout;
     const preview_layout_tests = b.addTest(.{
         .root_module = preview_layout_mod,
     });
@@ -1072,7 +906,6 @@ pub fn build(b: *std.Build) void {
     });
     preview_dump_mod.addImport("full_format", topology_full_format_mod);
     preview_dump_mod.addImport("layout", preview_layout_mod);
-    circ_compile_mod.addImport("preview_dump", preview_dump_mod);
     const preview_dump_tests = b.addTest(.{
         .root_module = preview_dump_mod,
     });
@@ -1082,13 +915,7 @@ pub fn build(b: *std.Build) void {
     // Shared engine session: builds a live engine.Circuit from a full topology
     // and resolves root pins by name. Consumed by the truth-table builder and
     // the --sim drive loop.
-    const engine_session_mod = b.createModule(.{
-        .root_source_file = b.path("lib/engine_session.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    engine_session_mod.addImport("circuit", circuit_mod);
-    engine_session_mod.addImport("full_format", topology_full_format_mod);
+    const engine_session_mod = fe.engine_session;
     const engine_session_tests = b.addTest(.{
         .root_module = engine_session_mod,
     });
@@ -1128,14 +955,7 @@ pub fn build(b: *std.Build) void {
 
     // Truth-table mode: enumerates input vectors against a native engine.Circuit
     // built from the full topology, then renders to Markdown.
-    const truth_table_builder_mod = b.createModule(.{
-        .root_source_file = b.path("lib/truth_table/builder.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    truth_table_builder_mod.addImport("circuit", circuit_mod);
-    truth_table_builder_mod.addImport("full_format", topology_full_format_mod);
-    truth_table_builder_mod.addImport("engine_session", engine_session_mod);
+    const truth_table_builder_mod = fe.truth_table_builder;
     circ_compile_mod.addImport("truth_table_builder", truth_table_builder_mod);
     const truth_table_builder_tests = b.addTest(.{
         .root_module = truth_table_builder_mod,
@@ -1143,13 +963,7 @@ pub fn build(b: *std.Build) void {
     const run_truth_table_builder_tests = b.addRunArtifact(truth_table_builder_tests);
     test_step.dependOn(&run_truth_table_builder_tests.step);
 
-    const truth_table_markdown_mod = b.createModule(.{
-        .root_source_file = b.path("lib/truth_table/markdown.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    truth_table_markdown_mod.addImport("builder", truth_table_builder_mod);
-    truth_table_markdown_mod.addImport("circuit", circuit_mod);
+    const truth_table_markdown_mod = fe.truth_table_markdown;
     circ_compile_mod.addImport("truth_table_markdown", truth_table_markdown_mod);
     const truth_table_markdown_tests = b.addTest(.{
         .root_module = truth_table_markdown_mod,
@@ -1157,13 +971,7 @@ pub fn build(b: *std.Build) void {
     const run_truth_table_markdown_tests = b.addRunArtifact(truth_table_markdown_tests);
     test_step.dependOn(&run_truth_table_markdown_tests.step);
 
-    const truth_table_csv_mod = b.createModule(.{
-        .root_source_file = b.path("lib/truth_table/csv.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    truth_table_csv_mod.addImport("builder", truth_table_builder_mod);
-    truth_table_csv_mod.addImport("circuit", circuit_mod);
+    const truth_table_csv_mod = fe.truth_table_csv;
     circ_compile_mod.addImport("truth_table_csv", truth_table_csv_mod);
     const truth_table_csv_tests = b.addTest(.{
         .root_module = truth_table_csv_mod,
@@ -1171,13 +979,7 @@ pub fn build(b: *std.Build) void {
     const run_truth_table_csv_tests = b.addRunArtifact(truth_table_csv_tests);
     test_step.dependOn(&run_truth_table_csv_tests.step);
 
-    const truth_table_json_mod = b.createModule(.{
-        .root_source_file = b.path("lib/truth_table/json.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    truth_table_json_mod.addImport("builder", truth_table_builder_mod);
-    truth_table_json_mod.addImport("circuit", circuit_mod);
+    const truth_table_json_mod = fe.truth_table_json;
     circ_compile_mod.addImport("truth_table_json", truth_table_json_mod);
     const truth_table_json_tests = b.addTest(.{
         .root_module = truth_table_json_mod,
@@ -1185,25 +987,14 @@ pub fn build(b: *std.Build) void {
     const run_truth_table_json_tests = b.addRunArtifact(truth_table_json_tests);
     test_step.dependOn(&run_truth_table_json_tests.step);
 
-    const preview_layout_types_mod = b.createModule(.{
-        .root_source_file = b.path("lib/preview/layout/types.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    preview_layout_types_mod.addImport("full_format", topology_full_format_mod);
-    preview_layout_types_mod.addImport("layout", preview_layout_mod);
+    const preview_layout_types_mod = fe.preview_layout_types;
     const preview_layout_types_tests = b.addTest(.{
         .root_module = preview_layout_types_mod,
     });
     const run_preview_layout_types_tests = b.addRunArtifact(preview_layout_types_tests);
     test_step.dependOn(&run_preview_layout_types_tests.step);
 
-    const preview_layout_sizing_mod = b.createModule(.{
-        .root_source_file = b.path("lib/preview/layout/sizing.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    preview_layout_sizing_mod.addImport("full_format", topology_full_format_mod);
+    const preview_layout_sizing_mod = fe.preview_layout_sizing;
     const preview_layout_sizing_tests = b.addTest(.{
         .root_module = preview_layout_sizing_mod,
     });
@@ -1211,14 +1002,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_preview_layout_sizing_tests.step);
 
     // Phase 2 slice 2: Stage 1 — collapse
-    const preview_layout_collapse_mod = b.createModule(.{
-        .root_source_file = b.path("lib/preview/layout/collapse.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    preview_layout_collapse_mod.addImport("full_format", topology_full_format_mod);
-    preview_layout_collapse_mod.addImport("layout", preview_layout_mod);
-    preview_layout_collapse_mod.addImport("layout_types", preview_layout_types_mod);
+    const preview_layout_collapse_mod = fe.preview_layout_collapse;
     const preview_layout_collapse_tests = b.addTest(.{
         .root_module = preview_layout_collapse_mod,
     });
@@ -1226,13 +1010,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_preview_layout_collapse_tests.step);
 
     // Phase 2 slice 3: Stage 2 — columns
-    const preview_layout_columns_mod = b.createModule(.{
-        .root_source_file = b.path("lib/preview/layout/columns.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    preview_layout_columns_mod.addImport("full_format", topology_full_format_mod);
-    preview_layout_columns_mod.addImport("layout_types", preview_layout_types_mod);
+    const preview_layout_columns_mod = fe.preview_layout_columns;
     const preview_layout_columns_tests = b.addTest(.{
         .root_module = preview_layout_columns_mod,
     });
@@ -1240,13 +1018,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_preview_layout_columns_tests.step);
 
     // Phase 2 slice 4: Stage 3 — rows
-    const preview_layout_rows_mod = b.createModule(.{
-        .root_source_file = b.path("lib/preview/layout/rows.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    preview_layout_rows_mod.addImport("full_format", topology_full_format_mod);
-    preview_layout_rows_mod.addImport("layout_types", preview_layout_types_mod);
+    const preview_layout_rows_mod = fe.preview_layout_rows;
     const preview_layout_rows_tests = b.addTest(.{
         .root_module = preview_layout_rows_mod,
     });
@@ -1254,15 +1026,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_preview_layout_rows_tests.step);
 
     // Phase 2 slice 5: Stage 4 — place
-    const preview_layout_place_mod = b.createModule(.{
-        .root_source_file = b.path("lib/preview/layout/place.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    preview_layout_place_mod.addImport("full_format", topology_full_format_mod);
-    preview_layout_place_mod.addImport("layout", preview_layout_mod);
-    preview_layout_place_mod.addImport("layout_types", preview_layout_types_mod);
-    preview_layout_place_mod.addImport("sizing", preview_layout_sizing_mod);
+    const preview_layout_place_mod = fe.preview_layout_place;
     const preview_layout_place_tests = b.addTest(.{
         .root_module = preview_layout_place_mod,
     });
@@ -1270,14 +1034,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_preview_layout_place_tests.step);
 
     // Phase 2 slice 6a: Stage 5 — route
-    const preview_layout_route_mod = b.createModule(.{
-        .root_source_file = b.path("lib/preview/layout/route.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    preview_layout_route_mod.addImport("full_format", topology_full_format_mod);
-    preview_layout_route_mod.addImport("layout", preview_layout_mod);
-    preview_layout_route_mod.addImport("layout_types", preview_layout_types_mod);
+    const preview_layout_route_mod = fe.preview_layout_route;
     const preview_layout_route_tests = b.addTest(.{
         .root_module = preview_layout_route_mod,
     });
@@ -1285,14 +1042,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_preview_layout_route_tests.step);
 
     // Phase 3 slice 3: glyphs — depends on layout types.
-    const preview_render_glyphs_mod = b.createModule(.{
-        .root_source_file = b.path("lib/preview/render/glyphs.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    preview_render_glyphs_mod.addImport("layout", preview_layout_mod);
-    preview_render_glyphs_mod.addImport("canvas", preview_render_canvas_mod);
-    preview_render_glyphs_mod.addImport("color", preview_render_color_mod);
+    const preview_render_glyphs_mod = fe.preview_render_glyphs;
     const preview_render_glyphs_tests = b.addTest(.{
         .root_module = preview_render_glyphs_mod,
     });
@@ -1300,16 +1050,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_preview_render_glyphs_tests.step);
 
     // Phase 3 slice 4: render orchestrator — composes Canvas + glyphs + wire rendering.
-    const preview_render_mod = b.createModule(.{
-        .root_source_file = b.path("lib/preview/render.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    preview_render_mod.addImport("layout", preview_layout_mod);
-    preview_render_mod.addImport("layout_types", preview_layout_types_mod);
-    preview_render_mod.addImport("canvas", preview_render_canvas_mod);
-    preview_render_mod.addImport("color", preview_render_color_mod);
-    preview_render_mod.addImport("glyphs", preview_render_glyphs_mod);
+    const preview_render_mod = fe.preview_render;
     const preview_render_tests = b.addTest(.{
         .root_module = preview_render_mod,
     });
@@ -1317,18 +1058,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_preview_render_tests.step);
 
     // Phase 2 slice 6b: orchestrator composing all five stages
-    const preview_layout_orchestrator_mod = b.createModule(.{
-        .root_source_file = b.path("lib/preview/layout/orchestrator.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    preview_layout_orchestrator_mod.addImport("full_format", topology_full_format_mod);
-    preview_layout_orchestrator_mod.addImport("layout", preview_layout_mod);
-    preview_layout_orchestrator_mod.addImport("collapse", preview_layout_collapse_mod);
-    preview_layout_orchestrator_mod.addImport("columns", preview_layout_columns_mod);
-    preview_layout_orchestrator_mod.addImport("rows", preview_layout_rows_mod);
-    preview_layout_orchestrator_mod.addImport("place", preview_layout_place_mod);
-    preview_layout_orchestrator_mod.addImport("route", preview_layout_route_mod);
+    const preview_layout_orchestrator_mod = fe.preview_layout_orchestrator;
     circ_compile_mod.addImport("layout_orchestrator", preview_layout_orchestrator_mod);
     circ_compile_mod.addImport("preview_render", preview_render_mod);
 
