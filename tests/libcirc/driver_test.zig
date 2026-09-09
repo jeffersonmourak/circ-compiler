@@ -424,3 +424,62 @@ test "driver: a recovered syntax error is status 1 with a syntax diagnostic" {
     try std.testing.expectEqual(libcirc.Status.ok, an.status);
     try std.testing.expect(std.mem.indexOf(u8, an.body, "\"code\":\"syntax\"") != null);
 }
+
+test "driver: rom truth tables with and without a preload equal the CLI goldens" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    const image = try std.fs.cwd().readFileAlloc(a, "tests/fixtures/mem/rom_lookup.bin", 1 << 20);
+    const loaded = try libcirc.truthTable(a, .{
+        .root = "tests/fixtures/circuits/rom_lookup.circ",
+        .options = .{ .preloads = &.{.{ .name = "code", .bytes = image }} },
+    });
+    try expectOk(loaded);
+    try golden.expectGolden(loaded.body, "tests/fixtures/truth_table/rom_lookup.truth.golden");
+
+    const unloaded = try libcirc.truthTable(a, .{ .root = "tests/fixtures/circuits/rom_basic.circ" });
+    try expectOk(unloaded);
+    try golden.expectGolden(unloaded.body, "tests/fixtures/truth_table/rom_basic.truth.golden");
+}
+
+test "driver: ram and bad-preload truth tables are refused with the CLI's words" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    const ram = try libcirc.truthTable(a, .{ .root = "tests/fixtures/circuits/ram_basic.circ" });
+    try std.testing.expectEqual(libcirc.Status.refused, ram.status);
+    try std.testing.expectEqualStrings(
+        "{\"error\":\"truth-table: ram 'data' is stateful (its clk/we would be enumerated as inputs and rows would depend on visiting order); use --sim to drive it\"}",
+        ram.body,
+    );
+    const ref = try cli(a, &.{ "circ-compile", "tests/fixtures/circuits/ram_basic.circ", "--truth-table" });
+    try std.testing.expectEqual(@as(u8, 1), ref.code);
+    try std.testing.expectEqualStrings(
+        "truth-table: ram 'data' is stateful (its clk/we would be enumerated as inputs and rows would depend on visiting order); use --sim to drive it\n",
+        ref.stderr,
+    );
+
+    const image = try std.fs.cwd().readFileAlloc(a, "tests/fixtures/mem/rom_lookup.bin", 1 << 20);
+    const nope = try libcirc.truthTable(a, .{
+        .root = "tests/fixtures/circuits/rom_lookup.circ",
+        .options = .{ .preloads = &.{.{ .name = "nope", .bytes = image }} },
+    });
+    try std.testing.expectEqual(libcirc.Status.refused, nope.status);
+    try std.testing.expectEqualStrings(
+        "{\"error\":\"truth-table: preload 'nope': no memory named 'nope' (declared memories: rom code[8, 4])\"}",
+        nope.body,
+    );
+
+    const oversized = [_]u8{0} ** 17;
+    const big = try libcirc.truthTable(a, .{
+        .root = "tests/fixtures/circuits/rom_lookup.circ",
+        .options = .{ .preloads = &.{.{ .name = "code", .bytes = &oversized }} },
+    });
+    try std.testing.expectEqual(libcirc.Status.refused, big.status);
+    try std.testing.expectEqualStrings(
+        "{\"error\":\"truth-table: preload 'code': 17 words exceed capacity 16\"}",
+        big.body,
+    );
+}

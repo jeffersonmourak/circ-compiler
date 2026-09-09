@@ -48,6 +48,9 @@ pub const Options = struct {
     value_format: ValueFormat = .binary,
     /// Truth table: hard cap on `sum(input widths)`, 1..24.
     truth_table_cap: u8 = 16,
+    /// Truth table: images loaded into root memories by declared name
+    /// before any vector is driven, so a rom tabulates as a lookup table.
+    preloads: []const engine_session.Preload = &.{},
     /// Compile/preview/truth table: warnings count as errors (status 1).
     warnings_as_errors: bool = false,
 };
@@ -198,7 +201,7 @@ pub fn truthTable(allocator: std.mem.Allocator, req: Request) std.mem.Allocator.
         error.OutOfMemory => return error.OutOfMemory,
         error.Failed => return internal(allocator, &buf, failure),
     };
-    if (modes.truthTablePreflight(topology, req.options.truth_table_cap)) |refusal| {
+    if (try modes.truthTablePreflight(allocator, topology, req.options.truth_table_cap, req.options.preloads)) |refusal| {
         var text: std.ArrayList(u8) = .{};
         try refusal.write(text.writer(allocator), .{ .flag = "options.truth_table_cap", .cap_max = truth_table_cap_max });
         try json.writeError(buf.writer(allocator), text.items);
@@ -206,6 +209,7 @@ pub fn truthTable(allocator: std.mem.Allocator, req: Request) std.mem.Allocator.
     }
     var table = modes.buildTruthTable(allocator, topology, .{
         .max_input_bits = req.options.truth_table_cap,
+        .preloads = req.options.preloads,
     }, &failure) catch |err| switch (err) {
         error.OutOfMemory => return error.OutOfMemory,
         error.Failed => return internal(allocator, &buf, failure),

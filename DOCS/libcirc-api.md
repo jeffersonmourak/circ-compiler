@@ -51,6 +51,7 @@ One JSON object. Only `root` is required.
 | `format` | `"markdown"` \| `"csv"` \| `"json"` | `"markdown"` | truth table |
 | `value_format` | `"binary"` \| `"hex"` \| `"decimal"` | `"binary"` | truth table |
 | `truth_table_cap` | integer 1..24 | `16` | truth table: hard cap on the sum of input widths |
+| `preloads` | object: memory name → hex string | `{}` | truth table: raw images loaded into root `rom`s by declared name before any vector is driven (`ceil(W/8)` bytes per word, little-endian; the same bytes `--mem` reads from a file) |
 | `warnings_as_errors` | bool | `false` | compile, preview, truth table: `W*` becomes status 1 |
 
 The `--analyze` stdin contract of the CLI (`{"root_path","overlays"}`,
@@ -64,7 +65,7 @@ keeps parsing it itself and calls the same Zig API.
 | 0 | ok | analysis JSON (trailing `\n`) | the `.wasm` bytes | the schematic text | the table |
 | 1 | diagnostics | — | `{"files":[…],"diagnostics":[…],"symbols":[],"references":[]}` | same | same |
 | 2 | bad request | `{"error":"…"}` | same | same | same |
-| 3 | refused | — | — | `{"error":"layout build failed: …"}` | `{"error":"truth table requires N input bits, exceeds cap of C (raise with options.truth_table_cap, max 24)"}` |
+| 3 | refused | — | — | `{"error":"layout build failed: …"}` | `{"error":"…"}`: a bad preload (`truth-table: preload '<name>': <reason>`), a stateful `ram` (`truth-table: ram '<name>' is stateful (…); use --sim to drive it`), or the cap (`truth table requires N input bits, exceeds cap of C (raise with options.truth_table_cap, max 24)`) — checked in that order |
 | 4 | out of memory | empty | empty | empty | empty |
 | 5 | internal | `{"error":"analyze: <ErrName>"}` | `{"error":"<stage>: <ErrName>"}` | same | same |
 

@@ -12,6 +12,7 @@ const layout = @import("layout");
 const layout_orchestrator = @import("layout_orchestrator");
 const preview_render = @import("preview_render");
 const truth_table_builder = @import("truth_table_builder");
+const engine_session = @import("engine_session");
 const truth_table_markdown = @import("truth_table_markdown");
 const truth_table_csv = @import("truth_table_csv");
 const truth_table_json = @import("truth_table_json");
@@ -88,12 +89,21 @@ pub fn renderPreview(allocator: std.mem.Allocator, writer: anytype, grid: layout
 /// the CLI's exact message (no trailing newline); `flag`/`cap_max` name the
 /// knob to raise the cap with in the caller's vocabulary.
 pub const Refusal = union(enum) {
+    /// A preload names no root memory, or its image is rejected by the codec.
+    bad_preload: struct { name: []const u8, reason: []const u8 },
+    /// A `ram` anywhere in the circuit: its clk/we would be enumerated.
+    stateful_ram: []const u8,
     too_many_bits: struct { bits: u32, cap: u8 },
 
     pub const CliText = struct { flag: []const u8, cap_max: u8 };
 
     pub fn write(self: Refusal, writer: anytype, text: CliText) !void {
         switch (self) {
+            .bad_preload => |p| try writer.print("truth-table: preload '{s}': {s}", .{ p.name, p.reason }),
+            .stateful_ram => |name| try writer.print(
+                "truth-table: ram '{s}' is stateful (its clk/we would be enumerated as inputs and rows would depend on visiting order); use --sim to drive it",
+                .{name},
+            ),
             .too_many_bits => |t| try writer.print(
                 "truth table requires {d} input bits, exceeds cap of {d} (raise with {s}, max {d})",
                 .{ t.bits, t.cap, text.flag, text.cap_max },
@@ -102,11 +112,48 @@ pub const Refusal = union(enum) {
     }
 };
 
-/// Pre-flight the cap so the caller can give a specific bit-count message
-/// instead of the builder's generic `TooManyInputs`.
-pub fn truthTablePreflight(topology: full_format.FullTopology, cap: u8) ?Refusal {
+/// Pre-flight in the CLI's order — preloads, then ram, then the cap — so
+/// the caller can give a specific message instead of the builder's generic
+/// `BadPreload` / `StatefulComponent` / `TooManyInputs`.
+pub fn truthTablePreflight(
+    allocator: std.mem.Allocator,
+    topology: full_format.FullTopology,
+    cap: u8,
+    preloads: []const engine_session.Preload,
+) std.mem.Allocator.Error!?Refusal {
+    if (preloads.len > 0) {
+        const memories = engine_session.collectMemories(allocator, topology) catch |err| switch (err) {
+            error.OutOfMemory => return error.OutOfMemory,
+            error.InvalidTopology => return .{ .bad_preload = .{ .name = preloads[0].name, .reason = "invalid topology" } },
+        };
+        for (preloads) |preload| {
+            const mem = findMemory(memories, preload.name) orelse {
+                var reason: std.ArrayList(u8) = .{};
+                const w = reason.writer(allocator);
+                try w.print("no memory named '{s}' (declared memories: ", .{preload.name});
+                if (memories.len == 0) try w.writeAll("none");
+                for (memories, 0..) |m, k| {
+                    if (k > 0) try w.writeAll(", ");
+                    try w.print("{s} {s}[{d}, {d}]", .{ @tagName(m.kind), m.name, m.data_width, m.addr_width });
+                }
+                try w.writeAll(")");
+                return .{ .bad_preload = .{ .name = preload.name, .reason = reason.items } };
+            };
+            _ = engine_session.validateImage(mem, preload.bytes) catch |err| {
+                var reason: std.ArrayList(u8) = .{};
+                try engine_session.writeImageError(reason.writer(allocator), err, mem, preload.bytes.len);
+                return .{ .bad_preload = .{ .name = preload.name, .reason = reason.items } };
+            };
+        }
+    }
+    if (truth_table_builder.firstRamName(topology)) |name| return .{ .stateful_ram = name };
     const bits = truth_table_builder.countInputBits(topology);
     if (bits > cap) return .{ .too_many_bits = .{ .bits = bits, .cap = cap } };
+    return null;
+}
+
+fn findMemory(memories: []const engine_session.MemRef, name: []const u8) ?engine_session.MemRef {
+    for (memories) |m| if (std.mem.eql(u8, m.name, name)) return m;
     return null;
 }
 

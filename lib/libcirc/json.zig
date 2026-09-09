@@ -7,6 +7,15 @@ const analyzer = @import("analyze");
 
 const Request = @import("../libcirc.zig").Request;
 const Options = @import("../libcirc.zig").Options;
+const engine_session = @import("engine_session");
+
+/// Decode an even-length hex string; any other input is `PreloadNotHex`.
+pub fn hexToBytes(allocator: std.mem.Allocator, hex: []const u8) ParseError![]u8 {
+    if (hex.len % 2 != 0) return error.PreloadNotHex;
+    const out = try allocator.alloc(u8, hex.len / 2);
+    _ = std.fmt.hexToBytes(out, hex) catch return error.PreloadNotHex;
+    return out;
+}
 const File = frontend.File;
 
 pub const ParseError = error{
@@ -20,6 +29,7 @@ pub const ParseError = error{
     OptionsNotObject,
     BadOption,
     CapOutOfRange,
+    PreloadNotHex,
     OutOfMemory,
 };
 
@@ -35,6 +45,7 @@ pub fn describe(err: ParseError) []const u8 {
         error.OptionsNotObject => "'options' must be an object",
         error.BadOption => "unknown or mistyped option",
         error.CapOutOfRange => "options.truth_table_cap must be 1..24",
+        error.PreloadNotHex => "options.preloads values must be hex strings (an even number of hex digits)",
         error.OutOfMemory => "out of memory",
     };
 }
@@ -111,6 +122,21 @@ pub fn parseRequest(allocator: std.mem.Allocator, bytes: []const u8) ParseError!
                 options.format = try enumOption(@TypeOf(options.format), value);
             } else if (std.mem.eql(u8, key, "value_format")) {
                 options.value_format = try enumOption(@TypeOf(options.value_format), value);
+            } else if (std.mem.eql(u8, key, "preloads")) {
+                const obj_p = switch (value) {
+                    .object => |o| o,
+                    else => return error.BadOption,
+                };
+                var list: std.ArrayList(engine_session.Preload) = .{};
+                var pit = obj_p.iterator();
+                while (pit.next()) |p| {
+                    const hex = switch (p.value_ptr.*) {
+                        .string => |h| h,
+                        else => return error.PreloadNotHex,
+                    };
+                    try list.append(allocator, .{ .name = p.key_ptr.*, .bytes = try hexToBytes(allocator, hex) });
+                }
+                options.preloads = try list.toOwnedSlice(allocator);
             } else if (std.mem.eql(u8, key, "truth_table_cap")) {
                 const cap = switch (value) {
                     .integer => |i| i,
@@ -200,8 +226,13 @@ test "json: parses the full request" {
         \\{"root": "/playground/main.circ",
         \\ "files": {"/playground/main.circ": "import ha \"half_adder.circ\"\n", "/playground/./half_adder.circ": "input a\n"},
         \\ "options": {"expand_macros": true, "expand_display": true, "color": "always",
-        \\             "format": "csv", "value_format": "hex", "truth_table_cap": 20, "warnings_as_errors": true}}
+        \\             "format": "csv", "value_format": "hex", "truth_table_cap": 20, "warnings_as_errors": true,
+        \\             "preloads": {"code": "00112233445566778899aabbccddeeff"}}}
     );
+    try std.testing.expectEqual(@as(usize, 1), req.options.preloads.len);
+    try std.testing.expectEqualStrings("code", req.options.preloads[0].name);
+    try std.testing.expectEqual(@as(usize, 16), req.options.preloads[0].bytes.len);
+    try std.testing.expectEqual(@as(u8, 0xff), req.options.preloads[0].bytes[15]);
     try std.testing.expectEqualStrings("/playground/main.circ", req.root);
     try std.testing.expectEqual(@as(usize, 2), req.files.len);
     try std.testing.expect(req.options.expand_macros);
@@ -235,6 +266,9 @@ test "json: each error has a message" {
         .{ .bytes = "{\"root\":\"/r\",\"options\":{\"expand_macros\":\"yes\"}}", .err = error.BadOption },
         .{ .bytes = "{\"root\":\"/r\",\"options\":{\"truth_table_cap\":25}}", .err = error.CapOutOfRange },
         .{ .bytes = "{\"root\":\"/r\",\"options\":{\"truth_table_cap\":0}}", .err = error.CapOutOfRange },
+        .{ .bytes = "{\"root\":\"/r\",\"options\":{\"preloads\":{\"a\":\"0g\"}}}", .err = error.PreloadNotHex },
+        .{ .bytes = "{\"root\":\"/r\",\"options\":{\"preloads\":{\"a\":\"abc\"}}}", .err = error.PreloadNotHex },
+        .{ .bytes = "{\"root\":\"/r\",\"options\":{\"preloads\":[]}}", .err = error.BadOption },
     };
     for (cases) |c| {
         try std.testing.expectError(c.err, parseRequest(a, c.bytes));

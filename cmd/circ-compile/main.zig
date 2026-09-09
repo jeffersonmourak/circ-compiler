@@ -427,20 +427,10 @@ pub fn run(
 
             const preloads = (try resolvePreloads(allocator, args, topology, stderr_writer)) orelse return 2;
 
-            // Pre-flight the stateful case so the message names the ram
-            // instead of surfacing a bare StatefulComponent from the builder.
-            if (truth_table_builder.firstRamName(topology)) |ram_name| {
-                try stderr_writer.print(
-                    "truth-table: ram '{s}' is stateful (its clk/we would be enumerated as inputs and rows would depend on visiting order); use --sim to drive it\n",
-                    .{ram_name},
-                );
-                return 1;
-            }
-
-            // Pre-flight the cap so users get a specific bit-count
-            // message ("X exceeds cap of Y") instead of a generic
-            // TooManyInputs error from the builder.
-            if (libcirc.modes.truthTablePreflight(topology, args.truth_table_cap)) |refusal| {
+            // Pre-flight (preloads were already resolved and validated above,
+            // then the stateful ram, then the cap) so users get a specific
+            // message instead of a bare builder error.
+            if (try libcirc.modes.truthTablePreflight(allocator, topology, args.truth_table_cap, preloads)) |refusal| {
                 try refusal.write(stderr_writer, .{ .flag = "--truth-table-cap", .cap_max = cli_args.truth_table_cap_max });
                 try stderr_writer.writeByte('\n');
                 return 1;

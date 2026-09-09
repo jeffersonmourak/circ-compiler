@@ -177,3 +177,20 @@ test "c_api: the documented request literal compiles" {
     try std.testing.expectEqual(@as(u32, 0), call(c_api.circ_preview, documented));
     try std.testing.expect(std.mem.indexOf(u8, result(), "NOT") != null);
 }
+
+test "c_api: truth table ram refusal is status 3 and a hex preload loads a rom" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    const ram_source = try std.fs.cwd().readFileAlloc(a, "tests/fixtures/circuits/ram_basic.circ", 1 << 20);
+    const ram_req = try requestFor(a, "/virtual/ram.circ", ram_source, "");
+    try std.testing.expectEqual(@as(u32, 3), call(c_api.circ_truth_table, ram_req));
+    try std.testing.expect(std.mem.indexOf(u8, result(), "ram 'data' is stateful") != null);
+
+    const rom_source = try std.fs.cwd().readFileAlloc(a, "tests/fixtures/circuits/rom_lookup.circ", 1 << 20);
+    const rom_req = try requestFor(a, "/virtual/rom.circ", rom_source, "{\"preloads\":{\"code\":\"00112233445566778899aabbccddeeff\"}}");
+    try std.testing.expectEqual(@as(u32, 0), call(c_api.circ_truth_table, rom_req));
+    const expected = try std.fs.cwd().readFileAlloc(a, "tests/fixtures/truth_table/rom_lookup.truth.golden", 1 << 20);
+    try std.testing.expectEqualStrings(expected, result());
+}
