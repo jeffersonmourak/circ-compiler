@@ -1,3 +1,12 @@
+// proto-circ.peg — the .circ grammar. `zig build parser:gen` feeds this file to the
+// maintainer's langlang fork (github.com/jeffersonmourak/langlang, branch
+// zig-parser-gen, tag go/v0.0.13-zig.2) as
+//   langlang -grammar lib/grammar/proto-circ.peg -disable-capture-spaces -output-language zig -output-path lib/parser/parser.zig
+// and vendors the result: the fork's go/zig/langlang_runtime.zig (the PEG VM, all 33
+// opcodes, wasm32-freestanding clean) followed by this grammar's bytecode as comptime
+// tables. The generated header's `Runtime: … abi=N sha256=…` line is the skew signal
+// between fork and vendored file. Edit here → parser:gen → review tests/fixtures/expected-ast.
+
 Program     <- (Annotation / ImportDecl / InputDecl / Declaration / Connection / RecoverLine)* EndOfInput
 EndOfInput  <- (!.)^trailing
 RecoverLine <- (![\n] .)+

@@ -201,3 +201,11 @@ Append-only log, one entry per shipped slice. Newest at the bottom. See `DOCS/PL
 **Tests:** `bun --bun run build` green (`dist/_astro` carries the renderer chunk, the theme module, the worker and the page script); `bun test` 16 pass; `zig build test` green (no Zig change). **Manual checklist (a)–(i) not run** — no browser in this session. What is proven: the code paths above compile and bundle; the by-name pin replay and hash gating are exercised only by reading.
 **Next slice:** Phase 4 complete except the browser checklist. Next is Phase 5 (`DOCS/PLANS/PHASE_5_decisions_and_docs.md`).
 **Notes:** (1) The renderer branch is **not pushed** and the site still pins `ae8658b`; once `host-pin-api` is pushed (needs approval), `cd site && bun add 'circ-renderer@github:jeffersonmourak/circ-renderer#<sha>'` switches the playground onto `setInputSignal` automatically (feature-detected) and `renderer-versions.ts` can import the exported list. (2) Renderer v03 (rom/ram geometry, `portByteOfName`, memory exports) stays deferred to the post-#79 rebase.
+
+## 2026-09-08 — Phase 5 — Slice 1: grammar header comment
+
+**What shipped:** The 8-line `//` header at the top of `lib/grammar/proto-circ.peg` naming the fork, the `parser:gen` command, `lib/parser/parser.zig` and the fork's `go/zig/langlang_runtime.zig`; `Program` now sits on line 10. Because `grammar_sha256` hashes the raw grammar bytes, `site/public/wasm/libcirc.wasm` and `libcirc.manifest.json` were refreshed together (`bun run libcirc`).
+**Files touched:** `lib/grammar/proto-circ.peg`, `site/public/wasm/libcirc.wasm`, `site/public/wasm/libcirc.manifest.json`, `DOCS/STATUS.md`.
+**Tests:** `zig build parser:gen && git diff --stat lib/parser/parser.zig` → empty (comments never reach the bytecode; `langlang -version` = `v0.0.13-zig.2`); `zig build test` green, no fixture moved; the manifest's `grammar_sha256` equals `shasum -a 256 lib/grammar/proto-circ.peg`; `bun test` in `site/` 16 pass against the refreshed module.
+**Next slice:** Slice 2 — decision records (`tooling.md` rewrite, new `libcirc.md`, cross-links).
+**Notes:** The refresh is ~383 KB of binary churn for a comment; the alternative (folding it into the next tagged release) would have left the manifest check failing until then, so the refresh landed now.
