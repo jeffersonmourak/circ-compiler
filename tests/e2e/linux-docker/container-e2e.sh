@@ -38,4 +38,7 @@ node -e 'const fs=require("fs"); const b=fs.readFileSync("/out/inverter.wasm"); 
 echo "--- node drive ---"
 node /test/drive-inverter.mjs /out/inverter.wasm
 
+echo "--- libcirc ---"
+node /test/drive-libcirc.mjs /test/libcirc.wasm /test/inverter.circ
+
 echo "==> container e2e passed"

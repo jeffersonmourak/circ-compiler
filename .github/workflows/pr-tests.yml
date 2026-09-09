@@ -56,9 +56,10 @@ jobs:
         # SKIP_WASM_E2E=1 skips topology_protocol_test, which fails
         # reproducibly on Linux Node WASM runtimes (init() never flips
         # runtime_initialized to true) but passes on macOS. The skip is
-        # narrow — only that one test honors the env var; every golden
-        # test still runs unconditionally. Unskip once the wasm32 init
-        # divergence is investigated.
+        # narrow — only the Node-driven wasm tests honor the env var; every
+        # golden test still runs unconditionally. Unskip once the wasm32 init
+        # divergence is investigated (bisect harness: tests/e2e/linux-docker,
+        # WASM_OPTIMIZE / NODE_IMAGE; results in DOCS/STATUS.md).
         env:
           SKIP_WASM_E2E: "1"
         # `test-all` = the fast `test` step plus `test-emit` (the experimental

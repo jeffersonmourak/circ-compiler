@@ -11,6 +11,9 @@ test "topology host protocol: inverter round-trip via Node" {
     // .undefined sentinel. Repros only on Linux Node runtimes; works on
     // macOS Node 22 and 24. Skipped under SKIP_WASM_E2E=1 (set by
     // .github/workflows/pr-tests.yml) until the root cause is found.
+    // Still open: the WASM_OPTIMIZE x NODE_IMAGE matrix of
+    // tests/e2e/linux-docker/run.sh is the bisect harness (DOCS/STATUS.md,
+    // Phase 3 slice 5, 2026-09-08 — not run yet, Docker Hub unreachable).
     if (std.process.getEnvVarOwned(allocator, "SKIP_WASM_E2E") catch null) |val| {
         defer allocator.free(val);
         if (std.mem.eql(u8, val, "1")) {
