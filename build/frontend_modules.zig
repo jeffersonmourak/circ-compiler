@@ -14,6 +14,8 @@ const Module = std.Build.Module;
 pub const Options = struct {
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
+    /// `-fstrip` for every module in the graph (the wasm build strips).
+    strip: ?bool = null,
     /// The engine's `build_options` module, materialised once from its
     /// `addOptions` step by the caller (the wasm runtime twin shares it).
     build_options_mod: *Module,
@@ -74,6 +76,8 @@ pub const Modules = struct {
     preview_render: *Module,
     build_info: *Module,
     libcirc: *Module,
+    /// Root of libcirc.a and of libcirc.wasm: the ten `circ_*` exports.
+    c_api: *Module,
 };
 
 /// One module per target for the vendored, langlang-generated parser.
@@ -93,17 +97,20 @@ pub fn create(b: *std.Build, opts: Options) Modules {
         b: *std.Build,
         target: std.Build.ResolvedTarget,
         optimize: std.builtin.OptimizeMode,
+        strip: ?bool,
         fn module(self: @This(), path: []const u8) *Module {
             return self.b.createModule(.{
                 .root_source_file = self.b.path(path),
                 .target = self.target,
                 .optimize = self.optimize,
+                .strip = self.strip,
             });
         }
-    }{ .b = b, .target = target, .optimize = optimize };
+    }{ .b = b, .target = target, .optimize = optimize, .strip = opts.strip };
 
     // ---- syntax + IR ----
     const parser = createParserModule(b, target, optimize);
+    parser.strip = opts.strip;
     const translate = mk.module("lib/syntax/translate.zig");
     translate.addImport("parser", parser);
     const ir_types = mk.module("lib/ir/types.zig");
@@ -308,6 +315,8 @@ pub fn create(b: *std.Build, opts: Options) Modules {
     libcirc.addImport("preview_render_color", preview_render_color);
     libcirc.addImport("runtime_embed", opts.runtime_embed);
     libcirc.addImport("build_info", build_info);
+    const c_api = mk.module("lib/libcirc/c_api.zig");
+    c_api.addImport("libcirc", libcirc);
 
     return .{
         .parser = parser,
@@ -360,5 +369,6 @@ pub fn create(b: *std.Build, opts: Options) Modules {
         .preview_render = preview_render,
         .build_info = build_info,
         .libcirc = libcirc,
+        .c_api = c_api,
     };
 }

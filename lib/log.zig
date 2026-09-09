@@ -45,12 +45,11 @@ const PrintType = enum {
 };
 
 fn printOnBrowser(comptime printType: PrintType, comptime format: []const u8, args: anytype) void {
+    // Ask first: formatting allocates from the engine arena, and a host with
+    // logging off must not pay for lines it will never see.
+    if (!debugEnabled()) return;
     const msg = printType.format(format, args);
-    const msgPtr = &msg[0];
-
-    if (debugEnabled()) {
-        onDebugLog(msgPtr, msg.len, printType.toInt());
-    }
+    onDebugLog(&msg[0], msg.len, printType.toInt());
 }
 
 fn wasmLog(comptime _: @Type(.enum_literal)) type {

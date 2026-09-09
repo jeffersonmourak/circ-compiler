@@ -173,7 +173,6 @@ pub fn build(b: *std.Build) void {
         .optimize = wasm_optimize,
         .strip = wasm_strip,
     });
-    _ = runtime_embed_wasm_mod; // consumed by the libcirc.wasm graph (next slice)
 
     // Version (from the VERSION file) and HEAD revision (git, at configure
     // time) exposed to the CLI's --version flag. A missing file or git
@@ -880,12 +879,7 @@ pub fn build(b: *std.Build) void {
 
     // The C ABI over libcirc: root of libcirc.a (slice 7) and of the wasm
     // module (Phase 3). Tested by calling the exports directly.
-    const libcirc_c_api_mod = b.createModule(.{
-        .root_source_file = b.path("lib/libcirc/c_api.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    libcirc_c_api_mod.addImport("libcirc", fe.libcirc);
+    const libcirc_c_api_mod = fe.c_api;
     const libcirc_c_api_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/libcirc/c_api_test.zig"),
         .target = target,
@@ -931,6 +925,41 @@ pub fn build(b: *std.Build) void {
     run_libcirc_smoke.expectExitCode(0);
     const libcirc_smoke_step = b.step("libcirc-smoke", "Compile and run examples/c/analyze.c against libcirc.a");
     libcirc_smoke_step.dependOn(&run_libcirc_smoke.step);
+
+    // `zig build libcirc-wasm`: the same front end for wasm32-freestanding.
+    // A second module graph (separate compilation, separate target), sharing
+    // only the materialised build_options/build_info objects.
+    const fe_wasm = @import("build/frontend_modules.zig").create(b, .{
+        .target = wasm_target,
+        .optimize = wasm_optimize,
+        .strip = wasm_strip,
+        .build_options_mod = circuit_options_default_mod,
+        .build_info = build_info,
+        .runtime_embed = runtime_embed_wasm_mod,
+    });
+    const circ_exports = [_][]const u8{
+        "circ_alloc",      "circ_free",       "circ_version",    "circ_analyze",    "circ_compile",
+        "circ_preview",    "circ_truth_table", "circ_result_ptr", "circ_result_len", "circ_reset",
+    };
+    const libcirc_wasm_mod = b.createModule(.{
+        .root_source_file = b.path("lib/libcirc/wasm_root.zig"),
+        .target = wasm_target,
+        .optimize = wasm_optimize,
+        .strip = wasm_strip,
+    });
+    libcirc_wasm_mod.addImport("c_api", fe_wasm.c_api);
+    // --export=<name> per entry; no rdynamic, so nothing else leaks out.
+    libcirc_wasm_mod.export_symbol_names = &circ_exports;
+    const libcirc_wasm = b.addExecutable(.{
+        .name = "libcirc",
+        .root_module = libcirc_wasm_mod,
+    });
+    libcirc_wasm.entry = .disabled;
+    const install_libcirc_wasm = b.addInstallArtifact(libcirc_wasm, .{
+        .dest_dir = .{ .override = .{ .custom = "lib" } },
+    });
+    const libcirc_wasm_step = b.step("libcirc-wasm", "Build zig-out/lib/libcirc.wasm (wasm32-freestanding, -Dwasm-optimize)");
+    libcirc_wasm_step.dependOn(&install_libcirc_wasm.step);
 
     const section_writer_tests = b.addTest(.{
         .root_module = section_writer_mod,
