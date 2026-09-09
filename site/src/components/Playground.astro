@@ -103,6 +103,91 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           rows="18"
         >{initial.source}</textarea>
       </div>
+      <!-- The dock. Both of its panels are about the SOURCE rather than the
+           compiled result, which is why they sit under the editor instead of
+           competing with the preview for the output pane. It ships open so a
+           reader with no stored envelope sees their diagnostics. -->
+      <div class="pg-dock" data-open="true">
+        <div class="pg-dock-bar">
+          <div class="pg-dock-tabs" role="tablist" aria-label="Editor panel">
+            <button
+              type="button"
+              role="tab"
+              class="pg-dock-tab"
+              id="pg-dock-tab-diagnostics"
+              data-dock="diagnostics"
+              aria-selected="true"
+              aria-controls="pg-dock-panel-diagnostics"
+            >Diagnostics<span class="pg-dock-badge" hidden></span></button>
+            <button
+              type="button"
+              role="tab"
+              class="pg-dock-tab"
+              id="pg-dock-tab-settings"
+              data-dock="settings"
+              aria-selected="false"
+              aria-controls="pg-dock-panel-settings"
+            >Settings</button>
+          </div>
+          <button
+            type="button"
+            class="pg-dock-toggle"
+            aria-expanded="true"
+            aria-controls="pg-dock-body"
+          >Hide</button>
+        </div>
+        <div class="pg-dock-body" id="pg-dock-body">
+          <div
+            class="pg-dock-panel"
+            id="pg-dock-panel-diagnostics"
+            data-dock-panel="diagnostics"
+            role="tabpanel"
+            aria-labelledby="pg-dock-tab-diagnostics"
+          ><ul class="pg-diag"></ul></div>
+          <div
+            class="pg-dock-panel"
+            id="pg-dock-panel-settings"
+            data-dock-panel="settings"
+            role="tabpanel"
+            aria-labelledby="pg-dock-tab-settings"
+            hidden
+          >
+            <div class="pg-settings">
+              <fieldset class="pg-settings-group">
+                <legend>Preview</legend>
+                <label><input type="checkbox" data-setting="expandMacros" /> Expand macros</label>
+                <label><input type="checkbox" data-setting="expandDisplay" /> Expand display</label>
+              </fieldset>
+              <fieldset class="pg-settings-group">
+                <legend>Truth table</legend>
+                <label for="pg-set-format">Format</label>
+                <select id="pg-set-format" data-setting="format">
+                  <option value="json">table</option>
+                  <option value="markdown">markdown</option>
+                  <option value="csv">csv</option>
+                </select>
+                <label for="pg-set-values">Values</label>
+                <select id="pg-set-values" data-setting="valueFormat">
+                  <option value="binary">binary</option>
+                  <option value="hex">hex</option>
+                  <option value="decimal">decimal</option>
+                </select>
+                <label for="pg-set-cap">Input-bit cap</label>
+                <input id="pg-set-cap" type="number" min="1" max="24" step="1" data-setting="truthTableCap" />
+                <span class="pg-settings-hint">2^cap rows; the enumeration cannot be stopped once started.</span>
+              </fieldset>
+              <fieldset class="pg-settings-group">
+                <legend>Compile</legend>
+                <label><input type="checkbox" data-setting="warningsAsErrors" /> Treat warnings as errors</label>
+              </fieldset>
+              <fieldset class="pg-settings-group pg-rom-group" hidden>
+                <legend>ROM images</legend>
+                <div class="pg-roms"></div>
+              </fieldset>
+            </div>
+          </div>
+        </div>
+      </div>
     </section>
     <div
       class="pg-splitter"
@@ -113,48 +198,23 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       aria-controls="pg-pane-editor pg-pane-output"
     ></div>
     <section class="pg-output" id="pg-pane-output">
-      <details class="pg-settings" id="pg-settings">
-        <summary>Settings</summary>
-        <fieldset class="pg-settings-group">
-          <legend>Preview</legend>
-          <label><input type="checkbox" data-setting="expandMacros" /> Expand macros</label>
-          <label><input type="checkbox" data-setting="expandDisplay" /> Expand display</label>
-        </fieldset>
-        <fieldset class="pg-settings-group">
-          <legend>Truth table</legend>
-          <label for="pg-set-format">Format</label>
-          <select id="pg-set-format" data-setting="format">
-            <option value="json">table</option>
-            <option value="markdown">markdown</option>
-            <option value="csv">csv</option>
-          </select>
-          <label for="pg-set-values">Values</label>
-          <select id="pg-set-values" data-setting="valueFormat">
-            <option value="binary">binary</option>
-            <option value="hex">hex</option>
-            <option value="decimal">decimal</option>
-          </select>
-          <label for="pg-set-cap">Input-bit cap</label>
-          <input id="pg-set-cap" type="number" min="1" max="24" step="1" data-setting="truthTableCap" />
-          <span class="pg-settings-hint">2^cap rows; the enumeration cannot be stopped once started.</span>
-        </fieldset>
-        <fieldset class="pg-settings-group">
-          <legend>Compile</legend>
-          <label><input type="checkbox" data-setting="warningsAsErrors" /> Treat warnings as errors</label>
-        </fieldset>
-        <fieldset class="pg-settings-group pg-rom-group" hidden>
-          <legend>ROM images</legend>
-          <div class="pg-roms"></div>
-        </fieldset>
-      </details>
       <div class="pg-tabs" role="tablist">
-        <button type="button" role="tab" data-tab="diagnostics" aria-selected="true">Diagnostics</button>
-        <button type="button" role="tab" data-tab="preview" aria-selected="false">Preview</button>
-        <button type="button" role="tab" data-tab="truth" aria-selected="false">Truth table</button>
+        <button type="button" role="tab" data-tab="preview" aria-selected="true">Preview</button>
+        <button
+          type="button"
+          role="tab"
+          data-tab="truth"
+          aria-selected="false"
+          aria-describedby="pg-tab-tip-truth"
+        >Truth table</button>
         <button type="button" role="tab" data-tab="simulate" aria-selected="false">Simulate</button>
+        {/* Empty and invisible until the tab is actually blocked; the island
+            fills it with the same sentence the panel shows. `role=tooltip`
+            plus the aria-describedby above is what makes the reason reachable
+            without a pointer. */}
+        <span class="pg-tab-tip" id="pg-tab-tip-truth" role="tooltip"></span>
       </div>
-      <div class="pg-panel" data-panel="diagnostics"><ul class="pg-diag"></ul></div>
-      <div class="pg-panel" data-panel="preview" hidden><pre class="pg-preview"></pre></div>
+      <div class="pg-panel" data-panel="preview"><pre class="pg-preview"></pre></div>
       <div class="pg-panel" data-panel="truth" hidden><div class="pg-table"></div></div>
       <div class="pg-panel" data-panel="simulate" hidden>
         <div class="pg-sim-note"></div>
@@ -186,7 +246,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
   import { joinConflicts, requestFor, rootOf, PLAYGROUND_DIR } from '../utils/split-files.ts';
   import { createSplitter } from '../scripts/splitter.ts';
   import { fnv1a } from '../utils/artifact-hash.ts';
-  import { capRefusal, mountSettingsDrawer, optionsFor } from '../scripts/settings-drawer.ts';
+  import { mountSettingsDrawer, optionsFor, truthTableRefusal } from '../scripts/settings-drawer.ts';
   import {
     applyRomImages,
     parseRomImage,
@@ -259,7 +319,8 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     type TabbedDiagnostic,
   } from '../scripts/circ-diagnostics.ts';
 
-  type Tab = 'diagnostics' | 'preview' | 'truth' | 'simulate';
+  type Tab = 'preview' | 'truth' | 'simulate';
+  type DockTab = 'diagnostics' | 'settings';
   /** A mapped diagnostic plus the file tab it belongs to; `null` when the
    *  compiler blamed a file with no tab (a `<builtin>/…` source, or a stale
    *  path from a reply that outlived a rename). */
@@ -300,6 +361,16 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     const shareBtn = el.querySelector<HTMLButtonElement>('.pg-share')!;
     const statusActions = el.querySelector<HTMLElement>('.pg-status-actions')!;
     const panels = Array.from(el.querySelectorAll<HTMLElement>('.pg-panel'));
+    // The dock: the editor's own strip, distinct from both the output tabs
+    // above and the file tabs. Its [role=tab] query is scoped for the same
+    // reason .pg-tabs's is.
+    const dock = el.querySelector<HTMLElement>('.pg-dock')!;
+    const dockTabs = Array.from(el.querySelectorAll<HTMLButtonElement>('.pg-dock-tabs [role=tab]'));
+    const dockPanels = Array.from(el.querySelectorAll<HTMLElement>('.pg-dock-panel'));
+    const dockToggle = el.querySelector<HTMLButtonElement>('.pg-dock-toggle')!;
+    const dockBadge = el.querySelector<HTMLElement>('.pg-dock-badge')!;
+    const truthTab = el.querySelector<HTMLButtonElement>('.pg-tabs [data-tab="truth"]')!;
+    const truthTip = el.querySelector<HTMLElement>('#pg-tab-tip-truth')!;
     const catalogue = JSON.parse(el.querySelector('#pg-picks')!.textContent || '[]') as CatalogueItem[];
     const supported = (el.dataset.supportedVersions || '').split(',').filter(Boolean).map(Number);
 
@@ -326,7 +397,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
        *  document. Refreshed by BOTH producers in the pipeline. */
       mapped: [] as MappedRow[],
       artifact: null as { bytes: Uint8Array; hash: number; size: number } | null,
-      tab: 'diagnostics' as Tab,
+      tab: 'preview' as Tab,
       version: null as LibcircVersion | null,
       simulateEnabled: true,
     };
@@ -337,6 +408,52 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     (el as any).__playground = { state, hooks };
 
     // ---- tabs ----
+    /**
+     * Why the truth table is unavailable, or null. Recomputed from state
+     * rather than cached, because all three of its inputs — the error count,
+     * the root's input width, and the cap — move independently.
+     */
+    function truthBlock(): string | null {
+      const errors = state.mapped.filter((m) => m.severity === 'error');
+      const first = errors[0];
+      return truthTableRefusal(
+        {
+          errors: errors.length,
+          // Code and message only. The file and line are one click away in the
+          // dock right below, and a tooltip is not the place for a position.
+          firstError: first ? `${first.code} ${first.message}` : null,
+          bits: rootInputBits(),
+        },
+        settings(),
+      );
+    }
+
+    /**
+     * Paint the truth tab's availability.
+     *
+     * `aria-disabled`, never the `disabled` attribute: a disabled button is
+     * unfocusable and swallows pointer events in most browsers, which would
+     * take the tooltip — the only place the reason is stated — away from
+     * exactly the readers who need it most. The click handler enforces it.
+     */
+    function applyTruthGate() {
+      const reason = truthBlock();
+      truthTab.setAttribute('aria-disabled', String(reason !== null));
+      truthTip.textContent = reason ?? '';
+      // A tooltip pointing at an empty element says nothing; drop the link
+      // entirely rather than describing the tab as ''.
+      if (reason === null) truthTab.removeAttribute('aria-describedby');
+      else truthTab.setAttribute('aria-describedby', 'pg-tab-tip-truth');
+      // Blocked while it is the open tab: say so in the panel rather than
+      // moving the reader somewhere they did not ask to go. Transient errors
+      // are constant while typing, and a tab that flees mid-keystroke is worse
+      // than one that explains itself.
+      if (reason !== null && state.tab === 'truth') {
+        tableEl.innerHTML = '';
+        tableEl.textContent = reason;
+      }
+    }
+
     function showTab(tab: Tab, opts: { persist?: boolean } = {}) {
       state.tab = tab;
       if (opts.persist !== false) store.update((draft) => { draft.tab = tab; });
@@ -348,7 +465,51 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       if (tab === 'preview') void runPreview(buildStage.seq);
       if (tab === 'truth') void runTruth(buildStage.seq);
     }
-    for (const b of tabs) b.addEventListener('click', () => showTab(b.dataset.tab as Tab));
+    for (const b of tabs) {
+      b.addEventListener('click', () => {
+        const tab = b.dataset.tab as Tab;
+        // The gate lives here rather than in showTab: a restore from the
+        // envelope must still be able to land on a blocked tab, or a reader
+        // who left the page on the truth table would come back to a pane that
+        // silently moved. Refusing here also keeps the reason on screen.
+        if (tab === 'truth' && b.getAttribute('aria-disabled') === 'true') {
+          const reason = truthTip.textContent;
+          if (reason) status.textContent = reason;
+          return;
+        }
+        showTab(tab);
+      });
+    }
+
+    // ---- the editor's dock ----
+    function showDockTab(tab: DockTab, opts: { persist?: boolean } = {}) {
+      for (const b of dockTabs) b.setAttribute('aria-selected', String(b.dataset.dock === tab));
+      for (const p of dockPanels) p.hidden = p.dataset.dockPanel !== tab;
+      if (opts.persist !== false) store.update((draft) => { draft.dock.tab = tab; });
+    }
+
+    function setDockOpen(open: boolean, opts: { persist?: boolean } = {}) {
+      dock.dataset.open = String(open);
+      dockToggle.setAttribute('aria-expanded', String(open));
+      dockToggle.textContent = open ? 'Hide' : 'Show';
+      if (opts.persist !== false) store.update((draft) => { draft.dock.open = open; });
+    }
+
+    for (const b of dockTabs) {
+      b.addEventListener('click', () => {
+        const tab = b.dataset.dock as DockTab;
+        // Clicking the panel you are already on, while open, closes the dock —
+        // the gesture every editor with a bottom panel uses. Clicking the other
+        // panel while closed opens it on that panel.
+        if (dock.dataset.open === 'true' && b.getAttribute('aria-selected') === 'true') {
+          setDockOpen(false);
+          return;
+        }
+        showDockTab(tab);
+        setDockOpen(true);
+      });
+    }
+    dockToggle.addEventListener('click', () => setDockOpen(dock.dataset.open !== 'true'));
 
     // ---- source linking ----
     // `decls` refreshes on every analysis; `table` only when a new artifact is
@@ -850,6 +1011,8 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       get: settings,
       set: (mutate) => {
         store.update((draft) => mutate(draft.settings));
+        // The cap is a setting, so changing one can unblock or block the tab.
+        applyTruthGate();
         // Both output panes read a setting, so both are re-run.
         void runPreview(buildStage.seq);
         void runTruth(buildStage.seq);
@@ -899,6 +1062,10 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       }
 
       showTab(store.envelope.tab as Tab, { persist: false });
+      showDockTab(store.envelope.dock.tab, { persist: false });
+      setDockOpen(store.envelope.dock.open, { persist: false });
+      renderDockBadge();
+      applyTruthGate();
       renderWorkspace();
 
       whenIdle(() => {
@@ -1509,8 +1676,9 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     async function runTruth(seq: number) {
       if (!state.tabs.files.length || !state.version) return;
       const bits = rootInputBits();
-      // One field feeds both the pre-flight and the request; they cannot drift.
-      const refusal = capRefusal(bits, settings());
+      // The same refusal the tab is painted with, so the panel and the tooltip
+      // can never disagree about why there is no table.
+      const refusal = truthBlock();
       if (refusal) {
         tableEl.innerHTML = '';
         tableEl.textContent = refusal;
@@ -1605,8 +1773,25 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       return `${m.fileName}:${m.line}:${m.column} ${m.code} ${m.message}`;
     }
 
+    /** The count on the dock tab. It is the only diagnostics signal a reader
+     *  gets while the dock is collapsed, so it carries the severity in its
+     *  colour as well as the number. */
+    function renderDockBadge() {
+      const errors = state.mapped.filter((m) => m.severity === 'error').length;
+      const warnings = state.mapped.length - errors;
+      dockBadge.hidden = state.mapped.length === 0;
+      dockBadge.dataset.severity = errors > 0 ? 'error' : 'warning';
+      dockBadge.textContent = String(errors > 0 ? errors : warnings);
+      dockBadge.title =
+        `${errors} error${errors === 1 ? '' : 's'}, ${warnings} warning${warnings === 1 ? '' : 's'}`;
+    }
+
     function renderDiagnostics() {
       diagList.innerHTML = '';
+      // Both derive from `state.mapped`, so they are refreshed together with
+      // the list rather than by whoever remembers to call them.
+      renderDockBadge();
+      applyTruthGate();
       if (state.mapped.length === 0) {
         const li = document.createElement('li');
         li.className = 'pg-diag-ok';

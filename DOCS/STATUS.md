@@ -585,3 +585,28 @@ The grouping is real, not cosmetic. `buildCatalogue` derives each item's group f
 3. **`public/wasm/tour-*.wasm` is now in `.gitignore`.** Those seven are a byproduct of `scripts/compile-content.ts`; the tour renders its steps inert and ships none of them. They have been sitting untracked and manually avoided on every commit of this initiative, which is a rule that works right up until it doesn't.
 4. **Memory, slice and concat draw in the renderer's default styling, not the site's.** `src/utils/circ-theme.mjs` overrides five kinds plus `subcircuit`; `pickSkin` falls back to `defaultSkins` for the rest, and those read their colours through a `color(theme, key, fallback)` that degrades to a hardcoded value. So `rom-lookup`, `ram-write-read`, `slice-and-concat` and `alu-4bit` all render — they just do not match the hand-drawn gates beside them. This is the same gap as the "no memory skin" note in the Phase 7 close-out, now visible on four cards instead of none.
 5. **One correction against my own earlier measurement.** A first pass at filling the previews used a regex that matched across entry boundaries, so eight entries received another entry's schematic while reporting success. The sizes recorded in that pass were wrong — `alu-4bit` is 37 lines by 253 columns, not the 11 by 41 first measured. The fill was redone per entry, and all fifteen previews are now verified byte-exact against `scripts/.compiled.json`.
+
+## 2026-09-09 — Interface — the editor's dock, and a truth tab that says no
+
+**What shipped:** Two refinements to the playground's workbench.
+
+**The dock.** Diagnostics and settings were both in the output pane: diagnostics as one of four tabs, settings as a `<details>` drawer above them. Neither belongs there. Both are about the *source*, not the compiled result, so a reader debugging an error had to give up the preview to read it, and a reader adjusting the cap had to reach past the output they were adjusting. Both now live in a collapsible dock under the editor, with two tabs of their own. It ships open on diagnostics, remembers which panel and whether it was open, and collapses either by the Hide button or by clicking the panel already showing — the gesture every editor with a bottom panel uses. While collapsed, a count badge on the tab still reports the diagnostics, red when any of them is an error.
+
+The output pane is now three tabs: preview, truth table, simulate.
+
+**The truth tab refuses, and says why.** It was always clickable. With errors it produced a status-bar line and left the previous table on screen; over the input-bit cap it replaced the panel with a refusal only after being clicked. Now the reason is computed up front by `truthTableRefusal`, the tab carries `aria-disabled`, and the same sentence is the tooltip on hover or focus. Errors outrank the cap, because a circuit that does not build has nothing to enumerate, and the tooltip names the first error rather than only counting: *"2 errors to fix first, starting with E001 undeclared name 'b'. A truth table needs a circuit that compiles."*
+
+**Files touched:** `site/src/components/Playground.astro`, `site/src/utils/playground-store.ts`, `site/src/scripts/settings-drawer.ts`, `site/src/styles/global.css`, `site/test/settings-drawer.test.ts`, `site/test/playground-store.test.ts`, `site/test/island-smoke.test.ts`, `DOCS/STATUS.md`.
+
+**Tests:** `bun test` 300 pass across 27 files, from 294. `bun --bun run typecheck` 0 errors. Build, `bun run bundle` and `zig build test-all` green. `/playground` gzip 23.7 KB against a 120 KB ceiling, up 0.6 KB.
+
+**Next slice:** none.
+
+**Notes:**
+
+1. **`aria-disabled`, never the `disabled` attribute.** A disabled button is unfocusable and swallows pointer events in most browsers, which would take the tooltip — the only place the reason is written — away from exactly the readers who need it most. The click handler enforces the refusal instead, and a refused click puts the reason in the status bar so a pointerless reader still gets it.
+2. **A blocked tab that is already open stays open.** Errors are constant while typing, and a tab that flees mid-keystroke is worse than one that explains itself, so the panel renders the reason rather than switching away. Restoring a stored `tab: 'truth'` on load deliberately bypasses the gate for the same reason.
+3. **Two negative proofs.** Deleting the collapse-on-reclick branch fails the new island-smoke test on `dock.dataset.open`; swapping the refusal precedence so the cap speaks before the errors fails `truthTableRefusal`'s first test. Both reverted, both green.
+4. **The envelope migrates without a version bump.** `OutputTab` lost `'diagnostics'`, so every envelope written before today carries a `tab` that is no longer valid — it falls back to `'preview'` field by field, and the scratch projects beside it survive untouched. That path has its own test; a reset there would have cost real work. The new `dock` key defaults the same way, since no existing envelope has one.
+5. **`warningsAsErrors` does not reach this gate.** The severities come from the analysis, which does not receive that setting, so with warnings-as-errors on, a W001 leaves the tab enabled and the refusal arrives later from the worker as a status-bar line. That is the pre-existing behaviour of that path, not a regression, and it is the one case where the tab's promise is weaker than the compile's.
+6. **The wrap's 18rem floor had to go in app layout.** It was harmless while `.pg-editor-wrap` was the pane's only flexible child; with the dock sharing the column it is what would push the dock out of a viewport-locked pane, and `.pg-editor` clips.

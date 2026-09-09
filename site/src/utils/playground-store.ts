@@ -21,8 +21,23 @@ export const MAX_SOURCE_BYTES = 32 * 1024;
 export const MAX_ENVELOPE_BYTES = 256 * 1024;
 export const WRITE_DEBOUNCE_MS = 500;
 
-/** The four output tabs. */
-export type OutputTab = 'diagnostics' | 'preview' | 'truth' | 'simulate';
+/**
+ * The three output tabs. Diagnostics is not among them: it belongs to the
+ * source, not to the compiled result, so it lives in the editor's own dock
+ * beside the settings rather than competing with the preview for the pane a
+ * reader is watching.
+ */
+export type OutputTab = 'preview' | 'truth' | 'simulate';
+
+/** The editor dock's two panels. */
+export type DockTab = 'diagnostics' | 'settings';
+
+/** The dock is collapsible, and which panel it was left on is remembered
+ *  separately from whether it was left open. */
+export interface DockState {
+  open: boolean;
+  tab: DockTab;
+}
 
 /** `example:<slug>` | `tour:<n>` | `scratch:<id>`. */
 export type PickId = string;
@@ -70,6 +85,7 @@ export interface PlaygroundEnvelope {
   layout: LayoutState;
   settings: PlaygroundSettings;
   tab: OutputTab;
+  dock: DockState;
 }
 
 export type StoreNote =
@@ -92,7 +108,9 @@ export interface TimerLike {
   clearTimeout(id: number): void;
 }
 
-const OUTPUT_TABS: readonly OutputTab[] = ['diagnostics', 'preview', 'truth', 'simulate'];
+const OUTPUT_TABS: readonly OutputTab[] = ['preview', 'truth', 'simulate'];
+const DOCK_TABS: readonly DockTab[] = ['diagnostics', 'settings'];
+export const DEFAULT_DOCK: DockState = { open: true, tab: 'diagnostics' };
 const FORMATS: readonly PlaygroundSettings['format'][] = ['markdown', 'csv', 'json'];
 const VALUE_FORMATS: readonly PlaygroundSettings['valueFormat'][] = ['binary', 'hex', 'decimal'];
 
@@ -118,7 +136,8 @@ export function defaultEnvelope(): PlaygroundEnvelope {
     activeFile: null,
     layout: { ratios: {} },
     settings: defaultSettings(),
-    tab: 'diagnostics',
+    tab: 'preview',
+    dock: { ...DEFAULT_DOCK },
   };
 }
 
@@ -126,6 +145,16 @@ const utf8Bytes = (s: string): number => new TextEncoder().encode(s).length;
 
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/** Missing entirely in every envelope written before the dock existed, which
+ *  is why each field falls back on its own rather than the object as a whole. */
+function normalizeDock(raw: unknown): DockState {
+  const out: DockState = { ...DEFAULT_DOCK };
+  if (!isObject(raw)) return out;
+  if (typeof raw.open === 'boolean') out.open = raw.open;
+  if (DOCK_TABS.includes(raw.tab as DockTab)) out.tab = raw.tab as DockTab;
+  return out;
+}
 
 function normalizeSettings(raw: unknown): PlaygroundSettings {
   const out = defaultSettings();
@@ -205,7 +234,11 @@ export function normalize(raw: unknown): { envelope: PlaygroundEnvelope; note: S
       activeFile: typeof raw.activeFile === 'string' ? raw.activeFile : null,
       layout: { ratios: normalizeRatios(isObject(raw.layout) ? raw.layout.ratios : null) },
       settings: normalizeSettings(raw.settings),
-      tab: OUTPUT_TABS.includes(raw.tab as OutputTab) ? (raw.tab as OutputTab) : 'diagnostics',
+      // An envelope written before diagnostics left the output pane carries
+      // `tab: 'diagnostics'`, which is no longer an output tab. It falls back
+      // here like any other unrecognised value rather than resetting anything.
+      tab: OUTPUT_TABS.includes(raw.tab as OutputTab) ? (raw.tab as OutputTab) : 'preview',
+      dock: normalizeDock(raw.dock),
     },
     note: null,
   };

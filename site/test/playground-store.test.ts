@@ -87,12 +87,13 @@ describe('playground store', () => {
   test('defaults and round-trip', () => {
     const env = defaultEnvelope();
     expect(Object.keys(env).sort()).toEqual(
-      ['activeFile', 'activeId', 'layout', 'scratch', 'settings', 'tab', 'version'].sort(),
+      ['activeFile', 'activeId', 'dock', 'layout', 'scratch', 'settings', 'tab', 'version'].sort(),
     );
     expect(env.version).toBe(1);
     expect(env.settings.truthTableCap).toBe(12);
     expect(env.settings.format).toBe('json');
-    expect(env.tab).toBe('diagnostics');
+    expect(env.tab).toBe('preview');
+    expect(env.dock).toEqual({ open: true, tab: 'diagnostics' });
     // normalize is a fixed point on its own output.
     const round = normalize(JSON.parse(JSON.stringify(env)));
     expect(round.note).toBeNull();
@@ -164,7 +165,34 @@ describe('playground store', () => {
     expect(normalize({ ...defaultEnvelope(), settings: { truthTableCap: 0 } }).envelope.settings.truthTableCap).toBe(1);
 
     // A bad tab falls back.
-    expect(normalize({ ...defaultEnvelope(), tab: 'nope' }).envelope.tab).toBe('diagnostics');
+    expect(normalize({ ...defaultEnvelope(), tab: 'nope' }).envelope.tab).toBe('preview');
+    // …and so does the one written by every envelope from before diagnostics
+    // left the output pane. This is the real migration, and it is not a reset:
+    // the scratch projects in that same envelope must survive it.
+    const legacy = normalize({ ...defaultEnvelope(), tab: 'diagnostics', scratch: [project('kept', 5)] });
+    expect(legacy.note).toBeNull();
+    expect(legacy.envelope.tab).toBe('preview');
+    expect(legacy.envelope.scratch.map((p) => p.name)).toEqual(['kept']);
+
+    // The dock defaults field by field, since no envelope written before this
+    // change carries one at all.
+    const noDock = { ...defaultEnvelope() } as Record<string, unknown>;
+    delete noDock.dock;
+    expect(normalize(noDock).envelope.dock).toEqual({ open: true, tab: 'diagnostics' });
+    expect(normalize({ ...defaultEnvelope(), dock: 'nope' }).envelope.dock).toEqual({ open: true, tab: 'diagnostics' });
+    expect(normalize({ ...defaultEnvelope(), dock: { open: false } }).envelope.dock).toEqual({
+      open: false,
+      tab: 'diagnostics',
+    });
+    expect(normalize({ ...defaultEnvelope(), dock: { tab: 'settings' } }).envelope.dock).toEqual({
+      open: true,
+      tab: 'settings',
+    });
+    // A tab the dock does not have falls back without touching `open`.
+    expect(normalize({ ...defaultEnvelope(), dock: { open: false, tab: 'preview' } }).envelope.dock).toEqual({
+      open: false,
+      tab: 'diagnostics',
+    });
 
     // An activeId naming a scratch project that is gone becomes null.
     expect(normalize({ ...defaultEnvelope(), activeId: 'scratch:missing' }).envelope.activeId).toBeNull();

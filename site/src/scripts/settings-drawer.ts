@@ -82,6 +82,41 @@ export function capRefusal(bits: number | null, s: PlaygroundSettings): string |
   );
 }
 
+/**
+ * Why the truth table cannot run right now, or null.
+ *
+ * Two refusals, in the order they matter. A circuit with errors has no
+ * artifact to enumerate, so the cap is moot until it builds; only then does
+ * the width matter. The island puts this string on the tab as its tooltip and
+ * in the panel as its body, so the reader gets the same sentence whichever way
+ * they arrive at it.
+ *
+ * `errors` is a count of error-severity diagnostics, and `bits` is null until
+ * an analysis lands — neither being known yet is not a refusal.
+ */
+export interface TruthTableState {
+  /** How many error-severity diagnostics the analysis reported. */
+  errors: number;
+  /** The first of them, `code message`, so the tooltip names something the
+   *  reader can act on rather than only counting. Null when unknown. */
+  firstError?: string | null;
+  /** Total input width of the root file; null until an analysis lands. */
+  bits: number | null;
+}
+
+export function truthTableRefusal(t: TruthTableState, s: PlaygroundSettings): string | null {
+  if (t.errors > 0) {
+    const tail = 'A truth table needs a circuit that compiles.';
+    if (!t.firstError) {
+      return `${t.errors} error${t.errors === 1 ? '' : 's'} to fix first. ${tail}`;
+    }
+    return t.errors === 1
+      ? `One error to fix first — ${t.firstError}. ${tail}`
+      : `${t.errors} errors to fix first, starting with ${t.firstError}. ${tail}`;
+  }
+  return capRefusal(t.bits, s);
+}
+
 // ---------------------------------------------------------------------------
 // The drawer's DOM wiring. Kept here rather than in the island so the island
 // stays markup plus a script, and so this can change without touching it.

@@ -743,7 +743,11 @@ hr {
   gap: 0;
   border-bottom: 1px solid var(--border);
   background: var(--pane-label-bg);
-  overflow-x: auto;
+  /* The tooltip is positioned against this strip, so it cannot be the thing
+     that scrolls — `overflow-x: auto` here would clip it. The tabs are three
+     short words and wrap sooner than they overflow. */
+  flex-wrap: wrap;
+  position: relative;
 }
 .pg-tabs button {
   font: inherit;
@@ -761,6 +765,46 @@ hr {
 .pg-tabs button[aria-selected="true"] {
   color: var(--accent);
   border-bottom-color: var(--accent);
+}
+/* Blocked, not disabled: the element stays focusable so the reason below is
+   reachable without a pointer. `not-allowed` is the only cursor that says the
+   click will be refused before it is. */
+.pg-tabs button[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.pg-tabs button[aria-disabled="true"][aria-selected="true"] { border-bottom-color: currentColor; }
+/* The tooltip. Empty and unlinked whenever the tab is available, so there is
+   nothing to show; `:empty` makes that structural rather than a class the
+   island has to remember to remove. */
+.pg-tab-tip {
+  position: absolute;
+  top: 100%;
+  left: 0.5rem;
+  right: 0.5rem;
+  z-index: 5;
+  margin-top: 0.25rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.18);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 100ms ease;
+  pointer-events: none;
+}
+.pg-tabs button[aria-disabled="true"]:hover ~ .pg-tab-tip,
+.pg-tabs button[aria-disabled="true"]:focus-visible ~ .pg-tab-tip {
+  opacity: 1;
+  visibility: visible;
+}
+.pg-tab-tip:empty { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .pg-tab-tip { transition: none; }
 }
 .pg-panel { padding: 0.75rem 0.85rem; overflow: auto; flex: 1; }
 .pg-panel[hidden] { display: none; }
@@ -780,30 +824,106 @@ hr {
 .pg-diag-warning button { color: var(--muted); }
 .pg-diag button:disabled { color: var(--muted); cursor: default; text-decoration: none; }
 .pg-diag-counts { color: var(--muted); margin-bottom: 0.5rem; }
-/* The settings drawer, at the top of the output pane. */
-.pg-settings {
-  border-bottom: 1px solid var(--border);
-  font-size: 0.8rem;
+/* ---------- the editor's dock ----------
+   A collapsible strip under the editing surface holding the two panels that
+   are about the SOURCE rather than the compiled result: diagnostics and
+   settings. It is `flex: 0 0 auto` so the editor above it takes the slack. */
+.pg-dock {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-top: 1px solid var(--border);
+  background: var(--pane-bg);
 }
-.pg-settings > summary {
-  cursor: pointer;
-  padding: 0.3rem 0.6rem;
+.pg-dock-bar {
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+  background: var(--pane-label-bg);
+}
+.pg-dock-tabs {
+  display: flex;
+  gap: 0;
+  overflow-x: auto;
+  flex: 1;
+  min-width: 0;
+  scrollbar-width: thin;
+}
+.pg-dock-tab {
+  font: inherit;
   font-family: var(--font-mono);
   font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 0.4rem 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.pg-dock-tab:hover { color: var(--fg); }
+.pg-dock-tab[aria-selected="true"] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+/* Collapsed, nothing is "selected" in a way the reader can see, so the
+   underline would be a lie about what is on screen. */
+.pg-dock[data-open="false"] .pg-dock-tab[aria-selected="true"] {
+  border-bottom-color: transparent;
   color: var(--muted);
 }
-.pg-settings > summary:hover { color: var(--fg); }
-.pg-settings[open] > summary { color: var(--fg); }
+.pg-dock-badge {
+  font-size: 0.68rem;
+  line-height: 1;
+  padding: 0.15rem 0.35rem;
+  border-radius: 999px;
+  background: var(--border);
+  color: var(--fg);
+}
+.pg-dock-badge[data-severity="error"] { background: var(--danger); color: var(--bg); }
+.pg-dock-badge[hidden] { display: none; }
+.pg-dock-toggle {
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  padding: 0.4rem 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pg-dock-toggle:hover { color: var(--fg); }
+.pg-dock-body {
+  /* A share of the pane rather than a fixed height, so the dock stays usable
+     on a short viewport and never crowds the editor out on a tall one. */
+  height: var(--pg-dock-h, 12rem);
+  max-height: 45%;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+}
+.pg-dock[data-open="false"] .pg-dock-body { display: none; }
+.pg-dock-panel { padding: 0.6rem 0.85rem; }
+.pg-dock-panel[hidden] { display: none; }
+/* Settings, now a dock panel rather than a drawer of its own. */
+.pg-settings { font-size: 0.8rem; }
 .pg-settings-group {
   border: 0;
   border-top: 1px solid var(--border);
   margin: 0;
-  padding: 0.4rem 0.6rem;
+  padding: 0.5rem 0 0.35rem;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
 }
+.pg-settings-group:first-child { border-top: 0; padding-top: 0; }
 .pg-settings-group legend {
   font-family: var(--font-mono);
   font-size: 0.7rem;
@@ -1460,6 +1580,10 @@ a.install-line:hover {
 }
 /* The base editor theme gives .cm-editor no height of its own, so the pane
    needs one, and the scroller needs a vertical overflow to go with it. */
+/* The wrap's 18rem floor was harmless while it was the only flexible child of
+   the pane. With the dock below it, that floor is what would push the dock out
+   of a viewport-locked pane, and .pg-editor clips. */
+[data-layout='app'] .pg-editor .pg-editor-wrap { min-height: 0; }
 [data-layout='app'] .pg-editor .pg-cm { min-height: 0; }
 [data-layout='app'] .pg-editor .pg-cm .cm-editor { height: 100%; }
 [data-layout='app'] .pg-editor .pg-cm .cm-scroller { overflow: auto; }

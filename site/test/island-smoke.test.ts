@@ -27,6 +27,11 @@ const HARNESS_ONLY = [
 ];
 
 let restore: (() => void) | null = null;
+/** The playground document, kept so a later test can drive its DOM: the island
+ *  module is imported once per process and cannot be mounted twice. Typed off
+ *  `runIsland` rather than as a `Document`, because happy-dom's is structurally
+ *  its own — the same trap the Element casts below document. */
+let lastPlayground: Awaited<ReturnType<typeof runIsland>>['doc'] | null = null;
 
 function installDom(html: string) {
   const window = new Window({ url: 'http://localhost/playground' });
@@ -91,6 +96,7 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
   test('the playground mounts its editor, tabs and workbench', async () => {
     const { doc, errors } = await runIsland('playground', 'Playground.astro');
     expect(errors).toEqual([]);
+    lastPlayground = doc;
 
     // The editor took over from the fallback.
     expect(doc.querySelectorAll('.cm-editor')).toHaveLength(1);
@@ -108,6 +114,44 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(doc.querySelectorAll('.pg-filetab').length).toBeGreaterThanOrEqual(1);
     expect(doc.querySelector('.pg-files')?.hasAttribute('hidden')).toBe(false);
 
+    // The dock: two panels under the editor, diagnostics open and selected.
+    const dock = doc.querySelector('.pg-dock') as unknown as { dataset: Record<string, string> } | null;
+    expect(dock).not.toBeNull();
+    expect(dock!.dataset.open).toBe('true');
+    const dockTabs = Array.from(
+      doc.querySelectorAll('.pg-dock-tabs [role=tab]'),
+      (b) => (b as unknown as { dataset: Record<string, string> }).dataset.dock,
+    );
+    expect(dockTabs).toEqual(['diagnostics', 'settings']);
+    expect(doc.querySelector('.pg-dock-tab[data-dock="diagnostics"]')?.getAttribute('aria-selected')).toBe('true');
+    expect(doc.querySelector('[data-dock-panel="diagnostics"]')?.hasAttribute('hidden')).toBe(false);
+    expect(doc.querySelector('[data-dock-panel="settings"]')?.hasAttribute('hidden')).toBe(true);
+
+    // Both moved OUT of the output pane. A duplicate left behind would give
+    // the settings two sets of live controls bound to one store.
+    const output = doc.querySelector('.pg-output')!;
+    expect(output.querySelectorAll('.pg-diag')).toHaveLength(0);
+    expect(output.querySelectorAll('[data-setting]')).toHaveLength(0);
+    expect(doc.querySelectorAll('.pg-diag')).toHaveLength(1);
+    const editorPane = doc.querySelector('.pg-editor')!;
+    expect(editorPane.querySelectorAll('[data-setting]').length).toBeGreaterThan(0);
+    expect(editorPane.querySelector('.pg-dock')).not.toBeNull();
+
+    // The output strip is the three compiled views, diagnostics gone.
+    const outTabs = Array.from(
+      doc.querySelectorAll('.pg-tabs [role=tab]'),
+      (b) => (b as unknown as { dataset: Record<string, string> }).dataset.tab,
+    );
+    expect(outTabs).toEqual(['preview', 'truth', 'simulate']);
+    expect(doc.querySelector('.pg-tabs [data-tab="preview"]')?.getAttribute('aria-selected')).toBe('true');
+
+    // The tooltip exists and is empty — no analysis lands in this harness, so
+    // the truth tab is not blocked and must say nothing.
+    const tip = doc.querySelector('#pg-tab-tip-truth')!;
+    expect(tip.getAttribute('role')).toBe('tooltip');
+    expect(tip.textContent).toBe('');
+    expect(doc.querySelector('.pg-tabs [data-tab="truth"]')?.getAttribute('aria-disabled')).toBe('false');
+
     // The workbench furniture, and the panes grid in order.
     expect(doc.querySelector('.pg-splitter')).not.toBeNull();
     expect(doc.querySelector('.pg-statusbar')).not.toBeNull();
@@ -118,6 +162,40 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
       (c) => (c as { className: string }).className,
     );
     expect(panes).toEqual(['pg-ws', 'pg-editor', 'pg-splitter', 'pg-output']);
+  });
+
+  test('the dock collapses and reopens, and remembers which panel', async () => {
+    // The playground module is imported once per process, so this reuses the
+    // document the test above left behind rather than mounting a second one.
+    const doc = lastPlayground!;
+    const dock = doc.querySelector('.pg-dock') as unknown as { dataset: Record<string, string> };
+    const toggle = doc.querySelector('.pg-dock-toggle') as unknown as { click(): void; textContent: string };
+    const diagTab = doc.querySelector('.pg-dock-tab[data-dock="diagnostics"]') as unknown as { click(): void };
+    const setTab = doc.querySelector('.pg-dock-tab[data-dock="settings"]') as unknown as { click(): void };
+    const body = doc.querySelector('.pg-dock-body')!;
+
+    expect(dock.dataset.open).toBe('true');
+    toggle.click();
+    expect(dock.dataset.open).toBe('false');
+    expect(toggle.textContent).toBe('Show');
+    toggle.click();
+    expect(dock.dataset.open).toBe('true');
+    expect(toggle.textContent).toBe('Hide');
+
+    // Switching panel keeps the dock open and moves the selection with it.
+    setTab.click();
+    expect(dock.dataset.open).toBe('true');
+    expect(doc.querySelector('[data-dock-panel="settings"]')?.hasAttribute('hidden')).toBe(false);
+    expect(doc.querySelector('[data-dock-panel="diagnostics"]')?.hasAttribute('hidden')).toBe(true);
+
+    // Clicking the panel already showing is the collapse gesture.
+    setTab.click();
+    expect(dock.dataset.open).toBe('false');
+    // …and clicking the OTHER panel while collapsed reopens on that one.
+    diagTab.click();
+    expect(dock.dataset.open).toBe('true');
+    expect(doc.querySelector('[data-dock-panel="diagnostics"]')?.hasAttribute('hidden')).toBe(false);
+    expect(body).not.toBeNull();
   });
 
   test('the tour mounts one inert editor per step', async () => {

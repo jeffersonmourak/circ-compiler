@@ -5,6 +5,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   DOCUMENTED_OPTION_KEYS,
   capRefusal,
+  truthTableRefusal,
   optionsFor,
   type LibcircOp,
 } from '../src/scripts/settings-drawer.ts';
@@ -129,6 +130,56 @@ describe('capRefusal', () => {
     expect(msg).toContain('20 input bits');
     expect(msg).toContain('12');
     expect(msg).toContain(String(2 ** 12));
+  });
+});
+
+describe('truthTableRefusal', () => {
+  test('errors outrank the cap, because a circuit that fails to build has nothing to enumerate', () => {
+    const s = settings({ truthTableCap: 4 });
+    // Both conditions at once: the error is what the reader is told, since it
+    // is the one they have to fix first.
+    const both = truthTableRefusal({ errors: 3, firstError: 'E001 undeclared name', bits: 99 }, s);
+    expect(both).toContain('3 errors');
+    expect(both).toContain('E001 undeclared name');
+    expect(both).not.toContain('input bits');
+    // The cap only speaks once the errors are gone.
+    expect(truthTableRefusal({ errors: 0, bits: 99 }, s)).toBe(capRefusal(99, s));
+  });
+
+  test('one error reads as a sentence, not as a count', () => {
+    const one = truthTableRefusal({ errors: 1, firstError: 'E004 required input is unconnected', bits: null }, settings())!;
+    expect(one).toContain('One error');
+    expect(one).toContain('E004 required input is unconnected');
+    expect(one).not.toContain('1 errors');
+    const many = truthTableRefusal({ errors: 2, firstError: 'E001 undeclared name', bits: null }, settings())!;
+    expect(many).toContain('2 errors');
+    expect(many).toContain('starting with');
+  });
+
+  test('an unknown first error degrades to the count rather than to "undefined"', () => {
+    for (const first of [null, undefined, '']) {
+      const msg = truthTableRefusal({ errors: 2, firstError: first, bits: null }, settings())!;
+      expect(msg).toContain('2 errors to fix first');
+      expect(msg).not.toContain('undefined');
+      expect(msg).not.toContain('null');
+    }
+  });
+
+  test('nothing wrong is not a refusal', () => {
+    expect(truthTableRefusal({ errors: 0, bits: 8 }, settings())).toBeNull();
+    // Warnings are not errors: a W001 must not take the truth table away.
+    expect(truthTableRefusal({ errors: 0, bits: null }, settings())).toBeNull();
+    // No analysis yet is not a refusal either.
+    expect(truthTableRefusal({ errors: 0, bits: null }, settings({ truthTableCap: 1 }))).toBeNull();
+  });
+
+  test('every refusal is a sentence a reader can act on', () => {
+    // Whatever it says, it says what to do next — this string is the whole
+    // tooltip, and a bare "unavailable" would be useless there.
+    const onErrors = truthTableRefusal({ errors: 2, firstError: 'E001 x', bits: null }, settings())!;
+    expect(onErrors).toMatch(/to fix first/i);
+    const onCap = truthTableRefusal({ errors: 0, bits: 40 }, settings())!;
+    expect(onCap).toMatch(/raise the cap/i);
   });
 });
 
