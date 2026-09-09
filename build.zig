@@ -961,6 +961,35 @@ pub fn build(b: *std.Build) void {
     const libcirc_wasm_step = b.step("libcirc-wasm", "Build zig-out/lib/libcirc.wasm (wasm32-freestanding, -Dwasm-optimize)");
     libcirc_wasm_step.dependOn(&install_libcirc_wasm.step);
 
+    // The Node-driven proof for libcirc.wasm (skips under SKIP_WASM_E2E=1).
+    const libcirc_wasm_embed_files = b.addWriteFiles();
+    _ = libcirc_wasm_embed_files.addCopyFile(libcirc_wasm.getEmittedBin(), "libcirc.wasm");
+    const libcirc_wasm_embed_file = libcirc_wasm_embed_files.add("libcirc_wasm_embed.zig",
+        \\pub const wasm = @embedFile("libcirc.wasm");
+    );
+    const libcirc_wasm_embed_mod = b.createModule(.{
+        .root_source_file = libcirc_wasm_embed_file,
+        .target = target,
+        .optimize = optimize,
+    });
+    const libcirc_wasm_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/e2e/libcirc_wasm_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    libcirc_wasm_tests_mod.addImport("libcirc_wasm_embed", libcirc_wasm_embed_mod);
+    libcirc_wasm_tests_mod.addImport("libcirc_c_api", fe.c_api);
+    libcirc_wasm_tests_mod.addImport("libcirc", fe.libcirc);
+    libcirc_wasm_tests_mod.addImport("golden", cli_golden_mod);
+    const libcirc_wasm_tests = b.addTest(.{
+        .name = "libcirc_wasm_tests",
+        .root_module = libcirc_wasm_tests_mod,
+    });
+    const run_libcirc_wasm_tests = b.addRunArtifact(libcirc_wasm_tests);
+    run_libcirc_wasm_tests.step.dependOn(&install_libcirc_wasm.step);
+    run_libcirc_wasm_tests.step.dependOn(&install_runtime.step);
+    test_step.dependOn(&run_libcirc_wasm_tests.step);
+
     const section_writer_tests = b.addTest(.{
         .root_module = section_writer_mod,
     });

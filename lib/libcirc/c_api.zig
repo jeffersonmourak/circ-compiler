@@ -68,11 +68,17 @@ fn dispatch(req_ptr: [*]const u8, len: usize, entry: Entry) u32 {
 /// Request buffers: the caller fills what `circ_alloc` returns and frees it
 /// with `circ_free` after the call (the library never keeps a pointer to it).
 pub export fn circ_alloc(len: usize) callconv(.c) ?[*]u8 {
+    // A zero-length request still needs a real, in-bounds pointer: hand out
+    // a static byte so hosts never see null for "empty".
+    if (len == 0) return @ptrCast(&zero_len_sentinel);
     const slice = std.heap.page_allocator.alloc(u8, len) catch return null;
     return slice.ptr;
 }
 
+var zero_len_sentinel: u8 = 0;
+
 pub export fn circ_free(ptr: [*]u8, len: usize) callconv(.c) void {
+    if (len == 0) return;
     std.heap.page_allocator.free(ptr[0..len]);
 }
 
