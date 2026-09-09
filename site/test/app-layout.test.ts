@@ -95,12 +95,4 @@ describe('app layout', () => {
     expect(light).toContain('--danger:');
     expect(dark).toContain('--danger:');
   });
-
-  test('the playground keeps its no-network promise in the page', () => {
-    const page = read('src', 'pages', 'playground.astro');
-    expect(page).toContain('nothing');
-    expect(page).toContain('leaves the page');
-    // Collapsed, not deleted: the workbench should not spend a screenful on it.
-    expect(page).toContain('<details class="pg-about">');
-  });
 });

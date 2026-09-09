@@ -534,7 +534,6 @@ hr {
 
 /* ---------- Playground ---------- */
 .pg { margin: 1rem 0 2rem; }
-.pg-intro { max-width: var(--measure); }
 .pg-banner {
   margin: 0 0 1rem;
   padding: 0.6rem 0.85rem;
@@ -641,103 +640,6 @@ hr {
   font-size: 0.75rem;
   color: var(--muted);
 }
-/* File tabs: the source pane's own strip, distinct from .pg-tabs (the OUTPUT
-   strip below) and from .lc-mount, which /index and /examples share. */
-.pg-files {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  border-bottom: 1px solid var(--border);
-  padding: 0 0.35rem;
-  min-height: 2.1rem;
-}
-.pg-files[hidden] { display: none; }
-.pg-filetabs {
-  display: flex;
-  align-items: stretch;
-  gap: 0.15rem;
-  overflow-x: auto;
-  flex: 1;
-  min-width: 0;
-  scrollbar-width: thin;
-}
-.pg-filetab {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.3rem 0.55rem;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: none;
-  color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  white-space: nowrap;
-  cursor: pointer;
-  user-select: none;
-}
-.pg-filetab:hover { color: var(--fg); }
-.pg-filetab[aria-selected='true'] {
-  color: var(--fg);
-  border-bottom-color: var(--accent);
-}
-.pg-filetab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.pg-filetab-root {
-  font-size: 0.65rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--accent);
-  border: 1px solid var(--border);
-  border-radius: 0.6rem;
-  padding: 0 0.3rem;
-}
-.pg-filetab-close {
-  border: 0;
-  background: none;
-  color: inherit;
-  font-size: 0.9rem;
-  line-height: 1;
-  padding: 0 0.15rem;
-  cursor: pointer;
-  opacity: 0.55;
-}
-.pg-filetab-close:hover { opacity: 1; }
-.pg-filetab[data-drop='true'] { background: var(--pane-label-bg); }
-.pg-filetab[data-confirm='true'] { border-bottom-color: var(--accent); }
-.pg-filetab[data-confirm='true'] .pg-filetab-close { opacity: 1; color: var(--accent); }
-.pg-filetab-input {
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  width: 9rem;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--fg);
-  padding: 0 0.2rem;
-}
-.pg-filetab-input[aria-invalid='true'] { border-color: var(--accent); }
-.pg-file-add {
-  border: 0;
-  background: none;
-  color: var(--muted);
-  font-size: 1rem;
-  line-height: 1;
-  padding: 0.2rem 0.4rem;
-  cursor: pointer;
-}
-.pg-file-add:hover { color: var(--fg); }
-.pg-filetab-badge {
-  font-size: 0.65rem;
-  min-width: 1.05rem;
-  text-align: center;
-  border-radius: 0.6rem;
-  padding: 0 0.25rem;
-  background: var(--pane-label-bg);
-  border: 1px solid var(--border);
-}
-.pg-filetab-badge[data-severity='error'] { color: var(--accent); border-color: var(--accent); }
-.pg-filetab-conflict { color: var(--accent); font-size: 0.75rem; }
-.pg-filetab-error { color: var(--accent); font-size: 0.75rem; }
-
 .pg-tabs {
   display: flex;
   gap: 0;
@@ -1366,11 +1268,6 @@ a.install-line:hover {
 [data-layout='app'] .site-footer { padding: 0.4rem 1rem; font-size: 0.75rem; }
 [data-layout='app'] .site-footer-row { margin: 0; }
 
-[data-layout='app'] .pg-head { margin: 0.4rem 0 0.5rem; }
-[data-layout='app'] .pg-head h1 { margin: 0; font-size: 1.3rem; }
-.pg-about { font-size: 0.85rem; color: var(--muted); }
-.pg-about summary { cursor: pointer; }
-.pg-about .pg-intro { margin: 0.5rem 0 0; }
 
 [data-layout='app'] .pg {
   margin: 0;
@@ -1408,6 +1305,99 @@ a.install-line:hover {
 .pg-ws-toggle:hover { color: var(--fg); }
 .pg-ws-body { overflow-y: auto; padding: 0.35rem 0; flex: 1; min-height: 0; }
 .pg-ws[data-collapsed] .pg-ws-body { display: none; }
+/* ---------- the workspace explorer ----------
+   One tree, three levels. Indentation comes from a --depth custom property the
+   island sets per row, so a level is one number rather than a selector per
+   depth, and the hit target still spans the full width at every level. */
+.pg-tree { display: flex; flex-direction: column; }
+.pg-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  width: 100%;
+  min-width: 0;
+  padding: 0.22rem 0.4rem 0.22rem calc(0.35rem + var(--depth, 0) * 0.85rem);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  border-left: 2px solid transparent;
+}
+.pg-tree-row:hover { background: var(--pane-label-bg); color: var(--fg); }
+.pg-tree-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.pg-tree-group { color: var(--fg); letter-spacing: 0.04em; text-transform: uppercase; font-size: 0.7rem; }
+/* The open project, and the file inside it the editor is showing. The bar is
+   what the editor's tab strip used to say by being selected. */
+.pg-tree-row[aria-current='true'] { color: var(--accent); }
+.pg-tree-file[aria-current='true'] {
+  background: var(--pane-label-bg);
+  border-left-color: var(--accent);
+}
+.pg-tree-twisty {
+  flex: 0 0 0.75rem;
+  font-size: 0.6rem;
+  line-height: 1;
+  color: var(--muted);
+}
+.pg-tree-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pg-tree-root {
+  font-size: 0.6rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 0.2rem;
+}
+/* The badge that used to sit on the editor tab. It is the reason a project can
+   be collapsed safely: shut, the project row still carries its files' worst. */
+.pg-tree-badge {
+  flex: 0 0 auto;
+  font-size: 0.65rem;
+  line-height: 1;
+  padding: 0.1rem 0.3rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.pg-tree-badge[data-severity='error'] { color: var(--danger); border-color: var(--danger); }
+.pg-tree-conflict { color: var(--accent); font-size: 0.72rem; }
+/* Row controls stay hidden until the row is hovered or holds focus, so a tree
+   of twenty projects is not a wall of glyphs. `focus-within` is what keeps
+   them reachable with a keyboard. */
+.pg-tree-actions { display: none; gap: 0.05rem; }
+.pg-tree-row > .pg-tree-action { display: none; }
+.pg-tree-row:hover .pg-tree-actions,
+.pg-tree-row:focus-within .pg-tree-actions,
+.pg-tree-row:hover > .pg-tree-action,
+.pg-tree-row:focus-within > .pg-tree-action { display: flex; }
+.pg-tree-action {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1;
+  padding: 0.1rem 0.2rem;
+  cursor: pointer;
+}
+.pg-tree-action:hover { color: var(--fg); }
+.pg-tree-row[data-confirm='true'] { border-left-color: var(--danger); }
+.pg-tree-row[data-confirm='true'] > .pg-tree-action,
+.pg-tree-row[data-confirm='true'] .pg-tree-action[aria-label^='Delete'] {
+  display: flex;
+  color: var(--danger);
+}
+.pg-tree-row[data-drop='true'] { background: var(--pane-label-bg); box-shadow: inset 0 -2px 0 var(--accent); }
+.pg-ws-error { color: var(--danger); font-size: 0.72rem; margin: 0.3rem 0.5rem 0; }
+.pg-ws-error:empty { display: none; }
+
 .pg-ws-section { margin: 0 0 0.4rem; }
 .pg-ws-group {
   margin: 0;
@@ -1441,7 +1431,7 @@ a.install-line:hover {
   color: var(--accent);
 }
 .pg-ws-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.pg-ws-empty { color: var(--muted); font-size: 0.75rem; padding: 0.22rem 0.6rem; }
+.pg-ws-empty { color: var(--muted); font-size: 0.72rem; padding: 0.2rem 0.4rem 0.35rem 1.2rem; }
 .pg-ws-new {
   position: absolute;
   top: 0.15rem;
@@ -1456,25 +1446,9 @@ a.install-line:hover {
 }
 .pg-ws-new:hover { color: var(--fg); }
 .pg-ws { position: relative; }
-.pg-ws-item { display: flex; align-items: center; }
-.pg-ws-item .pg-ws-row { flex: 1; min-width: 0; }
-.pg-ws-actions { display: none; gap: 0.05rem; padding-right: 0.3rem; }
-.pg-ws-item:hover .pg-ws-actions,
-.pg-ws-item:focus-within .pg-ws-actions { display: flex; }
-.pg-ws-action {
-  border: 0;
-  background: none;
-  color: var(--muted);
-  font-size: 0.75rem;
-  line-height: 1;
-  padding: 0.15rem 0.2rem;
-  cursor: pointer;
-}
-.pg-ws-action:hover { color: var(--fg); }
-.pg-ws-action[data-confirm='true'] { color: var(--danger); }
 .pg-ws-input {
-  width: calc(100% - 1.2rem);
-  margin: 0 0.6rem;
+  flex: 1;
+  min-width: 0;
   font-size: 0.8rem;
   font-family: inherit;
   border: 1px solid var(--accent);

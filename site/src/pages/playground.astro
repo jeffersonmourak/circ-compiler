@@ -10,18 +10,5 @@ import { SUPPORTED_TOPOLOGY_VERSIONS } from '../utils/renderer-versions.ts';
   mdTwin={null}
   layout="app"
 >
-  <header class="pg-head">
-    <h1>Playground</h1>
-    <details class="pg-about">
-      <summary>about this playground</summary>
-      <p class="pg-intro">
-        Type a circuit or pick an example. The compiler runs in your browser
-        (<code>libcirc.wasm</code>, built from circ-compiler
-        <code>{manifest.version}</code> at <code>{manifest.revision}</code>); nothing
-        leaves the page. Multi-file projects use <code>// name.circ</code> marker
-        lines, and the last file is the root.
-      </p>
-    </details>
-  </header>
   <Playground manifest={manifest} supportedVersions={SUPPORTED_TOPOLOGY_VERSIONS} />
 </Base>

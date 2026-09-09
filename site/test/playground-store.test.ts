@@ -87,13 +87,16 @@ describe('playground store', () => {
   test('defaults and round-trip', () => {
     const env = defaultEnvelope();
     expect(Object.keys(env).sort()).toEqual(
-      ['activeFile', 'activeId', 'dock', 'layout', 'scratch', 'settings', 'tab', 'version'].sort(),
+      ['activeFile', 'activeId', 'dock', 'layout', 'scratch', 'settings', 'tab', 'version', 'ws'].sort(),
     );
     expect(env.version).toBe(1);
     expect(env.settings.truthTableCap).toBe(12);
     expect(env.settings.format).toBe('json');
     expect(env.tab).toBe('preview');
-    expect(env.dock).toEqual({ open: true, tab: 'diagnostics' });
+    expect(env.dock).toEqual({ open: false, tab: 'diagnostics' });
+    // The reader's own projects open; every catalogue group starts shut, and
+    // whichever one holds the open project is revealed at load.
+    expect(env.ws).toEqual({ expanded: ['yours'] });
     // normalize is a fixed point on its own output.
     const round = normalize(JSON.parse(JSON.stringify(env)));
     expect(round.note).toBeNull();
@@ -178,21 +181,36 @@ describe('playground store', () => {
     // change carries one at all.
     const noDock = { ...defaultEnvelope() } as Record<string, unknown>;
     delete noDock.dock;
-    expect(normalize(noDock).envelope.dock).toEqual({ open: true, tab: 'diagnostics' });
-    expect(normalize({ ...defaultEnvelope(), dock: 'nope' }).envelope.dock).toEqual({ open: true, tab: 'diagnostics' });
-    expect(normalize({ ...defaultEnvelope(), dock: { open: false } }).envelope.dock).toEqual({
-      open: false,
+    expect(normalize(noDock).envelope.dock).toEqual({ open: false, tab: 'diagnostics' });
+    expect(normalize({ ...defaultEnvelope(), dock: 'nope' }).envelope.dock).toEqual({ open: false, tab: 'diagnostics' });
+    expect(normalize({ ...defaultEnvelope(), dock: { open: true } }).envelope.dock).toEqual({
+      open: true,
       tab: 'diagnostics',
     });
     expect(normalize({ ...defaultEnvelope(), dock: { tab: 'settings' } }).envelope.dock).toEqual({
-      open: true,
+      open: false,
       tab: 'settings',
     });
     // A tab the dock does not have falls back without touching `open`.
-    expect(normalize({ ...defaultEnvelope(), dock: { open: false, tab: 'preview' } }).envelope.dock).toEqual({
-      open: false,
+    expect(normalize({ ...defaultEnvelope(), dock: { open: true, tab: 'preview' } }).envelope.dock).toEqual({
+      open: true,
       tab: 'diagnostics',
     });
+
+    // The explorer's expansion set: ids only, deduped, and defaulted when the
+    // envelope predates it. An id naming nothing is harmless — it is never read.
+    const noWs = { ...defaultEnvelope() } as Record<string, unknown>;
+    delete noWs.ws;
+    expect(normalize(noWs).envelope.ws).toEqual({ expanded: ['yours'] });
+    expect(normalize({ ...defaultEnvelope(), ws: 'nope' }).envelope.ws).toEqual({ expanded: ['yours'] });
+    expect(normalize({ ...defaultEnvelope(), ws: { expanded: [] } }).envelope.ws).toEqual({ expanded: [] });
+    expect(
+      normalize({ ...defaultEnvelope(), ws: { expanded: ['a', 'a', 'b', 7, '', null] } }).envelope.ws,
+    ).toEqual({ expanded: ['a', 'b'] });
+    // A runaway list is capped rather than stored whole.
+    const manyIds = Array.from({ length: 500 }, (_, i) => `g${i}`);
+    expect(normalize({ ...defaultEnvelope(), ws: { expanded: manyIds } }).envelope.ws.expanded.length)
+      .toBeLessThanOrEqual(128);
 
     // An activeId naming a scratch project that is gone becomes null.
     expect(normalize({ ...defaultEnvelope(), activeId: 'scratch:missing' }).envelope.activeId).toBeNull();

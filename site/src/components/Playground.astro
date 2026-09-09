@@ -63,34 +63,32 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       >Workspace</button>
       <button type="button" class="pg-ws-new" aria-label="New project">+</button>
       <div class="pg-ws-body" id="pg-ws-body">
-        {groups.map(({ group, slug, items }) => (
-          <section class="pg-ws-section">
-            <h2 class="pg-ws-group" id={`pg-ws-h-${slug}`}>{group}</h2>
-            <ul class="pg-ws-list" aria-labelledby={`pg-ws-h-${slug}`}>
-              {items.map((c) => (
-                <li>
-                  <button type="button" class="pg-ws-row" data-pick={c.id}>{c.label}</button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ))}
-        <section class="pg-ws-section">
-          <h2 class="pg-ws-group" id="pg-ws-h-scratch">Yours</h2>
-          {/* Rendered by the island from the persisted envelope. */}
-          <ul class="pg-ws-list pg-ws-scratch" aria-labelledby="pg-ws-h-scratch"></ul>
-        </section>
+        {/* The pre-hydration fallback: every project, flat, as ordinary links
+            into the picker. The island replaces this whole subtree with a real
+            `role=tree` once it runs — expansion state and the open project's
+            file children both need the store, which the server does not have.
+            Kept rather than shipped empty so the sidebar is never a blank box
+            on a slow connection. */}
+        <ul class="pg-ws-fallback">
+          {groups.map(({ group, slug, items }) => (
+            <li class="pg-ws-section">
+              <h2 class="pg-ws-group" id={`pg-ws-h-${slug}`}>{group}</h2>
+              <ul class="pg-ws-list" aria-labelledby={`pg-ws-h-${slug}`}>
+                {items.map((c) => (
+                  <li>
+                    <button type="button" class="pg-ws-row" data-pick={c.id}>{c.label}</button>
+                  </li>
+                ))}
+              </ul>
+            </li>
+          ))}
+        </ul>
+        {/* One line under the tree, naming the first file that cannot be
+            written back to the combined source. */}
+        <p class="pg-ws-error" role="alert"></p>
       </div>
     </nav>
     <section class="pg-editor" id="pg-pane-editor">
-      <!-- The file tab strip. Ships empty and hidden: every tab is created by
-           the island, and the strip is only unhidden once the editor mounts,
-           so a reader never sees N tabs over one combined textarea. -->
-      <div class="pg-files" hidden>
-        <div class="pg-filetabs" role="tablist" aria-label="Project files" aria-orientation="horizontal"></div>
-        <button type="button" class="pg-file-add" aria-label="Add a file">+</button>
-        <span class="pg-filetab-error" role="alert"></span>
-      </div>
       <div class="pg-editor-wrap" id="pg-editor-panel" role="tabpanel">
         <div id="pg-editor" class="pg-cm" hidden></div>
         <textarea
@@ -107,7 +105,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
            compiled result, which is why they sit under the editor instead of
            competing with the preview for the output pane. It ships open so a
            reader with no stored envelope sees their diagnostics. -->
-      <div class="pg-dock" data-open="true">
+      <div class="pg-dock" data-open="false">
         <div class="pg-dock-bar">
           <div class="pg-dock-tabs" role="tablist" aria-label="Editor panel">
             <button
@@ -282,6 +280,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     touchScratch,
     uniqueName,
     NEW_PROJECT_SOURCE,
+    CATALOGUE_GROUPS,
     type CatalogueItem,
   } from '../utils/playground-store.ts';
   import {
@@ -309,6 +308,16 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     toSource,
     type FileTabsState,
   } from '../scripts/file-tabs.ts';
+  import {
+    fileNodeId,
+    moveFor,
+    reveal,
+    toggle as toggleExpanded,
+    visibleNodes,
+    type TreeInput,
+    type TreeKey,
+    type TreeNode,
+  } from '../scripts/ws-tree.ts';
   import {
     indexDoc,
     mapPerTab,
@@ -350,14 +359,11 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     // the file tabs, and showTab() would then clobber their aria-selected and
     // blank the output pane.
     const tabs = Array.from(el.querySelectorAll<HTMLButtonElement>('.pg-tabs [role=tab]'));
-    const fileStrip = el.querySelector<HTMLElement>('.pg-files')!;
-    const fileTabList = el.querySelector<HTMLElement>('.pg-filetabs')!;
-    const fileError = el.querySelector<HTMLElement>('.pg-filetab-error')!;
-    const fileAdd = el.querySelector<HTMLButtonElement>('.pg-file-add')!;
     const wsRoot = el.querySelector<HTMLElement>('.pg-ws')!;
     const wsToggle = el.querySelector<HTMLButtonElement>('.pg-ws-toggle')!;
-    const wsScratch = el.querySelector<HTMLElement>('.pg-ws-scratch')!;
+    const wsBody = el.querySelector<HTMLElement>('.pg-ws-body')!;
     const wsNew = el.querySelector<HTMLButtonElement>('.pg-ws-new')!;
+    const wsError = el.querySelector<HTMLElement>('.pg-ws-error')!;
     const shareBtn = el.querySelector<HTMLButtonElement>('.pg-share')!;
     const statusActions = el.querySelector<HTMLElement>('.pg-status-actions')!;
     const panels = Array.from(el.querySelectorAll<HTMLElement>('.pg-panel'));
@@ -648,7 +654,15 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         draft.activeId = id;
         draft.activeFile = activeFile(state.tabs).name;
       });
-      renderFileTabs();
+      // Open the group holding what just loaded, and the project itself, so the
+      // sidebar always contains the thing the editor is showing. A reader who
+      // then shuts it keeps it shut until they switch projects again.
+      const opened = reveal(expanded, treeInput(), id);
+      if (opened.size !== expanded.size) {
+        expanded = opened;
+        persistExpanded();
+      }
+      renderTree({ keepFocusOn: null });
       renderWorkspace();
       schedule();
       return true;
@@ -656,6 +670,19 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
 
     /** The scratch project whose delete is armed, or null. */
     let confirmProject: string | null = null;
+
+    /** What each join conflict means for the reader, in one line. */
+    const CONFLICT_TEXT: Record<string, string> = {
+      'blank-body': 'this file is empty, so the next file would merge into it',
+      'marker-in-body': 'a `// name.circ` line after code starts a new file here',
+      'illegal-name': 'this name cannot be written as a file marker',
+      'duplicate-name': 'another file has this name, so one of them is dropped',
+    };
+
+    /** Index of the file whose delete is armed, or null. A second Delete (or
+     *  the × on the row) removes it; anything else disarms. */
+    let confirmIndex: number | null = null;
+    let confirmTimer: number | null = null;
 
     const nowMs = () => Date.now();
 
@@ -712,9 +739,416 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       if (created) loadProject(created);
     }
 
-    function startRenameProject(id: string, row: HTMLElement) {
+    // ---- the workspace explorer ----
+    // One tree, three levels: group folders, the projects inside them, and —
+    // under the one project the editor holds — its files. It is the only place
+    // files live now: the strip that used to sit above the editor carried the
+    // active-file indicator and the per-file error badge, and both of those
+    // belong next to the project they describe rather than over the text.
+
+    /** Ids of the rows the reader has open. Seeded from the envelope, and
+     *  written back on every deliberate toggle. */
+    let expanded = new Set(store.envelope.ws.expanded);
+    /** Index into the flattened tree that holds the single tab stop. */
+    let treeFocus = 0;
+    let treeNodes: TreeNode[] = [];
+
+    const groupSlug = (label: string) => label.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
+    /** The tree as data. Rebuilt on every render rather than cached: each of
+     *  its inputs — the catalogue, the scratch list, the file set, the
+     *  analysis — moves on its own schedule. */
+    function treeInput(): TreeInput {
+      // "Yours" is not a catalogue group — it comes from the envelope — so the
+      // array is typed off TreeInput rather than inferred from CATALOGUE_GROUPS.
+      const groups: TreeInput['groups'][number][] = CATALOGUE_GROUPS
+        .filter((g) => catalogue.some((c) => c.group === g))
+        .map((g) => ({
+          id: groupSlug(g),
+          label: g as string,
+          projects: catalogue
+            .filter((c) => c.group === g)
+            .map((c) => ({ id: c.id, label: c.label, editable: false })),
+        }));
+      groups.push({
+        id: 'yours',
+        label: 'Yours',
+        projects: [...store.envelope.scratch]
+          .sort((a, b) => b.updatedAt - a.updatedAt)
+          .map((p) => ({ id: p.id, label: p.name, editable: true })),
+      });
+      return {
+        groups,
+        activeId: store.envelope.activeId,
+        files: state.tabs.files,
+        activeFile: state.tabs.active,
+        counts: countsByFile(state.tabs.files, state.analysis),
+        conflicts: new Map(joinConflicts(state.tabs.files).map((c) => [c.index, CONFLICT_TEXT[c.reason]])),
+        expanded,
+      };
+    }
+
+    function persistExpanded() {
+      store.update((draft) => { draft.ws.expanded = [...expanded]; });
+    }
+
+    /** Open a row and redraw. */
+    function expandNode(id: string, open: boolean) {
+      if (expanded.has(id) === open) return;
+      expanded = toggleExpanded(expanded, id);
+      persistExpanded();
+      renderTree();
+    }
+
+    /** The row that should hold the tab stop after a redraw: whatever the
+     *  reader was on if it still exists, else the active file, else the active
+     *  project. Losing the tab stop into row 0 on every keystroke would make
+     *  the tree unusable with a keyboard. */
+    function preferredFocus(nodes: readonly TreeNode[], wantedId: string | null): number {
+      if (wantedId) {
+        const at = nodes.findIndex((n) => n.id === wantedId);
+        if (at >= 0) return at;
+      }
+      const file = nodes.findIndex((n) => n.kind === 'file' && n.active);
+      if (file >= 0) return file;
+      const project = nodes.findIndex((n) => n.kind === 'project' && n.active);
+      return project >= 0 ? project : 0;
+    }
+
+    function badgeEl(severity: 'error' | 'warning', count: number): HTMLElement {
+      const badge = document.createElement('span');
+      badge.className = 'pg-tree-badge';
+      badge.dataset.severity = severity;
+      badge.textContent = String(count);
+      // The accessible name already carries the counts in words.
+      badge.setAttribute('aria-hidden', 'true');
+      return badge;
+    }
+
+    function iconButton(cls: string, glyph: string, label: string, onClick: () => void): HTMLButtonElement {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = cls;
+      b.textContent = glyph;
+      b.setAttribute('aria-label', label);
+      // A real tab stop, unlike the old strip's close control: `treeitem` is
+      // not on ARIA's presentational-children list, so a nested button here IS
+      // announced. That was the one thing `role=tab` could never allow.
+      b.tabIndex = -1;
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        onClick();
+      });
+      return b;
+    }
+
+    function renderTree(opts: { keepFocusOn?: string | null } = {}) {
+      const wantedId = opts.keepFocusOn !== undefined
+        ? opts.keepFocusOn
+        : (treeNodes[treeFocus]?.id ?? null);
+      treeNodes = visibleNodes(treeInput());
+      treeFocus = preferredFocus(treeNodes, wantedId);
+
+      const tree = document.createElement('div');
+      tree.className = 'pg-tree';
+      tree.setAttribute('role', 'tree');
+      tree.setAttribute('aria-label', 'Projects and files');
+
+      treeNodes.forEach((node, i) => {
+        const row = document.createElement('div');
+        row.className = `pg-tree-row pg-tree-${node.kind}`;
+        row.setAttribute('role', 'treeitem');
+        row.setAttribute('aria-level', String(node.level));
+        row.dataset.node = node.id;
+        row.dataset.index = String(i);
+        row.style.setProperty('--depth', String(node.level - 1));
+        // Roving tabindex: one stop for the whole tree.
+        row.tabIndex = i === treeFocus ? 0 : -1;
+
+        const parts: string[] = [node.label];
+
+        if (node.kind === 'group') {
+          row.setAttribute('aria-expanded', String(node.expanded));
+          parts.push(`${node.count} project${node.count === 1 ? '' : 's'}`);
+        }
+
+        // The twisty. Always present on an openable row, always absent
+        // otherwise: a disabled-looking triangle that does nothing is worse
+        // than the indent alone.
+        const twisty = document.createElement('span');
+        twisty.className = 'pg-tree-twisty';
+        twisty.setAttribute('aria-hidden', 'true');
+        const openable = node.kind === 'group' || (node.kind === 'project' && node.expandable);
+        twisty.textContent = openable ? (node.expanded ? '▾' : '▸') : '';
+        row.appendChild(twisty);
+
+        const name = document.createElement('span');
+        name.className = 'pg-tree-label';
+        name.textContent = node.label;
+        row.appendChild(name);
+
+        if (node.kind === 'project') {
+          row.dataset.pick = node.id;
+          if (node.expandable) row.setAttribute('aria-expanded', String(node.expanded));
+          if (node.active) {
+            row.setAttribute('aria-current', 'true');
+            parts.push('open');
+          }
+          if (node.severity) {
+            row.appendChild(badgeEl(node.severity, node.badge));
+            parts.push(`${node.badge} ${node.severity}${node.badge === 1 ? '' : 's'}`);
+          }
+          if (node.editable) {
+            const actions = document.createElement('span');
+            actions.className = 'pg-tree-actions';
+            const id = node.id;
+            const label = node.label;
+            actions.appendChild(iconButton('pg-tree-action', '✎', `Rename ${label}`, () => startRenameProject(id)));
+            actions.appendChild(
+              iconButton('pg-tree-action', '⧉', `Duplicate ${label}`, () => duplicateProject(id)),
+            );
+            const del = iconButton('pg-tree-action', '×', `Delete ${label}`, () => armOrDeleteProject(id));
+            if (confirmProject === id) {
+              del.dataset.confirm = 'true';
+              del.setAttribute('aria-label', `Delete ${label}? Activate again to confirm`);
+            }
+            actions.appendChild(del);
+            row.appendChild(actions);
+          }
+          if (node.active) {
+            const add = iconButton('pg-tree-action pg-tree-add', '＋', 'Add a file', addNewFile);
+            row.appendChild(add);
+          }
+        }
+
+        if (node.kind === 'file') {
+          row.dataset.index = String(i);
+          row.dataset.file = String(node.index);
+          if (node.active) {
+            row.setAttribute('aria-selected', 'true');
+            row.setAttribute('aria-current', 'true');
+          }
+          if (node.root) {
+            const chip = document.createElement('span');
+            chip.className = 'pg-tree-root';
+            chip.textContent = 'root';
+            chip.setAttribute('aria-hidden', 'true');
+            row.appendChild(chip);
+            parts.push('root file');
+          }
+          if (node.severity) {
+            row.appendChild(badgeEl(node.severity, node.badge));
+            parts.push(`${node.badge} ${node.severity}${node.badge === 1 ? '' : 's'}`);
+          } else {
+            parts.push('no diagnostics');
+          }
+          if (node.conflict) {
+            const mark = document.createElement('span');
+            mark.className = 'pg-tree-conflict';
+            mark.textContent = '⚠';
+            mark.setAttribute('aria-hidden', 'true');
+            row.appendChild(mark);
+            parts.push(`unsaveable: ${node.conflict}`);
+          }
+          const fileIndex = node.index;
+          const armed = confirmIndex === fileIndex;
+          if (armed) row.dataset.confirm = 'true';
+          row.appendChild(
+            iconButton('pg-tree-action', '×', `Delete ${node.label}`, () => armOrDelete(fileIndex)),
+          );
+
+          // Pointer reorder, an enhancement over Alt+Arrow and never the only
+          // path: a drag is impossible with a keyboard.
+          row.draggable = true;
+          row.addEventListener('dragstart', (e) => {
+            e.dataTransfer?.setData('text/plain', String(fileIndex));
+            if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+          });
+          row.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+            row.dataset.drop = 'true';
+          });
+          row.addEventListener('dragleave', () => { delete row.dataset.drop; });
+          row.addEventListener('drop', (e) => {
+            e.preventDefault();
+            delete row.dataset.drop;
+            const from = Number(e.dataTransfer?.getData('text/plain'));
+            if (Number.isInteger(from)) reorder(from, fileIndex);
+          });
+          if (armed) {
+            parts.length = 0;
+            parts.push(`Delete ${node.label}? Press Delete again to confirm`);
+          }
+        }
+
+        row.setAttribute('aria-label', parts.join(', '));
+        row.addEventListener('click', () => activate(i));
+        tree.appendChild(row);
+
+        // An open folder with nothing in it says so, rather than looking like
+        // a row that failed to render. Only "Yours" can be empty today.
+        if (node.kind === 'group' && node.expanded && node.count === 0) {
+          const empty = document.createElement('div');
+          empty.className = 'pg-ws-empty';
+          empty.textContent = 'Edit an example to start your own.';
+          tree.appendChild(empty);
+        }
+      });
+
+      wsBody.querySelector('.pg-tree')?.remove();
+      wsBody.querySelector('.pg-ws-fallback')?.remove();
+      wsBody.insertBefore(tree, wsError);
+
+      // One line naming the first file that cannot be written back, so the
+      // reader learns why a row is marked rather than only that it is.
+      const first = joinConflicts(state.tabs.files)[0];
+      wsError.textContent = first
+        ? `${state.tabs.files[first.index].name}: ${CONFLICT_TEXT[first.reason]}`
+        : '';
+
+      // The editor panel is labelled by whichever file row is current.
+      const activeRow = tree.querySelector<HTMLElement>('.pg-tree-file[aria-current="true"]');
+      if (activeRow) {
+        activeRow.id = `pg-tree-file-${state.tabs.active}`;
+        editorWrap.setAttribute('aria-labelledby', activeRow.id);
+      } else {
+        editorWrap.removeAttribute('aria-labelledby');
+      }
+    }
+
+    /** Kept for the callers that predate the tree; the tree is the workspace. */
+    const renderWorkspace = renderTree;
+
+    function focusNode(index: number) {
+      treeFocus = Math.max(0, Math.min(index, treeNodes.length - 1));
+      for (const row of wsBody.querySelectorAll<HTMLElement>('.pg-tree-row')) {
+        row.tabIndex = Number(row.dataset.index) === treeFocus ? 0 : -1;
+      }
+      wsBody.querySelector<HTMLElement>(`.pg-tree-row[data-index="${treeFocus}"]`)?.focus();
+    }
+
+    /** Focus the row showing file `index`, which is what every file operation
+     *  wants afterwards. */
+    function focusFileTab(index: number) {
+      const at = treeNodes.findIndex((n) => n.kind === 'file' && n.index === index);
+      if (at >= 0) focusNode(at);
+    }
+
+    /** Enter, Space, or a click. A folder toggles; a project loads; a file
+     *  opens in the editor. */
+    function activate(index: number) {
+      const node = treeNodes[index];
+      if (!node) return;
+      treeFocus = index;
+      if (node.kind === 'group') {
+        expandNode(node.id, !node.expanded);
+        focusNode(index);
+        return;
+      }
+      if (node.kind === 'project') {
+        disarm();
+        confirmProject = null;
+        if (node.active && node.expandable) {
+          // Already open: the click is about its files, not about loading it
+          // again, so it works the twisty.
+          expandNode(node.id, !node.expanded);
+          focusNode(index);
+          return;
+        }
+        loadProject(node.id);
+        return;
+      }
+      showFile(node.index);
+    }
+
+    wsBody.addEventListener('keydown', (e) => {
+      const row = (e.target as HTMLElement).closest<HTMLElement>('.pg-tree-row');
+      if (!row) return;
+      const index = Number(row.dataset.index);
+      const node = treeNodes[index];
+      if (!node) return;
+
+      // Alt+Arrow moves a FILE. Checked before the plain arrows and always
+      // prevented: Alt+ArrowLeft is Back on Windows and Linux, and losing the
+      // page mid-edit would cost the reader real work.
+      if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+        e.preventDefault();
+        if (node.kind === 'file') reorder(node.index, node.index + (e.key === 'ArrowDown' ? 1 : -1));
+        return;
+      }
+
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        activate(index);
+        return;
+      }
+      if (e.key === 'F2') {
+        e.preventDefault();
+        if (node.kind === 'file') startRename(node.index);
+        else if (node.kind === 'project' && node.editable) startRenameProject(node.id);
+        return;
+      }
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        if (node.kind === 'file') armOrDelete(node.index);
+        else if (node.kind === 'project' && node.editable) armOrDeleteProject(node.id);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        confirmProject = null;
+        disarm();
+        return;
+      }
+
+      const move = moveFor(treeNodes, index, e.key as TreeKey);
+      if (!move) return;
+      // Only consumed keys are prevented: Home and End must still work inside
+      // a rename input, and the arrows must still move the caret in the editor.
+      e.preventDefault();
+      if (move.kind === 'focus') focusNode(move.index);
+      else expandNode(move.id, move.kind === 'expand');
+    });
+
+    // ---- project operations ----
+    function duplicateProject(id: string) {
+      let created: string | null = null;
+      store.update((draft) => {
+        const r = duplicateScratch(draft.scratch, id, { now: nowMs() });
+        if (!r || !r.created) return;
+        draft.scratch = r.list;
+        created = r.created.id;
+      });
+      if (created) loadProject(created);
+    }
+
+    function armOrDeleteProject(id: string) {
+      const name = store.envelope.scratch.find((p) => p.id === id)?.name ?? id;
+      // Two presses, as for a file: a project is not undoable.
+      if (confirmProject !== id) {
+        confirmProject = id;
+        status.textContent = `Delete ${name}? Activate the × again to confirm.`;
+        renderTree();
+        return;
+      }
+      confirmProject = null;
+      const wasActive = store.envelope.activeId === id;
+      store.update((draft) => {
+        draft.scratch = deleteScratch(draft.scratch, id);
+        if (wasActive) draft.activeId = null;
+      });
+      status.textContent = `Deleted ${name}.`;
+      if (wasActive) loadProject(el.dataset.defaultPick ?? catalogue[0].id);
+      else renderTree({ keepFocusOn: null });
+    }
+
+    /** Swaps the row's label for an input. Escape reverts; a blur commits. */
+    function startRenameProject(id: string) {
       const current = store.envelope.scratch.find((p) => p.id === id);
-      if (!current) return;
+      const row = wsBody.querySelector<HTMLElement>(`.pg-tree-row[data-node="${CSS.escape(id)}"]`);
+      const nameEl = row?.querySelector<HTMLElement>('.pg-tree-label');
+      if (!current || !row || !nameEl) return;
       const input = document.createElement('input');
       input.className = 'pg-ws-input';
       input.value = current.name;
@@ -726,7 +1160,8 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         if (commit && input.value.trim() !== '') {
           store.update((draft) => { draft.scratch = renameScratch(draft.scratch, id, input.value); });
         }
-        renderWorkspace();
+        renderTree({ keepFocusOn: id });
+        focusNode(treeFocus);
       };
       input.addEventListener('keydown', (e) => {
         e.stopPropagation();
@@ -734,112 +1169,10 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
       });
       input.addEventListener('blur', () => finish(true));
-      row.replaceWith(input);
+      nameEl.replaceWith(input);
       input.focus();
       input.select();
     }
-
-    function renderWorkspace() {
-      const active = store.envelope.activeId;
-      for (const row of el.querySelectorAll<HTMLElement>('.pg-ws-row')) {
-        if (row.dataset.pick === active) row.setAttribute('aria-current', 'true');
-        else row.removeAttribute('aria-current');
-      }
-      wsScratch.innerHTML = '';
-      const projects = [...store.envelope.scratch].sort((a, b) => b.updatedAt - a.updatedAt);
-      if (projects.length === 0) {
-        const empty = document.createElement('li');
-        empty.className = 'pg-ws-empty';
-        empty.textContent = 'Edit an example to start your own.';
-        wsScratch.appendChild(empty);
-        return;
-      }
-      for (const p of projects) {
-        const li = document.createElement('li');
-        li.className = 'pg-ws-item';
-        const row = document.createElement('button');
-        row.type = 'button';
-        row.className = 'pg-ws-row';
-        row.dataset.pick = p.id;
-        row.textContent = p.name;
-        if (p.id === active) row.setAttribute('aria-current', 'true');
-        li.appendChild(row);
-
-        // Sibling buttons, not nested ones: a row is a plain button, so these
-        // are announced normally and reachable with the keyboard.
-        const actions = document.createElement('span');
-        actions.className = 'pg-ws-actions';
-        for (const [action, glyph, label] of [
-          ['rename', '\u270e', `Rename ${p.name}`],
-          ['duplicate', '\u29c9', `Duplicate ${p.name}`],
-          ['delete', '\u00d7', `Delete ${p.name}`],
-        ] as const) {
-          const b = document.createElement('button');
-          b.type = 'button';
-          b.className = 'pg-ws-action';
-          b.dataset.action = action;
-          b.dataset.id = p.id;
-          b.textContent = glyph;
-          b.setAttribute('aria-label', label);
-          if (action === 'delete' && confirmProject === p.id) {
-            b.dataset.confirm = 'true';
-            b.setAttribute('aria-label', `Delete ${p.name}? Activate again to confirm`);
-          }
-          actions.appendChild(b);
-        }
-        li.appendChild(actions);
-        wsScratch.appendChild(li);
-      }
-    }
-
-    // Delegated, so client-rendered scratch rows need no per-row wiring.
-    wsRoot.addEventListener('click', (e) => {
-      const target = e.target as HTMLElement;
-      const action = target.closest<HTMLElement>('.pg-ws-action');
-      if (action && action.dataset.id) {
-        const id = action.dataset.id;
-        const name = store.envelope.scratch.find((p) => p.id === id)?.name ?? id;
-        if (action.dataset.action === 'rename') {
-          const row = wsScratch.querySelector<HTMLElement>(`.pg-ws-row[data-pick="${id}"]`);
-          if (row) startRenameProject(id, row);
-          return;
-        }
-        if (action.dataset.action === 'duplicate') {
-          let created: string | null = null;
-          store.update((draft) => {
-            const r = duplicateScratch(draft.scratch, id, { now: nowMs() });
-            if (!r || !r.created) return;
-            draft.scratch = r.list;
-            created = r.created.id;
-          });
-          if (created) loadProject(created);
-          return;
-        }
-        if (action.dataset.action === 'delete') {
-          // Two presses, like the file tabs: a project is not undoable.
-          if (confirmProject !== id) {
-            confirmProject = id;
-            status.textContent = `Delete ${name}? Activate the × again to confirm.`;
-            renderWorkspace();
-            return;
-          }
-          confirmProject = null;
-          const wasActive = store.envelope.activeId === id;
-          store.update((draft) => {
-            draft.scratch = deleteScratch(draft.scratch, id);
-            if (wasActive) draft.activeId = null;
-          });
-          status.textContent = `Deleted ${name}.`;
-          if (wasActive) loadProject(el.dataset.defaultPick ?? catalogue[0].id);
-          else renderWorkspace();
-          return;
-        }
-      }
-      const row = target.closest<HTMLElement>('.pg-ws-row');
-      if (!row || !row.dataset.pick) return;
-      confirmProject = null;
-      loadProject(row.dataset.pick);
-    });
 
     wsNew.addEventListener('click', newProject);
 
@@ -1115,34 +1448,18 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       }
       state.tabs = next;
       editor?.showDocument(state.tabs.active);
-      renderFileTabs();
+      renderTree();
       focusFileTab(state.tabs.active);
       // No schedule(): the source did not change, only which file is visible.
     }
 
-    function focusFileTab(index: number) {
-      fileTabList.querySelector<HTMLElement>(`[data-index="${index}"]`)?.focus();
-    }
-
-    /** What each join conflict means for the reader, in one line. */
-    const CONFLICT_TEXT: Record<string, string> = {
-      'blank-body': 'this file is empty, so the next file would merge into it',
-      'marker-in-body': 'a `// name.circ` line after code starts a new file here',
-      'illegal-name': 'this name cannot be written as a file marker',
-      'duplicate-name': 'another tab has this name, so one of them is dropped',
-    };
-
-    /** Index of the tab whose delete is armed, or null. A second Delete (or the
-     *  close control) removes it; anything else disarms. */
-    let confirmIndex: number | null = null;
-    let confirmTimer: number | null = null;
 
     function disarm() {
       if (confirmIndex === null) return;
       confirmIndex = null;
       if (confirmTimer !== null) window.clearTimeout(confirmTimer);
       confirmTimer = null;
-      renderFileTabs();
+      renderTree();
     }
 
     function armOrDelete(index: number) {
@@ -1154,7 +1471,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         confirmIndex = index;
         if (confirmTimer !== null) window.clearTimeout(confirmTimer);
         confirmTimer = window.setTimeout(disarm, 4000);
-        renderFileTabs();
+        renderTree();
         status.textContent = `Delete ${state.tabs.files[index].name}? Press Delete again, or the ×, to confirm.`;
         return;
       }
@@ -1166,7 +1483,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       state.tabs = deleteFile(state.tabs, index);
       editor?.removeDocument(index);
       editor?.showDocument(state.tabs.active);
-      renderFileTabs();
+      renderTree();
       focusFileTab(state.tabs.active);
       status.textContent = wasRoot
         ? `Deleted ${name}. ${rootOf(state.tabs.files).name} is now the root.`
@@ -1180,7 +1497,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       const index = state.tabs.active;
       editor?.insertDocument(index, state.tabs.files[index].body);
       editor?.showDocument(index);
-      renderFileTabs();
+      renderTree();
       focusFileTab(index);
       status.textContent = `Added ${state.tabs.files[index].name}.`;
       schedule();
@@ -1190,11 +1507,11 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
      *  Escape reverts, and a blur commits only if the name is legal. */
     function startRename(index: number) {
       disarm();
-      const tab = fileTabList.querySelector<HTMLElement>(`[data-index="${index}"]`);
-      const nameEl = tab?.querySelector<HTMLElement>('.pg-filetab-name');
+      const tab = wsBody.querySelector<HTMLElement>(`.pg-tree-file[data-file="${index}"]`);
+      const nameEl = tab?.querySelector<HTMLElement>('.pg-tree-label');
       if (!tab || !nameEl) return;
       const input = document.createElement('input');
-      input.className = 'pg-filetab-input';
+      input.className = 'pg-ws-input';
       input.value = state.tabs.files[index].name;
       input.setAttribute('aria-label', 'File name');
       input.setAttribute('aria-invalid', 'false');
@@ -1203,31 +1520,31 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       const finish = (commit: boolean) => {
         if (done) return;
         done = true;
-        fileError.textContent = '';
+        wsError.textContent = '';
         if (commit) {
           const next = renameFile(state.tabs, index, input.value);
           if (next !== state.tabs) {
             state.tabs = next;
             status.textContent =
               `Renamed to ${input.value}. Imports are not rewritten — update them yourself if this file is imported.`;
-            renderFileTabs();
+            renderTree();
             focusFileTab(index);
             schedule();
             return;
           }
         }
-        renderFileTabs();
+        renderTree();
         focusFileTab(index);
       };
 
       input.addEventListener('keydown', (e) => {
-        e.stopPropagation(); // the strip's own arrow handling must not fire
+        e.stopPropagation(); // the tree's own arrow handling must not fire
         if (e.key === 'Enter') {
           e.preventDefault();
           const problem = nameError(state.tabs, index, input.value);
           if (problem) {
             input.setAttribute('aria-invalid', 'true');
-            fileError.textContent = problem;
+            wsError.textContent = problem;
             return;
           }
           finish(true);
@@ -1254,168 +1571,12 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       state.tabs = next;
       editor?.moveDocument(from, to);
       editor?.showDocument(state.tabs.active);
-      renderFileTabs();
+      renderTree();
       focusFileTab(state.tabs.active);
       const nowRoot = rootOf(state.tabs.files).name;
       if (nowRoot !== wasRoot) status.textContent = `${nowRoot} is now the root.`;
       schedule();
     }
-
-    fileAdd.addEventListener('click', addNewFile);
-
-    function renderFileTabs() {
-      fileTabList.innerHTML = '';
-      const root = rootIndex(state.tabs);
-      const counts = countsByFile(state.tabs.files, state.analysis);
-      const conflicts = new Map(joinConflicts(state.tabs.files).map((c) => [c.index, c.reason]));
-      state.tabs.files.forEach((file, i) => {
-        const selected = i === state.tabs.active;
-        const tab = document.createElement('div');
-        tab.className = 'pg-filetab';
-        tab.id = `pg-filetab-${i}`;
-        tab.setAttribute('role', 'tab');
-        tab.setAttribute('aria-controls', 'pg-editor-panel');
-        tab.setAttribute('aria-selected', String(selected));
-        // Roving tabindex: one stop for the whole strip.
-        tab.tabIndex = selected ? 0 : -1;
-        tab.dataset.index = String(i);
-        const armed = confirmIndex === i;
-        if (armed) tab.dataset.confirm = 'true';
-        const count = counts[i];
-        const conflict = conflicts.get(i);
-        const parts = [file.name];
-        if (i === root) parts.push('root file');
-        if (count.errors || count.warnings) {
-          if (count.errors) parts.push(`${count.errors} error${count.errors === 1 ? '' : 's'}`);
-          if (count.warnings) parts.push(`${count.warnings} warning${count.warnings === 1 ? '' : 's'}`);
-        } else {
-          parts.push('no diagnostics');
-        }
-        if (conflict) parts.push(`unsaveable: ${CONFLICT_TEXT[conflict]}`);
-        tab.setAttribute(
-          'aria-label',
-          armed ? `Delete ${file.name}? Press Delete again to confirm` : parts.join(', '),
-        );
-
-        const name = document.createElement('span');
-        name.className = 'pg-filetab-name';
-        name.textContent = file.name;
-        tab.appendChild(name);
-
-        if (i === root) {
-          const badge = document.createElement('span');
-          badge.className = 'pg-filetab-root';
-          badge.textContent = 'root';
-          badge.setAttribute('aria-hidden', 'true');
-          tab.appendChild(badge);
-        }
-
-        // The visible badges duplicate what the accessible name already says,
-        // so they are hidden from the accessibility tree.
-        if (count.errors || count.warnings) {
-          const badge = document.createElement('span');
-          badge.className = 'pg-filetab-badge';
-          badge.dataset.severity = count.errors ? 'error' : 'warning';
-          badge.textContent = String(count.errors || count.warnings);
-          badge.setAttribute('aria-hidden', 'true');
-          tab.appendChild(badge);
-        }
-        if (conflict) {
-          const mark = document.createElement('span');
-          mark.className = 'pg-filetab-conflict';
-          mark.textContent = '\u26a0';
-          mark.setAttribute('aria-hidden', 'true');
-          tab.appendChild(mark);
-        }
-
-        const close = document.createElement('button');
-        close.type = 'button';
-        close.className = 'pg-filetab-close';
-        // Pointer-only: `role="tab"` is on ARIA's presentational-children list,
-        // so a nested control may never be announced. The keyboard path is
-        // Delete on the tab itself, and both are named in `.pg-status`.
-        close.tabIndex = -1;
-        close.textContent = '\u00d7';
-        close.setAttribute('aria-label', `Delete ${file.name}`);
-        close.addEventListener('click', (e) => {
-          e.stopPropagation();
-          armOrDelete(i);
-        });
-        tab.appendChild(close);
-
-        tab.addEventListener('click', () => showFile(i));
-
-        // Pointer reorder. Always an enhancement over Alt+Arrow, never the
-        // only path: a drag is impossible with a keyboard.
-        tab.draggable = true;
-        tab.addEventListener('dragstart', (e) => {
-          e.dataTransfer?.setData('text/plain', String(i));
-          if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
-        });
-        tab.addEventListener('dragover', (e) => {
-          e.preventDefault();
-          if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-          tab.dataset.drop = 'true';
-        });
-        tab.addEventListener('dragleave', () => { delete tab.dataset.drop; });
-        tab.addEventListener('drop', (e) => {
-          e.preventDefault();
-          delete tab.dataset.drop;
-          const from = Number(e.dataTransfer?.getData('text/plain'));
-          if (Number.isInteger(from)) reorder(from, i);
-        });
-
-        fileTabList.appendChild(tab);
-      });
-      editorWrap.setAttribute('aria-labelledby', `pg-filetab-${state.tabs.active}`);
-
-      // One line names the first unrepresentable file, so the reader learns
-      // why a tab is marked rather than only that it is.
-      const first = joinConflicts(state.tabs.files)[0];
-      fileError.textContent = first
-        ? `${state.tabs.files[first.index].name}: ${CONFLICT_TEXT[first.reason]}`
-        : '';
-    }
-
-    fileTabList.addEventListener('keydown', (e) => {
-      const target = (e.target as HTMLElement).closest<HTMLElement>('[data-index]');
-      if (!target) return;
-      const index = Number(target.dataset.index);
-      const last = state.tabs.files.length - 1;
-      // Alt+Arrow moves the TAB. Checked before the plain arrows, and always
-      // prevented: Alt+ArrowLeft is Back on Windows and Linux, and this phase
-      // persists nothing, so one unhandled press would destroy the session.
-      if (e.altKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
-        e.preventDefault();
-        reorder(index, e.key === 'ArrowRight' ? index + 1 : index - 1);
-        return;
-      }
-      let next: number | null = null;
-      if (e.key === 'ArrowRight') next = index === last ? 0 : index + 1;
-      else if (e.key === 'ArrowLeft') next = index === 0 ? last : index - 1;
-      else if (e.key === 'Home') next = 0;
-      else if (e.key === 'End') next = last;
-      else if (e.key === 'Enter' || e.key === ' ') next = index;
-      else if (e.key === 'F2') {
-        e.preventDefault();
-        startRename(index);
-        return;
-      } else if (e.key === 'Delete' || e.key === 'Backspace') {
-        e.preventDefault();
-        armOrDelete(index);
-        return;
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        disarm();
-        return;
-      }
-      if (next === null) return;
-      // Every consumed key is prevented: Home/End would scroll the pane and
-      // the arrows would move the caret in the editor behind the strip.
-      e.preventDefault();
-      disarm();
-      showFile(next);
-    });
 
     // ---- editor ----
     // The textarea is the fallback editing surface: it edits and compiles on
@@ -1470,7 +1631,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         },
         onChange: (doc, index) => {
           state.tabs = setBody(state.tabs, index, doc);
-          renderFileTabs();
+          renderTree();
           persistSource();
           schedule();
         },
@@ -1480,8 +1641,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       source.remove();
       // The strip only exists once the editor does: on the fallback path a tab
       // would mean nothing, because one textarea holds every file at once.
-      fileStrip.hidden = false;
-      renderFileTabs();
+      renderTree();
     }
 
     const whenIdle = (fn: () => void) => {
@@ -1582,7 +1742,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       state.analysis = JSON.parse(an.text!) as Analysis;
       state.diagnostics = state.analysis.diagnostics;
       publishDiagnostics(snapshot, state.analysis);
-      renderFileTabs();
+      renderTree();
       link.decls = declsFor(state.analysis, rootPathFor(rootOf(state.tabs.files).name));
       renderRoms();
 
@@ -1632,7 +1792,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         const compileAnalysis = JSON.parse(c.text) as Analysis;
         state.diagnostics = compileAnalysis.diagnostics;
         publishDiagnostics(snapshot, compileAnalysis);
-        renderFileTabs();
+        renderTree();
         pipe.errors = Math.max(1, state.diagnostics.filter((d) => d.severity === 'error').length);
         // The artifact and the canvas are LEFT ALONE: the last good build stays
         // on screen, dimmed, until the source builds again.
@@ -1840,7 +2000,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
               if (tab !== state.tabs.active) {
                 state.tabs = selectTab(state.tabs, tab);
                 editor.showDocument(tab);
-                renderFileTabs();
+                renderTree();
               }
               editor.select(from, to);
             } else {

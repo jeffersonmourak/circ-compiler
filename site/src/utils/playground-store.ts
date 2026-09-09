@@ -32,6 +32,13 @@ export type OutputTab = 'preview' | 'truth' | 'simulate';
 /** The editor dock's two panels. */
 export type DockTab = 'diagnostics' | 'settings';
 
+/** Which rows of the workspace explorer the reader has open. Ids, not
+ *  indices: a group or project keeps its expansion across a content change
+ *  that renumbers everything around it. */
+export interface WorkspaceState {
+  expanded: string[];
+}
+
 /** The dock is collapsible, and which panel it was left on is remembered
  *  separately from whether it was left open. */
 export interface DockState {
@@ -86,6 +93,7 @@ export interface PlaygroundEnvelope {
   settings: PlaygroundSettings;
   tab: OutputTab;
   dock: DockState;
+  ws: WorkspaceState;
 }
 
 export type StoreNote =
@@ -110,7 +118,16 @@ export interface TimerLike {
 
 const OUTPUT_TABS: readonly OutputTab[] = ['preview', 'truth', 'simulate'];
 const DOCK_TABS: readonly DockTab[] = ['diagnostics', 'settings'];
-export const DEFAULT_DOCK: DockState = { open: true, tab: 'diagnostics' };
+// Shut. The dock holds diagnostics, and the explorer now carries the per-file
+// error badge, so a reader sees that something is wrong without it — opening it
+// is for reading the messages, which is a deliberate act.
+export const DEFAULT_DOCK: DockState = { open: false, tab: 'diagnostics' };
+/** The reader's own projects, open. Everything else starts shut, and whichever
+ *  group holds the open project is revealed at load without being persisted. */
+export const DEFAULT_WS: WorkspaceState = { expanded: ['yours'] };
+/** Enough for every group plus every project; past this the envelope is being
+ *  used as a scratchpad by something other than a reader. */
+const MAX_EXPANDED = 128;
 const FORMATS: readonly PlaygroundSettings['format'][] = ['markdown', 'csv', 'json'];
 const VALUE_FORMATS: readonly PlaygroundSettings['valueFormat'][] = ['binary', 'hex', 'decimal'];
 
@@ -138,6 +155,7 @@ export function defaultEnvelope(): PlaygroundEnvelope {
     settings: defaultSettings(),
     tab: 'preview',
     dock: { ...DEFAULT_DOCK },
+    ws: { expanded: [...DEFAULT_WS.expanded] },
   };
 }
 
@@ -154,6 +172,21 @@ function normalizeDock(raw: unknown): DockState {
   if (typeof raw.open === 'boolean') out.open = raw.open;
   if (DOCK_TABS.includes(raw.tab as DockTab)) out.tab = raw.tab as DockTab;
   return out;
+}
+
+/** Ids only, deduped and capped. An id names nothing in the envelope, so one
+ *  that no longer matches a group or project is simply never read. */
+function normalizeWorkspace(raw: unknown): WorkspaceState {
+  if (!isObject(raw) || !Array.isArray(raw.expanded)) {
+    return { expanded: [...DEFAULT_WS.expanded] };
+  }
+  const seen = new Set<string>();
+  for (const id of raw.expanded) {
+    if (typeof id !== 'string' || id === '') continue;
+    seen.add(id);
+    if (seen.size >= MAX_EXPANDED) break;
+  }
+  return { expanded: [...seen] };
 }
 
 function normalizeSettings(raw: unknown): PlaygroundSettings {
@@ -239,6 +272,7 @@ export function normalize(raw: unknown): { envelope: PlaygroundEnvelope; note: S
       // here like any other unrecognised value rather than resetting anything.
       tab: OUTPUT_TABS.includes(raw.tab as OutputTab) ? (raw.tab as OutputTab) : 'preview',
       dock: normalizeDock(raw.dock),
+      ws: normalizeWorkspace(raw.ws),
     },
     note: null,
   };
