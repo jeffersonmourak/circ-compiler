@@ -12,6 +12,7 @@ import {
   mapDiagnostics,
   offsetAt,
   rangeToSpan,
+  mapPerTab,
   toLintDiagnostics,
   type Analysis,
   type AnalyzeRange,
@@ -20,6 +21,8 @@ import { byteColToUtf16, caretOffset } from '../src/utils/columns.ts';
 import { splitFiles, requestFor, PLAYGROUND_DIR } from '../src/utils/split-files.ts';
 import { callOp, instantiateLibcirc, type LibcircExports } from '../src/scripts/libcirc-abi.ts';
 import { tour } from '../src/content/tour.ts';
+import { examples } from '../src/content/examples.ts';
+import { fromSource } from '../src/scripts/file-tabs.ts';
 
 const range = (sl: number, sc: number, el = sl, ec = sc): AnalyzeRange => ({
   start_line: sl,
@@ -309,5 +312,61 @@ describe.skipIf(skip)('circ diagnostics against the committed module', () => {
     );
     expect(results[0]).toBe(results[1]);
     expect(results[0]).toContain('mystery');
+  });
+});
+
+describe.skipIf(skip)('per-tab mapping against the committed module', () => {
+  test('a two-tab project lists every diagnostic exactly once', async () => {
+    const w = await lib();
+    // Errors in BOTH files, so each tab places its own and neither repeats the
+    // other's — the N-times-on-N-tabs bug the placeless pass exists to avoid.
+    const src = tour[5].source
+      .replace('input a, b', 'input a, b\nnot broken(in=nowhere)')
+      .replace('output cout', 'not alsobroken(in=missing)\noutput cout');
+    const files = fromSource(src).files;
+    expect(files).toHaveLength(2);
+
+    const out = callOp(w, 'analyze', requestFor(files));
+    expect(out.status).toBe(0);
+    const analysis = JSON.parse(decode(out.bytes)) as Analysis;
+    expect(analysis.diagnostics.length).toBeGreaterThan(1);
+
+    const { perTab, rows } = mapPerTab(files, analysis);
+    // The flat list is total and duplicate-free.
+    expect(rows).toHaveLength(analysis.diagnostics.length);
+    // Every row is placed on the tab whose file the compiler blamed.
+    for (const row of rows) {
+      if (row.tab === null) continue;
+      expect(files[row.tab].name).toBe(row.fileName);
+      expect(row.from).not.toBeNull();
+      expect(files[row.tab].body.slice(row.from!, row.to!).length).toBeGreaterThan(0);
+    }
+    // Each tab's own editor list holds only that tab's diagnostics.
+    perTab.forEach((mapped, i) => {
+      for (const d of toLintDiagnostics(mapped)) {
+        expect(d.to).toBeLessThanOrEqual(files[i].body.length);
+      }
+    });
+    expect(toLintDiagnostics(perTab[0]).length + toLintDiagnostics(perTab[1]).length).toBe(
+      rows.filter((r) => r.tab !== null).length,
+    );
+  });
+
+  test('no diagnostic is blamed on a builtin source for the shipped content', async () => {
+    // TODO(phase2)-C: Phase 0 resolves implicit builtins on the compile route,
+    // so `<builtin>/…` entries appear in analysis.files. This asserts none of
+    // them ever carries a DIAGNOSTIC for the 17 shipped sources, which is what
+    // would put an unclickable, confusing row in the reader's list.
+    const w = await lib();
+    let builtinDiagnostics = 0;
+    for (const src of [...examples.map((e) => e.source), ...tour.map((t) => t.source)]) {
+      const out = callOp(w, 'analyze', requestFor(fromSource(src).files));
+      const analysis = JSON.parse(decode(out.bytes)) as Analysis;
+      for (const d of analysis.diagnostics) {
+        const path = analysis.files.find((f) => f.file_id === d.file_id)?.path ?? '';
+        if (path.startsWith('<builtin>/')) builtinDiagnostics += 1;
+      }
+    }
+    expect(builtinDiagnostics).toBe(0);
   });
 });

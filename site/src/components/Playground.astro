@@ -36,7 +36,14 @@ const initial = picks[0];
           ))}
         </select>
       </div>
-      <div class="pg-editor-wrap">
+      <!-- The file tab strip. Ships empty and hidden: every tab is created by
+           the island, and the strip is only unhidden once the editor mounts,
+           so a reader never sees N tabs over one combined textarea. -->
+      <div class="pg-files" hidden>
+        <div class="pg-filetabs" role="tablist" aria-label="Project files" aria-orientation="horizontal"></div>
+        <span class="pg-filetab-error" role="alert"></span>
+      </div>
+      <div class="pg-editor-wrap" id="pg-editor-panel" role="tabpanel">
         <div id="pg-editor" class="pg-cm" hidden></div>
         <textarea
           id="pg-source"
@@ -71,16 +78,29 @@ const initial = picks[0];
 
 <script>
   import { LibcircClient, type LibcircVersion, type WorkerReply } from '../scripts/libcirc-client.ts';
-  import { splitFiles, requestFor, PLAYGROUND_DIR, type SplitFile } from '../utils/split-files.ts';
+  import { requestFor, rootOf, PLAYGROUND_DIR } from '../utils/split-files.ts';
   import {
-    mapDiagnostics,
+    activeFile,
+    fromSource,
+    rootIndex,
+    select as selectTab,
+    setBody,
+    toSource,
+    type FileTabsState,
+  } from '../scripts/file-tabs.ts';
+  import {
+    mapPerTab,
     toLintDiagnostics,
     type Analysis,
     type AnalyzeDiagnostic as Diagnostic,
-    type MappedDiagnostic,
+    type TabbedDiagnostic,
   } from '../scripts/circ-diagnostics.ts';
 
   type Tab = 'diagnostics' | 'preview' | 'truth' | 'simulate';
+  /** A mapped diagnostic plus the file tab it belongs to; `null` when the
+   *  compiler blamed a file with no tab (a `<builtin>/…` source, or a stale
+   *  path from a reply that outlived a rename). */
+  type MappedRow = TabbedDiagnostic;
   interface TruthTable { inputs: string[]; outputs: string[]; rows: { in: (number | null)[]; out: (number | null)[] }[] }
 
   const UI_INPUT_BITS_CAP = 12;
@@ -100,7 +120,13 @@ const initial = picks[0];
     const previewEl = el.querySelector<HTMLElement>('.pg-preview')!;
     const tableEl = el.querySelector<HTMLElement>('.pg-table')!;
     const simNote = el.querySelector<HTMLElement>('.pg-sim-note')!;
-    const tabs = Array.from(el.querySelectorAll<HTMLButtonElement>('[role=tab]'));
+    // Narrowed to the OUTPUT strip: an unscoped [role=tab] would also collect
+    // the file tabs, and showTab() would then clobber their aria-selected and
+    // blank the output pane.
+    const tabs = Array.from(el.querySelectorAll<HTMLButtonElement>('.pg-tabs [role=tab]'));
+    const fileStrip = el.querySelector<HTMLElement>('.pg-files')!;
+    const fileTabList = el.querySelector<HTMLElement>('.pg-filetabs')!;
+    const fileError = el.querySelector<HTMLElement>('.pg-filetab-error')!;
     const panels = Array.from(el.querySelectorAll<HTMLElement>('.pg-panel'));
     const picks = JSON.parse(el.querySelector('#pg-picks')!.textContent || '{}') as Record<string, string>;
     const supported = (el.dataset.supportedVersions || '').split(',').filter(Boolean).map(Number);
@@ -108,16 +134,15 @@ const initial = picks[0];
     const client = new LibcircClient(el.dataset.libcircWasm!);
     const state = {
       gen: 0,
-      /** The pipeline's single source of truth. Initialised from the server-
-       *  rendered textarea, written by the editor's onChange, read by fire()
-       *  and renderDiagnostics(). Never read off the DOM. */
-      source: source.value,
-      files: [] as SplitFile[],
+      /** The pipeline's single source of truth: the file set and which tab is
+       *  visible. The combined string is never stored — it is computed on
+       *  demand with `toSource(state.tabs)`. Never read off the DOM. */
+      tabs: fromSource(source.value) as FileTabsState,
       analysis: null as Analysis | null,
       diagnostics: [] as Diagnostic[],
       /** `state.diagnostics` mapped onto absolute offsets in the combined
        *  document. Refreshed by BOTH producers in `fire()`. */
-      mapped: [] as MappedDiagnostic[],
+      mapped: [] as MappedRow[],
       artifact: null as { bytes: Uint8Array; hash: number } | null,
       tab: 'diagnostics' as Tab,
       version: null as LibcircVersion | null,
@@ -137,6 +162,78 @@ const initial = picks[0];
     }
     for (const b of tabs) b.addEventListener('click', () => showTab(b.dataset.tab as Tab));
 
+    // ---- file tabs ----
+    function showFile(index: number) {
+      const next = selectTab(state.tabs, index);
+      if (next === state.tabs) {
+        // Already active: still move focus there, so a click always lands.
+        focusFileTab(state.tabs.active);
+        return;
+      }
+      state.tabs = next;
+      editor?.showDocument(state.tabs.active);
+      renderFileTabs();
+      focusFileTab(state.tabs.active);
+      // No schedule(): the source did not change, only which file is visible.
+    }
+
+    function focusFileTab(index: number) {
+      fileTabList.querySelector<HTMLElement>(`[data-index="${index}"]`)?.focus();
+    }
+
+    function renderFileTabs() {
+      fileTabList.innerHTML = '';
+      const root = rootIndex(state.tabs);
+      state.tabs.files.forEach((file, i) => {
+        const selected = i === state.tabs.active;
+        const tab = document.createElement('div');
+        tab.className = 'pg-filetab';
+        tab.id = `pg-filetab-${i}`;
+        tab.setAttribute('role', 'tab');
+        tab.setAttribute('aria-controls', 'pg-editor-panel');
+        tab.setAttribute('aria-selected', String(selected));
+        // Roving tabindex: one stop for the whole strip.
+        tab.tabIndex = selected ? 0 : -1;
+        tab.dataset.index = String(i);
+        tab.setAttribute('aria-label', `${file.name}${i === root ? ', root file' : ''}`);
+
+        const name = document.createElement('span');
+        name.className = 'pg-filetab-name';
+        name.textContent = file.name;
+        tab.appendChild(name);
+
+        if (i === root) {
+          const badge = document.createElement('span');
+          badge.className = 'pg-filetab-root';
+          badge.textContent = 'root';
+          badge.setAttribute('aria-hidden', 'true');
+          tab.appendChild(badge);
+        }
+
+        tab.addEventListener('click', () => showFile(i));
+        fileTabList.appendChild(tab);
+      });
+      editorWrap.setAttribute('aria-labelledby', `pg-filetab-${state.tabs.active}`);
+    }
+
+    fileTabList.addEventListener('keydown', (e) => {
+      const target = (e.target as HTMLElement).closest<HTMLElement>('[data-index]');
+      if (!target) return;
+      const index = Number(target.dataset.index);
+      const last = state.tabs.files.length - 1;
+      let next: number | null = null;
+      if (e.key === 'ArrowRight') next = index === last ? 0 : index + 1;
+      else if (e.key === 'ArrowLeft') next = index === 0 ? last : index - 1;
+      else if (e.key === 'Home') next = 0;
+      else if (e.key === 'End') next = last;
+      else if (e.key === 'Enter' || e.key === ' ') next = index;
+      if (next === null) return;
+      // Every consumed key is prevented: Home/End would scroll the pane and
+      // the arrows would move the caret in the editor behind the strip.
+      e.preventDefault();
+      showFile(next);
+    });
+
     // ---- editor ----
     // The textarea is the fallback editing surface: it edits and compiles on
     // its own, and it is removed from the DOM only once CodeMirror has mounted.
@@ -144,7 +241,7 @@ const initial = picks[0];
       if (e.key === 'Tab') {
         e.preventDefault();
         source.setRangeText('  ', source.selectionStart, source.selectionEnd, 'end');
-        state.source = source.value;
+        state.tabs = fromSource(source.value);
         schedule();
       }
     });
@@ -153,14 +250,17 @@ const initial = picks[0];
       if (timer !== null) window.clearTimeout(timer);
       timer = window.setTimeout(() => { timer = null; void fire(); }, DEBOUNCE_MS);
     }
+    // The fallback surface edits the COMBINED text; re-splitting on every
+    // keystroke keeps one model for both surfaces.
     source.addEventListener('input', () => {
-      state.source = source.value;
+      state.tabs = fromSource(source.value);
       schedule();
     });
     pick.addEventListener('change', () => {
-      state.source = picks[pick.value] ?? '';
-      source.value = state.source;
-      editor?.setDoc(state.source);
+      state.tabs = fromSource(picks[pick.value] ?? '');
+      source.value = toSource(state.tabs);
+      editor?.setDocuments(state.tabs.files.map((f) => f.body), state.tabs.active);
+      renderFileTabs();
       void fire();
     });
 
@@ -179,16 +279,22 @@ const initial = picks[0];
     function mountEditor(mod: EditorMod) {
       editorMod = mod;
       editor = mod.createEditor(editorHost, {
-        doc: state.source,
+        doc: activeFile(state.tabs).body,
         theme: mod.currentThemeMode(),
         ariaLabel: 'circ source',
-        onChange: (doc) => {
-          state.source = doc;
+        onChange: (doc, index) => {
+          state.tabs = setBody(state.tabs, index, doc);
+          renderFileTabs();
           schedule();
         },
       });
+      editor.setDocuments(state.tabs.files.map((f) => f.body), state.tabs.active);
       editorHost.hidden = false;
       source.remove();
+      // The strip only exists once the editor does: on the fallback path a tab
+      // would mean nothing, because one textarea holds every file at once.
+      fileStrip.hidden = false;
+      renderFileTabs();
     }
 
     const whenIdle = (fn: () => void) => {
@@ -234,11 +340,11 @@ const initial = picks[0];
       // has typed on; offsets computed here would then be silently wrong, and
       // @codemirror/lint maps registered diagnostics forward through later
       // changes with no way to know they were stale to begin with.
-      const snapshot = state.source;
-      state.files = splitFiles(snapshot);
+      // Per-tab, because the offsets each reply carries are file-local now.
+      const snapshot = state.tabs.files.map((f) => f.body);
       status.textContent = 'Compiling…';
 
-      const an = await client.call('analyze', requestFor(state.files));
+      const an = await client.call('analyze', requestFor(state.tabs.files));
       if (gen !== state.gen) return;
       if (an.status !== 0) {
         status.textContent = `analyze failed: ${an.error ?? an.status}`;
@@ -255,7 +361,7 @@ const initial = picks[0];
         hooks.onArtifact?.(null);
         status.textContent = `${errors} error${errors === 1 ? '' : 's'}${warnings ? `, ${warnings} warning${warnings === 1 ? '' : 's'}` : ''}.`;
       } else {
-        const c = await client.call('compile', requestFor(state.files));
+        const c = await client.call('compile', requestFor(state.tabs.files));
         if (gen !== state.gen) return;
         if (c.status === 0 && c.bytes) {
           const hash = fnv1a(c.bytes);
@@ -285,8 +391,8 @@ const initial = picks[0];
     }
 
     async function runPreview(gen: number) {
-      if (!state.files.length || !state.version) return;
-      const r = await client.call('preview', requestFor(state.files, { color: 'never' }));
+      if (!state.tabs.files.length || !state.version) return;
+      const r = await client.call('preview', requestFor(state.tabs.files, { color: 'never' }));
       if (gen !== state.gen) return;
       previewEl.textContent = r.status === 0 ? r.text! : messageOf(r);
     }
@@ -294,20 +400,20 @@ const initial = picks[0];
     function rootInputBits(): number | null {
       const a = state.analysis;
       if (!a) return null;
-      const rootPath = `${PLAYGROUND_DIR}/${state.files[state.files.length - 1]?.name}`;
+      const rootPath = `${PLAYGROUND_DIR}/${rootOf(state.tabs.files).name}`;
       const rootId = a.files.find((f) => f.path === rootPath)?.file_id ?? 0;
       return a.symbols.filter((s) => s.file_id === rootId && s.kind === 'input').reduce((n, s) => n + s.width, 0);
     }
 
     async function runTruth(gen: number) {
-      if (!state.files.length || !state.version) return;
+      if (!state.tabs.files.length || !state.version) return;
       const bits = rootInputBits();
       if (bits !== null && bits > UI_INPUT_BITS_CAP) {
         tableEl.innerHTML = '';
         tableEl.textContent = `This circuit has ${bits} input bits; the playground enumerates up to ${UI_INPUT_BITS_CAP} (${2 ** UI_INPUT_BITS_CAP} rows). Use circ-compile --truth-table for more.`;
         return;
       }
-      const r = await client.call('truth_table', requestFor(state.files, { format: 'json', truth_table_cap: UI_INPUT_BITS_CAP }));
+      const r = await client.call('truth_table', requestFor(state.tabs.files, { format: 'json', truth_table_cap: UI_INPUT_BITS_CAP }));
       if (gen !== state.gen) return;
       tableEl.innerHTML = '';
       if (r.status !== 0) {
@@ -351,10 +457,27 @@ const initial = picks[0];
      *  on, since a fresher run is already scheduled and will map correctly.
      *  The list itself always renders: it carries file-local positions, which
      *  do not go stale the same way. */
-    function publishDiagnostics(snapshot: string, analysis: Analysis) {
-      state.mapped = mapDiagnostics(snapshot, splitFiles(snapshot), analysis);
+    function publishDiagnostics(snapshot: readonly string[], analysis: Analysis) {
+      // Map ONCE PER TAB, each against a synthetic single-file array, so the
+      // offsets are file-local and can address that tab's own document. The
+      // mapper is total, so every call returns every diagnostic; a tab keeps
+      // only the rows it could place (`from !== null`), and the placeless rows
+      // — `<builtin>/…`, or a path naming no current tab — are emitted once,
+      // from a single extra pass, so nothing is listed N times on N tabs.
+      const { perTab, rows } = mapPerTab(state.tabs.files, analysis);
+      state.mapped = rows;
       renderDiagnostics();
-      if (snapshot === state.source) editor?.setDiagnostics(toLintDiagnostics(state.mapped));
+
+      // Phase 1's staleness guard, re-based per tab: a reply computed against
+      // a body the reader has since edited must not be pushed, because the
+      // linter maps stored diagnostics forward and cannot know they were
+      // stale. An add, delete or move in flight desynchronises every index, so
+      // the whole push is skipped.
+      if (!editor || snapshot.length !== state.tabs.files.length) return;
+      state.tabs.files.forEach((f, i) => {
+        if (snapshot[i] !== f.body) return;
+        editor!.setDiagnosticsFor(i, toLintDiagnostics(perTab[i]));
+      });
     }
 
     /** `<file>:<line>:<col> <code> <message>`, with the compiler's own
@@ -389,7 +512,9 @@ const initial = picks[0];
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.textContent = diagnosticLabel(m);
-        if (m.from !== null && m.to !== null) {
+        // A row for the ACTIVE tab jumps; a row for another file is inert until
+        // slice 6 adds the tab switch, so no slice ever mis-places the caret.
+        if (m.from !== null && m.to !== null && m.tab === state.tabs.active) {
           const { from, to } = m;
           btn.addEventListener('click', () => {
             if (editor) {
@@ -399,6 +524,8 @@ const initial = picks[0];
               source.setSelectionRange(from, to);
             }
           });
+        } else if (m.from !== null && m.tab !== null) {
+          btn.disabled = true;
         } else {
           // A file with no editor buffer (`<builtin>/…`): the row stays, so the
           // count and the message are still visible, but there is nowhere to go.

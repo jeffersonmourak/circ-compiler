@@ -223,3 +223,42 @@ export function toLintDiagnostics(
   }
   return out;
 }
+
+/** A mapped diagnostic plus the file tab it belongs to, or `null` when the
+ *  compiler blamed a file with no tab. */
+export type TabbedDiagnostic = MappedDiagnostic & { tab: number | null };
+
+/**
+ * Map one analysis against a set of tabs, each file on its own.
+ *
+ * Each per-tab call passes a synthetic single-entry file array, so `docLine`
+ * degenerates to the file-local line and the offsets address that tab's own
+ * document. The mapper is total — one entry per analyze diagnostic, every
+ * time — so every call returns the whole list; a tab keeps only the rows it
+ * could actually place, and the placeless ones are emitted once from a single
+ * extra pass. Without that, an N-tab project would list every unplaceable
+ * diagnostic N times.
+ *
+ * `rows` is the flat list the panel renders; `perTab[i]` is what tab `i`'s
+ * editor document should be given, after `toLintDiagnostics`.
+ */
+export function mapPerTab(
+  files: readonly { name: string; body: string }[],
+  analysis: Analysis,
+): { perTab: MappedDiagnostic[][]; rows: TabbedDiagnostic[] } {
+  const perTab = files.map((f) =>
+    mapDiagnostics(f.body, [{ name: f.name, body: f.body, startLine: 0 }], analysis),
+  );
+  const rows: TabbedDiagnostic[] = [];
+  perTab.forEach((mapped, tab) => {
+    for (const m of mapped) if (m.from !== null) rows.push({ ...m, tab });
+  });
+  const placed = new Set(rows.map(keyOf));
+  for (const m of perTab[0] ?? []) {
+    if (m.from === null && !placed.has(keyOf(m))) rows.push({ ...m, tab: null });
+  }
+  return { perTab, rows };
+}
+
+const keyOf = (m: MappedDiagnostic): string => `${m.fileName}:${m.line}:${m.column}:${m.code}:${m.message}`;
+

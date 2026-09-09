@@ -633,6 +633,58 @@ hr {
   font-size: 0.75rem;
   color: var(--muted);
 }
+/* File tabs: the source pane's own strip, distinct from .pg-tabs (the OUTPUT
+   strip below) and from .lc-mount, which /index and /examples share. */
+.pg-files {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--border);
+  padding: 0 0.35rem;
+  min-height: 2.1rem;
+}
+.pg-files[hidden] { display: none; }
+.pg-filetabs {
+  display: flex;
+  align-items: stretch;
+  gap: 0.15rem;
+  overflow-x: auto;
+  flex: 1;
+  min-width: 0;
+  scrollbar-width: thin;
+}
+.pg-filetab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.55rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+.pg-filetab:hover { color: var(--fg); }
+.pg-filetab[aria-selected='true'] {
+  color: var(--fg);
+  border-bottom-color: var(--accent);
+}
+.pg-filetab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.pg-filetab-root {
+  font-size: 0.65rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  padding: 0 0.3rem;
+}
+.pg-filetab-error { color: var(--accent); font-size: 0.75rem; }
+
 .pg-tabs {
   display: flex;
   gap: 0;

@@ -8,6 +8,7 @@ import { callOp, callVersion, instantiateLibcirc, type LibcircExports } from '..
 import { examples } from '../src/content/examples.ts';
 import { tour } from '../src/content/tour.ts';
 import { splitFiles, requestFor } from '../src/utils/split-files.ts';
+import { fromSource, toSource } from '../src/scripts/file-tabs.ts';
 
 const skip = process.env.SKIP_LIBCIRC_TEST === '1';
 const wasmPath = resolve(import.meta.dir, '..', 'public', 'wasm', 'libcirc.wasm');
@@ -69,8 +70,13 @@ describe.skipIf(skip)('libcirc.wasm', () => {
   test('compiles tour step 6 with the last // name.circ file as root', async () => {
     const w = await lib();
     const step = tour[5];
-    const files = splitFiles(step.source);
+    // Through the tab model, which is what the page now drives requests from.
+    const tabs = fromSource(step.source);
+    const files = tabs.files;
     expect(files.map((f) => f.name)).toEqual(['half_adder.circ', 'root.circ']);
+    // The tab set is a lossless view of the source it came from.
+    expect(toSource(tabs)).toBe(step.source);
+    expect(requestFor(files)).toEqual(requestFor(splitFiles(step.source)));
     const out = callOp(w, 'compile', requestFor(files));
     expect(out.status).toBe(0);
     const mod = await WebAssembly.compile(out.bytes);
