@@ -682,6 +682,7 @@ pub fn build(b: *std.Build) void {
     const run_libcirc_tests = b.addRunArtifact(libcirc_tests);
     run_libcirc_tests.step.dependOn(&install_runtime.step);
 
+
     const analyze_tests = b.addTest(.{
         .root_module = analyze_mod,
     });
@@ -835,11 +836,32 @@ pub fn build(b: *std.Build) void {
     // Wire serializer and section_writer into the circ-compile binary
     circ_compile_mod.addImport("serializer", topology_serializer_tests_mod);
     circ_compile_mod.addImport("section_writer", section_writer_mod);
-    circ_compile_mod.addImport("golden", b.createModule(.{
+    // Shared with the libcirc driver tests, which import the CLI module and
+    // so must see the same golden module object.
+    const cli_golden_mod = b.createModule(.{
         .root_source_file = b.path("tests/helpers/golden.zig"),
         .target = target,
         .optimize = optimize,
-    }));
+    });
+    circ_compile_mod.addImport("golden", cli_golden_mod);
+
+    // Proves the library equals the CLI byte for byte, mode by mode, and
+    // drives the compiled artifact through Node.
+    const libcirc_driver_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/libcirc/driver_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    libcirc_driver_tests_mod.addImport("libcirc", fe.libcirc);
+    libcirc_driver_tests_mod.addImport("circ_compile", circ_compile_mod);
+    libcirc_driver_tests_mod.addImport("golden", cli_golden_mod);
+    const libcirc_driver_tests = b.addTest(.{
+        .name = "libcirc_driver_tests",
+        .root_module = libcirc_driver_tests_mod,
+    });
+    const run_libcirc_driver_tests = b.addRunArtifact(libcirc_driver_tests);
+    run_libcirc_driver_tests.step.dependOn(&install_runtime.step);
+    test_step.dependOn(&run_libcirc_driver_tests.step);
     // full_serializer and preview_dump added below; the import wiring happens after the modules are created.
 
     const section_writer_tests = b.addTest(.{
