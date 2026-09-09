@@ -1,0 +1,15 @@
+{
+  "version": "0.0.2",
+  "revision": "a1d9532",
+  "topology_version": 2,
+  "full_version": 2,
+  "parser": "langlang go/v0.0.12 abi=1",
+  "parser_runtime_sha256": "007bc7864beb8c39960a00e87f52b19f4f3e7c334516168cc78285b3b094ec06",
+  "grammar_sha256": "30e5116fed4f9e25fa7c6f4d8e475a92c64562c3db37d532f8d45e6ab7981911",
+  "bytes": 383450,
+  "gzip_bytes": 146597,
+  "budget": {
+    "bytes": 614400,
+    "gzip_bytes": 204800
+  }
+}

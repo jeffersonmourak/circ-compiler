@@ -8,7 +8,9 @@
     "build": "bun run sync && bun run llm-mirror && astro build",
     "preview": "astro preview",
     "sync": "bun run scripts/sync-reference.ts",
-    "llm-mirror": "bun run scripts/build-llm-mirror.ts"
+    "llm-mirror": "bun run scripts/build-llm-mirror.ts",
+    "libcirc": "bun run scripts/build-libcirc.ts",
+    "test": "bun test"
   },
   "dependencies": {
     "astro": "^5.0.0",

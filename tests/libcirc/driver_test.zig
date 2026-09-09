@@ -399,3 +399,28 @@ test "driver: root plus overlay-only sibling compiles like the disk project" {
     try expectOk(disk);
     try std.testing.expect(std.mem.eql(u8, disk.body, mem.body));
 }
+
+test "driver: a recovered syntax error is status 1 with a syntax diagnostic" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // The parser recovers (drops `n`) and the CLI would compile the rest;
+    // the library reports the mark so a host never ships a silently
+    // truncated circuit.
+    const files = [_]libcirc.File{.{ .path = "/v/broken.circ", .text = "input a\nnot n(in=a\n" }};
+    const out = try libcirc.compile(a, .{ .root = "/v/broken.circ", .files = &files });
+    try std.testing.expectEqual(libcirc.Status.diagnostics, out.status);
+    const parsed = try std.json.parseFromSlice(std.json.Value, a, out.body, .{});
+    const diags = parsed.value.object.get("diagnostics").?.array.items;
+    try std.testing.expectEqual(@as(usize, 1), diags.len);
+    try std.testing.expectEqualStrings("syntax", diags[0].object.get("code").?.string);
+    try std.testing.expectEqualStrings("expected ')' to close the connection list", diags[0].object.get("message").?.string);
+    try std.testing.expectEqual(@as(i64, 3), diags[0].object.get("range").?.object.get("start_line").?.integer);
+    try std.testing.expectEqual(@as(i64, 2), diags[0].object.get("range").?.object.get("end_col").?.integer);
+
+    // The same marks, in the same shape, from analyze.
+    const an = try libcirc.analyze(a, .{ .root = "/v/broken.circ", .files = &files });
+    try std.testing.expectEqual(libcirc.Status.ok, an.status);
+    try std.testing.expect(std.mem.indexOf(u8, an.body, "\"code\":\"syntax\"") != null);
+}

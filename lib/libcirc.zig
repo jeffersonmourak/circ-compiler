@@ -109,7 +109,11 @@ fn runFront(allocator: std.mem.Allocator, req: Request, route: frontend.Route, f
         },
         else => return try internal(allocator, buf, failure),
     };
-    if (front.errors > 0 or (req.options.warnings_as_errors and front.warnings > 0)) {
+    // A recovered syntax error is still an error: the parser dropped the
+    // declaration it could not read, so the artifact would silently lack
+    // it. (The CLI compiles such a file today; the library refuses.)
+    const syntax_errors = front.ast_file.errors.len > 0;
+    if (syntax_errors or front.errors > 0 or (req.options.warnings_as_errors and front.warnings > 0)) {
         try json.writeDiagnostics(allocator, buf.writer(allocator), front);
         return try outcome(allocator, .diagnostics, buf);
     }

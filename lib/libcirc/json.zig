@@ -136,13 +136,30 @@ pub fn writeError(writer: anytype, message: []const u8) !void {
 
 /// The front end's diagnostics in the analyze-api shape:
 /// `{"files":[…],"diagnostics":[…],"symbols":[],"references":[]}`.
+/// Validator diagnostics first, then one `syntax` entry per recovered
+/// error mark on the root — the same order and widening `--analyze` uses.
 pub fn writeDiagnostics(allocator: std.mem.Allocator, writer: anytype, front: *const frontend.Front) !void {
     const files = try allocator.alloc(analyzer.FileEntry, front.file_paths.len);
     for (front.file_paths, 0..) |p, i| files[i] = .{ .file_id = @intCast(i), .path = p };
-    const diags = try analyzer.convertDiagnostics(allocator, front.diagnostics.items);
+    const converted = try analyzer.convertDiagnostics(allocator, front.diagnostics.items);
+    var diags: std.ArrayList(analyzer.Diagnostic) = .{};
+    try diags.appendSlice(allocator, converted);
+    for (front.ast_file.errors) |mark| {
+        // Guarantee a non-empty range so an editor highlights a span.
+        var end_col = mark.span.end_col;
+        if (mark.span.end_line == mark.span.start_line and end_col <= mark.span.start_col) end_col = mark.span.start_col + 1;
+        try diags.append(allocator, .{
+            .file_id = 0,
+            .severity = "error",
+            .code = "syntax",
+            .range = .{ .start_line = mark.span.start_line, .start_col = mark.span.start_col, .end_line = mark.span.end_line, .end_col = end_col },
+            .message = mark.message,
+            .related = &.{},
+        });
+    }
     try analyzer.renderJson(writer, .{
         .files = files,
-        .diagnostics = diags,
+        .diagnostics = diags.items,
         .symbols = &.{},
         .references = &.{},
     });
