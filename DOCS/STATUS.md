@@ -97,3 +97,11 @@ Append-only log, one entry per shipped slice. Newest at the bottom. See `DOCS/PL
 **Tests:** `json: parses the full request`, `json: each error has a message` (13 cases), `json: writeError escapes`; 8 `c_api` tests — version JSON, `circ_analyze` == `renderJson`, five bad-request bodies (invalid JSON, missing root, relative key, `color: auto`, unreadable root), `circ_compile` yields `\0asm` and equals the Zig API, E001 → status 1, preview/truth table == Zig API and cap refusal → status 3, result buffer replaced by the next call, alloc/free + `circ_reset` (engine arena 0). `zig build test` green.
 **Next slice:** Slice 7 — `zig build libcirc` (static `libcirc.a` + installed `include/libcirc.h`), `examples/c/analyze.c`, `zig build libcirc-smoke`.
 **Notes:** `preloads`/`PreloadNotHex`/`hexToBytes` wait for the post-#79 rebase (no memories on this branch). The exports are `pub export` so the test module can call them by name; the symbol names are unaffected.
+
+## 2026-09-08 — Phase 2 — Slice 7: `zig build libcirc` and the C smoke
+
+**What shipped:** `zig build libcirc` builds `zig-out/lib/libcirc.a` (static, root `lib/libcirc/c_api.zig`, `.name = "circ"`) and installs `include/libcirc.h` (hand-written: the six `CIRC_STATUS_*` codes and the ten prototypes with `uint8_t*`/`size_t`, i.e. pointer-sized rather than the plan's literal `u32`). `zig build libcirc-smoke` compiles `examples/c/analyze.c` with Zig's C compiler, links the archive, and runs it with `expectExitCode(0)`: it prints the version JSON, then the analysis JSON and the preview for an in-memory inverter, and calls `circ_reset`.
+**Files touched:** `include/libcirc.h` (new), `examples/c/analyze.c` (new), `build.zig`, `DOCS/STATUS.md`.
+**Tests:** `zig build libcirc` → `nm` lists exactly `_circ_alloc _circ_analyze _circ_compile _circ_free _circ_preview _circ_reset _circ_result_len _circ_result_ptr _circ_truth_table _circ_version`; `zig build libcirc-smoke` exits 0. Archive sizes on aarch64-macos: Debug 6,918,072 B, ReleaseSmall 558,384 B.
+**Next slice:** Slice 8 — `DOCS/analyze-api.md` overlay semantics and the invalid-input section, `DOCS/libcirc-api.md`, CLAUDE.md/README build rows.
+**Notes:** The smoke's request literal is the one `DOCS/libcirc-api.md` documents; slice 8 adds a `c_api` test over the same bytes so the doc and the code cannot drift.

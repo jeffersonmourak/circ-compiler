@@ -873,6 +873,37 @@ pub fn build(b: *std.Build) void {
     run_libcirc_c_api_tests.step.dependOn(&install_runtime.step);
     test_step.dependOn(&run_libcirc_c_api_tests.step);
 
+    // `zig build libcirc`: the static library plus its C header.
+    // b.addLibrary prefixes "lib", so .name = "circ" yields libcirc.a.
+    const libcirc_lib = b.addLibrary(.{
+        .linkage = .static,
+        .name = "circ",
+        .root_module = libcirc_c_api_mod,
+    });
+    libcirc_lib.step.dependOn(&install_runtime.step);
+    libcirc_lib.installHeader(b.path("include/libcirc.h"), "libcirc.h");
+    const install_libcirc = b.addInstallArtifact(libcirc_lib, .{});
+    const libcirc_step = b.step("libcirc", "Build zig-out/lib/libcirc.a and zig-out/include/libcirc.h");
+    libcirc_step.dependOn(&install_libcirc.step);
+
+    // `zig build libcirc-smoke`: a C program linked against the archive.
+    const libcirc_smoke_mod = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    libcirc_smoke_mod.addCSourceFile(.{ .file = b.path("examples/c/analyze.c") });
+    libcirc_smoke_mod.addIncludePath(b.path("include"));
+    libcirc_smoke_mod.linkLibrary(libcirc_lib);
+    const libcirc_smoke_exe = b.addExecutable(.{
+        .name = "libcirc-smoke",
+        .root_module = libcirc_smoke_mod,
+    });
+    const run_libcirc_smoke = b.addRunArtifact(libcirc_smoke_exe);
+    run_libcirc_smoke.expectExitCode(0);
+    const libcirc_smoke_step = b.step("libcirc-smoke", "Compile and run examples/c/analyze.c against libcirc.a");
+    libcirc_smoke_step.dependOn(&run_libcirc_smoke.step);
+
     const section_writer_tests = b.addTest(.{
         .root_module = section_writer_mod,
     });
