@@ -66,3 +66,21 @@ The entries below record the decisions of the playground-v2 initiative (the site
 
 **Measured, not assumed.** `@codemirror/lint` bakes its squiggle colours into SVG data URIs rather than CSS colour properties, so `circ-editor.ts` rebuilds `.cm-lintRange-error` / `-warning` with its own `underline(color)` instead of trying to recolour them; the lint *gutter* markers keep their defaults, since their colours sit in both a `fill` and a `stroke`. And the validator emits no per-identifier spans: `input b / not n(in=a) / output o(in=n.out)` reports `E004` over the whole declaration `not n(in=a)`, plus `W001` spanning exactly the unused `b`. The plan prompt's "a squiggle under exactly `a`" was wrong about both the code and the span, and the test pins what the compiler actually reports.
 
+### The marker format does not fork; `joinFiles` is its inverse
+
+**Decision.** The playground's interchange format stays one string with `// <name>.circ` line markers, read by `splitFiles`. `site/src/utils/split-files.ts` gains its exact inverse, `joinFiles(files)`, plus `isFileName(name)` — one predicate derived from the same `MARKER` regex, so the tab UI and the splitter cannot disagree about a legal name — and `joinConflicts(files)`, which names the four arrays the format or the request builder cannot represent: a blank non-last body, a marker line after content, an illegal name, and a duplicate name. `SplitFile` now extends a new `NamedFile { name, body }`, and `rootOf` / `requestFor` accept `readonly NamedFile[]`, so a tab array with no `startLine` drives the worker requests unchanged. Tabs, and later persistence and share links, are views over that one string; no second key and no second format is introduced.
+
+**Round trip.** All 17 shipped sources join back byte-identically. Three normalisations are pinned by name rather than left to be discovered: a redundant leading `// main.circ` marker is dropped (but kept when dropping it would promote the next line to a marker), a source whose last line is a marker gains one trailing newline, and a non-canonical marker re-emits canonically because `MARKER` captures neither its inner nor its trailing whitespace.
+
+**Rationale.** Examples, the tour, `compile-content.ts` and the playground already speak this format; a tab model with its own representation would need a converter at every boundary and would drift from the content the site ships. Making the inverse total and its failures enumerable is what lets the UI warn instead of silently losing a file.
+
+**Alternatives.** A JSON tab document (forks the format, breaks `compile-content.ts`); inferring the root from a field instead of position (decision 3 fixes the root as the last file, and reorder is how it changes).
+
+### The last file is the root; reorder is how you change it
+
+**Decision.** `rootOf(files)` remains `files[files.length - 1]`, and the tab strip marks that tab with a `root` badge. There is no root field and none is added: moving a tab past the end is the way to change which file is compiled. `requestFor` roots the request on the same entry, so the model, the badge and the compiler always agree.
+
+**Rationale.** One source of truth beats two that can disagree. A separate root pointer would have to be validated on every add, delete and rename, and a stale pointer compiles the wrong file with no visible cause.
+
+**Alternatives.** A `root` boolean on each tab (two things to keep in sync); a context-menu "set as root" (a hidden mode, invisible in the tab order, and still a second source of truth).
+

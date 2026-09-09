@@ -70,6 +70,8 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - One token table, two consumers (`circ-tokens.mjs` feeds the TextMate grammar and the CodeMirror tokenizer; `rom`/`ram` were the bug)
 - The editor palette is derived from the shiki themes (one `TAG_SCOPES` table, last-scope-wins, the TextMate `fontStyle` split into real CSS properties)
 - Analyze offsets are mapped in a pure module (byte columns + `SplitFile.startLine` → absolute UTF-16 offsets; both producers; the snapshot guard)
+- The marker format does not fork; `joinFiles` is its inverse (`isFileName`, `joinConflicts`, `NamedFile`, the three normalisations)
+- The last file is the root; reorder is how you change it (no root field, `rootOf` is position)
 
 ## Conventions
 
