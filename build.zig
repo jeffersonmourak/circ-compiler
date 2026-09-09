@@ -2,13 +2,15 @@ const std = @import("std");
 
 const GRAMMAR_FILE = "lib/grammar/proto-circ.peg";
 
-// Link the langlang Go c-archive (lib/parser/parser.a) into a Compile step.
-// Skips wrapping the archive in a Zig Library because `zig build-lib` on Linux
-// can't re-bundle a CGo c-archive into another static archive cross-platform;
-// adding it as a direct object file lets each consumer's linker handle it.
-fn linkParserArchive(b: *std.Build, compile: *std.Build.Step.Compile, build_archive_cmd: *std.Build.Step.Run) void {
-    compile.addObjectFile(b.path("lib/parser/parser.a"));
-    compile.step.dependOn(&build_archive_cmd.step);
+// The parser is a langlang-generated, vendored Zig file (lib/parser/parser.zig):
+// the pasted VM runtime plus the grammar's bytecode tables. One module per
+// target, so a wasm consumer can mint its own twin with the same literal.
+fn createParserModule(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Module {
+    return b.createModule(.{
+        .root_source_file = b.path("lib/parser/parser.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 }
 
 pub fn build(b: *std.Build) void {
@@ -16,65 +18,30 @@ pub fn build(b: *std.Build) void {
 
     const optimize = b.standardOptimizeOption(.{});
 
-    const parser_gen = b.step("parser:gen", "Generate Go Parser");
+    const parser_gen = b.step("parser:gen", "Regenerate lib/parser/parser.zig from lib/grammar/proto-circ.peg (needs the langlang fork on PATH)");
 
+    // Only the maintainer's fork emits Zig (upstream go/v0.0.12 rejects
+    // -output-language zig), so refuse any other langlang before generating.
+    // has_side_effects keeps the check out of the cache after a toolchain swap.
+    const check_langlang = b.addSystemCommand(&.{ "langlang", "-version" });
+    check_langlang.addCheck(.{ .expect_stdout_match = "v0.0.13-zig.2" });
+    check_langlang.has_side_effects = true;
+
+    // GRAMMAR_FILE stays relative to the build root: the generated header
+    // copies the argument verbatim into its "Source File:" line.
     const generate_parser_cmd = b.addSystemCommand(&.{
         "langlang",
         "-grammar",
         GRAMMAR_FILE,
         "-disable-capture-spaces",
         "-output-language",
-        "go",
+        "zig",
         "-output-path",
-        "lib/parser/parser.go",
-        "-go-package",
-        "parser",
-        "-go-parser",
-        "Parser",
+        "lib/parser/parser.zig",
     });
+    generate_parser_cmd.step.dependOn(&check_langlang.step);
 
     parser_gen.dependOn(&generate_parser_cmd.step);
-
-    const parser_archive = b.step("parser:archive", "Build CGo c-archive (lib/parser/parser.a) from Go shim");
-
-    // Tell Go to cross-compile to the same arch/OS as the Zig target. Without
-    // this, a Go toolchain installed for amd64 (e.g. running under Rosetta on
-    // Apple Silicon) emits an x86_64 archive that the arm64 linker rejects.
-    const goarch = switch (target.result.cpu.arch) {
-        .aarch64 => "arm64",
-        .x86_64 => "amd64",
-        else => @panic("unsupported CPU arch for Go c-archive build"),
-    };
-    const goos = switch (target.result.os.tag) {
-        .macos => "darwin",
-        .linux => "linux",
-        .windows => "windows",
-        else => @panic("unsupported OS for Go c-archive build"),
-    };
-
-    // Route Go's CGo C compiler through `zig cc -target <triple>`. Go's
-    // runtime/cgo includes Linux-only C (linux_syscall.c uses setresuid /
-    // setresgid) that the host's clang can't compile when cross-building
-    // from macOS. Zig's bundled libc headers cover every target triple, so
-    // using it as CC makes both native and cross-builds hermetic.
-    const zig_triple = target.result.zigTriple(b.allocator) catch @panic("OOM");
-    const cc_value = b.fmt("zig cc -target {s}", .{zig_triple});
-
-    const build_archive_cmd = b.addSystemCommand(&.{
-        "go",
-        "build",
-        "-buildmode=c-archive",
-        "-o",
-        "parser.a",
-        "./shim",
-    });
-    build_archive_cmd.setCwd(b.path("lib/parser"));
-    build_archive_cmd.setEnvironmentVariable("GOARCH", goarch);
-    build_archive_cmd.setEnvironmentVariable("GOOS", goos);
-    build_archive_cmd.setEnvironmentVariable("CGO_ENABLED", "1");
-    build_archive_cmd.setEnvironmentVariable("CC", cc_value);
-
-    parser_archive.dependOn(&build_archive_cmd.step);
 
     const golden_tests = b.addTest(.{
         .root_module = b.createModule(.{
@@ -98,8 +65,14 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    translate_mod.addIncludePath(b.path("."));
-    translate_mod.addIncludePath(b.path("./lib"));
+    const parser_mod = createParserModule(b, target, optimize);
+    translate_mod.addImport("parser", parser_mod);
+    // Runs the generated file's own `langlang tables` test (verifyTables).
+    const parser_tests = b.addTest(.{
+        .name = "parser_tests",
+        .root_module = parser_mod,
+    });
+    const run_parser_tests = b.addRunArtifact(parser_tests);
     translate_tests_mod.addImport("translate", translate_mod);
     translate_tests_mod.addImport("golden", b.createModule(.{
         .root_source_file = b.path("tests/helpers/golden.zig"),
@@ -115,10 +88,6 @@ pub fn build(b: *std.Build) void {
     const translate_tests = b.addTest(.{
         .root_module = translate_tests_mod,
     });
-    translate_tests.addIncludePath(b.path("."));
-    translate_tests.addIncludePath(b.path("./lib"));
-    linkParserArchive(b, translate_tests, build_archive_cmd);
-    translate_tests.linkLibC();
     const run_translate_tests = b.addRunArtifact(translate_tests);
     const ir_types_mod = b.createModule(.{
         .root_source_file = b.path("lib/ir/types.zig"),
@@ -156,10 +125,6 @@ pub fn build(b: *std.Build) void {
     const resolver_tests = b.addTest(.{
         .root_module = resolver_tests_mod,
     });
-    resolver_tests.addIncludePath(b.path("."));
-    resolver_tests.addIncludePath(b.path("./lib"));
-    linkParserArchive(b, resolver_tests, build_archive_cmd);
-    resolver_tests.linkLibC();
     const run_resolver_tests = b.addRunArtifact(resolver_tests);
     const validator_codes_mod = b.createModule(.{
         .root_source_file = b.path("lib/validator/codes.zig"),
@@ -296,10 +261,6 @@ pub fn build(b: *std.Build) void {
     const validator_name_passes_tests = b.addTest(.{
         .root_module = validator_name_passes_tests_mod,
     });
-    validator_name_passes_tests.addIncludePath(b.path("."));
-    validator_name_passes_tests.addIncludePath(b.path("./lib"));
-    linkParserArchive(b, validator_name_passes_tests, build_archive_cmd);
-    validator_name_passes_tests.linkLibC();
     const run_validator_name_passes_tests = b.addRunArtifact(validator_name_passes_tests);
     const validator_structural_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/validator/structural_passes_test.zig"),
@@ -322,10 +283,6 @@ pub fn build(b: *std.Build) void {
     const validator_structural_tests = b.addTest(.{
         .root_module = validator_structural_tests_mod,
     });
-    validator_structural_tests.addIncludePath(b.path("."));
-    validator_structural_tests.addIncludePath(b.path("./lib"));
-    linkParserArchive(b, validator_structural_tests, build_archive_cmd);
-    validator_structural_tests.linkLibC();
     const run_validator_structural_tests = b.addRunArtifact(validator_structural_tests);
     const validator_loop_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/validator/loop_passes_test.zig"),
@@ -344,10 +301,6 @@ pub fn build(b: *std.Build) void {
     const validator_loop_tests = b.addTest(.{
         .root_module = validator_loop_tests_mod,
     });
-    validator_loop_tests.addIncludePath(b.path("."));
-    validator_loop_tests.addIncludePath(b.path("./lib"));
-    linkParserArchive(b, validator_loop_tests, build_archive_cmd);
-    validator_loop_tests.linkLibC();
     const run_validator_loop_tests = b.addRunArtifact(validator_loop_tests);
     const validator_run_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/validator/run_test.zig"),
@@ -366,10 +319,6 @@ pub fn build(b: *std.Build) void {
     const validator_run_tests = b.addTest(.{
         .root_module = validator_run_tests_mod,
     });
-    validator_run_tests.addIncludePath(b.path("."));
-    validator_run_tests.addIncludePath(b.path("./lib"));
-    linkParserArchive(b, validator_run_tests, build_archive_cmd);
-    validator_run_tests.linkLibC();
     const run_validator_run_tests = b.addRunArtifact(validator_run_tests);
     const emit_build_fn_mod = b.createModule(.{
         .root_source_file = b.path("lib/emit/build_fn.zig"),
@@ -448,10 +397,6 @@ pub fn build(b: *std.Build) void {
     const emit_build_fn_tests = b.addTest(.{
         .root_module = emit_build_fn_tests_mod,
     });
-    emit_build_fn_tests.addIncludePath(b.path("."));
-    emit_build_fn_tests.addIncludePath(b.path("./lib"));
-    linkParserArchive(b, emit_build_fn_tests, build_archive_cmd);
-    emit_build_fn_tests.linkLibC();
     const run_emit_build_fn_tests = b.addRunArtifact(emit_build_fn_tests);
     const emit_metadata_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/emit/metadata_test.zig"),
@@ -474,10 +419,6 @@ pub fn build(b: *std.Build) void {
     const emit_metadata_tests = b.addTest(.{
         .root_module = emit_metadata_tests_mod,
     });
-    emit_metadata_tests.addIncludePath(b.path("."));
-    emit_metadata_tests.addIncludePath(b.path("./lib"));
-    linkParserArchive(b, emit_metadata_tests, build_archive_cmd);
-    emit_metadata_tests.linkLibC();
     const run_emit_metadata_tests = b.addRunArtifact(emit_metadata_tests);
     const emit_full_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/emit/full_emit_test.zig"),
@@ -497,10 +438,6 @@ pub fn build(b: *std.Build) void {
     const emit_full_tests = b.addTest(.{
         .root_module = emit_full_tests_mod,
     });
-    emit_full_tests.addIncludePath(b.path("."));
-    emit_full_tests.addIncludePath(b.path("./lib"));
-    linkParserArchive(b, emit_full_tests, build_archive_cmd);
-    emit_full_tests.linkLibC();
     const run_emit_full_tests = b.addRunArtifact(emit_full_tests);
     const wasm_run_mod = b.createModule(.{
         .root_source_file = b.path("tests/helpers/wasm_run.zig"),
@@ -521,9 +458,7 @@ pub fn build(b: *std.Build) void {
     const emit_behavior_tests = b.addTest(.{
         .root_module = emit_behavior_tests_mod,
     });
-    emit_behavior_tests.addIncludePath(b.path("."));
-    emit_behavior_tests.addIncludePath(b.path("./lib"));
-    linkParserArchive(b, emit_behavior_tests, build_archive_cmd);
+    // tests/helpers/wasm_run.zig uses std.c.getpid on non-Windows hosts.
     emit_behavior_tests.linkLibC();
     const run_emit_behavior_tests = b.addRunArtifact(emit_behavior_tests);
     // Phase 3 slice 1: color resolution module (depends only on std, used by cli_args).
@@ -606,10 +541,6 @@ pub fn build(b: *std.Build) void {
     const resolver_scan_imports_tests = b.addTest(.{
         .root_module = resolver_scan_imports_tests_mod,
     });
-    resolver_scan_imports_tests.addIncludePath(b.path("."));
-    resolver_scan_imports_tests.addIncludePath(b.path("./lib"));
-    linkParserArchive(b, resolver_scan_imports_tests, build_archive_cmd);
-    resolver_scan_imports_tests.linkLibC();
     const run_resolver_scan_imports_tests = b.addRunArtifact(resolver_scan_imports_tests);
     const resolver_import_cycle_mod = b.createModule(.{
         .root_source_file = b.path("lib/resolver/import_cycle.zig"),
@@ -630,10 +561,6 @@ pub fn build(b: *std.Build) void {
     const resolver_import_cycle_tests = b.addTest(.{
         .root_module = resolver_import_cycle_tests_mod,
     });
-    resolver_import_cycle_tests.addIncludePath(b.path("."));
-    resolver_import_cycle_tests.addIncludePath(b.path("./lib"));
-    linkParserArchive(b, resolver_import_cycle_tests, build_archive_cmd);
-    resolver_import_cycle_tests.linkLibC();
     const run_resolver_import_cycle_tests = b.addRunArtifact(resolver_import_cycle_tests);
     const resolver_resolve_bodies_mod = b.createModule(.{
         .root_source_file = b.path("lib/resolver/resolve_bodies.zig"),
@@ -659,10 +586,6 @@ pub fn build(b: *std.Build) void {
     const resolver_resolve_bodies_tests = b.addTest(.{
         .root_module = resolver_resolve_bodies_tests_mod,
     });
-    resolver_resolve_bodies_tests.addIncludePath(b.path("."));
-    resolver_resolve_bodies_tests.addIncludePath(b.path("./lib"));
-    linkParserArchive(b, resolver_resolve_bodies_tests, build_archive_cmd);
-    resolver_resolve_bodies_tests.linkLibC();
     const run_resolver_resolve_bodies_tests = b.addRunArtifact(resolver_resolve_bodies_tests);
     const resolver_builtins_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/resolver/builtins_test.zig"),
@@ -674,10 +597,6 @@ pub fn build(b: *std.Build) void {
     const resolver_builtins_tests = b.addTest(.{
         .root_module = resolver_builtins_tests_mod,
     });
-    resolver_builtins_tests.addIncludePath(b.path("."));
-    resolver_builtins_tests.addIncludePath(b.path("./lib"));
-    linkParserArchive(b, resolver_builtins_tests, build_archive_cmd);
-    resolver_builtins_tests.linkLibC();
     const run_resolver_builtins_tests = b.addRunArtifact(resolver_builtins_tests);
     const resolver_file_loader_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/resolver/file_loader_test.zig"),
@@ -689,10 +608,6 @@ pub fn build(b: *std.Build) void {
     const resolver_file_loader_tests = b.addTest(.{
         .root_module = resolver_file_loader_tests_mod,
     });
-    resolver_file_loader_tests.addIncludePath(b.path("."));
-    resolver_file_loader_tests.addIncludePath(b.path("./lib"));
-    linkParserArchive(b, resolver_file_loader_tests, build_archive_cmd);
-    resolver_file_loader_tests.linkLibC();
     const run_resolver_file_loader_tests = b.addRunArtifact(resolver_file_loader_tests);
 
     // --- Pre-built Runtime WASM ---
@@ -893,10 +808,6 @@ pub fn build(b: *std.Build) void {
         .root_module = circ_compile_mod,
     });
     circ_compile_exe.step.dependOn(&install_runtime.step);
-    circ_compile_exe.addIncludePath(b.path("."));
-    circ_compile_exe.addIncludePath(b.path("./lib"));
-    linkParserArchive(b, circ_compile_exe, build_archive_cmd);
-    circ_compile_exe.linkLibC();
     b.installArtifact(circ_compile_exe);
     const circ_compile_step = b.step("circ-compile", "Build circ-compile CLI");
     circ_compile_step.dependOn(b.getInstallStep());
@@ -904,20 +815,12 @@ pub fn build(b: *std.Build) void {
     const circ_compile_tests = b.addTest(.{
         .root_module = circ_compile_mod,
     });
-    circ_compile_tests.addIncludePath(b.path("."));
-    circ_compile_tests.addIncludePath(b.path("./lib"));
-    linkParserArchive(b, circ_compile_tests, build_archive_cmd);
-    circ_compile_tests.linkLibC();
     const run_circ_compile_tests = b.addRunArtifact(circ_compile_tests);
     run_circ_compile_tests.step.dependOn(&install_runtime.step);
 
     const analyze_tests = b.addTest(.{
         .root_module = analyze_mod,
     });
-    analyze_tests.addIncludePath(b.path("."));
-    analyze_tests.addIncludePath(b.path("./lib"));
-    linkParserArchive(b, analyze_tests, build_archive_cmd);
-    analyze_tests.linkLibC();
     const run_analyze_tests = b.addRunArtifact(analyze_tests);
 
     const analyze_golden_tests_mod = b.createModule(.{
@@ -935,10 +838,6 @@ pub fn build(b: *std.Build) void {
         .name = "analyze_golden_tests",
         .root_module = analyze_golden_tests_mod,
     });
-    analyze_golden_tests.addIncludePath(b.path("."));
-    analyze_golden_tests.addIncludePath(b.path("./lib"));
-    linkParserArchive(b, analyze_golden_tests, build_archive_cmd);
-    analyze_golden_tests.linkLibC();
     const run_analyze_golden_tests = b.addRunArtifact(analyze_golden_tests);
     const validator_project_passes_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/validator/project_passes_test.zig"),
@@ -954,10 +853,6 @@ pub fn build(b: *std.Build) void {
     const validator_project_passes_tests = b.addTest(.{
         .root_module = validator_project_passes_tests_mod,
     });
-    validator_project_passes_tests.addIncludePath(b.path("."));
-    validator_project_passes_tests.addIncludePath(b.path("./lib"));
-    linkParserArchive(b, validator_project_passes_tests, build_archive_cmd);
-    validator_project_passes_tests.linkLibC();
     const run_validator_project_passes_tests = b.addRunArtifact(validator_project_passes_tests);
     const validator_codes_snapshot_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/validator/codes_snapshot_test.zig"),
@@ -980,13 +875,10 @@ pub fn build(b: *std.Build) void {
     const validator_codes_snapshot_tests = b.addTest(.{
         .root_module = validator_codes_snapshot_tests_mod,
     });
-    validator_codes_snapshot_tests.addIncludePath(b.path("."));
-    validator_codes_snapshot_tests.addIncludePath(b.path("./lib"));
-    linkParserArchive(b, validator_codes_snapshot_tests, build_archive_cmd);
-    validator_codes_snapshot_tests.linkLibC();
     const run_validator_codes_snapshot_tests = b.addRunArtifact(validator_codes_snapshot_tests);
     const test_step = b.step("test", "Run project test suite");
     test_step.dependOn(&run_golden_tests.step);
+    test_step.dependOn(&run_parser_tests.step);
     test_step.dependOn(&run_translate_tests.step);
     test_step.dependOn(&run_ir_types_tests.step);
     test_step.dependOn(&run_resolver_tests.step);
@@ -1034,10 +926,6 @@ pub fn build(b: *std.Build) void {
     const emit_project_tests = b.addTest(.{
         .root_module = emit_project_tests_mod,
     });
-    emit_project_tests.addIncludePath(b.path("."));
-    emit_project_tests.addIncludePath(b.path("./lib"));
-    linkParserArchive(b, emit_project_tests, build_archive_cmd);
-    emit_project_tests.linkLibC();
     const run_emit_project_tests = b.addRunArtifact(emit_project_tests);
     test_step.dependOn(&run_emit_project_tests.step);
 
@@ -1058,9 +946,7 @@ pub fn build(b: *std.Build) void {
     const project_behavior_tests = b.addTest(.{
         .root_module = project_behavior_tests_mod,
     });
-    project_behavior_tests.addIncludePath(b.path("."));
-    project_behavior_tests.addIncludePath(b.path("./lib"));
-    linkParserArchive(b, project_behavior_tests, build_archive_cmd);
+    // tests/helpers/wasm_run.zig uses std.c.getpid on non-Windows hosts.
     project_behavior_tests.linkLibC();
     const run_project_behavior_tests = b.addRunArtifact(project_behavior_tests);
     // Detached from `test`; wired into `test-emit` near the end of build().
@@ -1468,10 +1354,6 @@ pub fn build(b: *std.Build) void {
     const preview_layout_integration_tests = b.addTest(.{
         .root_module = preview_layout_integration_mod,
     });
-    preview_layout_integration_tests.addIncludePath(b.path("."));
-    preview_layout_integration_tests.addIncludePath(b.path("./lib"));
-    linkParserArchive(b, preview_layout_integration_tests, build_archive_cmd);
-    preview_layout_integration_tests.linkLibC();
     const run_preview_layout_integration_tests = b.addRunArtifact(preview_layout_integration_tests);
     test_step.dependOn(&run_preview_layout_integration_tests.step);
 
@@ -1493,10 +1375,6 @@ pub fn build(b: *std.Build) void {
     const topology_full_emit_integration_tests = b.addTest(.{
         .root_module = topology_full_emit_integration_mod,
     });
-    topology_full_emit_integration_tests.addIncludePath(b.path("."));
-    topology_full_emit_integration_tests.addIncludePath(b.path("./lib"));
-    linkParserArchive(b, topology_full_emit_integration_tests, build_archive_cmd);
-    topology_full_emit_integration_tests.linkLibC();
     const run_topology_full_emit_integration_tests = b.addRunArtifact(topology_full_emit_integration_tests);
     run_topology_full_emit_integration_tests.step.dependOn(&install_runtime.step);
     test_step.dependOn(&run_topology_full_emit_integration_tests.step);
@@ -1517,10 +1395,6 @@ pub fn build(b: *std.Build) void {
     const section_writer_fixtures_tests = b.addTest(.{
         .root_module = section_writer_fixtures_tests_mod,
     });
-    section_writer_fixtures_tests.addIncludePath(b.path("."));
-    section_writer_fixtures_tests.addIncludePath(b.path("./lib"));
-    linkParserArchive(b, section_writer_fixtures_tests, build_archive_cmd);
-    section_writer_fixtures_tests.linkLibC();
     const run_section_writer_fixtures_tests = b.addRunArtifact(section_writer_fixtures_tests);
     run_section_writer_fixtures_tests.step.dependOn(&install_runtime.step);
     test_step.dependOn(&run_section_writer_fixtures_tests.step);
@@ -1540,10 +1414,6 @@ pub fn build(b: *std.Build) void {
     const serializer_fixtures_tests = b.addTest(.{
         .root_module = serializer_fixtures_tests_mod,
     });
-    serializer_fixtures_tests.addIncludePath(b.path("."));
-    serializer_fixtures_tests.addIncludePath(b.path("./lib"));
-    linkParserArchive(b, serializer_fixtures_tests, build_archive_cmd);
-    serializer_fixtures_tests.linkLibC();
     const run_serializer_fixtures_tests = b.addRunArtifact(serializer_fixtures_tests);
     run_serializer_fixtures_tests.step.dependOn(&install_runtime.step);
     test_step.dependOn(&run_serializer_fixtures_tests.step);
@@ -1671,10 +1541,6 @@ pub fn build(b: *std.Build) void {
         .name = "engine-bench",
         .root_module = bench_mod,
     });
-    bench_exe.addIncludePath(b.path("."));
-    bench_exe.addIncludePath(b.path("./lib"));
-    linkParserArchive(b, bench_exe, build_archive_cmd);
-    bench_exe.linkLibC();
 
     const run_bench = b.addRunArtifact(bench_exe);
     // The Run step inherits the parent's environment by default (env_map
