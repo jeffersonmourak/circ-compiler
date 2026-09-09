@@ -81,3 +81,66 @@ export function capRefusal(bits: number | null, s: PlaygroundSettings): string |
     `(${2 ** s.truthTableCap} rows). Raise the cap in settings, or use circ-compile --truth-table.`
   );
 }
+
+// ---------------------------------------------------------------------------
+// The drawer's DOM wiring. Kept here rather than in the island so the island
+// stays markup plus a script, and so this can change without touching it.
+// ---------------------------------------------------------------------------
+
+export interface SettingsDeps {
+  get(): PlaygroundSettings;
+  /** Applies a mutation to the stored settings and re-runs whatever reads them. */
+  set(mutate: (draft: PlaygroundSettings) => void): void;
+}
+
+/** Which control shape each setting uses, derived from the value's type. */
+type BoolKey = 'expandMacros' | 'expandDisplay' | 'warningsAsErrors';
+type ChoiceKey = 'format' | 'valueFormat';
+
+/**
+ * Bind every `data-setting` control in the drawer to the stored settings.
+ *
+ * Each control is read once to paint the current value and then writes back on
+ * change; nothing here validates, because the store already clamps and falls
+ * back key by key, and a second validator is a second thing to disagree with.
+ */
+export function mountSettingsDrawer(root: ParentNode, deps: SettingsDeps): void {
+  const controls = root.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-setting]');
+
+  const paint = () => {
+    const s = deps.get();
+    for (const el of controls) {
+      const key = el.dataset.setting as keyof PlaygroundSettings;
+      if (el instanceof HTMLInputElement && el.type === 'checkbox') {
+        el.checked = Boolean(s[key as BoolKey]);
+      } else if (el instanceof HTMLInputElement && el.type === 'number') {
+        el.value = String(s.truthTableCap);
+      } else {
+        el.value = String(s[key as ChoiceKey]);
+      }
+    }
+  };
+
+  for (const el of controls) {
+    el.addEventListener('change', () => {
+      const key = el.dataset.setting as keyof PlaygroundSettings;
+      deps.set((draft) => {
+        if (el instanceof HTMLInputElement && el.type === 'checkbox') {
+          (draft[key as BoolKey] as boolean) = el.checked;
+        } else if (el instanceof HTMLInputElement && el.type === 'number') {
+          const n = Number.parseInt(el.value, 10);
+          // The store clamps; this only refuses to write a non-number.
+          if (Number.isFinite(n)) draft.truthTableCap = n;
+        } else {
+          (draft[key as ChoiceKey] as string) = el.value;
+        }
+      });
+      // Repaint from the store, so a clamped value is shown as stored rather
+      // than as typed.
+      paint();
+    });
+  }
+
+  paint();
+}
+

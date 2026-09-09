@@ -777,6 +777,54 @@ hr {
 .pg-diag-warning button { color: var(--muted); }
 .pg-diag button:disabled { color: var(--muted); cursor: default; text-decoration: none; }
 .pg-diag-counts { color: var(--muted); margin-bottom: 0.5rem; }
+/* The settings drawer, at the top of the output pane. */
+.pg-settings {
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8rem;
+}
+.pg-settings > summary {
+  cursor: pointer;
+  padding: 0.3rem 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.pg-settings > summary:hover { color: var(--fg); }
+.pg-settings[open] > summary { color: var(--fg); }
+.pg-settings-group {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 0;
+  padding: 0.4rem 0.6rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.pg-settings-group legend {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 0;
+}
+.pg-settings-group label { display: inline-flex; align-items: center; gap: 0.3rem; }
+.pg-settings-group input[type='number'] { width: 4rem; }
+.pg-settings-hint { color: var(--muted); font-size: 0.7rem; flex-basis: 100%; }
+.pg-rom { display: flex; flex-direction: column; gap: 0.25rem; flex-basis: 100%; }
+.pg-rom textarea {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  min-height: 3.5rem;
+  resize: vertical;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
+}
+.pg-rom-meta { color: var(--muted); font-size: 0.7rem; }
+.pg-rom-error { color: var(--danger); font-size: 0.72rem; }
+
 /* Source linking: the span in the editor the canvas is pointing at. A
    background, not a border, so it never shifts the text by a pixel. */
 .cm-circ-linked {

@@ -105,6 +105,40 @@ const initial = catalogue[0];
       aria-controls="pg-pane-editor pg-pane-output"
     ></div>
     <section class="pg-output" id="pg-pane-output">
+      <details class="pg-settings" id="pg-settings">
+        <summary>Settings</summary>
+        <fieldset class="pg-settings-group">
+          <legend>Preview</legend>
+          <label><input type="checkbox" data-setting="expandMacros" /> Expand macros</label>
+          <label><input type="checkbox" data-setting="expandDisplay" /> Expand display</label>
+        </fieldset>
+        <fieldset class="pg-settings-group">
+          <legend>Truth table</legend>
+          <label for="pg-set-format">Format</label>
+          <select id="pg-set-format" data-setting="format">
+            <option value="json">table</option>
+            <option value="markdown">markdown</option>
+            <option value="csv">csv</option>
+          </select>
+          <label for="pg-set-values">Values</label>
+          <select id="pg-set-values" data-setting="valueFormat">
+            <option value="binary">binary</option>
+            <option value="hex">hex</option>
+            <option value="decimal">decimal</option>
+          </select>
+          <label for="pg-set-cap">Input-bit cap</label>
+          <input id="pg-set-cap" type="number" min="1" max="24" step="1" data-setting="truthTableCap" />
+          <span class="pg-settings-hint">2^cap rows; the enumeration cannot be stopped once started.</span>
+        </fieldset>
+        <fieldset class="pg-settings-group">
+          <legend>Compile</legend>
+          <label><input type="checkbox" data-setting="warningsAsErrors" /> Treat warnings as errors</label>
+        </fieldset>
+        <fieldset class="pg-settings-group pg-rom-group" hidden>
+          <legend>ROM images</legend>
+          <div class="pg-roms"></div>
+        </fieldset>
+      </details>
       <div class="pg-tabs" role="tablist">
         <button type="button" role="tab" data-tab="diagnostics" aria-selected="true">Diagnostics</button>
         <button type="button" role="tab" data-tab="preview" aria-selected="false">Preview</button>
@@ -143,6 +177,8 @@ const initial = catalogue[0];
   import { getSharedClient, type LibcircVersion, type WorkerReply } from '../scripts/libcirc-client.ts';
   import { joinConflicts, requestFor, rootOf, PLAYGROUND_DIR } from '../utils/split-files.ts';
   import { createSplitter } from '../scripts/splitter.ts';
+  import { capRefusal, mountSettingsDrawer, optionsFor } from '../scripts/settings-drawer.ts';
+  import { preloadsFor, romSymbols, type MemorySymbol } from '../utils/rom-image.ts';
   import {
     declarationAt,
     declsFor,
@@ -214,7 +250,6 @@ const initial = catalogue[0];
   type MappedRow = TabbedDiagnostic;
   interface TruthTable { inputs: string[]; outputs: string[]; rows: { in: (number | null)[]; out: (number | null)[] }[] }
 
-  const UI_INPUT_BITS_CAP = 12;
 
   const root = document.querySelector<HTMLElement>('.pg');
   if (root) init(root);
@@ -673,6 +708,29 @@ const initial = catalogue[0];
       status.textContent = copied
         ? `Link copied (${result.chars} characters).`
         : 'Link selected below — copy it with your keyboard.';
+    });
+
+    // ---- settings ----
+    const settings = () => store.envelope.settings;
+    /** The reader's ROM text, per memory. Session state: an image can be
+     *  megabytes once hex-encoded, far past what the envelope may hold. */
+    const romImages = new Map<string, string>();
+    const currentRoms = (): MemorySymbol[] => {
+      const a = state.analysis;
+      if (!a) return [];
+      return romSymbols(a.symbols, rootFileId(a.files, rootPathFor(rootOf(state.tabs.files).name)));
+    };
+    const preloads = () => preloadsFor(romImages, currentRoms());
+
+    mountSettingsDrawer(el, {
+      get: settings,
+      set: (mutate) => {
+        store.update((draft) => mutate(draft.settings));
+        // Both output panes read a setting, so both are re-run.
+        void runPreview(buildStage.seq);
+        void runTruth(buildStage.seq);
+        schedule();
+      },
     });
 
     // ---- bootstrap ----
@@ -1299,7 +1357,7 @@ const initial = catalogue[0];
 
     async function runPreview(seq: number) {
       if (!state.tabs.files.length || !state.version) return;
-      const r = await client.call('preview', requestFor(state.tabs.files, { color: 'never' }));
+      const r = await client.call('preview', requestFor(state.tabs.files, optionsFor('preview', settings())));
       // The follow-on call re-checks the SAME stage: this is the guard the
       // langlang playground omits on its second stage.
       if (!buildStage.isCurrent(seq)) return;
@@ -1326,12 +1384,14 @@ const initial = catalogue[0];
     async function runTruth(seq: number) {
       if (!state.tabs.files.length || !state.version) return;
       const bits = rootInputBits();
-      if (bits !== null && bits > UI_INPUT_BITS_CAP) {
+      // One field feeds both the pre-flight and the request; they cannot drift.
+      const refusal = capRefusal(bits, settings());
+      if (refusal) {
         tableEl.innerHTML = '';
-        tableEl.textContent = `This circuit has ${bits} input bits; the playground enumerates up to ${UI_INPUT_BITS_CAP} (${2 ** UI_INPUT_BITS_CAP} rows). Use circ-compile --truth-table for more.`;
+        tableEl.textContent = refusal;
         return;
       }
-      const r = await client.call('truth_table', requestFor(state.tabs.files, { format: 'json', truth_table_cap: UI_INPUT_BITS_CAP }));
+      const r = await client.call('truth_table', requestFor(state.tabs.files, optionsFor('truth_table', settings(), preloads())));
       if (!buildStage.isCurrent(seq)) return;
       if (r.status !== 0) {
         // A refusal leaves the last good table on screen; the reason goes to
