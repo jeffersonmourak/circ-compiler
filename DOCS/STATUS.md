@@ -290,3 +290,14 @@ Append-only log, one entry per shipped slice. Newest at the bottom. See `DOCS/PL
 2. The collapse state is deliberately not persisted, per the phase plan: a collapsed sidebar on a returning visit hides the workspace this phase exists to make visible, and the toggle is one click.
 3. The sidebar's width is a CSS custom property on the same grid the divider writes to, so collapsing it changes one value and never touches the divider's own ratio.
 4. Manual checklist — **unrun** (no browser): clicking a row loads it, and reloading returns to it.
+
+## 2026-09-09 — Phase 4 — Slice 4: the scratch lifecycle
+
+**What shipped:** A `+` button creates a project from `NEW_PROJECT_SOURCE`; each scratch row carries rename, duplicate and delete controls as **sibling** buttons of the row rather than nested inside it, so they are announced normally and reachable with the keyboard. Rename is an inline input (Enter commits, Escape cancels, blur commits); delete is a two-press confirm, like the file tabs, because a project is not undoable. **Copy-on-write:** the first edit while the active id names an example or a tour step forks it into a scratch project named after the shipped title through `uniqueName`, moves `activeId` to the fork and says so in the status line; every later edit calls `touchScratch` in place. Both editing surfaces go through the same `persistSource`, and all of it rides Phase 3's existing debounced writer and its `pagehide` flush — no new listener.
+**Files touched:** `site/src/components/Playground.astro`, `site/src/styles/global.css`, `site/test/workspace.test.ts`, `DOCS/STATUS.md`.
+**Tests:** added two cases — the fork case end to end (activeId names a content project, one edit creates a scratch named `Half-adder`, `activeId` moves to it, a `flush` and `readEnvelope` cycle returns the edited text, the shipped example is byte-identical afterwards, and a second fork is `Half-adder 2`) and a later edit updating the fork in place rather than forking again. Ran `bun test` (196 pass across 19 files), `bun --bun run build` (pass), `bun run bundle` (ok; `/playground` 13.9 KB gzip).
+**Next slice:** Slice 5 — load precedence and the fragment scrub.
+**Notes:**
+1. Forking is triggered by the first change event, not by a diff against the shipped text: an example edited and then edited back stays forked. That is the accepted behaviour in the phase plan, recorded here so a later slice does not "fix" it.
+2. Deleting the active project falls back to the default pick rather than leaving the editor pointing at nothing.
+3. Manual checklist — **unrun** (no browser): edit an example, reload, find the edit under Yours.

@@ -36,6 +36,7 @@ const initial = catalogue[0];
         aria-expanded="true"
         aria-controls="pg-ws-body"
       >Workspace</button>
+      <button type="button" class="pg-ws-new" aria-label="New project">+</button>
       <div class="pg-ws-body" id="pg-ws-body">
         {(['Examples', 'Tour'] as const).map((group) => (
           <section class="pg-ws-section">
@@ -126,8 +127,16 @@ const initial = catalogue[0];
   import {
     createStore,
     describeNote,
+    createScratch,
+    deleteScratch,
+    duplicateScratch,
+    idKind,
+    renameScratch,
     resolveInitial,
     resolveSource,
+    touchScratch,
+    uniqueName,
+    NEW_PROJECT_SOURCE,
     type CatalogueItem,
   } from '../utils/playground-store.ts';
   import {
@@ -201,6 +210,7 @@ const initial = catalogue[0];
     const wsRoot = el.querySelector<HTMLElement>('.pg-ws')!;
     const wsToggle = el.querySelector<HTMLButtonElement>('.pg-ws-toggle')!;
     const wsScratch = el.querySelector<HTMLElement>('.pg-ws-scratch')!;
+    const wsNew = el.querySelector<HTMLButtonElement>('.pg-ws-new')!;
     const panels = Array.from(el.querySelectorAll<HTMLElement>('.pg-panel'));
     const catalogue = JSON.parse(el.querySelector('#pg-picks')!.textContent || '[]') as CatalogueItem[];
     const supported = (el.dataset.supportedVersions || '').split(',').filter(Boolean).map(Number);
@@ -307,6 +317,91 @@ const initial = catalogue[0];
       return true;
     }
 
+    /** The scratch project whose delete is armed, or null. */
+    let confirmProject: string | null = null;
+
+    const nowMs = () => Date.now();
+
+    /**
+     * Write the current text back to the envelope. A content project is never
+     * overwritten: the first edit forks it into a scratch project, which is
+     * what keeps a shipped example the shipped example.
+     */
+    function persistSource() {
+      const id = store.envelope.activeId;
+      const source = toSource(state.tabs);
+      const fileName = activeFile(state.tabs).name;
+      if (id && idKind(id) === 'scratch') {
+        store.update((draft) => {
+          draft.scratch = touchScratch(draft.scratch, id, source, nowMs()).list;
+          draft.activeFile = fileName;
+        });
+        return;
+      }
+      const label = catalogue.find((c) => c.id === id)?.label ?? 'Untitled';
+      let created: string | null = null;
+      store.update((draft) => {
+        const r = createScratch(draft.scratch, {
+          name: label,
+          source,
+          now: nowMs(),
+          keep: draft.activeId,
+        });
+        if (!r.created) return;
+        draft.scratch = r.list;
+        draft.activeId = r.created.id;
+        draft.activeFile = fileName;
+        created = r.created.id;
+      });
+      if (created) {
+        status.textContent = `Copied into your own project so the example stays as it shipped.`;
+        renderWorkspace();
+      }
+    }
+
+    function newProject() {
+      let created: string | null = null;
+      store.update((draft) => {
+        const r = createScratch(draft.scratch, {
+          name: uniqueName('Untitled', draft.scratch.map((p) => p.name)),
+          source: NEW_PROJECT_SOURCE,
+          now: nowMs(),
+          keep: draft.activeId,
+        });
+        if (!r.created) return;
+        draft.scratch = r.list;
+        created = r.created.id;
+      });
+      if (created) loadProject(created);
+    }
+
+    function startRenameProject(id: string, row: HTMLElement) {
+      const current = store.envelope.scratch.find((p) => p.id === id);
+      if (!current) return;
+      const input = document.createElement('input');
+      input.className = 'pg-ws-input';
+      input.value = current.name;
+      input.setAttribute('aria-label', 'Project name');
+      let done = false;
+      const finish = (commit: boolean) => {
+        if (done) return;
+        done = true;
+        if (commit && input.value.trim() !== '') {
+          store.update((draft) => { draft.scratch = renameScratch(draft.scratch, id, input.value); });
+        }
+        renderWorkspace();
+      };
+      input.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+        else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+      });
+      input.addEventListener('blur', () => finish(true));
+      row.replaceWith(input);
+      input.focus();
+      input.select();
+    }
+
     function renderWorkspace() {
       const active = store.envelope.activeId;
       for (const row of el.querySelectorAll<HTMLElement>('.pg-ws-row')) {
@@ -324,6 +419,7 @@ const initial = catalogue[0];
       }
       for (const p of projects) {
         const li = document.createElement('li');
+        li.className = 'pg-ws-item';
         const row = document.createElement('button');
         row.type = 'button';
         row.className = 'pg-ws-row';
@@ -331,16 +427,84 @@ const initial = catalogue[0];
         row.textContent = p.name;
         if (p.id === active) row.setAttribute('aria-current', 'true');
         li.appendChild(row);
+
+        // Sibling buttons, not nested ones: a row is a plain button, so these
+        // are announced normally and reachable with the keyboard.
+        const actions = document.createElement('span');
+        actions.className = 'pg-ws-actions';
+        for (const [action, glyph, label] of [
+          ['rename', '\u270e', `Rename ${p.name}`],
+          ['duplicate', '\u29c9', `Duplicate ${p.name}`],
+          ['delete', '\u00d7', `Delete ${p.name}`],
+        ] as const) {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.className = 'pg-ws-action';
+          b.dataset.action = action;
+          b.dataset.id = p.id;
+          b.textContent = glyph;
+          b.setAttribute('aria-label', label);
+          if (action === 'delete' && confirmProject === p.id) {
+            b.dataset.confirm = 'true';
+            b.setAttribute('aria-label', `Delete ${p.name}? Activate again to confirm`);
+          }
+          actions.appendChild(b);
+        }
+        li.appendChild(actions);
         wsScratch.appendChild(li);
       }
     }
 
     // Delegated, so client-rendered scratch rows need no per-row wiring.
     wsRoot.addEventListener('click', (e) => {
-      const row = (e.target as HTMLElement).closest<HTMLElement>('.pg-ws-row');
+      const target = e.target as HTMLElement;
+      const action = target.closest<HTMLElement>('.pg-ws-action');
+      if (action && action.dataset.id) {
+        const id = action.dataset.id;
+        const name = store.envelope.scratch.find((p) => p.id === id)?.name ?? id;
+        if (action.dataset.action === 'rename') {
+          const row = wsScratch.querySelector<HTMLElement>(`.pg-ws-row[data-pick="${id}"]`);
+          if (row) startRenameProject(id, row);
+          return;
+        }
+        if (action.dataset.action === 'duplicate') {
+          let created: string | null = null;
+          store.update((draft) => {
+            const r = duplicateScratch(draft.scratch, id, { now: nowMs() });
+            if (!r || !r.created) return;
+            draft.scratch = r.list;
+            created = r.created.id;
+          });
+          if (created) loadProject(created);
+          return;
+        }
+        if (action.dataset.action === 'delete') {
+          // Two presses, like the file tabs: a project is not undoable.
+          if (confirmProject !== id) {
+            confirmProject = id;
+            status.textContent = `Delete ${name}? Activate the × again to confirm.`;
+            renderWorkspace();
+            return;
+          }
+          confirmProject = null;
+          const wasActive = store.envelope.activeId === id;
+          store.update((draft) => {
+            draft.scratch = deleteScratch(draft.scratch, id);
+            if (wasActive) draft.activeId = null;
+          });
+          status.textContent = `Deleted ${name}.`;
+          if (wasActive) loadProject(el.dataset.defaultPick ?? catalogue[0].id);
+          else renderWorkspace();
+          return;
+        }
+      }
+      const row = target.closest<HTMLElement>('.pg-ws-row');
       if (!row || !row.dataset.pick) return;
+      confirmProject = null;
       loadProject(row.dataset.pick);
     });
+
+    wsNew.addEventListener('click', newProject);
 
     wsToggle.addEventListener('click', () => {
       const open = wsToggle.getAttribute('aria-expanded') === 'true';
@@ -732,6 +896,7 @@ const initial = catalogue[0];
     // keystroke keeps one model for both surfaces.
     source.addEventListener('input', () => {
       state.tabs = fromSource(source.value);
+      persistSource();
       schedule();
     });
 
@@ -756,6 +921,7 @@ const initial = catalogue[0];
         onChange: (doc, index) => {
           state.tabs = setBody(state.tabs, index, doc);
           renderFileTabs();
+          persistSource();
           schedule();
         },
       });

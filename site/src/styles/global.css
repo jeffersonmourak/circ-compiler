@@ -1247,6 +1247,46 @@ a.install-line:hover {
 }
 .pg-ws-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .pg-ws-empty { color: var(--muted); font-size: 0.75rem; padding: 0.22rem 0.6rem; }
+.pg-ws-new {
+  position: absolute;
+  top: 0.15rem;
+  right: 0.3rem;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0.15rem 0.3rem;
+  cursor: pointer;
+}
+.pg-ws-new:hover { color: var(--fg); }
+.pg-ws { position: relative; }
+.pg-ws-item { display: flex; align-items: center; }
+.pg-ws-item .pg-ws-row { flex: 1; min-width: 0; }
+.pg-ws-actions { display: none; gap: 0.05rem; padding-right: 0.3rem; }
+.pg-ws-item:hover .pg-ws-actions,
+.pg-ws-item:focus-within .pg-ws-actions { display: flex; }
+.pg-ws-action {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1;
+  padding: 0.15rem 0.2rem;
+  cursor: pointer;
+}
+.pg-ws-action:hover { color: var(--fg); }
+.pg-ws-action[data-confirm='true'] { color: var(--danger); }
+.pg-ws-input {
+  width: calc(100% - 1.2rem);
+  margin: 0 0.6rem;
+  font-size: 0.8rem;
+  font-family: inherit;
+  border: 1px solid var(--accent);
+  background: var(--bg);
+  color: var(--fg);
+  padding: 0 0.2rem;
+}
 
 .pg-statusbar {
   display: flex;

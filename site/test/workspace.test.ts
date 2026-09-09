@@ -410,3 +410,55 @@ describe('resolveInitial', () => {
     expect(r.note).not.toBeNull();
   });
 });
+
+describe('copy-on-write forking', () => {
+  test('an edited example forks and survives a write/read cycle', () => {
+    const storage = fakeStorage();
+    const timers = fakeTimers();
+    const store = createStore({ storage, timers });
+    const edited = `${examples.find((e) => e.slug === 'half-adder')!.source}// mine\n`;
+
+    // The island's persistSource, in model terms: activeId names a content
+    // project, so the first edit forks rather than overwriting.
+    store.update((d) => { d.activeId = 'example:half-adder'; });
+    const label = catalogue.find((c) => c.id === 'example:half-adder')!.label;
+    expect(label).toBe('Half-adder');
+
+    let forkedId = '';
+    store.update((d) => {
+      const r = createScratch(d.scratch, { name: label, source: edited, now: 100, keep: d.activeId });
+      d.scratch = r.list;
+      d.activeId = r.created!.id;
+      forkedId = r.created!.id;
+    });
+    store.flush();
+
+    const back = readEnvelope(storage).envelope;
+    expect(back.activeId).toBe(forkedId);
+    expect(idKind(back.activeId!)).toBe('scratch');
+    expect(back.scratch[0].name).toBe('Half-adder');
+    expect(resolveSource(forkedId, catalogue, back.scratch)).toBe(edited);
+    // The shipped example is untouched by the fork.
+    expect(resolveSource('example:half-adder', catalogue, back.scratch)).toBe(
+      examples.find((e) => e.slug === 'half-adder')!.source,
+    );
+
+    // A second fork of the same example is numbered rather than colliding.
+    let secondName = '';
+    store.update((d) => {
+      const r = createScratch(d.scratch, { name: label, source: edited, now: 200, keep: d.activeId });
+      d.scratch = r.list;
+      secondName = r.created!.name;
+    });
+    expect(secondName).toBe('Half-adder 2');
+  });
+
+  test('a later edit updates the fork in place rather than forking again', () => {
+    let list = createScratch([], { name: 'Half-adder', source: 'a', now: 1 }).list;
+    const id = list[0].id;
+    list = touchScratch(list, id, 'b', 2).list;
+    expect(list).toHaveLength(1);
+    expect(list[0].source).toBe('b');
+    expect(list[0].updatedAt).toBe(2);
+  });
+});
