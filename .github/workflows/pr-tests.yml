@@ -37,6 +37,21 @@ jobs:
         with:
           node-version: "24"
 
+      - name: Remove Go from PATH (the build must not need it)
+        # ubuntu-latest ships a Go toolchain, so the plain job could never
+        # prove the build is Go-free. Drop every PATH entry that resolves
+        # `go`, export the pruned PATH, then assert it no longer resolves.
+        run: |
+          set -euo pipefail
+          pruned=""
+          IFS=: read -ra dirs <<< "$PATH"
+          for d in "${dirs[@]}"; do
+            if [[ -x "$d/go" ]]; then echo "dropping $d (has go)"; else pruned="${pruned:+$pruned:}$d"; fi
+          done
+          echo "PATH=$pruned" >> "$GITHUB_ENV"
+          if PATH="$pruned" command -v go >/dev/null 2>&1; then echo "::error::go still resolves on PATH"; exit 1; fi
+          PATH="$pruned" zig version && PATH="$pruned" node --version
+
       - name: Run all tests (includes every golden)
         # SKIP_WASM_E2E=1 skips topology_protocol_test, which fails
         # reproducibly on Linux Node WASM runtimes (init() never flips

@@ -3,5 +3,3 @@ zig-out/
 example/
 node_modules/
 .claude/
-lib/parser/parser.a
-lib/parser/parser.h

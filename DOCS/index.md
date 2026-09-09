@@ -82,10 +82,10 @@ lib/
   log.zig                  Conditional logging bridge (extern → host onDebugLog)
   memory.zig               Allocator wrapper (wasm_allocator on WASM, GPA on native)
   transport.zig            State serialisation helpers
-  parser/                  Vendored langlang-generated Go parser + CGo shim
-                           (parser.go, shim/shim.go → parser.a + parser.h)
+  parser/                  Vendored langlang-generated Zig parser
+                           (parser.zig: VM runtime + bytecode tables)
   grammar/proto-circ.peg   Source grammar for the .circ language
-  syntax/                  Parse tree → AST translation, FFI to the c-archive
+  syntax/                  Parse tree → AST translation over the generated Tree API
   resolver/                scan_imports, import_cycle, resolve_bodies, builtins
   ir/                      Resolved IR (types, single-module resolver)
   validator/               Diagnostic codes (E001–E016, W001–W003) and passes

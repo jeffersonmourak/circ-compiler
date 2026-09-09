@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this project is
 
-`circ-compiler` is a one-shot compiler. It takes a `.circ` digital-logic source (plus any siblings it imports) and emits a self-contained `.wasm` artifact whose exports simulate that exact circuit. The compiler is pure Zig (the parser is a langlang-generated Go CGo c-archive linked in); there is no runtime SDK, no rendering layer, and no JavaScript in the build. Every compiled `.wasm` carries a vendored prebuilt runtime plus two custom sections (`circ.topology.v0.min`, `circ.topology.v0.full`) and exposes a fixed pull-based API: `topology_alloc`, `init`, `run`, `setPin(id, value, defined)`, `getOutputValue(id)`, `getOutputDefined(id)`. The two getters return paired `BitVecState` halves crossed as `i64`/`BigInt`.
+`circ-compiler` is a one-shot compiler. It takes a `.circ` digital-logic source (plus any siblings it imports) and emits a self-contained `.wasm` artifact whose exports simulate that exact circuit. The compiler is pure Zig (the parser is a langlang-generated Zig file, `lib/parser/parser.zig`, vendored); there is no runtime SDK, no rendering layer, and no JavaScript in the build. Every compiled `.wasm` carries a vendored prebuilt runtime plus two custom sections (`circ.topology.v0.min`, `circ.topology.v0.full`) and exposes a fixed pull-based API: `topology_alloc`, `init`, `run`, `setPin(id, value, defined)`, `getOutputValue(id)`, `getOutputDefined(id)`. The two getters return paired `BitVecState` halves crossed as `i64`/`BigInt`.
 
 ## Analysis philosophy
 
@@ -21,9 +21,8 @@ confident summary.
 ## Toolchain prerequisites
 
 - Zig 0.15.x.
-- Go 1.21+. Every build runs `go build` once to (re)produce `lib/parser/parser.a` from the vendored `lib/parser/parser.go`.
 - Node on `PATH` for the behavioral WASM harness in `zig build test`.
-- langlang is only needed if you regenerate the parser from `lib/grammar/proto-circ.peg`. circ uses the maintainer's fork, which adds `-output-language zig` on top of upstream `go/v0.0.12` and regenerates the current `parser.go` byte for byte: `go install github.com/jeffersonmourak/langlang/go/cmd/langlang@v0.0.13-zig.2` (branch head: `@zig-parser-gen`; source and docs at https://github.com/jeffersonmourak/langlang, `go/zig/README.md`). Check with `langlang -version`.
+- langlang is only needed if you regenerate `lib/parser/parser.zig` from `lib/grammar/proto-circ.peg`. circ uses the maintainer's fork, which adds `-output-language zig` on top of upstream `go/v0.0.12`: `go install github.com/jeffersonmourak/langlang/go/cmd/langlang@v0.0.13-zig.2` (branch head: `@zig-parser-gen`; source and docs at https://github.com/jeffersonmourak/langlang, `go/zig/README.md`). Check with `langlang -version`; `zig build parser:gen` refuses any other version.
 
 ## Build and test commands
 
@@ -35,8 +34,7 @@ confident summary.
 | `zig build test-emit` | Emit-zig backend behavioral smoke (`tests/emit/{behavior,project_behavior}_test.zig`). Slow: every fixture spawns a nested `zig build wasm`. Guards the experimental `--emit-zig` pipeline only. |
 | `zig build test-all` | `test` + `test-emit`. The full gate CI runs (see `.github/workflows/pr-tests.yml`). |
 | `zig build bench` | Engine benchmark over the truth-table fixture corpus, compared against `tests/fixtures/bench/engine.bench.golden`. Counters are asserted; wall-clock is not. |
-| `zig build parser:archive` | Rebuilds `lib/parser/parser.a` from `lib/parser/shim/shim.go` via `go build -buildmode=c-archive`. Runs automatically as a dependency of `circ-compile`. |
-| `zig build parser:gen` | Regenerates `lib/parser/parser.go` from `lib/grammar/proto-circ.peg`. Only when the grammar changes; requires langlang on `PATH`. |
+| `zig build parser:gen` | Regenerates `lib/parser/parser.zig` from `lib/grammar/proto-circ.peg`. Only when the grammar changes; requires the langlang fork (`v0.0.13-zig.2`) on `PATH`, and the step refuses any other version. |
 | `zig build e2e-linux-docker` | Runs `tests/e2e/linux-docker/run.sh`. Requires Docker. |
 
 Useful environment variables:
@@ -69,7 +67,7 @@ Hard errors block emission; partial or "best-effort" artifacts are never produce
 .circ source
      │
      ▼
-[lib/syntax + lib/parser]   PEG parser (vendored C, generated from
+[lib/syntax + lib/parser]   PEG parser (vendored Zig, generated from
                             lib/grammar/proto-circ.peg) → Zig AST
      │
      ▼
