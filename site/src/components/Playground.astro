@@ -128,7 +128,9 @@ const initial = catalogue[0];
     {/* Rendered from the committed manifest so the bar is never blank before
         the version handshake resolves; the island overwrites it after. */}
     <span class="pg-status-identity">circ {manifest.version} · {manifest.revision} · CIRF v{manifest.full_version}</span>
-    <span class="pg-status-actions"></span>
+    <span class="pg-status-actions">
+      <button type="button" class="pg-share">Share</button>
+    </span>
     {/* The announcement channel: file-tab operations and store notes. */}
     <span class="pg-status" role="status" aria-live="polite"></span>
   </div>
@@ -141,7 +143,7 @@ const initial = catalogue[0];
   import { LibcircClient, type LibcircVersion, type WorkerReply } from '../scripts/libcirc-client.ts';
   import { joinConflicts, requestFor, rootOf, PLAYGROUND_DIR } from '../utils/split-files.ts';
   import { createSplitter } from '../scripts/splitter.ts';
-  import { decodeShare, readHash, webStreamsCodec } from '../utils/share-link.ts';
+  import { decodeShare, encodeShare, readHash, shareUrl, webStreamsCodec } from '../utils/share-link.ts';
   import { generateSillyName } from '../utils/sillyname.ts';
   import {
     createStore,
@@ -230,6 +232,8 @@ const initial = catalogue[0];
     const wsToggle = el.querySelector<HTMLButtonElement>('.pg-ws-toggle')!;
     const wsScratch = el.querySelector<HTMLElement>('.pg-ws-scratch')!;
     const wsNew = el.querySelector<HTMLButtonElement>('.pg-ws-new')!;
+    const shareBtn = el.querySelector<HTMLButtonElement>('.pg-share')!;
+    const statusActions = el.querySelector<HTMLElement>('.pg-status-actions')!;
     const panels = Array.from(el.querySelectorAll<HTMLElement>('.pg-panel'));
     const catalogue = JSON.parse(el.querySelector('#pg-picks')!.textContent || '[]') as CatalogueItem[];
     const supported = (el.dataset.supportedVersions || '').split(',').filter(Boolean).map(Number);
@@ -529,6 +533,44 @@ const initial = catalogue[0];
       const open = wsToggle.getAttribute('aria-expanded') === 'true';
       wsToggle.setAttribute('aria-expanded', String(!open));
       wsRoot.toggleAttribute('data-collapsed', open);
+    });
+
+    // ---- share ----
+    /** Copy `text`, or fall back to a focused read-only input the reader can
+     *  select. Never leaves the button pending. */
+    async function copyText(text: string): Promise<boolean> {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch {
+        const input = document.createElement('input');
+        input.className = 'pg-share-fallback';
+        input.readOnly = true;
+        input.value = text;
+        statusActions.appendChild(input);
+        input.focus();
+        input.select();
+        input.addEventListener('blur', () => input.remove(), { once: true });
+        return false;
+      }
+    }
+
+    shareBtn.addEventListener('click', async () => {
+      const source = toSource(state.tabs);
+      const result = await encodeShare(source, webStreamsCodec());
+      if (!result.ok) {
+        // Past the cap the link is useless, so offer the thing that is not.
+        const copied = await copyText(source);
+        status.textContent = copied
+          ? `Too long to put in a link (${result.chars} characters, limit ${result.cap}); the source is on your clipboard.`
+          : `Too long to put in a link (${result.chars} characters, limit ${result.cap}); the source is selected below.`;
+        return;
+      }
+      const link = shareUrl(location.href, result.fragment);
+      const copied = await copyText(link);
+      status.textContent = copied
+        ? `Link copied (${result.chars} characters).`
+        : 'Link selected below — copy it with your keyboard.';
     });
 
     // ---- bootstrap ----

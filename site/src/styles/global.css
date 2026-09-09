@@ -1301,6 +1301,26 @@ a.install-line:hover {
   flex-wrap: wrap;
 }
 .pg-status-spacer { flex: 1; }
+.pg-status-actions { display: flex; align-items: center; gap: 0.3rem; }
+.pg-share {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--pane-label-bg);
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 0.72rem;
+  padding: 0.1rem 0.45rem;
+  cursor: pointer;
+}
+.pg-share:hover { border-color: var(--accent); color: var(--accent); }
+.pg-share-fallback {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  width: 14rem;
+  border: 1px solid var(--accent);
+  background: var(--bg);
+  color: var(--fg);
+}
 .pg-status-label { color: var(--fg); }
 .pg-status-identity { opacity: 0.75; }
 .pg-status { color: var(--accent); }
