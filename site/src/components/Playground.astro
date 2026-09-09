@@ -278,6 +278,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     clampWindow,
     dumpRows,
     formatAddress,
+    maskFor,
     pageContaining,
     pageCount,
     parseAddress,
@@ -285,6 +286,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     type AddressWindow,
     type Cell,
   } from '../scripts/memory-panel.ts';
+  import { editWord, imageCells, imageFromBytes } from '../scripts/rom-words.ts';
   import {
     declarationAt,
     declsFor,
@@ -1314,6 +1316,12 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     const MEM_PER_ROW = 8;
     /** Where each memory's dump is scrolled to, by declared name. */
     const memWindows = new Map<string, number>();
+    /** Addresses holding a zero the reader never typed, per rom. The image
+     *  cannot tell a chosen zero from a gap it had to fill, so the distinction
+     *  is carried beside it. */
+    const romImplied = new Map<string, Set<number>>();
+    /** Roms whose hex escape hatch is showing. */
+    const hexOpen = new Set<string>();
 
     /** The running circuit's exports, or null when nothing is simulating.
      *  Contents can only be read while the Simulate tab has built a view. */
@@ -1385,19 +1393,25 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
 
     /** Rebuild the whole panel. Cheap: the number of declared memories is
      *  small, and only one page of one memory is ever read. */
-    function renderMemory() {
+    function renderMemory(opts: { force?: boolean } = {}) {
       updateMemTab();
       const mems = currentRoms();
       if (mems.length === 0) {
         memPanel.innerHTML = '';
         return;
       }
-      // Typing in a rom box must not destroy the box being typed into, so the
-      // rebuild is skipped while the panel holds focus and nothing structural
-      // changed. The status lines still refresh.
+      // Typing in the hex box must not destroy the box being typed into, so a
+      // rebuild is skipped while a TEXT FIELD inside the panel has focus and
+      // nothing structural changed. `force` overrides that, and every path
+      // that changes contents uses it: after a cell edit the focus is still
+      // inside the panel, and skipping there would swallow the edit that was
+      // just made.
       const signature = mems.map((m) => `${m.name}:${m.kind}:${m.width}:${m.addrWidth}`).join('|');
-      const focusHeld = memPanel.contains(document.activeElement);
-      if (memPanel.dataset.signature === signature && focusHeld) {
+      const active = document.activeElement;
+      const typing = active !== null
+        && memPanel.contains(active)
+        && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT');
+      if (!opts.force && memPanel.dataset.signature === signature && typing) {
         for (const mem of mems) updateRomStatus(mem);
         return;
       }
@@ -1406,8 +1420,57 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       for (const mem of mems) memPanel.appendChild(renderOneMemory(mem));
     }
 
+    /**
+     * What each address holds, and where that came from.
+     *
+     * One grid serves both jobs the panel used to split between a textarea and
+     * a dump. A running circuit is the truth when there is one; otherwise a rom
+     * shows its pending image, and a ram shows nothing, because a ram has no
+     * image and its contents do not exist until it runs.
+     */
+    function cellsFor(mem: MemorySymbol): {
+      read: (addr: number) => Cell;
+      live: boolean;
+      editable: boolean;
+      note: string | null;
+    } {
+      const host = memHost();
+      const id = host ? memIdOf(mem) : null;
+      if (host && id !== null) {
+        return {
+          read: (addr) => readCell(host, id, addr),
+          live: true,
+          editable: true,
+          note: null,
+        };
+      }
+      if (mem.kind === 'ram') {
+        return {
+          read: () => ({ value: 0n, defined: 0n }),
+          live: false,
+          editable: false,
+          note: 'A ram holds nothing until the circuit runs. Open the Simulate tab to fill it.',
+        };
+      }
+      const cells = imageCells(romImages.get(mem.name) ?? '', mem);
+      if (!cells.ok) {
+        return { read: () => ({ value: 0n, defined: 0n }), live: false, editable: false, note: cells.message };
+      }
+      const mask = maskFor(mem.width);
+      return {
+        read: (addr) => {
+          const word = cells.cells[addr];
+          return word === null ? { value: 0n, defined: 0n } : { value: word, defined: mask };
+        },
+        live: false,
+        editable: true,
+        note: 'Not running: this is the image that will be loaded. Open the Simulate tab to watch it live.',
+      };
+    }
+
     function renderOneMemory(mem: MemorySymbol): HTMLElement {
       const total = maxWords(mem.addrWidth);
+      const source = cellsFor(mem);
       const wrap = document.createElement('section');
       wrap.className = 'pg-mem-item';
       wrap.dataset.name = mem.name;
@@ -1422,42 +1485,29 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       shape.className = 'pg-mem-shape';
       shape.textContent = `${mem.kind} [${mem.width}, ${mem.addrWidth}] · ${total} word${total === 1 ? '' : 's'}`;
       head.appendChild(shape);
+      const live = document.createElement('span');
+      live.className = 'pg-mem-live';
+      live.dataset.live = String(source.live);
+      live.textContent = source.live ? 'running' : 'not running';
+      head.appendChild(live);
       wrap.appendChild(head);
 
-      const host = memHost();
-      const id = host ? memIdOf(mem) : null;
+      // --- the grid, which is now the editor as well as the view
+      const win = clampWindow(memWindows.get(mem.name) ?? 0, MEM_PAGE, total);
+      const pages = pageCount(MEM_PAGE, total);
+      if (pages > 1) wrap.appendChild(pageNav(mem, win, total));
+      wrap.appendChild(gridTable(mem, source, win));
+
+      if (source.note) {
+        const note = document.createElement('p');
+        note.className = 'pg-mem-idle';
+        note.textContent = source.note;
+        wrap.appendChild(note);
+      }
 
       // --- controls
       const controls = document.createElement('div');
       controls.className = 'pg-mem-controls';
-
-      if (mem.kind === 'rom') {
-        const boxId = `pg-rom-${mem.name}`;
-        const label = document.createElement('label');
-        label.className = 'pg-mem-imglabel';
-        label.htmlFor = boxId;
-        label.textContent = 'Image';
-        controls.appendChild(label);
-        const box = document.createElement('textarea');
-        box.id = boxId;
-        box.className = 'pg-rom-box';
-        box.spellcheck = false;
-        box.value = romImages.get(mem.name) ?? '';
-        box.placeholder = `hex bytes, little-endian, ${(mem.width + 7) >> 3} per word`;
-        box.addEventListener('input', () => {
-          romImages.set(mem.name, box.value);
-          updateRomStatus(mem);
-          applyToView();
-          void runTruth(buildStage.seq);
-        });
-        controls.appendChild(box);
-      } else {
-        const note = document.createElement('div');
-        note.className = 'pg-rom-meta';
-        note.textContent =
-          'A ram is written by the circuit through its clk and we pins, so there is nothing to preload.';
-        controls.appendChild(note);
-      }
 
       const buttons = document.createElement('div');
       buttons.className = 'pg-mem-buttons';
@@ -1465,20 +1515,43 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       clear.type = 'button';
       clear.className = 'pg-mem-btn';
       clear.textContent = 'Clear';
-      clear.title = 'Make every word unknown again';
-      clear.disabled = id === null;
+      clear.title = mem.kind === 'rom'
+        ? 'Empty the image, so every word is unknown again'
+        : 'Make every word unknown again';
+      clear.disabled = mem.kind === 'ram' && !source.live;
       clear.addEventListener('click', () => clearMemory(mem));
       buttons.appendChild(clear);
 
-      const refresh = document.createElement('button');
-      refresh.type = 'button';
-      refresh.className = 'pg-mem-btn';
-      refresh.textContent = 'Refresh';
-      refresh.title = 'Read the contents again';
-      refresh.disabled = id === null;
-      refresh.addEventListener('click', () => renderMemory());
-      buttons.appendChild(refresh);
+      if (source.live) {
+        const refresh = document.createElement('button');
+        refresh.type = 'button';
+        refresh.className = 'pg-mem-btn';
+        refresh.textContent = 'Refresh';
+        refresh.title = 'Read the contents again';
+        refresh.addEventListener('click', () => renderMemory({ force: true }));
+        buttons.appendChild(refresh);
+      }
+
+      if (mem.kind === 'rom') {
+        // The hex is behind a checkbox: it is the escape hatch for pasting a
+        // blob or loading a file, not the thing a reader should have to use.
+        const toggle = document.createElement('label');
+        toggle.className = 'pg-mem-hextoggle';
+        const box = document.createElement('input');
+        box.type = 'checkbox';
+        box.checked = hexOpen.has(mem.name);
+        box.addEventListener('change', () => {
+          if (box.checked) hexOpen.add(mem.name);
+          else hexOpen.delete(mem.name);
+          renderMemory();
+        });
+        toggle.appendChild(box);
+        toggle.appendChild(document.createTextNode(' Edit as hex'));
+        buttons.appendChild(toggle);
+      }
       controls.appendChild(buttons);
+
+      if (mem.kind === 'rom' && hexOpen.has(mem.name)) controls.appendChild(hexEditor(mem));
 
       const meta = document.createElement('div');
       meta.className = 'pg-rom-meta';
@@ -1488,95 +1561,122 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       controls.appendChild(err);
       wrap.appendChild(controls);
 
-      // --- the dump
-      if (host === null || id === null) {
-        const idle = document.createElement('p');
-        idle.className = 'pg-mem-idle';
-        idle.textContent =
-          host === null
-            ? 'Contents appear once the circuit is running — open the Simulate tab.'
-            : `${mem.name} is not in the compiled circuit yet.`;
-        wrap.appendChild(idle);
-        if (mem.kind === 'rom') updateRomStatus(mem);
-        return wrap;
-      }
+      if (mem.kind === 'rom') updateRomStatus(mem, wrap);
+      return wrap;
+    }
 
-      const win = clampWindow(memWindows.get(mem.name) ?? 0, MEM_PAGE, total);
+    /** The hex textarea and the file picker, both writing the same image. */
+    function hexEditor(mem: MemorySymbol): HTMLElement {
+      const holder = document.createElement('div');
+      holder.className = 'pg-mem-hex';
+
+      const boxId = `pg-rom-${mem.name}`;
+      const label = document.createElement('label');
+      label.className = 'pg-mem-imglabel';
+      label.htmlFor = boxId;
+      label.textContent = 'Image, hex bytes, little-endian';
+      holder.appendChild(label);
+
+      const box = document.createElement('textarea');
+      box.id = boxId;
+      box.className = 'pg-rom-box';
+      box.spellcheck = false;
+      box.value = romImages.get(mem.name) ?? '';
+      box.placeholder = `${(mem.width + 7) >> 3} byte${(mem.width + 7) >> 3 === 1 ? '' : 's'} per word`;
+      box.addEventListener('input', () => {
+        setImage(mem, box.value, new Set(), { redraw: false });
+        updateRomStatus(mem);
+      });
+      // Typing hex and then leaving redraws the grid against the new image.
+      box.addEventListener('change', () => renderMemory({ force: true }));
+      holder.appendChild(box);
+
+      const file = document.createElement('input');
+      file.type = 'file';
+      file.className = 'pg-mem-file';
+      file.setAttribute('aria-label', `Load a binary image into ${mem.name}`);
+      file.addEventListener('change', () => {
+        const chosen = file.files?.[0];
+        if (!chosen) return;
+        void chosen.arrayBuffer().then((buffer) => {
+          const result = imageFromBytes(new Uint8Array(buffer), mem);
+          if (!result.ok) {
+            status.textContent = result.message;
+            return;
+          }
+          // A loaded file is entirely the reader's choice, so nothing in it is
+          // implied.
+          setImage(mem, result.text, new Set());
+          status.textContent = `Loaded ${chosen.name} into ${mem.name}.`;
+        });
+      });
+      holder.appendChild(file);
+      return holder;
+    }
+
+    function pageNav(mem: MemorySymbol, win: AddressWindow, total: number): HTMLElement {
       const nav = document.createElement('div');
       nav.className = 'pg-mem-nav';
-      const pages = pageCount(MEM_PAGE, total);
-      if (pages > 1) {
-        const back = document.createElement('button');
-        back.type = 'button';
-        back.className = 'pg-mem-btn';
-        back.textContent = '◀';
-        back.setAttribute('aria-label', 'Previous page');
-        back.disabled = win.start === 0;
-        back.addEventListener('click', () => {
-          memWindows.set(mem.name, Math.max(0, win.start - MEM_PAGE));
-          renderMemory();
-        });
-        nav.appendChild(back);
-      }
+      const back = document.createElement('button');
+      back.type = 'button';
+      back.className = 'pg-mem-btn';
+      back.textContent = '◀';
+      back.setAttribute('aria-label', 'Previous page');
+      back.disabled = win.start === 0;
+      back.addEventListener('click', () => {
+        memWindows.set(mem.name, Math.max(0, win.start - MEM_PAGE));
+        renderMemory();
+      });
+      nav.appendChild(back);
+
       const range = document.createElement('span');
       range.className = 'pg-mem-range';
       range.textContent =
         `${formatAddress(win.start, mem.addrWidth)}–${formatAddress(win.start + win.count - 1, mem.addrWidth)}`;
       nav.appendChild(range);
-      if (pages > 1) {
-        const fwd = document.createElement('button');
-        fwd.type = 'button';
-        fwd.className = 'pg-mem-btn';
-        fwd.textContent = '▶';
-        fwd.setAttribute('aria-label', 'Next page');
-        fwd.disabled = win.start + win.count >= total;
-        fwd.addEventListener('click', () => {
-          memWindows.set(mem.name, win.start + MEM_PAGE);
-          renderMemory();
-        });
-        nav.appendChild(fwd);
 
-        const jump = document.createElement('input');
-        jump.className = 'pg-mem-jump';
-        jump.setAttribute('aria-label', `Go to an address in ${mem.name}`);
-        jump.placeholder = 'addr';
-        jump.addEventListener('keydown', (e) => {
-          e.stopPropagation();
-          if (e.key !== 'Enter') return;
-          e.preventDefault();
-          const addr = parseAddress(jump.value, mem.addrWidth);
-          if (addr === null) {
-            status.textContent = `Not an address in ${mem.name}. Hex, or d for decimal.`;
-            return;
-          }
-          memWindows.set(mem.name, pageContaining(addr, MEM_PAGE, total).start);
-          renderMemory();
-        });
-        nav.appendChild(jump);
-      }
-      wrap.appendChild(nav);
-      wrap.appendChild(dumpTable(mem, host, id, win, total));
-      if (mem.kind === 'rom') updateRomStatus(mem);
-      return wrap;
+      const fwd = document.createElement('button');
+      fwd.type = 'button';
+      fwd.className = 'pg-mem-btn';
+      fwd.textContent = '▶';
+      fwd.setAttribute('aria-label', 'Next page');
+      fwd.disabled = win.start + win.count >= total;
+      fwd.addEventListener('click', () => {
+        memWindows.set(mem.name, win.start + MEM_PAGE);
+        renderMemory();
+      });
+      nav.appendChild(fwd);
+
+      const jump = document.createElement('input');
+      jump.className = 'pg-mem-jump';
+      jump.setAttribute('aria-label', `Go to an address in ${mem.name}`);
+      jump.placeholder = 'addr';
+      jump.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        const addr = parseAddress(jump.value, mem.addrWidth);
+        if (addr === null) {
+          status.textContent = `Not an address in ${mem.name}. Hex, or d for decimal.`;
+          return;
+        }
+        memWindows.set(mem.name, pageContaining(addr, MEM_PAGE, total).start);
+        renderMemory();
+      });
+      nav.appendChild(jump);
+      return nav;
     }
 
-    function dumpTable(
+    function gridTable(
       mem: MemorySymbol,
-      host: Record<string, unknown>,
-      id: number,
+      source: ReturnType<typeof cellsFor>,
       win: AddressWindow,
-      total: number,
     ): HTMLElement {
+      const implied = romImplied.get(mem.name) ?? new Set<number>();
       const table = document.createElement('table');
       table.className = 'pg-mem-table';
       const body = document.createElement('tbody');
-      const rows = dumpRows(
-        (addr) => readCell(host, id, addr),
-        win,
-        MEM_PER_ROW,
-        mem.width,
-        settings().valueFormat,
-      );
+      const rows = dumpRows(source.read, win, MEM_PER_ROW, mem.width, settings().valueFormat);
       for (const row of rows) {
         const tr = document.createElement('tr');
         const th = document.createElement('th');
@@ -1589,20 +1689,29 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           td.className = 'pg-mem-cell';
           td.textContent = c.text;
           if (!c.known) td.dataset.unknown = 'true';
-          td.tabIndex = 0;
-          td.setAttribute('role', 'button');
-          td.setAttribute(
-            'aria-label',
-            `${mem.name} at ${formatAddress(c.addr, mem.addrWidth)} is ${c.text}. Activate to change it.`,
-          );
-          const edit = () => editCell(td, mem, id, c.addr, total);
-          td.addEventListener('dblclick', edit);
-          td.addEventListener('keydown', (e) => {
-            if (e.key !== 'Enter' && e.key !== ' ') return;
-            e.preventDefault();
-            e.stopPropagation();
-            edit();
-          });
+          // A zero that is only there because a later word was written is not
+          // a value the reader chose, and must not read like one.
+          const isImplied = mem.kind === 'rom' && implied.has(c.addr) && c.known;
+          if (isImplied) td.dataset.implied = 'true';
+          const where = `${mem.name} at ${formatAddress(c.addr, mem.addrWidth)}`;
+          const said = isImplied
+            ? `${c.text}, filled to reach a later word`
+            : c.text;
+          if (source.editable) {
+            td.tabIndex = 0;
+            td.setAttribute('role', 'button');
+            td.setAttribute('aria-label', `${where} is ${said}. Activate to change it.`);
+            const edit = () => editCell(td, mem, c.addr);
+            td.addEventListener('dblclick', edit);
+            td.addEventListener('keydown', (e) => {
+              if (e.key !== 'Enter' && e.key !== ' ') return;
+              e.preventDefault();
+              e.stopPropagation();
+              edit();
+            });
+          } else {
+            td.setAttribute('aria-label', `${where} is ${said}`);
+          }
           tr.appendChild(td);
         }
         body.appendChild(tr);
@@ -1611,11 +1720,22 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       return table;
     }
 
-    /** Swap one cell for an input. Enter writes it through `setMemWord`;
-     *  Escape leaves the word alone. */
-    function editCell(td: HTMLElement, mem: MemorySymbol, id: number, addr: number, total: number) {
-      const host = memHost();
-      if (!host || typeof host.setMemWord !== 'function') return;
+    /** Replace a memory's image, and push it wherever it has to go. */
+    function setImage(
+      mem: MemorySymbol,
+      text: string,
+      implied: ReadonlySet<number>,
+      opts: { redraw?: boolean } = {},
+    ) {
+      romImages.set(mem.name, text);
+      romImplied.set(mem.name, new Set(implied));
+      applyToView();
+      void runTruth(buildStage.seq);
+      if (opts.redraw !== false) renderMemory({ force: true });
+    }
+
+    /** Swap one cell for an input. Enter writes it; Escape leaves it alone. */
+    function editCell(td: HTMLElement, mem: MemorySymbol, addr: number) {
       const previous = td.textContent ?? '';
       const input = document.createElement('input');
       input.className = 'pg-mem-input';
@@ -1627,30 +1747,18 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         if (done) return;
         done = true;
         if (!commit) {
-          renderMemory();
+          renderMemory({ force: true });
           return;
         }
         const parsed = parseWord(input.value, mem.width, settings().valueFormat);
         if (!parsed.ok) {
           status.textContent = parsed.message;
-          renderMemory();
+          renderMemory({ force: true });
           return;
         }
-        const rc = (host.setMemWord as (i: number, a: number, v: bigint, d: bigint) => number)(
-          id,
-          addr,
-          parsed.value,
-          parsed.defined,
-        );
-        if (rc !== 0) status.textContent = `${mem.name} refused the write (code ${rc}).`;
-        else {
-          status.textContent =
-            `${mem.name}[${formatAddress(addr, mem.addrWidth)}] = ${parsed.defined === 0n ? 'unknown' : input.value.trim()}.`;
-        }
-        // A memory mutator re-presents its own output, so the canvas is
-        // already correct; it just has to be told to repaint.
-        sim.view?.view.refreshState();
-        renderMemory();
+        const unknown = parsed.defined === 0n;
+        if (mem.kind === 'rom') writeRomWord(mem, addr, unknown ? null : parsed.value);
+        else writeLiveWord(mem, addr, parsed.value, parsed.defined);
       };
 
       input.addEventListener('keydown', (e) => {
@@ -1663,10 +1771,51 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       td.appendChild(input);
       input.focus();
       input.select();
-      void total;
+    }
+
+    /** A rom is edited through its IMAGE, so the truth table and the canvas
+     *  both see the change and a reload cannot lose it. */
+    function writeRomWord(mem: MemorySymbol, addr: number, value: bigint | null) {
+      const text = romImages.get(mem.name) ?? '';
+      const implied = romImplied.get(mem.name) ?? new Set<number>();
+      const result = editWord(text, implied, mem, addr, value);
+      if (!result.ok) {
+        status.textContent = result.message;
+        renderMemory({ force: true });
+        return;
+      }
+      const filled = [...result.edit.implied].filter((a) => !implied.has(a));
+      setImage(mem, result.edit.text, result.edit.implied);
+      status.textContent = filled.length > 0
+        ? `${mem.name}[${formatAddress(addr, mem.addrWidth)}] set. An image is a prefix, so ${filled.length} earlier word${filled.length === 1 ? '' : 's'} became zero.`
+        : `${mem.name}[${formatAddress(addr, mem.addrWidth)}] ${value === null ? 'is unknown again' : 'set'}.`;
+    }
+
+    /** A ram has no image, so it is written straight into the running circuit. */
+    function writeLiveWord(mem: MemorySymbol, addr: number, value: bigint, defined: bigint) {
+      const host = memHost();
+      const id = memIdOf(mem);
+      if (!host || id === null || typeof host.setMemWord !== 'function') {
+        status.textContent = `${mem.name} is not running.`;
+        renderMemory({ force: true });
+        return;
+      }
+      const rc = (host.setMemWord as (i: number, a: number, v: bigint, d: bigint) => number)(id, addr, value, defined);
+      status.textContent = rc === 0
+        ? `${mem.name}[${formatAddress(addr, mem.addrWidth)}] ${defined === 0n ? 'is unknown again' : 'set'}.`
+        : `${mem.name} refused the write (code ${rc}).`;
+      sim.view?.view.refreshState();
+      renderMemory({ force: true });
     }
 
     function clearMemory(mem: MemorySymbol) {
+      if (mem.kind === 'rom') {
+        // Emptying the image is what clears a rom: an empty image is a legal
+        // instruction that reaches the runtime as memClear.
+        setImage(mem, '', new Set());
+        status.textContent = `${mem.name} cleared; every word is unknown.`;
+        return;
+      }
       const host = memHost();
       const id = memIdOf(mem);
       if (!host || id === null || typeof host.memClear !== 'function') return;
@@ -1675,12 +1824,18 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         ? `${mem.name} cleared; every word is unknown.`
         : `${mem.name} refused the clear (code ${rc}).`;
       sim.view?.view.refreshState();
-      renderMemory();
+      renderMemory({ force: true });
     }
 
     /** Say what the current rom text amounts to, or why it does not. */
-    function updateRomStatus(mem: MemorySymbol) {
-      const wrap = memPanel.querySelector<HTMLElement>(`.pg-mem-item[data-name="${CSS.escape(mem.name)}"]`);
+    /**
+     * `into` is the row being built, which is NOT in the panel yet: the
+     * caller appends it after this returns. Looking it up by name at that
+     * moment finds nothing, and the line silently stays blank.
+     */
+    function updateRomStatus(mem: MemorySymbol, into?: HTMLElement) {
+      const wrap = into
+        ?? memPanel.querySelector<HTMLElement>(`.pg-mem-item[data-name="${CSS.escape(mem.name)}"]`);
       if (!wrap) return;
       const meta = wrap.querySelector<HTMLElement>('.pg-rom-meta');
       const err = wrap.querySelector<HTMLElement>('.pg-rom-error');

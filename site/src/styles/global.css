@@ -806,7 +806,6 @@ hr {
   /* A share of the pane rather than a fixed height, so the dock stays usable
      on a short viewport and never crowds the editor out on a tall one. */
   height: var(--pg-dock-h, 12rem);
-  max-height: 45%;
   overflow: auto;
   border-top: 1px solid var(--border);
 }
@@ -849,7 +848,33 @@ hr {
 .pg-mem-head { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
 .pg-mem-name { margin: 0; font-family: var(--font-mono); font-size: 0.85rem; }
 .pg-mem-shape { color: var(--muted); font-family: var(--font-mono); font-size: 0.7rem; }
-.pg-mem-controls { display: flex; flex-direction: column; gap: 0.3rem; }
+.pg-mem-controls { display: flex; flex-direction: column; gap: 0.4rem; }
+/* Whether a circuit is behind the grid or only an image is. */
+.pg-mem-live {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 0.35rem;
+}
+.pg-mem-live[data-live='true'] { color: var(--accent); border-color: var(--accent); }
+/* The hex escape hatch, behind its checkbox. */
+.pg-mem-hextoggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--muted);
+  cursor: pointer;
+  margin-left: auto;
+}
+.pg-mem-hextoggle:hover { color: var(--fg); }
+.pg-mem-hex { display: flex; flex-direction: column; gap: 0.3rem; }
+.pg-mem-file { font-size: 0.7rem; color: var(--muted); }
 .pg-mem-imglabel {
   font-family: var(--font-mono);
   font-size: 0.7rem;
@@ -867,7 +892,7 @@ hr {
   color: var(--fg);
   width: 100%;
 }
-.pg-mem-buttons { display: flex; gap: 0.35rem; }
+.pg-mem-buttons { display: flex; align-items: center; gap: 0.35rem; }
 .pg-mem-btn {
   font: inherit;
   font-family: var(--font-mono);
@@ -896,6 +921,7 @@ hr {
 /* The dump. It scrolls on its own axis: a 64-bit word in binary is 64
    characters, and eight of those across must not widen the dock. */
 .pg-mem-table {
+  margin: 0.1rem 0 0.2rem;
   border-collapse: collapse;
   font-family: var(--font-mono-strict);
   font-size: 0.72rem;
@@ -922,6 +948,14 @@ hr {
 .pg-mem-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 /* A word nothing has written is not a zero, and must not read like one. */
 .pg-mem-cell[data-unknown='true'] { color: var(--muted); opacity: 0.6; }
+/* …and a zero that exists only because a LATER word was written is not a
+   value the reader chose. The image format has no hole to offer, so the mark
+   is the only place that distinction survives. */
+.pg-mem-cell[data-implied='true'] {
+  color: var(--muted);
+  font-style: italic;
+  border-bottom: 1px dotted var(--muted);
+}
 .pg-mem-input {
   width: 100%;
   min-width: 3rem;

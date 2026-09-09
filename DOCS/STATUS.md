@@ -719,3 +719,28 @@ A memory is the one thing in the playground the artifact does not carry. The com
 4. **`showDockTab` had to split.** It both moves the selection and writes the store, and the availability check needed the first without the second — calling the whole thing from inside a render recursed back into it. `selectDockPanel` is now the DOM half.
 5. **A ram refreshes on a pin toggle, and only then.** A toggled pin can clock a ram, so the panel redraws from `onPinToggle` — but only while it is actually on screen, since every visible word is a call across the boundary. The rest of the time it is Refresh, a page turn, or an edit.
 6. **Negative proof on both halves.** Making `formatWord` render an unknown cell's value bits fails 14 tests; showing the tab unconditionally fails the island smoke test. Both reverted, both green.
+
+## 2026-09-09 — Feature — the memory editor becomes one grid
+
+**What shipped:** The Memory tab had two ways of saying the same thing: a hex textarea for the image, and a separate read-only dump of the running circuit. They are now one grid, and the grid is the editor.
+
+Cells are **words, not bytes**. That matters as soon as a width is not a byte: at `rom x[12, 4]` a word is two bytes little-endian with the top four bits forced to zero, and a byte view actively misleads. Both shipped examples declare `[8, 4]`, so their grid is sixteen cells on one screen with no paging at all.
+
+Where a cell's value comes from depends on what exists. A running circuit is the truth when there is one. Otherwise a rom shows its pending image, and a ram shows nothing, because a ram has no image and its contents do not exist until it runs. Editing follows the same split: a rom is edited through its **image**, so the truth table and the canvas both see the change and a reload cannot lose it; a ram is written straight into the running circuit with `setMemWord`.
+
+The hex textarea is now behind an "Edit as hex" checkbox, alongside a file picker that loads a binary image. Both go through `parseRomImage`, so a file cannot get in through a door the textarea is not allowed through.
+
+**The prefix rule.** The image format is a byte stream with no way to say "unknown", so an image is always a prefix: writing word 5 of an empty rom cannot leave words 0 through 4 unknown. They come into existence as zeros, and those zeros are marked — dimmed and italic, with an accessible name saying they were filled to reach a later word. Taking word 5 back shortens the image and takes the filler with it, stopping at the first word the reader actually chose. Making a word unknown in the MIDDLE cannot shorten anything, so it becomes an implied zero rather than being refused.
+
+**Files touched:** `site/src/scripts/rom-words.ts` (new), `site/test/rom-words.test.ts` (new), `site/src/components/Playground.astro`, `site/src/styles/global.css`, `site/test/memory-panel.test.ts`.
+
+**Tests:** `bun test` 392 pass across 30 files, from 363. `bun --bun run typecheck` 0 errors. Build and `bun run bundle` green. `/playground` gzip 28.9 KB against a 120 KB ceiling, up 1.3 KB.
+
+**Next slice:** none.
+
+**Notes:**
+
+1. **Two bugs found while building, both mine from the last commit.** The panel's rebuild was skipped whenever anything inside it held focus, which after a cell edit is the cell itself — so an edit would have been swallowed by the redraw meant to show it. Every path that changes contents now forces the rebuild, and the skip narrowed to a focused text field, which is the case it was actually for. Separately, `updateRomStatus` looked its row up by name inside the panel while the row was still being built and not yet appended, so the "N of 16 words" line could never have been filled on a first render; it takes the row directly now.
+2. **The prefix rule is proved against a real circuit, not just in the abstract.** Three tests edit a word through `editWord`, load the resulting image into a compiled artifact, and read it back: words 0 through 4 are real zeros in the circuit rather than unknowns, word 5 holds what was typed, word 6 is still unknown, and taking word 5 back empties the image and the circuit with it. A binary file and the equivalent typed hex are shown to land identically.
+3. **`implied` cannot be derived, so it is carried.** The image cannot tell a zero the reader chose from a zero the format had to invent, so the set of filled addresses lives beside the text. Pasting hex or loading a file clears it: a reader who supplied the whole image meant all of it.
+4. **Negative proof.** Dropping the gap from the implied set — the mark quietly disappearing — fails 12 tests across the two files.

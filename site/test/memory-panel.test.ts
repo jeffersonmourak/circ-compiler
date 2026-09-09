@@ -242,6 +242,7 @@ import { resolve } from 'node:path';
 import { callOp, instantiateLibcirc, type LibcircExports } from '../src/scripts/libcirc-abi.ts';
 import { requestFor, splitFiles } from '../src/utils/split-files.ts';
 import { applyRomImages, parseRomImage, romPlan, romSymbols, type MemorySymbol } from '../src/utils/rom-image.ts';
+import { editWord, imageFromBytes } from '../src/scripts/rom-words.ts';
 import { examples } from '../src/content/examples.ts';
 import type { Analysis } from '../src/scripts/circ-diagnostics.ts';
 
@@ -387,5 +388,90 @@ describe.skipIf(skip)('reading and writing a running memory', () => {
     expect((host.memClear as (i: number) => number)(id)).toBe(0);
     const rows = dumpRows(read, { start: 0, count: 16 }, 16, mem.width, 'hex');
     expect(new Set(rows[0].cells.map((c) => c.text))).toEqual(new Set([UNKNOWN]));
+  });
+});
+
+describe.skipIf(skip)('a grid edit reaching a running rom', () => {
+  const source = 'input[4] pc\nrom code[8, 4](addr = pc.out)\noutput[8] out(in = code.out)\n';
+  const mem: MemorySymbol = { name: 'code', kind: 'rom', width: 8, addrWidth: 4 };
+
+  function bindRom(host: Record<string, unknown>) {
+    const getInfo = host.getMemInfo as (id: number) => number;
+    let id = -1;
+    for (let candidate = 0; candidate < 64; candidate += 1) {
+      if (getInfo(candidate) >= 0) { id = candidate; break; }
+    }
+    const read = (addr: number): Cell => ({
+      value: BigInt((host.getMemValue as (i: number, a: number) => bigint)(id, addr)),
+      defined: BigInt((host.getMemDefined as (i: number, a: number) => bigint)(id, addr)),
+    });
+    return { id, read };
+  }
+
+  test('writing one word past the end lands as the prefix rule says', async () => {
+    // The whole loop: a cell edit becomes an image, the image is loaded into a
+    // real circuit, and the circuit reads back what the grid promised.
+    const edit = editWord('', new Set(), mem, 5, 0x7fn);
+    expect(edit.ok).toBe(true);
+    if (!edit.ok) return;
+    expect([...edit.edit.implied].sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4]);
+
+    const host = await runCircuit(source);
+    const { id, read } = bindRom(host);
+    const applied = applyRomImages(
+      host as never,
+      romPlan(new Map([[mem.name, edit.edit.text]]), [mem]),
+      () => id,
+      [mem],
+    );
+    expect(applied.applied).toEqual([mem.name]);
+
+    // 0 through 4 are real zeros in the circuit, not unknowns: the format had
+    // no way to leave them out, which is exactly what the mark is for.
+    for (let addr = 0; addr < 5; addr += 1) {
+      expect(formatWord(read(addr), mem.width, 'hex')).toBe('00');
+    }
+    expect(formatWord(read(5), mem.width, 'hex')).toBe('7f');
+    // …and everything after the image really is unknown.
+    expect(formatWord(read(6), mem.width, 'hex')).toBe(UNKNOWN);
+  });
+
+  test('taking that word back empties the image, and the circuit with it', async () => {
+    const written = editWord('', new Set(), mem, 5, 0x7fn);
+    expect(written.ok).toBe(true);
+    if (!written.ok) return;
+    const cleared = editWord(written.edit.text, written.edit.implied, mem, 5, null);
+    expect(cleared.ok).toBe(true);
+    if (!cleared.ok) return;
+    expect(cleared.edit.text).toBe('');
+
+    const host = await runCircuit(source);
+    const { id, read } = bindRom(host);
+    applyRomImages(host as never, romPlan(new Map([[mem.name, written.edit.text]]), [mem]), () => id, [mem]);
+    expect(formatWord(read(0), mem.width, 'hex')).toBe('00');
+    // An empty image is a legal instruction that reaches the runtime as a
+    // clear, so the filler zeros go away rather than lingering.
+    applyRomImages(host as never, romPlan(new Map([[mem.name, cleared.edit.text]]), [mem]), () => id, [mem]);
+    for (let addr = 0; addr < 8; addr += 1) {
+      expect(formatWord(read(addr), mem.width, 'hex')).toBe(UNKNOWN);
+    }
+  });
+
+  test('a binary file and typed hex reach the circuit identically', async () => {
+    const bytes = new Uint8Array([0xde, 0xad, 0xbe, 0xef]);
+    const fromFile = imageFromBytes(bytes, mem);
+    expect(fromFile).toEqual({ ok: true, text: 'deadbeef' });
+    if (!fromFile.ok) return;
+
+    const host = await runCircuit(source);
+    const { id, read } = bindRom(host);
+    applyRomImages(host as never, romPlan(new Map([[mem.name, fromFile.text]]), [mem]), () => id, [mem]);
+    const viaFile = [0, 1, 2, 3].map((a) => formatWord(read(a), mem.width, 'hex'));
+    expect(viaFile).toEqual(['de', 'ad', 'be', 'ef']);
+
+    const host2 = await runCircuit(source);
+    const b2 = bindRom(host2);
+    applyRomImages(host2 as never, romPlan(new Map([[mem.name, 'de ad be ef']]), [mem]), () => b2.id, [mem]);
+    expect([0, 1, 2, 3].map((a) => formatWord(b2.read(a), mem.width, 'hex'))).toEqual(viaFile);
   });
 });
