@@ -24,6 +24,23 @@ const initial = catalogue[0];
   data-manifest-revision={manifest.revision}
   data-default-pick={initial.id}
 >
+  <!-- A classic script, executed during parsing, so the fragment is gone from
+       location.href before any deferred module runs — PostHog's real init
+       among them. The island reads the stashed copy instead. -->
+  <script is:inline>
+    (function () {
+      try {
+        var h = location.hash;
+        if (/^#(src=|src0=|pick=)/.test(h) || /[#&](src|src0|pick)=/.test(h)) {
+          window.__circShareHash = h;
+          history.replaceState(history.state, '', location.pathname + location.search);
+        }
+      } catch (_) {
+        // A blocked History API leaves the fragment in place; the island still
+        // reads it from location.hash.
+      }
+    })();
+  </script>
   <div class="pg-banner" hidden></div>
   <div class="pg-panes">
     <!-- A sibling of the two panes, never a track inside them: the divider's
@@ -124,6 +141,8 @@ const initial = catalogue[0];
   import { LibcircClient, type LibcircVersion, type WorkerReply } from '../scripts/libcirc-client.ts';
   import { joinConflicts, requestFor, rootOf, PLAYGROUND_DIR } from '../utils/split-files.ts';
   import { createSplitter } from '../scripts/splitter.ts';
+  import { decodeShare, readHash, webStreamsCodec } from '../utils/share-link.ts';
+  import { generateSillyName } from '../utils/sillyname.ts';
   import {
     createStore,
     describeNote,
@@ -513,22 +532,54 @@ const initial = catalogue[0];
     });
 
     // ---- bootstrap ----
-    // Slice 5 adds the `src` and `pick` intents to this same call; slice 3
-    // opens the stored project, or the first catalogue entry on a first visit.
-    {
+    // The share decode is async, so the whole bootstrap is: the editor is
+    // created only once the source is settled, and nothing renders twice.
+    async function bootstrap() {
+      const hash = (window as { __circShareHash?: string }).__circShareHash ?? location.hash;
+      const intent = readHash(hash);
+      const decoded = intent.src ? await decodeShare(hash, webStreamsCodec()) : null;
       const { outcome, note } = resolveInitial({
-        intent: {},
-        decoded: null,
+        intent,
+        decoded,
         env: store.envelope,
         catalogue,
         defaultId: el.dataset.defaultPick ?? catalogue[0]?.id ?? '',
       });
-      if (outcome.kind !== 'share') {
+
+      if (outcome.kind === 'share') {
+        // A shared source becomes a project of the reader's own, so editing it
+        // does not need a second fork.
+        let created: string | null = null;
+        store.update((draft) => {
+          const r = createScratch(draft.scratch, {
+            name: uniqueName(generateSillyName(), draft.scratch.map((p) => p.name)),
+            source: outcome.source,
+            now: nowMs(),
+            keep: draft.activeId,
+          });
+          if (!r.created) return;
+          draft.scratch = r.list;
+          created = r.created.id;
+        });
+        if (created) {
+          loadProject(created);
+          status.textContent = 'Opened the shared circuit as a new project.';
+        } else {
+          status.textContent = 'That shared circuit is too large to open.';
+        }
+      } else {
         loadProject(outcome.id, { restoreFile: store.envelope.activeFile });
+        if (note) status.textContent = note;
       }
-      if (note) status.textContent = note;
+
       showTab(store.envelope.tab as Tab, { persist: false });
       renderWorkspace();
+
+      whenIdle(() => {
+        void loadEditor().then(mountEditor, () => {
+          status.textContent = 'Rich editor unavailable; using the plain text box.';
+        });
+      });
     }
 
     // ---- the pane divider ----
@@ -940,11 +991,7 @@ const initial = catalogue[0];
       if (typeof ric === 'function') ric(fn);
       else window.setTimeout(fn, 0);
     };
-    whenIdle(() => {
-      void loadEditor().then(mountEditor, () => {
-        status.textContent = 'Rich editor unavailable; using the plain text box.';
-      });
-    });
+    void bootstrap();
 
     // ---- version handshake ----
     async function ensureReady(): Promise<boolean> {
