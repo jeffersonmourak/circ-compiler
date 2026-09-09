@@ -12,12 +12,20 @@ type Props = {
    * `<link rel="alternate">` advertisement entirely.
    */
   mdTwin?: string | null;
+  /**
+   * `'app'` turns the page into a viewport-locked workbench: the body becomes
+   * a `100dvh` grid and `main` stops being a centred article column. Every
+   * other page keeps `'default'`, and its markup is byte-identical to before
+   * this prop existed — `data-layout` is only stamped for `'app'`.
+   */
+  layout?: 'default' | 'app';
 };
 
 const {
   title = 'circ — a small language for digital circuits',
   description = 'A small language for building and simulating logic circuits, made for people learning how computers work.',
   mdTwin,
+  layout = 'default',
 } = Astro.props;
 
 const stripTrailingSlash = (s: string): string => s.replace(/\/$/, '');
@@ -72,7 +80,7 @@ const isLanding = twin === `${stripTrailingSlash(base)}/index.md`;
       }
     </script>
   </head>
-  <body>
+  <body data-layout={layout === 'app' ? 'app' : undefined}>
     <Nav />
     <main>
       <slot />

@@ -36,6 +36,7 @@
   --code-bg: #e8def0;
   --pane-bg: #f4eefb;
   --pane-label-bg: #ebe4f5;
+  --danger: #a83737;
 
   --font-prose: 'Ronzino', ui-sans-serif, system-ui, -apple-system, "Segoe UI",
     Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -65,6 +66,7 @@
   --code-bg: #1f1438;
   --pane-bg: #0c0517;
   --pane-label-bg: #13091f;
+  --danger: #ff6b8a;
 
   color-scheme: dark;
 }
@@ -1138,3 +1140,69 @@ a.install-line:hover {
 
 .download-source { max-width: var(--measure); }
 .download-source .install-snippet { margin: 1rem 0; }
+
+/* ---------- The playground as an app layout ----------
+   Opted into by `layout="app"` on Base.astro, which stamps data-layout on
+   <body>. Every rule here is scoped to that attribute, so no other page — and
+   no <LiveEditor> on /tour or /examples — is ever matched. Nothing here
+   touches a .lc-mount selector: that block is shared with LiveCanvas.astro,
+   which / and /examples render. */
+[data-layout='app'] {
+  height: 100vh; /* fallback first */
+  height: 100dvh;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+[data-layout='app'] main {
+  padding: 0 1rem 0.5rem;
+  max-width: none;
+  margin: 0;
+  /* A grid item defaults to min-height: auto, which lets the 1fr row grow
+     past the viewport; with overflow: hidden on the body the bottom of the
+     page would then be unreachable, with no scrollbar anywhere. */
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+[data-layout='app'] .site-footer { padding: 0.4rem 1rem; font-size: 0.75rem; }
+[data-layout='app'] .site-footer-row { margin: 0; }
+
+[data-layout='app'] .pg-head { margin: 0.4rem 0 0.5rem; }
+[data-layout='app'] .pg-head h1 { margin: 0; font-size: 1.3rem; }
+.pg-about { font-size: 0.85rem; color: var(--muted); }
+.pg-about summary { cursor: pointer; }
+.pg-about .pg-intro { margin: 0.5rem 0 0; }
+
+[data-layout='app'] .pg {
+  margin: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+[data-layout='app'] .pg-panes { min-height: 0; }
+[data-layout='app'] .pg-editor,
+[data-layout='app'] .pg-output {
+  min-height: 0;
+}
+/* The base editor theme gives .cm-editor no height of its own, so the pane
+   needs one, and the scroller needs a vertical overflow to go with it. */
+[data-layout='app'] .pg-editor .pg-cm { min-height: 0; }
+[data-layout='app'] .pg-editor .pg-cm .cm-editor { height: 100%; }
+[data-layout='app'] .pg-editor .pg-cm .cm-scroller { overflow: auto; }
+
+@media (max-width: 800px) {
+  /* Below the breakpoint the workbench stops being viewport-locked: two panes
+     crushed into one 1fr row under min-height: 0 would be unusable, so the
+     page scrolls vertically instead. */
+  [data-layout='app'] {
+    height: auto;
+    overflow: visible;
+  }
+  [data-layout='app'] main { overflow: visible; }
+  [data-layout='app'] .pg-editor,
+  [data-layout='app'] .pg-output {
+    min-height: 60vh;
+  }
+}
+
