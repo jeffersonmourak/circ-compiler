@@ -47,3 +47,11 @@ circ-compile <input.circ> --truth-table              # enumerate input combinati
 **Rationale.** Earlier drafts of this decision document carried a `--build-dir <path>` override for the now-removed temp-directory dance. The Zig-free pipeline collapsed that path away entirely: there is nothing to override because there is no intermediate state to preserve. `--emit-zig` covers the "I want to inspect the Zig" use case directly.
 
 **Alternatives.** Re-introducing an intermediate directory would only matter if a future build mode produced multiple artifacts that needed coordination — not in scope today.
+
+### `--mem` is scoped to sim and truth-table
+
+**Decision.** `--mem=<name>=<path>` preloads a `rom`/`ram` from a raw image and is accepted only by `--sim` and `--truth-table`; every other mode rejects it at parse time with a usage error, exactly as `--strict`/`--format` are gated above. The flag is repeatable up to a fixed 16 (`ParseError.TooManyMemPreloads` → `usage error: too many --mem flags (max 16)`), stored in a fixed `[16]` array on `Args` so `Args.parse` stays allocator-free, and split at the *first* `=` after the prefix so a path may itself contain `=`. Name resolution, file reading and image validation happen later, in `main.zig`, after the topology is built.
+
+**Rationale.** The flag half of decision 7 in `DOCS/PLANS_PROMPT.md`. Preloads only mean something to a mode that *runs* the circuit; the default compile deliberately never embeds contents (see [language.md](language.md) "Memory contents are runtime configuration"), so accepting `--mem` there would suggest an artifact can carry an image. Sixteen is far above any teaching circuit's memory count and lets `Args` stay a plain value type. Splitting at the first `=` mirrors how `name=path` is read by a human.
+
+**Alternatives.** A growable list on `Args` — needs an allocator in `parse`, which every existing test calls without one. Accepting `--mem` in default compile as "bake this image into the `.wasm`" — a second contents mechanism, rejected with the in-source image. The verbs that do the same job interactively are recorded in [runtime-api.md](runtime-api.md) "`--sim` preloads by declared name; verbs are additive at proto=1".

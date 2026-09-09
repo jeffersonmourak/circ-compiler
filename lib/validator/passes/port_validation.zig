@@ -1,6 +1,7 @@
 const std = @import("std");
 const diagnostics = @import("diagnostics");
 const ir = @import("ir_types");
+const memory_validation = @import("memory_validation");
 
 fn toDiagnosticSpan(span: ir.Span) diagnostics.Span {
     return .{
@@ -33,6 +34,11 @@ fn isValidInputPort(component: ir.Component, port: []const u8) bool {
         // valid input. The resolver always emits well-formed names, so
         // we just check the prefix here.
         .concat => std.mem.startsWith(u8, port, "operand_"),
+        .memory => |m| switch (m.mode) {
+            .rom => std.mem.eql(u8, port, "addr"),
+            .ram => std.mem.eql(u8, port, "addr") or std.mem.eql(u8, port, "din") or
+                std.mem.eql(u8, port, "we") or std.mem.eql(u8, port, "clk"),
+        },
     };
 }
 
@@ -46,6 +52,19 @@ fn isValidOutputPort(component: ir.Component, port: []const u8) bool {
         .unresolved_name => true,
         .slice => std.mem.eql(u8, port, "out"),
         .concat => std.mem.eql(u8, port, "out"),
+        .memory => std.mem.eql(u8, port, "out"),
+    };
+}
+
+/// Width contract of one connection end inside this module, or null when
+/// the end has no single-width contract here (sub-circuit ports are checked
+/// with project context in sub_circuit_validation; slice/concat inputs vary
+/// per operand and surface their mismatches through the shape checks below).
+fn endpointWidth(component: ir.Component, port: []const u8, side: memory_validation.Side) ?u8 {
+    return switch (component.kind) {
+        .primitive => component.width,
+        .memory => |m| memory_validation.memoryPortWidth(m, port, side),
+        .sub_circuit_ref, .unresolved_name, .slice, .concat => null,
     };
 }
 
@@ -92,21 +111,22 @@ pub fn run(
             try diagnostic_list.append(allocator, diagnostic);
         }
 
-        // E014: width mismatch on connections where both endpoints are primitive
-        // components in this module. Cross-boundary cases involving sub_circuit_ref
-        // are handled by lib/validator/passes/sub_circuit_validation.zig, which has
-        // the project context to look up the target module's pin widths.
-        if (from_component.kind == .primitive and to_component.kind == .primitive) {
-            if (from_component.width != to_component.width) {
-                const message = try std.fmt.allocPrint(
-                    allocator,
-                    "width mismatch: source width {d}, destination expects {d}",
-                    .{ from_component.width, to_component.width },
-                );
-                var diagnostic = diagnostics.makeDiagnostic(.E014, toDiagnosticSpan(connection.span));
-                diagnostic.message = message;
-                try diagnostic_list.append(allocator, diagnostic);
-            }
+        // E014: width mismatch on connections where both endpoints carry a
+        // single-width contract in this module (primitives and memory ports).
+        // Cross-boundary cases involving sub_circuit_ref are handled by
+        // lib/validator/passes/sub_circuit_validation.zig, which has the
+        // project context to look up the target module's pin widths.
+        const from_width = endpointWidth(from_component, connection.from.port, .from);
+        const to_width = endpointWidth(to_component, connection.to.port, .to);
+        if (from_width != null and to_width != null and from_width.? != to_width.?) {
+            const message = try std.fmt.allocPrint(
+                allocator,
+                "width mismatch: source width {d}, destination expects {d}",
+                .{ from_width.?, to_width.? },
+            );
+            var diagnostic = diagnostics.makeDiagnostic(.E014, toDiagnosticSpan(connection.span));
+            diagnostic.message = message;
+            try diagnostic_list.append(allocator, diagnostic);
         }
     }
 

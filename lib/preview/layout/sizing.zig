@@ -23,6 +23,10 @@ pub const primitive_sizing = std.EnumArray(full_format.ComponentKind, PrimitiveS
     // placement code that looked at them would draw empty boxes.
     .slice = .{ .width = 0, .height = 0 },
     .concat = .{ .width = 0, .height = 0 },
+    // Memories size dynamically via `memorySize` (the label carries the
+    // instance name and widths); zero sentinels here.
+    .rom = .{ .width = 0, .height = 0 },
+    .ram = .{ .width = 0, .height = 0 },
 });
 
 /// Decimal-digit count of `n` for label-length math (e.g. 1 -> 1, 64 -> 2).
@@ -74,6 +78,31 @@ pub fn macroSize(label_width: usize, input_count: u32) PrimitiveSize {
     const min_h: u32 = 3;
     const needed_h: u32 = if (input_count <= 1) min_h else 2 * input_count + 1;
     return .{ .width = padded_w, .height = needed_h };
+}
+
+/// Length of a memory box label `<kind> <name>[W,A]`.
+pub fn memoryLabelLen(kind_name_len: usize, name_len: usize, data_width: u8, addr_width: u8) usize {
+    return kind_name_len + 1 + name_len + 1 + digitsOf(data_width) + 1 + digitsOf(addr_width) + 1;
+}
+
+/// Memory box size: wide enough for its label like a pin, and tall enough
+/// for one input port per odd border row like a macro box (rom: 3 rows,
+/// ram: 9 rows).
+pub fn memorySize(label_len: usize, input_count: u32) PrimitiveSize {
+    const min_width: u32 = 5;
+    const padded_w = @max(min_width, @as(u32, @intCast(label_len)) + 4);
+    const needed_h: u32 = if (input_count <= 1) 3 else 2 * input_count + 1;
+    return .{ .width = padded_w, .height = needed_h };
+}
+
+test "sizing: memorySize follows the pin width rule and the macro height rule" {
+    try std.testing.expectEqual(@as(u32, 17), memorySize(13, 1).width);
+    try std.testing.expectEqual(@as(u32, 3), memorySize(13, 1).height);
+    try std.testing.expectEqual(@as(u32, 17), memorySize(13, 4).width);
+    try std.testing.expectEqual(@as(u32, 9), memorySize(13, 4).height);
+    try std.testing.expectEqual(@as(u32, 5), memorySize(0, 1).width);
+    // "rom code[8,4]" is 13 chars.
+    try std.testing.expectEqual(@as(usize, 13), memoryLabelLen(3, 4, 8, 4));
 }
 
 test "sizing: primitive table values match locked spec" {

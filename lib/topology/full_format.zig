@@ -2,7 +2,7 @@ const std = @import("std");
 const format = @import("format");
 
 pub const FULL_MAGIC: [4]u8 = .{ 'C', 'I', 'R', 'F' };
-pub const FULL_VERSION: u8 = 0x02;
+pub const FULL_VERSION: u8 = 0x03;
 
 pub const ComponentKind = format.ComponentKind;
 pub const PortName = format.PortName;
@@ -15,10 +15,12 @@ pub const OriginFrame = struct {
 };
 
 /// Kind-dispatched auxiliary metadata for the full topology section. Slice
-/// records carry the bit-range; everything else has `.none`.
+/// records carry the bit-range, memory records their address width;
+/// everything else has `.none`.
 pub const Aux = union(enum) {
     none,
     slice: struct { lo: u8, hi: u8 },
+    memory: struct { addr_width: u8 },
 };
 
 pub const FullComponentRecord = struct {
@@ -50,7 +52,7 @@ pub const FullTopology = struct {
 
 test "full_format: magic and version are stable" {
     try std.testing.expectEqualSlices(u8, "CIRF", &FULL_MAGIC);
-    try std.testing.expectEqual(@as(u8, 0x02), FULL_VERSION);
+    try std.testing.expectEqual(@as(u8, 0x03), FULL_VERSION);
 }
 
 test "full_format: kind values mirror min payload" {
@@ -60,4 +62,8 @@ test "full_format: kind values mirror min payload" {
     try std.testing.expectEqual(@intFromEnum(format.ComponentKind.wire), @intFromEnum(ComponentKind.wire));
     try std.testing.expectEqual(@intFromEnum(format.ComponentKind.led), @intFromEnum(ComponentKind.led));
     try std.testing.expectEqual(@intFromEnum(format.ComponentKind.output_pin), @intFromEnum(ComponentKind.output_pin));
+    try std.testing.expectEqual(@intFromEnum(format.ComponentKind.slice), @intFromEnum(ComponentKind.slice));
+    try std.testing.expectEqual(@intFromEnum(format.ComponentKind.concat), @intFromEnum(ComponentKind.concat));
+    try std.testing.expectEqual(@intFromEnum(format.ComponentKind.rom), @intFromEnum(ComponentKind.rom));
+    try std.testing.expectEqual(@intFromEnum(format.ComponentKind.ram), @intFromEnum(ComponentKind.ram));
 }

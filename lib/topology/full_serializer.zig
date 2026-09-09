@@ -47,6 +47,7 @@ pub fn encode(allocator: std.mem.Allocator, topology: FullTopology) ![]u8 {
                 try out.append(allocator, s.lo);
                 try out.append(allocator, s.hi);
             },
+            .memory => |m| try out.append(allocator, m.addr_width),
         }
     }
 
@@ -113,6 +114,10 @@ fn parsePortByte(name: []const u8) !u8 {
     if (std.mem.eql(u8, name, "a")) return @intFromEnum(full_format.PortName.a);
     if (std.mem.eql(u8, name, "b")) return @intFromEnum(full_format.PortName.b);
     if (std.mem.eql(u8, name, "out")) return @intFromEnum(full_format.PortName.out);
+    if (std.mem.eql(u8, name, "addr")) return @intFromEnum(full_format.PortName.addr);
+    if (std.mem.eql(u8, name, "din")) return @intFromEnum(full_format.PortName.din);
+    if (std.mem.eql(u8, name, "we")) return @intFromEnum(full_format.PortName.we);
+    if (std.mem.eql(u8, name, "clk")) return @intFromEnum(full_format.PortName.clk);
     // Concat operand ports round-trip as the raw operand index; the
     // decoder disambiguates by `to_comp.kind == concat`.
     if (std.mem.startsWith(u8, name, "operand_")) {
@@ -132,6 +137,13 @@ fn primitiveToKind(p: ir.PrimitiveKind) ComponentKind {
     };
 }
 
+fn memoryWireKind(mode: ir.MemoryMode) ComponentKind {
+    return switch (mode) {
+        .rom => .rom,
+        .ram => .ram,
+    };
+}
+
 fn findComponent(module: *const ir.Module, id: ir.ComponentId) ?*const ir.Component {
     for (module.components) |*comp| {
         if (comp.id.value == id.value) return comp;
@@ -147,7 +159,7 @@ fn resolveSignalGlobalId(
 ) !u32 {
     const comp = findComponent(module, endpoint.component) orelse return error.ComponentNotFound;
     switch (comp.kind) {
-        .primitive, .slice, .concat => return local_to_global.get(endpoint.component.value) orelse error.InternalError,
+        .primitive, .slice, .concat, .memory => return local_to_global.get(endpoint.component.value) orelse error.InternalError,
         .sub_circuit_ref => {
             const outputs = sub_output_map.get(endpoint.component.value) orelse return error.InternalError;
             return outputs.get(endpoint.port) orelse return error.UnknownPortName;
@@ -259,6 +271,32 @@ fn expandModule(
                     .origin = origin_copy,
                 });
             },
+            .memory => |m| {
+                const global_id = state.next_global_id;
+                state.next_global_id += 1;
+                try local_to_global.put(comp.id.value, global_id);
+
+                const name_src = comp.instance_name orelse "";
+                const name_copy = try state.allocator.dupe(u8, name_src);
+                errdefer state.allocator.free(name_copy);
+                const origin_copy = try dupOrigin(state.allocator, origin_stack.items);
+                errdefer {
+                    for (origin_copy) |frame| {
+                        state.allocator.free(frame.alias);
+                        state.allocator.free(frame.subcircuit);
+                    }
+                    state.allocator.free(origin_copy);
+                }
+
+                try state.components.append(state.allocator, .{
+                    .id = global_id,
+                    .kind = memoryWireKind(m.mode),
+                    .width = comp.width,
+                    .name = name_copy,
+                    .origin = origin_copy,
+                    .aux = .{ .memory = .{ .addr_width = m.addr_width } },
+                });
+            },
             .sub_circuit_ref, .unresolved_name => unreachable,
         }
     }
@@ -329,7 +367,7 @@ fn expandModule(
     for (module.connections) |conn| {
         const to_comp = findComponent(module, conn.to.component) orelse return error.ComponentNotFound;
         switch (to_comp.kind) {
-            .primitive, .slice, .concat => {},
+            .primitive, .slice, .concat, .memory => {},
             else => continue,
         }
 
@@ -455,6 +493,20 @@ pub fn buildFromModule(allocator: std.mem.Allocator, module: *const ir.Module) !
                     .origin = empty_origin,
                 });
             },
+            .memory => |m| {
+                const name_src = comp.instance_name orelse "";
+                const name_copy = try allocator.dupe(u8, name_src);
+                errdefer allocator.free(name_copy);
+                const empty_origin = try allocator.alloc(OriginFrame, 0);
+                try components.append(allocator, .{
+                    .id = comp.id.value,
+                    .kind = memoryWireKind(m.mode),
+                    .width = comp.width,
+                    .name = name_copy,
+                    .origin = empty_origin,
+                    .aux = .{ .memory = .{ .addr_width = m.addr_width } },
+                });
+            },
             .sub_circuit_ref => return error.SubCircuitInFlatModule,
             .unresolved_name => return error.UnresolvedComponent,
         }
@@ -492,11 +544,57 @@ test "full_encode_empty: locks the wire format" {
     // magic(4) + version(1) + num_components(4) + num_connections(4) = 13 bytes
     const expected = [_]u8{
         'C', 'I', 'R', 'F',
-        0x02,
+        0x03,
         0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00,
     };
     try std.testing.expectEqualSlices(u8, &expected, bytes);
+}
+
+test "full_encode: memory record carries one addr_width aux byte" {
+    const allocator = std.testing.allocator;
+    const components = [_]FullComponentRecord{
+        .{ .id = 3, .kind = .rom, .width = 8, .name = "code", .origin = &.{}, .aux = .{ .memory = .{ .addr_width = 4 } } },
+    };
+    const topo = FullTopology{ .components = &components, .connections = &.{} };
+
+    const bytes = try encode(allocator, topo);
+    defer allocator.free(bytes);
+
+    // magic(4)+ver(1)+num_components(4) + id(4)+kind(1)+width(1)+name_len(4)+name(4)+origin_len(4)+aux(1) + num_connections(4) = 32
+    try std.testing.expectEqual(@as(usize, 32), bytes.len);
+    try std.testing.expectEqual(@intFromEnum(full_format.ComponentKind.rom), bytes[13]);
+    try std.testing.expectEqual(@as(u8, 8), bytes[14]);
+    try std.testing.expectEqual(@as(u8, 4), bytes[27]);
+}
+
+test "full_walk: buildFromModule emits memory records with aux and name" {
+    const allocator = std.testing.allocator;
+    const span = ir.Span{ .file_id = 0, .start_line = 0, .start_col = 0, .end_line = 0, .end_col = 0 };
+    const ram = ir.Memory{ .mode = .ram, .data_width = 8, .addr_width = 4, .arg_count = 2, .type_width_given = false };
+    const components = [_]ir.Component{
+        .{ .id = .{ .value = 0 }, .kind = .{ .primitive = .input_pin }, .instance_name = "a", .span = span, .width = 4 },
+        .{ .id = .{ .value = 1 }, .kind = .{ .memory = ram }, .instance_name = "data", .span = span, .width = 8 },
+    };
+    const connections = [_]ir.Connection{
+        .{ .from = .{ .component = .{ .value = 0 }, .port = "out" }, .to = .{ .component = .{ .value = 1 }, .port = "addr" }, .span = span },
+    };
+    const module = ir.Module{
+        .file_id = .{ .value = 0 },
+        .inputs = &.{},
+        .outputs = &.{},
+        .components = &components,
+        .connections = &connections,
+        .imports = &.{},
+    };
+
+    var topo = try buildFromModule(allocator, &module);
+    defer topo.deinit(allocator);
+
+    try std.testing.expectEqual(ComponentKind.ram, topo.components[1].kind);
+    try std.testing.expectEqualStrings("data", topo.components[1].name);
+    try std.testing.expectEqual(@as(u8, 4), topo.components[1].aux.memory.addr_width);
+    try std.testing.expectEqual(@intFromEnum(full_format.PortName.addr), topo.connections[0].port);
 }
 
 test "full_encode: single component with no origin emits expected layout" {
@@ -512,7 +610,7 @@ test "full_encode: single component with no origin emits expected layout" {
     // magic(4)+ver(1)+num_components(4) + id(4)+kind(1)+width(1)+name_len(4)+name(2)+origin_len(4) + num_connections(4) = 29
     try std.testing.expectEqual(@as(usize, 29), bytes.len);
     try std.testing.expectEqualSlices(u8, "CIRF", bytes[0..4]);
-    try std.testing.expectEqual(@as(u8, 0x02), bytes[4]);
+    try std.testing.expectEqual(@as(u8, 0x03), bytes[4]);
     // num_components = 1
     try std.testing.expectEqual(@as(u32, 1), std.mem.readInt(u32, bytes[5..9], .little));
     // id = 7

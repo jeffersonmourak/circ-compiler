@@ -46,14 +46,15 @@ message on stderr for a malformed request or an internal failure.
                      "range": {"start_line":3,"start_col":1,"end_line":3,"end_col":6},
                      "message": "required input 'a' is unconnected",
                      "related": [ { "file_id": 0, "range": {…}, "message": "…" } ] } ],
-  "symbols":     [ { "file_id": 0, "name": "a", "kind": "input", "width": 1, "range": {…} } ],
+  "symbols":     [ { "file_id": 0, "name": "a", "kind": "input", "width": 1, "range": {…} },
+                   { "file_id": 0, "name": "code", "kind": "rom", "width": 8, "addr_width": 4, "range": {…} } ],
   "references":  [ { "file_id": 0, "range": {…}, "target_file": 0, "target_range": {…}, "hover": "input a" } ]
 }
 ```
 
 - **`files`**: `file_id` to absolute path. Paths beginning `<builtin>/` are embedded macro sources with no on-disk file; consumers should skip them when mapping to editor URIs.
-- **`diagnostics`**: `severity` is `"error"` or `"warning"`. `code` is a validator code (`E001`-`E016`, `W001`-`W003`, a stable surface) or `"syntax"` for the synthetic truncation diagnostic (see below). `related` carries secondary spans (e.g. the first declaration in a collision).
-- **`symbols`**: `kind` is `input`, `output`, `and`, `not`, `led`, or `instance`. One entry per declaration.
+- **`diagnostics`**: `severity` is `"error"` or `"warning"`. `code` is a validator code (`E001`-`E018`, `W001`-`W003`, a stable surface) or `"syntax"` for the synthetic truncation diagnostic (see below). `related` carries secondary spans (e.g. the first declaration in a collision).
+- **`symbols`**: `kind` is `input`, `output`, `and`, `not`, `led`, `rom`, `ram`, or `instance`. One entry per declaration. `addr_width` is present only on `rom`/`ram` symbols, where `width` is the data width `W` and `addr_width` the address width `A` of the `[W, A]` declaration; consumers must tolerate its absence on every other kind.
 - **`references`**: a navigable link from a use site (`range`) to a definition (`target_file` + `target_range`), with a `hover` string. Covers signal references (to the source component's declaration) and import aliases (to the imported file).
 
 ### Range

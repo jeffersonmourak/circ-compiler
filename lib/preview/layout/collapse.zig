@@ -202,6 +202,10 @@ pub fn collapse(arena: std.mem.Allocator, topology: FullTopology, opts: layout.L
             .inputs = inputs_list.items,
             .outputs = outputs_list.items,
             .signal_width = comp.width,
+            .addr_width = switch (comp.aux) {
+                .memory => |m| m.addr_width,
+                else => 0,
+            },
         });
     }
 

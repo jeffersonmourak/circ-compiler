@@ -41,6 +41,7 @@ pub const Modules = struct {
     combinational_loop: *Module,
     dead_code: *Module,
     unused_import: *Module,
+    memory_validation: *Module,
     validator_run: *Module,
     sub_circuit_validation: *Module,
     validator_run_project: *Module,
@@ -133,6 +134,7 @@ pub fn create(b: *std.Build, opts: Options) Modules {
         "lib/validator/passes/dead_code.zig",
         "lib/validator/passes/unused_import.zig",
         "lib/validator/passes/sub_circuit_validation.zig",
+        "lib/validator/passes/memory_validation.zig",
     };
     var passes: [pass_files.len]*Module = undefined;
     for (pass_files, 0..) |file, i| {
@@ -150,6 +152,9 @@ pub fn create(b: *std.Build, opts: Options) Modules {
     const dead_code = passes[7];
     const unused_import = passes[8];
     const sub_circuit_validation = passes[9];
+    const memory_validation = passes[10];
+    port_validation.addImport("memory_validation", memory_validation);
+    sub_circuit_validation.addImport("memory_validation", memory_validation);
     const validator_run = mk.module("lib/validator/run.zig");
     validator_run.addImport("diagnostics", diagnostics);
     validator_run.addImport("ir_types", ir_types);
@@ -162,6 +167,7 @@ pub fn create(b: *std.Build, opts: Options) Modules {
     validator_run.addImport("combinational_loop", combinational_loop);
     validator_run.addImport("dead_code", dead_code);
     validator_run.addImport("unused_import", unused_import);
+    validator_run.addImport("memory_validation", memory_validation);
     const validator_run_project = mk.module("lib/validator/run_project.zig");
     validator_run_project.addImport("diagnostics", diagnostics);
     validator_run_project.addImport("ir_types", ir_types);
@@ -334,6 +340,7 @@ pub fn create(b: *std.Build, opts: Options) Modules {
         .combinational_loop = combinational_loop,
         .dead_code = dead_code,
         .unused_import = unused_import,
+        .memory_validation = memory_validation,
         .validator_run = validator_run,
         .sub_circuit_validation = sub_circuit_validation,
         .validator_run_project = validator_run_project,

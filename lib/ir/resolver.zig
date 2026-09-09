@@ -65,6 +65,31 @@ fn isPrimitive(name: []const u8) ?ir.PrimitiveKind {
     return null;
 }
 
+fn memoryModeFor(name: []const u8) ?ir.MemoryMode {
+    if (std.mem.eql(u8, name, "rom")) return .rom;
+    if (std.mem.eql(u8, name, "ram")) return .ram;
+    return null;
+}
+
+fn memoryFromCallWidths(
+    ctx: *const ResolveContext,
+    component_ast: ast.ComponentInstance,
+    mode: ir.MemoryMode,
+) !ir.Memory {
+    const args = component_ast.width_args;
+    // A malformed argument list keeps placeholder widths of 1 so the IR
+    // stays structurally valid until the validator reports the shape.
+    const data_width: u8 = if (args.len >= 1) try widthFromSpec(ctx, args[0]) else 1;
+    const addr_width: u8 = if (args.len >= 2) try widthFromSpec(ctx, args[1]) else 1;
+    return .{
+        .mode = mode,
+        .data_width = data_width,
+        .addr_width = addr_width,
+        .arg_count = @intCast(@min(args.len, std.math.maxInt(u8))),
+        .type_width_given = component_ast.type_name.width != null,
+    };
+}
+
 fn nextComponentId(ctx: *ResolveContext) ir.ComponentId {
     const id = ir.ComponentId{ .value = ctx.next_component_id };
     ctx.next_component_id += 1;
@@ -90,19 +115,27 @@ fn addComponent(
 ) !ir.ComponentId {
     const id = nextComponentId(ctx);
 
-    const kind = if (isPrimitive(component_ast.type_name.text)) |primitive|
-        ir.ComponentKind{ .primitive = primitive }
-    else if (ctx.import_aliases.contains(component_ast.type_name.text))
-        ir.ComponentKind{
-            .sub_circuit_ref = .{
-                .name = component_ast.type_name.text,
-                .span = toIrSpan(component_ast.type_name.span),
-            },
-        }
-    else
-        ir.ComponentKind{ .unresolved_name = component_ast.type_name.text };
-
-    const width = try widthFromSpec(ctx, component_ast.type_name.width);
+    var width: u8 = 1;
+    // Memory type names win over import aliases, like primitives do; the
+    // validator reports the shadowed alias so the precedence is never silent.
+    const kind = if (memoryModeFor(component_ast.type_name.text)) |mode| blk: {
+        const memory = try memoryFromCallWidths(ctx, component_ast, mode);
+        width = memory.data_width;
+        break :blk ir.ComponentKind{ .memory = memory };
+    } else blk: {
+        width = try widthFromSpec(ctx, component_ast.type_name.width);
+        break :blk if (isPrimitive(component_ast.type_name.text)) |primitive|
+            ir.ComponentKind{ .primitive = primitive }
+        else if (ctx.import_aliases.contains(component_ast.type_name.text))
+            ir.ComponentKind{
+                .sub_circuit_ref = .{
+                    .name = component_ast.type_name.text,
+                    .span = toIrSpan(component_ast.type_name.span),
+                },
+            }
+        else
+            ir.ComponentKind{ .unresolved_name = component_ast.type_name.text };
+    };
 
     try ctx.components.append(ctx.allocator, .{
         .id = id,

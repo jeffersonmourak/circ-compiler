@@ -1,0 +1,3 @@
+rom code[4, 4](addr = w.out)
+wire[4] w(in = code.out)
+output[4] out(in = code.out)

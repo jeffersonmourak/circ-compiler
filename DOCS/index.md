@@ -1,6 +1,6 @@
 # circ-compiler Documentation
 
-`circ-compiler` is a Zig CLI that compiles `.circ` digital-logic source files into self-contained WebAssembly modules. Each compiled `.wasm` embeds a prebuilt simulation runtime plus the circuit's topology (as custom sections) and exposes a small fixed API — `init`, `run`, `setPin(id, value, defined)`, and the paired `getOutputValue(id)` / `getOutputDefined(id)` getters — usable from any host that supports WebAssembly.
+`circ-compiler` is a Zig CLI that compiles `.circ` digital-logic source files into self-contained WebAssembly modules. Each compiled `.wasm` embeds a prebuilt simulation runtime plus the circuit's topology (as custom sections) and exposes a small fixed API — `init`, `run`, `setPin(id, value, defined)`, and the paired `getOutputValue(id)` / `getOutputDefined(id)` getters (and, for circuits with `rom`/`ram`, the memory export family documented in [wasm-api.md](wasm-api.md)) — usable from any host that supports WebAssembly.
 
 ## What it does
 
@@ -27,6 +27,7 @@ output out(in=inv.out)
 | [libcirc-api.md](libcirc-api.md)             | The compiler front end as a library: request/response, status codes, the C ABI  |
 | [circuit-format.md](circuit-format.md)       | `.circ` DSL syntax, grammar, file examples                              |
 | [preview.md](preview.md)                     | `circ-compile --preview`: ASCII circuit schematic rendering             |
+| [logisim-import.md](logisim-import.md)       | Mapping Logisim `ROM`/`RAM` components onto `rom`/`ram`                 |
 | [benchmark.md](benchmark.md)                 | `zig build bench`: engine regression gate, counters, golden workflow    |
 | [decisions/](decisions/index.md)             | Architectural decisions for the `.circ` compiler                        |
 | [archive/](archive/index.md)                 | Archived implementation plans                                           |
@@ -88,7 +89,7 @@ lib/
   syntax/                  Parse tree (parser.runtime.Tree) → AST translation
   resolver/                scan_imports, import_cycle, resolve_bodies, builtins
   ir/                      Resolved IR (types, single-module resolver)
-  validator/               Diagnostic codes (E001–E016, W001–W003) and passes
+  validator/               Diagnostic codes (E001–E018, W001–W003) and passes
   topology/                Compact + full topology serializers, custom-section writer
   emit/                    Experimental --emit-zig path (standalone Zig output)
   preview/                 ASCII schematic layout + renderer for --preview

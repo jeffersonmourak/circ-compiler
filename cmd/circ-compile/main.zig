@@ -92,8 +92,84 @@ fn parseErrorMessage(err: anyerror) []const u8 {
         error.ConflictingModes => "cannot combine --emit-zig and --inspect",
         error.InvalidFlagValue => "invalid flag value",
         error.TruthTableCapTooLarge => "--truth-table-cap value exceeds maximum of 24",
+        error.TooManyMemPreloads => "too many --mem flags (max 16)",
         else => "invalid arguments",
     };
+}
+
+/// Resolve every `--mem=<name>=<path>` against the built topology: the name
+/// must be a root-level memory, the file must be readable, and the image
+/// must pass the codec's checks. Any failure prints one line to `stderr`
+/// and returns null; the caller exits 2. Runs before any `--sim` handshake
+/// byte so stdout stays a clean protocol channel.
+fn resolvePreloads(
+    allocator: std.mem.Allocator,
+    args: cli_args.Args,
+    topology: anytype,
+    stderr_writer: anytype,
+) !?[]const sim_loop.Preload {
+    const flags = args.memPreloads();
+    if (flags.len == 0) return &.{};
+
+    const memories = sim_loop.collectMemories(allocator, topology) catch |err| {
+        try reportBackendError(stderr_writer, "topology build failed", err);
+        return null;
+    };
+    var preloads = try allocator.alloc(sim_loop.Preload, flags.len);
+    for (flags, 0..) |flag, i| {
+        const mem = findMemRef(memories, flag.name) orelse {
+            try stderr_writer.print("--mem {s}={s}: no memory named '{s}' (declared memories: ", .{ flag.name, flag.path, flag.name });
+            if (memories.len == 0) try stderr_writer.writeAll("none");
+            for (memories, 0..) |m, k| {
+                if (k > 0) try stderr_writer.writeAll(", ");
+                try stderr_writer.print("{s} {s}[{d}, {d}]", .{ @tagName(m.kind), m.name, m.data_width, m.addr_width });
+            }
+            try stderr_writer.writeAll(")\n");
+            return null;
+        };
+        const bytes = std.fs.cwd().readFileAlloc(allocator, flag.path, sim_loop.IMAGE_READ_CAP) catch |err| switch (err) {
+            error.FileNotFound => {
+                try stderr_writer.print("--mem {s}={s}: file not found\n", .{ flag.name, flag.path });
+                return null;
+            },
+            error.FileTooBig => {
+                try stderr_writer.print("--mem {s}={s}: ", .{ flag.name, flag.path });
+                try sim_loop.writeImageError(stderr_writer, error.FileTooBig, mem, 0);
+                try stderr_writer.writeByte('\n');
+                return null;
+            },
+            else => {
+                try stderr_writer.print("--mem {s}={s}: failed reading file: {s}\n", .{ flag.name, flag.path, @errorName(err) });
+                return null;
+            },
+        };
+        _ = sim_loop.validateImage(mem, bytes) catch |err| {
+            try stderr_writer.print("--mem {s}={s}: ", .{ flag.name, flag.path });
+            try sim_loop.writeImageError(stderr_writer, err, mem, bytes.len);
+            try stderr_writer.writeByte('\n');
+            return null;
+        };
+        preloads[i] = .{ .name = flag.name, .bytes = bytes };
+    }
+    return preloads;
+}
+
+fn findMemRef(memories: []const sim_loop.MemRef, name: []const u8) ?sim_loop.MemRef {
+    for (memories) |m| {
+        if (std.mem.eql(u8, m.name, name)) return m;
+    }
+    return null;
+}
+
+/// Backend failures print `<context>: <ErrorName>`, except the emit-zig
+/// memory rejection, which gets a human line.
+fn reportBackendError(writer: anytype, context: []const u8, err: anyerror) !void {
+    switch (err) {
+        error.MemoryUnsupportedInEmitZig => {
+            try writer.writeAll("--emit-zig does not support rom/ram; compile to .wasm instead\n");
+        },
+        else => try writer.print("{s}: {s}\n", .{ context, @errorName(err) }),
+    }
 }
 
 fn countDiagnostics(diagnostic_list: []const diagnostics.Diagnostic) struct { errors: usize, warnings: usize } {
@@ -231,8 +307,10 @@ pub fn run(
         };
         defer topology.deinit(allocator);
 
+        const preloads = (try resolvePreloads(allocator, args, topology, stderr_writer)) orelse return 2;
+
         const stdin_reader = std.fs.File.stdin().deprecatedReader();
-        sim_loop.serve(allocator, topology, args.input_path, front.diagnostics.items, stdin_reader, stdout_writer) catch |err| {
+        sim_loop.serve(allocator, topology, args.input_path, front.diagnostics.items, preloads, stdin_reader, stdout_writer) catch |err| {
             try stderr_writer.print("sim: {s}\n", .{@errorName(err)});
             return 1;
         };
@@ -254,7 +332,7 @@ pub fn run(
                         .compile_timestamp = "2026-05-01T22:00:00Z",
                         .compiler_version = "circ-compiler/dev",
                     }) catch |err| {
-                        try stderr_writer.print("emission failed: {s}\n", .{@errorName(err)});
+                        try reportBackendError(stderr_writer, "emission failed", err);
                         return 1;
                     };
                 }
@@ -263,7 +341,7 @@ pub fn run(
                     .compile_timestamp = "2026-05-01T22:00:00Z",
                     .compiler_version = "circ-compiler/dev",
                 }) catch |err| {
-                    try stderr_writer.print("emission failed: {s}\n", .{@errorName(err)});
+                    try reportBackendError(stderr_writer, "emission failed", err);
                     return 1;
                 };
             };
@@ -347,6 +425,18 @@ pub fn run(
             };
             defer topology.deinit(allocator);
 
+            const preloads = (try resolvePreloads(allocator, args, topology, stderr_writer)) orelse return 2;
+
+            // Pre-flight the stateful case so the message names the ram
+            // instead of surfacing a bare StatefulComponent from the builder.
+            if (truth_table_builder.firstRamName(topology)) |ram_name| {
+                try stderr_writer.print(
+                    "truth-table: ram '{s}' is stateful (its clk/we would be enumerated as inputs and rows would depend on visiting order); use --sim to drive it\n",
+                    .{ram_name},
+                );
+                return 1;
+            }
+
             // Pre-flight the cap so users get a specific bit-count
             // message ("X exceeds cap of Y") instead of a generic
             // TooManyInputs error from the builder.
@@ -358,8 +448,14 @@ pub fn run(
 
             var table = libcirc.modes.buildTruthTable(allocator, topology, .{
                 .max_input_bits = args.truth_table_cap,
+                .preloads = preloads,
             }, &failure) catch |err| {
                 if (err == error.OutOfMemory) return error.OutOfMemory;
+                // Unreachable after resolvePreloads; kept for the library path.
+                if (failure.cause == error.BadPreload) {
+                    try stderr_writer.writeAll("truth-table: preload failed\n");
+                    return 1;
+                }
                 try stderr_writer.print("{s}: {s}\n", .{ failure.stage.cliLabel(), @errorName(failure.cause) });
                 return 1;
             };
@@ -624,6 +720,34 @@ test "phase3_render_single_gate" {
     const exit_code = try runPreview(allocator, "tests/fixtures/circuits/single_gate.circ", &stdout_buf, &stderr_buf);
     try std.testing.expectEqual(@as(u8, 0), exit_code);
     try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/single_gate.render.golden");
+}
+
+test "preview: rom box render golden" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+    const exit_code = try runPreview(allocator, "tests/fixtures/circuits/rom_basic.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try std.testing.expectEqual(@as(usize, 0), stderr_buf.items.len);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/rom_basic.render.golden");
+}
+
+test "preview: ram box render golden" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+    const exit_code = try runPreview(allocator, "tests/fixtures/circuits/ram_basic.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try std.testing.expectEqual(@as(usize, 0), stderr_buf.items.len);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/preview/renders/ram_basic.render.golden");
 }
 
 test "preview: multi-bit input pin label" {
@@ -993,6 +1117,176 @@ test "truth_table_chain_fixture" {
     const exit_code = try runTruthTable(allocator, "tests/fixtures/circuits/chain.circ", &stdout_buf, &stderr_buf);
     try std.testing.expectEqual(@as(u8, 0), exit_code);
     try golden.expectGolden(stdout_buf.items, "tests/fixtures/truth_table/chain.truth.golden");
+}
+
+test "truth_table_rom_unloaded_renders_undefined_golden" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const exit_code = try runTruthTable(allocator, "tests/fixtures/circuits/rom_basic.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/truth_table/rom_basic.truth.golden");
+}
+
+/// Writes a 16-word identity-ish image (word i = i * 0x11) into a temp dir
+/// and returns its cwd-relative path, so `--mem` can name it.
+fn writeRomImage(allocator: std.mem.Allocator, tmp: *std.testing.TmpDir, name: []const u8, byte_count: usize) ![]const u8 {
+    const image = try allocator.alloc(u8, byte_count);
+    for (image, 0..) |*byte, i| byte.* = @intCast((i * 0x11) & 0xff);
+    try tmp.dir.writeFile(.{ .sub_path = name, .data = image });
+    return std.fmt.allocPrint(allocator, ".zig-cache/tmp/{s}/{s}", .{ tmp.sub_path, name });
+}
+
+fn runSimWithArgs(
+    allocator: std.mem.Allocator,
+    fixture_path: []const u8,
+    extra_flags: []const []const u8,
+    stdout_buf: *std.ArrayList(u8),
+    stderr_buf: *std.ArrayList(u8),
+) !u8 {
+    var argv: std.ArrayList([]const u8) = .{};
+    defer argv.deinit(allocator);
+    try argv.append(allocator, "circ-compile");
+    try argv.append(allocator, fixture_path);
+    try argv.append(allocator, "--sim");
+    for (extra_flags) |flag| try argv.append(allocator, flag);
+    return run(allocator, argv.items, stdout_buf.writer(allocator), stderr_buf.writer(allocator));
+}
+
+test "truth_table_rom_lookup_preloaded" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const image_path = try writeRomImage(allocator, &tmp, "code.bin", 16);
+    const flag = try std.fmt.allocPrint(allocator, "--mem=code={s}", .{image_path});
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const exit_code = try runTruthTableWithArgs(allocator, "tests/fixtures/circuits/rom_lookup.circ", &.{flag}, &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 0), exit_code);
+    try std.testing.expectEqual(@as(usize, 0), stderr_buf.items.len);
+    try golden.expectGolden(stdout_buf.items, "tests/fixtures/truth_table/rom_lookup.truth.golden");
+}
+
+test "truth_table_mem_unknown_name_exits_2" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const image_path = try writeRomImage(allocator, &tmp, "code.bin", 16);
+    const flag = try std.fmt.allocPrint(allocator, "--mem=nope={s}", .{image_path});
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const exit_code = try runTruthTableWithArgs(allocator, "tests/fixtures/circuits/rom_lookup.circ", &.{flag}, &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 2), exit_code);
+    try std.testing.expectEqual(@as(usize, 0), stdout_buf.items.len);
+    try std.testing.expect(std.mem.indexOf(u8, stderr_buf.items, "no memory named 'nope' (declared memories: rom code[8, 4])") != null);
+}
+
+test "sim_mem_unknown_name_exits_2_before_handshake" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    const image_path = try writeRomImage(allocator, &tmp, "code.bin", 16);
+    const flag = try std.fmt.allocPrint(allocator, "--mem=nope={s}", .{image_path});
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    // The pre-flight fails before serve() is reached, so stdin is never read.
+    const exit_code = try runSimWithArgs(allocator, "tests/fixtures/circuits/rom_basic.circ", &.{flag}, &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 2), exit_code);
+    try std.testing.expectEqual(@as(usize, 0), stdout_buf.items.len);
+    try std.testing.expect(std.mem.indexOf(u8, stderr_buf.items, "no memory named 'nope' (declared memories: rom code[8, 4])") != null);
+}
+
+test "sim_mem_missing_file_and_bad_image_exit_2" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    {
+        var stdout_buf: std.ArrayList(u8) = .{};
+        defer stdout_buf.deinit(allocator);
+        var stderr_buf: std.ArrayList(u8) = .{};
+        defer stderr_buf.deinit(allocator);
+        const missing = try std.fmt.allocPrint(allocator, "--mem=code=.zig-cache/tmp/{s}/does_not_exist.bin", .{tmp.sub_path});
+        const exit_code = try runSimWithArgs(allocator, "tests/fixtures/circuits/rom_basic.circ", &.{missing}, &stdout_buf, &stderr_buf);
+        try std.testing.expectEqual(@as(u8, 2), exit_code);
+        try std.testing.expectEqual(@as(usize, 0), stdout_buf.items.len);
+        try std.testing.expect(std.mem.indexOf(u8, stderr_buf.items, "does_not_exist.bin: file not found") != null);
+    }
+    {
+        var stdout_buf: std.ArrayList(u8) = .{};
+        defer stdout_buf.deinit(allocator);
+        var stderr_buf: std.ArrayList(u8) = .{};
+        defer stderr_buf.deinit(allocator);
+        const image_path = try writeRomImage(allocator, &tmp, "big.bin", 17);
+        const flag = try std.fmt.allocPrint(allocator, "--mem=code={s}", .{image_path});
+        const exit_code = try runSimWithArgs(allocator, "tests/fixtures/circuits/rom_basic.circ", &.{flag}, &stdout_buf, &stderr_buf);
+        try std.testing.expectEqual(@as(u8, 2), exit_code);
+        try std.testing.expectEqual(@as(usize, 0), stdout_buf.items.len);
+        try std.testing.expect(std.mem.indexOf(u8, stderr_buf.items, "17 words exceed capacity 16") != null);
+    }
+}
+
+test "usage_error_for_too_many_mem_flags" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    var flags: [17][]const u8 = undefined;
+    for (&flags) |*slot| slot.* = "--mem=code=x.bin";
+    const exit_code = try runSimWithArgs(allocator, "tests/fixtures/circuits/rom_basic.circ", &flags, &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 2), exit_code);
+    try std.testing.expect(std.mem.indexOf(u8, stderr_buf.items, "usage error: too many --mem flags (max 16)") != null);
+}
+
+test "truth_table_rejects_ram_as_stateful" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var stdout_buf: std.ArrayList(u8) = .{};
+    defer stdout_buf.deinit(allocator);
+    var stderr_buf: std.ArrayList(u8) = .{};
+    defer stderr_buf.deinit(allocator);
+
+    const exit_code = try runTruthTable(allocator, "tests/fixtures/circuits/ram_basic.circ", &stdout_buf, &stderr_buf);
+    try std.testing.expectEqual(@as(u8, 1), exit_code);
+    try std.testing.expectEqual(@as(usize, 0), stdout_buf.items.len);
+    try std.testing.expect(std.mem.indexOf(u8, stderr_buf.items, "truth-table: ram 'data' is stateful") != null);
+    try std.testing.expect(std.mem.indexOf(u8, stderr_buf.items, "--sim") != null);
 }
 
 test "truth_table_rejects_output_path" {

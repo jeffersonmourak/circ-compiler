@@ -1,0 +1,1 @@
+tests/fixtures/circuits/E002_memory_unknown_port.circ:3:31: error: E002: unknown input port 'din'

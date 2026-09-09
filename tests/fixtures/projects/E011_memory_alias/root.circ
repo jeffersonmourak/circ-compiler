@@ -1,0 +1,4 @@
+import rom "rom.circ"
+input a
+rom r(x = a.out)
+output out(in = r.out)

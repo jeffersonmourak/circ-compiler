@@ -17,6 +17,19 @@ fn portNameStr(port: u8) ![]const u8 {
         .a => "a",
         .b => "b",
         .out => "out",
+        .addr => "addr",
+        .din => "din",
+        .we => "we",
+        .clk => "clk",
+    };
+}
+
+/// Wire kind byte for an engine memory mode. The runtime module has no
+/// `format` import of its own, so the exports reach the byte through here.
+pub fn memKindByte(mode: engine.MemoryMode) u8 {
+    return switch (mode) {
+        .rom => @intFromEnum(format.ComponentKind.rom),
+        .ram => @intFromEnum(format.ComponentKind.ram),
     };
 }
 
@@ -62,6 +75,17 @@ pub fn initFromTopology(circuit: *engine.Circuit, payload: []const u8) !void {
                 );
             },
             .concat => try circuit.createComponent(.{ .concat = .{} }, width),
+            .rom, .ram => blk: {
+                // Memory records carry one trailing aux byte: the address
+                // width. Exactly one engine node per record keeps the
+                // host's positional id addressing intact.
+                if (offset + 1 > payload.len) return error.TruncatedPayload;
+                const addr_width = payload[offset];
+                offset += 1;
+                if (addr_width == 0 or addr_width > engine.MAX_ADDR_WIDTH) return error.InvalidMemoryRecord;
+                const mode: engine.MemoryMode = if (component_kind == .rom) .rom else .ram;
+                break :blk try circuit.createComponent(try engine.memoryKind(mode, addr_width), width);
+            },
         };
         comp.id = id;
         comp_map.putAssumeCapacity(id, comp);
@@ -122,6 +146,83 @@ test "interpreter: rejects v01 payload" {
     std.mem.copyForwards(u8, payload[0..4], &format.MAGIC);
     payload[4] = 0x01;
     try std.testing.expectError(error.UnsupportedVersion, initFromTopology(&circuit, &payload));
+}
+
+test "interpreter: rejects v02 payload" {
+    var circuit = try engine.Circuit.init();
+    defer circuit.deinit();
+    var payload = [_]u8{0} ** 13;
+    std.mem.copyForwards(u8, payload[0..4], &format.MAGIC);
+    payload[4] = 0x02;
+    try std.testing.expectError(error.UnsupportedVersion, initFromTopology(&circuit, &payload));
+}
+
+fn memoryPayload(list: *std.ArrayList(u8), comp_count: u32, conn_count: u32) !void {
+    try list.appendSlice(allocator, &format.MAGIC);
+    try list.append(allocator, format.VERSION);
+    var buf: [4]u8 = undefined;
+    std.mem.writeInt(u32, &buf, comp_count, .little);
+    try list.appendSlice(allocator, &buf);
+    std.mem.writeInt(u32, &buf, conn_count, .little);
+    try list.appendSlice(allocator, &buf);
+}
+
+test "interpreter: decodes rom and ram records and wires their ports" {
+    var circuit = try engine.Circuit.init();
+    defer circuit.deinit();
+
+    var payload: std.ArrayList(u8) = .{};
+    defer payload.deinit(allocator);
+    try memoryPayload(&payload, 3, 5);
+    // id 0: input_pin[4]
+    try payload.appendSlice(allocator, &[_]u8{ 0, 0, 0, 0, @intFromEnum(format.ComponentKind.input_pin), 4 });
+    // id 1: rom[8, 4]
+    try payload.appendSlice(allocator, &[_]u8{ 1, 0, 0, 0, @intFromEnum(format.ComponentKind.rom), 8, 4 });
+    // id 2: ram[8, 2]
+    try payload.appendSlice(allocator, &[_]u8{ 2, 0, 0, 0, @intFromEnum(format.ComponentKind.ram), 8, 2 });
+    // 0 -> 1.addr, 0 -> 2.addr, 1 -> 2.din, 0 -> 2.we, 0 -> 2.clk
+    try payload.appendSlice(allocator, &[_]u8{ 0, 0, 0, 0, 1, 0, 0, 0, @intFromEnum(format.PortName.addr) });
+    try payload.appendSlice(allocator, &[_]u8{ 0, 0, 0, 0, 2, 0, 0, 0, @intFromEnum(format.PortName.addr) });
+    try payload.appendSlice(allocator, &[_]u8{ 1, 0, 0, 0, 2, 0, 0, 0, @intFromEnum(format.PortName.din) });
+    try payload.appendSlice(allocator, &[_]u8{ 0, 0, 0, 0, 2, 0, 0, 0, @intFromEnum(format.PortName.we) });
+    try payload.appendSlice(allocator, &[_]u8{ 0, 0, 0, 0, 2, 0, 0, 0, @intFromEnum(format.PortName.clk) });
+
+    try initFromTopology(&circuit, payload.items);
+
+    try std.testing.expectEqual(@as(usize, 3), circuit.nodes.items.len);
+    const rom = circuit.nodes.items[1];
+    const ram = circuit.nodes.items[2];
+    try std.testing.expect(rom.kind == .memory and rom.kind.memory.mode == .rom);
+    try std.testing.expectEqual(@as(u8, 4), rom.kind.memory.cells.addr_width);
+    try std.testing.expectEqual(@as(u8, 8), rom.state_handle.tier);
+    try std.testing.expect(ram.kind.memory.mode == .ram);
+    try std.testing.expectEqual(@as(usize, 4), ram.kind.memory.cells.values.len);
+    try std.testing.expect(ram.kind.memory.addr == circuit.nodes.items[0]);
+    try std.testing.expect(ram.kind.memory.din == rom);
+    try std.testing.expect(ram.kind.memory.we != null and ram.kind.memory.clk != null);
+    try std.testing.expectEqual(@as(u8, 8), memKindByte(.rom));
+    try std.testing.expectEqual(@as(u8, 9), memKindByte(.ram));
+}
+
+test "interpreter: rejects truncated or out-of-range memory record" {
+    var circuit = try engine.Circuit.init();
+    defer circuit.deinit();
+
+    var truncated: std.ArrayList(u8) = .{};
+    defer truncated.deinit(allocator);
+    try memoryPayload(&truncated, 1, 0);
+    try truncated.appendSlice(allocator, &[_]u8{ 0, 0, 0, 0, @intFromEnum(format.ComponentKind.rom), 8 });
+    try std.testing.expectError(error.TruncatedPayload, initFromTopology(&circuit, truncated.items));
+
+    for ([_]u8{ 0, 17 }) |bad_width| {
+        var circuit2 = try engine.Circuit.init();
+        defer circuit2.deinit();
+        var payload: std.ArrayList(u8) = .{};
+        defer payload.deinit(allocator);
+        try memoryPayload(&payload, 1, 0);
+        try payload.appendSlice(allocator, &[_]u8{ 0, 0, 0, 0, @intFromEnum(format.ComponentKind.ram), 8, bad_width });
+        try std.testing.expectError(error.InvalidMemoryRecord, initFromTopology(&circuit2, payload.items));
+    }
 }
 
 test "interpreter: single not-gate topology" {

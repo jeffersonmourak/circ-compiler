@@ -1,0 +1,7 @@
+# A memory-free circuit: the handshake is byte-identical to proto=1 before
+# memories existed, and `mems` reports an empty block.
+mems
+set a 1
+set b 1
+get out
+quit

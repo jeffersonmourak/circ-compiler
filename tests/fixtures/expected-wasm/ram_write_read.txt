@@ -1,0 +1,16 @@
+# A 16 x 8-bit RAM driven through the real artifact with the clock as an
+# ordinary input pin. Pins are driven left to right within a row, each
+# setPin settling before the next.
+#
+# Row 1: clk goes undefined -> high with we=1. Not an edge (the rule needs a
+#        defined low first), so nothing is written and q is undefined.
+# Row 2: clk low. Row 3: clk high, a defined rising edge with we=1 and a
+#        fully defined address: 0x2a lands in cell 3 and q shows it at once.
+# Row 4: another address with we=0 and clk low: cell 4 is unwritten.
+# Row 5: back to address 3 with we=0 through a rising edge: no write, and
+#        the earlier value is still there.
+a=0011 d=11111111 we=1 clk=1 => q=????????
+a=0011 d=00101010 we=1 clk=0 => q=????????
+a=0011 d=00101010 we=1 clk=1 => q=00101010
+a=0100 d=00000000 we=0 clk=0 => q=????????
+a=0011 d=00000000 we=0 clk=1 => q=00101010

@@ -39,6 +39,17 @@ pub const truth_table_cap_max: u8 = 24;
 /// who need wider can opt in with `--truth-table-cap` up to 24.
 pub const truth_table_cap_default: u8 = 16;
 
+/// Fixed capacity for `--mem` flags so `parse` stays allocator-free.
+pub const MAX_MEM_PRELOADS: u8 = 16;
+
+/// One `--mem=<name>=<path>`: an image file to load into the named root
+/// memory before `--sim` or `--truth-table` runs. Both slices borrow argv,
+/// like `output_path`.
+pub const MemPreload = struct {
+    name: []const u8,
+    path: []const u8,
+};
+
 pub const Args = struct {
     input_path: []const u8,
     mode: Mode,
@@ -52,6 +63,12 @@ pub const Args = struct {
     truth_table_strict: bool = false,
     truth_table_verbose: bool = false,
     truth_table_cap: u8 = truth_table_cap_default,
+    mem_preloads: [MAX_MEM_PRELOADS]MemPreload = undefined,
+    mem_preload_count: u8 = 0,
+
+    pub fn memPreloads(self: *const Args) []const MemPreload {
+        return self.mem_preloads[0..self.mem_preload_count];
+    }
 };
 
 pub const ParseError = error{
@@ -61,6 +78,7 @@ pub const ParseError = error{
     ConflictingModes,
     InvalidFlagValue,
     TruthTableCapTooLarge,
+    TooManyMemPreloads,
     HelpRequested,
     VersionRequested,
 };
@@ -92,6 +110,11 @@ pub const help_text =
     \\                                    Honored for widths 2..7; widths >=8 fall back to hex.
     \\    --color=auto|always|never       ANSI styling. Default 'auto' (on when stdout is a TTY;
     \\                                    the NO_COLOR environment variable also disables colour).
+    \\
+    \\  Sim and truth-table:
+    \\    --mem=<name>=<path>             Load a raw image file into the root memory declared as
+    \\                                    <name> (rom or ram) before driving the circuit. Repeatable
+    \\                                    (max 16). Bad names, files, or images exit 2 on stderr.
     \\
     \\  Truth-table-only:
     \\    --format=markdown|csv|json      Output format. Default 'markdown'. CSV uses 0/1/? cells;
@@ -247,6 +270,18 @@ pub fn parse(argv: []const []const u8) ParseError!Args {
             args.truth_table_cap = @intCast(parsed_cap);
             continue;
         }
+        if (std.mem.startsWith(u8, token, "--mem=")) {
+            // Split at the first '=' after the prefix so paths may contain '='.
+            const rest = token["--mem=".len..];
+            const eq = std.mem.indexOfScalar(u8, rest, '=') orelse return error.InvalidFlagValue;
+            const name = rest[0..eq];
+            const path = rest[eq + 1 ..];
+            if (name.len == 0 or path.len == 0) return error.InvalidFlagValue;
+            if (args.mem_preload_count == MAX_MEM_PRELOADS) return error.TooManyMemPreloads;
+            args.mem_preloads[args.mem_preload_count] = .{ .name = name, .path = path };
+            args.mem_preload_count += 1;
+            continue;
+        }
         if (std.mem.eql(u8, token, "-o")) {
             if (i + 1 >= argv.len) return error.InvalidFlagValue;
             i += 1;
@@ -274,6 +309,7 @@ pub fn parse(argv: []const []const u8) ParseError!Args {
     if (args.truth_table_strict and args.mode != .truth_table) return error.InvalidFlagValue;
     if (args.truth_table_verbose and args.mode != .truth_table) return error.InvalidFlagValue;
     if (args.truth_table_cap != truth_table_cap_default and args.mode != .truth_table) return error.InvalidFlagValue;
+    if (args.mem_preload_count != 0 and args.mode != .sim and args.mode != .truth_table) return error.InvalidFlagValue;
 
     return args;
 }
@@ -511,7 +547,7 @@ test "cli_args_help_text_mentions_every_mode_and_flag" {
         "-o",           "--help",        "-h",                 "--warnings-as-errors",
         "-Werror",      "--expand-macros", "--color=",        "--format=",
         "--strict",     "--verbose",      "--truth-table-format=", "--truth-table-cap=",
-        "--version",    "--sim",
+        "--version",    "--sim",          "--mem=",
     };
     inline for (needles) |needle| {
         try std.testing.expect(std.mem.indexOf(u8, help_text, needle) != null);
@@ -603,4 +639,42 @@ test "cli_args_sim_rejects_output_path" {
 test "cli_args_sim_rejects_other_modes" {
     try std.testing.expectError(error.ConflictingModes, parse(&.{ "circ-compile", "in.circ", "--sim", "--truth-table" }));
     try std.testing.expectError(error.ConflictingModes, parse(&.{ "circ-compile", "in.circ", "--inspect", "--sim" }));
+}
+
+test "cli_args_parse_mem_single_repeated_and_first_equals_split" {
+    const parsed = try parse(&.{ "circ-compile", "in.circ", "--sim", "--mem=code=a.bin", "--mem=data=b=c.bin" });
+    try std.testing.expectEqual(@as(usize, 2), parsed.memPreloads().len);
+    try std.testing.expectEqualStrings("code", parsed.memPreloads()[0].name);
+    try std.testing.expectEqualStrings("a.bin", parsed.memPreloads()[0].path);
+    try std.testing.expectEqualStrings("data", parsed.memPreloads()[1].name);
+    try std.testing.expectEqualStrings("b=c.bin", parsed.memPreloads()[1].path);
+
+    const none = try parse(&.{ "circ-compile", "in.circ", "--truth-table" });
+    try std.testing.expectEqual(@as(usize, 0), none.memPreloads().len);
+}
+
+test "cli_args_mem_rejects_empty_name_or_path_or_missing_equals" {
+    try std.testing.expectError(error.InvalidFlagValue, parse(&.{ "circ-compile", "in.circ", "--sim", "--mem=code=" }));
+    try std.testing.expectError(error.InvalidFlagValue, parse(&.{ "circ-compile", "in.circ", "--sim", "--mem==x" }));
+    try std.testing.expectError(error.InvalidFlagValue, parse(&.{ "circ-compile", "in.circ", "--sim", "--mem=code" }));
+}
+
+test "cli_args_mem_seventeen_flags_is_TooManyMemPreloads" {
+    var argv: [3 + 17][]const u8 = undefined;
+    argv[0] = "circ-compile";
+    argv[1] = "in.circ";
+    argv[2] = "--sim";
+    for (argv[3..]) |*slot| slot.* = "--mem=code=a.bin";
+    try std.testing.expectError(error.TooManyMemPreloads, parse(&argv));
+
+    const sixteen = try parse(argv[0 .. 3 + 16]);
+    try std.testing.expectEqual(@as(usize, 16), sixteen.memPreloads().len);
+}
+
+test "cli_args_mem_rejects_outside_sim_and_truth_table" {
+    try std.testing.expectError(error.InvalidFlagValue, parse(&.{ "circ-compile", "in.circ", "--preview", "--mem=code=a.bin" }));
+    try std.testing.expectError(error.InvalidFlagValue, parse(&.{ "circ-compile", "in.circ", "--inspect", "--mem=code=a.bin" }));
+    try std.testing.expectError(error.InvalidFlagValue, parse(&.{ "circ-compile", "in.circ", "-o", "out.wasm", "--mem=code=a.bin" }));
+    _ = try parse(&.{ "circ-compile", "in.circ", "--sim", "--mem=code=a.bin" });
+    _ = try parse(&.{ "circ-compile", "in.circ", "--truth-table", "--mem=code=a.bin" });
 }

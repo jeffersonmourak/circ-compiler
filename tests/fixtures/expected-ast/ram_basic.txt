@@ -1,0 +1,20 @@
+File [f0:1:1-6:1]
+Imports (0)
+Inputs (3)
+  Input a width=[4] [f0:1:1-1:11]
+  Input d width=[8] [f0:2:1-2:11]
+  Input we, clk [f0:3:1-3:14]
+Outputs (1)
+  Output q width=[8] [f0:5:1-5:27]
+    NamedRef data.out [f0:5:18-5:26]
+Components (1)
+  Component type=ram instance=data width_args=[8, 4] [f0:4:1-4:70]
+    Port addr [f0:4:16-4:20]
+      NamedRef a.out [f0:4:23-4:28]
+    Port din [f0:4:30-4:33]
+      NamedRef d.out [f0:4:36-4:41]
+    Port we [f0:4:43-4:45]
+      NamedRef we.out [f0:4:48-4:54]
+    Port clk [f0:4:56-4:59]
+      NamedRef clk.out [f0:4:62-4:69]
+Errors (0)

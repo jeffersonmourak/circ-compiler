@@ -216,6 +216,17 @@ const single_fixtures = [_]Single{
     .{ .path = "tests/fixtures/circuits/E007_unassigned_output.circ", .golden = "tests/fixtures/expected-diagnostics/E007_unassigned_output.txt" },
     .{ .path = "tests/fixtures/circuits/E008_simple_loop.circ", .golden = "tests/fixtures/expected-diagnostics/E008_simple_loop.txt" },
     .{ .path = "tests/fixtures/circuits/E014_width_mismatch.circ", .golden = "tests/fixtures/expected-diagnostics/E014_width_mismatch.txt" },
+    .{ .path = "tests/fixtures/circuits/E017_memory_no_widths.circ", .golden = "tests/fixtures/expected-diagnostics/E017_memory_no_widths.txt" },
+    .{ .path = "tests/fixtures/circuits/E017_memory_one_width.circ", .golden = "tests/fixtures/expected-diagnostics/E017_memory_one_width.txt" },
+    .{ .path = "tests/fixtures/circuits/E017_memory_type_width.circ", .golden = "tests/fixtures/expected-diagnostics/E017_memory_type_width.txt" },
+    .{ .path = "tests/fixtures/circuits/E017_memory_ident_list.circ", .golden = "tests/fixtures/expected-diagnostics/E017_memory_ident_list.txt" },
+    .{ .path = "tests/fixtures/circuits/E018_memory_width_range.circ", .golden = "tests/fixtures/expected-diagnostics/E018_memory_width_range.txt" },
+    .{ .path = "tests/fixtures/circuits/E002_memory_unknown_port.circ", .golden = "tests/fixtures/expected-diagnostics/E002_memory_unknown_port.txt" },
+    .{ .path = "tests/fixtures/circuits/E004_memory_missing_ports.circ", .golden = "tests/fixtures/expected-diagnostics/E004_memory_missing_ports.txt" },
+    .{ .path = "tests/fixtures/circuits/E014_memory_port_width.circ", .golden = "tests/fixtures/expected-diagnostics/E014_memory_port_width.txt" },
+    .{ .path = "tests/fixtures/circuits/E006_shadows_memory.circ", .golden = "tests/fixtures/expected-diagnostics/E006_shadows_memory.txt" },
+    .{ .path = "tests/fixtures/circuits/E008_rom_loop.circ", .golden = "tests/fixtures/expected-diagnostics/E008_rom_loop.txt" },
+    .{ .path = "tests/fixtures/circuits/clean_ram_feedback.circ", .golden = "tests/fixtures/expected-diagnostics/clean_ram_feedback.txt" },
     .{ .path = "tests/fixtures/circuits/W001_unused_input.circ", .golden = "tests/fixtures/expected-diagnostics/W001_unused_input.txt" },
     .{ .path = "tests/fixtures/circuits/W002_dangling_output.circ", .golden = "tests/fixtures/expected-diagnostics/W002_dangling_output.txt" },
     .{ .path = "tests/fixtures/circuits/W003_unused_import.circ", .golden = "tests/fixtures/expected-diagnostics/W003_unused_import.txt" },
@@ -233,6 +244,8 @@ const project_fixtures = [_]Project{
     .{ .root = "tests/fixtures/projects/E016_arity_over/root.circ", .golden = "tests/fixtures/expected-diagnostics/E016_arity_over.txt" },
     .{ .root = "tests/fixtures/projects/E016_arity_under/root.circ", .golden = "tests/fixtures/expected-diagnostics/E016_arity_under.txt" },
     .{ .root = "tests/fixtures/projects/W002_dangling_subcircuit_output/root.circ", .golden = "tests/fixtures/expected-diagnostics/W002_dangling_subcircuit_output.txt" },
+    .{ .root = "tests/fixtures/projects/memory_parametric/root.circ", .golden = "tests/fixtures/expected-diagnostics/memory_parametric_clean.txt" },
+    .{ .root = "tests/fixtures/projects/E011_memory_alias/root.circ", .golden = "tests/fixtures/expected-diagnostics/E011_memory_alias.txt" },
 };
 
 test "Phase 9.3 diagnostic code snapshots (single-file full validator)" {

@@ -1,0 +1,31 @@
+mems
+set a 5
+set d 0x2a
+set w 1
+# The first defined clk is X -> 1: not an edge, nothing is written.
+set clk 1
+get q
+# A defined low -> high edge with we high commits din.
+set clk 0
+set clk 1
+get q
+# Asynchronous read: the value follows the address.
+set a 6
+get q
+set a 5
+get q
+# With we low a full pulse writes nothing.
+set w 0
+set d 0x11
+set clk 0
+set clk 1
+get q
+peek data 5
+peek data 6
+# Host-side writes and clears.
+poke data 6 0x7f
+set a 6
+get q
+clear data
+get q
+quit

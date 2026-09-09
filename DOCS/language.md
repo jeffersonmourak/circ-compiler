@@ -225,6 +225,44 @@ imports, write the import explicitly:
 import xor "<builtin>/xor.circ"
 ```
 
+### 3.5 Memories (declaration shape)
+
+`rom` and `ram` are built-in memory types. A memory is declared like a
+parametric sub-circuit instance: the type keyword, an instance name, exactly
+two instance-position width arguments `[W, A]` (data width and address
+width), and a port list:
+
+```
+input[4] pc
+rom code[8, 4](addr = pc.out)          // 16 words of 8 bits, read-only
+output[8] out(in = code.out)
+
+input[4] a
+input[8] d
+input we, clk
+ram data[8, 4](addr = a.out, din = d.out, we = we.out, clk = clk.out)
+output[8] q(in = data.out)
+```
+
+| Type  | Input ports                 | Output | Port widths                                  |
+| ----- | --------------------------- | ------ | -------------------------------------------- |
+| `rom` | `addr`                      | `out`  | `addr` is `A` wide; `out` is `W` wide        |
+| `ram` | `addr`, `din`, `we`, `clk`  | `out`  | `addr` is `A`, `din`/`out` are `W`, `we`/`clk` are 1 |
+
+`W` must be in `1..64` and `A` in `1..16` (`E018`); a declaration with any
+other number of width arguments, or with a width written after the keyword
+(`rom[8] m[8, 4]`), is `E017`. Inside a parametric sub-circuit the arguments
+may name introduced parameters (`ram m[W, A](...)`). Every listed input port is
+required (`E004`), ports are checked at their own widths (`E014`), and a
+`ram` breaks combinational loops while a `rom` does not (`E008`). `rom` and
+`ram` are reserved: an instance or input named `rom` is `E006`, and
+`import rom "..."` is `E011`.
+
+Memory contents never appear in source — they are loaded at runtime by the
+host (or by `--sim`). This section is only the declaration shape; the read and
+write semantics, the X rules, the edge rule, and how contents get in are in
+§6.5.
+
 ---
 
 ## 4. Signals and Wiring
@@ -300,7 +338,7 @@ rules as a named one.
 ### 4.1 Validation Rules
 
 The compiler enforces a small set of rules on the resulting graph; violations
-produce diagnostics with stable codes (`E001`–`E016`, `W001`–`W003`, see
+produce diagnostics with stable codes (`E001`–`E018`, `W001`–`W003`, see
 `circuit-format.md` for the full catalogue):
 
 * Every signal reference must resolve to a declared name (`E001`).
@@ -319,6 +357,8 @@ produce diagnostics with stable codes (`E001`–`E016`, `W001`–`W003`, see
   diagnostic suggests adding `<W>` to the callee.
 * Parametric arity mismatch (caller writes `[N, M]` but the callee declares
   one parameter, or vice versa) is `E016`.
+* A memory declaration must carry exactly two width arguments `[W, A]`
+  (`E017`) with `W` in `1..64` and `A` in `1..16` (`E018`); see §6.5.
 
 ---
 
@@ -514,6 +554,96 @@ input[8] x, y
 nor[8] n(a = x, b = y)         // bitwise NOR across all 8 bits
 output[8] z(in = n.out)
 ```
+
+### 6.5 Memories (`rom`/`ram`)
+
+Memories are the first primitives whose instance takes *two* width
+parameters: `[W, A]` is the same `CallWidths` list a parametric sub-circuit
+call takes (§6.3), read as the data width `W` and the address width `A`. A
+memory therefore holds `2^A` words of `W` bits. The declaration shape is in
+§3.5; this section is the reference for what a memory *does*.
+
+```
+input[4] pc
+rom code[8, 4](addr = pc)                       // 16 words × 8 bits
+output[8] instr(in = code.out)
+
+input[4] a
+input[8] d
+input w, clk
+ram data[8, 4](addr = a, din = d, we = w, clk = clk)
+output[8] q(in = data.out)
+```
+
+**Ports.**
+
+| Type  | Port   | Direction | Width | Meaning                                              |
+| ----- | ------ | --------- | ----- | ---------------------------------------------------- |
+| both  | `addr` | input     | `A`   | the address whose word appears on `out`              |
+| both  | `out`  | output    | `W`   | the word at `addr` (asynchronous read)               |
+| `ram` | `din`  | input     | `W`   | the word to write                                    |
+| `ram` | `we`   | input     | 1     | write enable                                         |
+| `ram` | `clk`  | input     | 1     | the clock; a write happens on its rising edge        |
+
+Every input port is required (`E004`) and is checked at the width in the
+table (`E014`); a port name outside the table is `E002`. `W` must be in
+`1..64` and `A` in `1..16` (`E018`).
+
+**Reading.** Both kinds read asynchronously: `out` is always the word stored
+at the presented `addr`, and it follows every address change without a clock,
+exactly like any other combinational output. A cell that has never been
+loaded or written reads fully undefined. If *any* bit of `addr` is undefined,
+`out` is fully undefined — there is no partial lookup.
+
+**Writing (`ram` only).** A `ram` writes `din` into the cell at `addr` on a
+*defined low → defined high* transition of `clk`, and only if `we` is
+defined-high and every bit of `addr` is defined at that moment. The clock's
+previous level must have been a defined `0`: the very first `set clk 1` (or
+`setPin(clk, 1n, 1n)`) after power-on is *not* an edge, because the previous
+level was undefined, so a circuit can never write on its way out of the
+all-undefined initial state. `din` is stored as presented, bit for bit,
+including its definedness — a partially undefined `din` writes a partially
+undefined cell. `clk` and `we` are ordinary width-1 inputs; there is no clock
+primitive. From a host you pulse the clock by driving it low and then high;
+from `--sim` that is `set clk 0` then `set clk 1`.
+
+**Contents come from the host.** Source never carries an image. A memory is
+filled at run time through one of three doors, all taking the same headerless
+raw image — `ceil(W/8)` little-endian bytes per word, at most `2^A` words,
+padding bits clear (see `wasm-api.md` "Image format"):
+
+* a compiled artifact's `getMemInfo` / `memBuffer` / `memLoad` / `memStore` /
+  `memClear` / `setMemWord` / `getMemValue` / `getMemDefined` exports
+  (`wasm-api.md`);
+* `--sim` and `--truth-table` with `--mem=<name>=<path>` on the command line;
+* `--sim`'s `load`, `save`, `peek`, `poke`, `mem`, and `clear` verbs
+  (`sim-protocol.md`).
+
+Loading is *replace-all*: a shorter image leaves the remaining cells
+undefined, an empty image clears the memory.
+
+**Loops.** For `E008` a `ram` behaves like a gate — a path through it does
+not form a combinational loop, so feeding `q` back into `d` or `a` is legal — 
+while a `rom` is transparent, so `rom` `out → addr` with nothing in between is
+an `E008` cycle (§5.2).
+
+**Parametric memories.** Inside a `<W, A>` sub-circuit the width arguments may
+name the introduced parameters, and callers bind them positionally like any
+other parametric call:
+
+```
+input<A>[A] addr
+input<W>[W] din
+input we, clk
+ram m[W, A](addr = addr, din = din, we = we, clk = clk)
+output[W] q(in = m.out)
+```
+
+**Tooling.** `--truth-table` tabulates a circuit whose memories are all `rom`
+(preload them with `--mem`; unloaded cells print `?`) and refuses one that
+contains a `ram`, whose clock would otherwise be enumerated as an input;
+drive those with `--sim`. `--preview` draws a `rom` as a one-input box and a
+`ram` as a four-input box. `--emit-zig` does not support memories.
 
 ---
 

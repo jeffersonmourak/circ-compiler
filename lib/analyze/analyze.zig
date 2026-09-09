@@ -54,6 +54,9 @@ pub const Symbol = struct {
     name: []const u8,
     kind: []const u8,
     width: u8,
+    /// Address width, present only on `rom`/`ram` symbols (`width` is then
+    /// the data width).
+    addr_width: ?u8 = null,
     range: Range,
 };
 
@@ -267,6 +270,7 @@ fn symbolKind(kind: ir.ComponentKind) ?[]const u8 {
         },
         .sub_circuit_ref, .unresolved_name => "instance",
         .slice, .concat => null,
+        .memory => |m| @tagName(m.mode),
     };
 }
 
@@ -286,8 +290,13 @@ fn hoverForComponent(allocator: std.mem.Allocator, module: *const ir.Module, id:
             .unresolved_name => |n| n,
             .slice => "slice",
             .concat => "concat",
+            .memory => |m| @tagName(m.mode),
         };
         const name = c.instance_name orelse "";
+        if (c.kind == .memory) {
+            const m = c.kind.memory;
+            return std.fmt.allocPrint(allocator, "{s}[{d},{d}] {s}", .{ kname, m.data_width, m.addr_width, name });
+        }
         if (c.width > 1) return std.fmt.allocPrint(allocator, "{s}[{d}] {s}", .{ kname, c.width, name });
         return std.fmt.allocPrint(allocator, "{s} {s}", .{ kname, name });
     }
@@ -335,6 +344,10 @@ fn collectSymbolsAndReferences(
                 .name = name,
                 .kind = ks,
                 .width = c.width,
+                .addr_width = switch (c.kind) {
+                    .memory => |m| m.addr_width,
+                    else => null,
+                },
                 .range = rangeFromSpan(c.span),
             });
         }
@@ -434,7 +447,9 @@ pub fn renderJson(writer: anytype, a: Analysis) !void {
         try writeJsonString(writer, s.name);
         try writer.writeAll(",\"kind\":");
         try writeJsonString(writer, s.kind);
-        try writer.print(",\"width\":{d},\"range\":", .{s.width});
+        try writer.print(",\"width\":{d}", .{s.width});
+        if (s.addr_width) |aw| try writer.print(",\"addr_width\":{d}", .{aw});
+        try writer.writeAll(",\"range\":");
         try writeRange(writer, s.range);
         try writer.writeByte('}');
     }
@@ -522,6 +537,83 @@ test "analyze: emits symbols and reference links" {
     try std.testing.expect(has_input_a);
     try std.testing.expect(has_gate_g);
     try std.testing.expect(result.references.len >= 3);
+}
+
+test "analyze: memory declarations resolve to rom/ram symbols with hover" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    var overlay = Overlay{};
+    try overlay.put(a, "/virtual/rom.circ", "input[4] pc\nrom code[8, 4](addr = pc.out)\noutput[8] out(in = code.out)\n");
+
+    const result = try analyze(a, "/virtual/rom.circ", overlay);
+    for (result.diagnostics) |d| {
+        try std.testing.expect(!std.mem.eql(u8, d.severity, "error"));
+    }
+
+    var found_symbol = false;
+    for (result.symbols) |s| {
+        if (std.mem.eql(u8, s.name, "code")) {
+            try std.testing.expectEqualStrings("rom", s.kind);
+            try std.testing.expectEqual(@as(u8, 8), s.width);
+            found_symbol = true;
+        }
+    }
+    try std.testing.expect(found_symbol);
+
+    var found_hover = false;
+    for (result.references) |r| {
+        if (std.mem.eql(u8, r.hover, "rom[8,4] code")) found_hover = true;
+    }
+    try std.testing.expect(found_hover);
+}
+
+test "analyze: memory symbols carry addr_width" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    var overlay = Overlay{};
+    try overlay.put(a, "/virtual/rom.circ", "input[4] pc\nrom code[8, 4](addr = pc)\noutput[8] instr(in = code.out)\n");
+
+    const result = try analyze(a, "/virtual/rom.circ", overlay);
+    for (result.diagnostics) |d| {
+        try std.testing.expect(!std.mem.eql(u8, d.severity, "error"));
+    }
+
+    var found_code = false;
+    var found_pc = false;
+    for (result.symbols) |s| {
+        if (std.mem.eql(u8, s.name, "code")) {
+            try std.testing.expectEqualStrings("rom", s.kind);
+            try std.testing.expectEqual(@as(u8, 8), s.width);
+            try std.testing.expectEqual(@as(?u8, 4), s.addr_width);
+            found_code = true;
+        }
+        if (std.mem.eql(u8, s.name, "pc")) {
+            try std.testing.expectEqual(@as(?u8, null), s.addr_width);
+            found_pc = true;
+        }
+    }
+    try std.testing.expect(found_code);
+    try std.testing.expect(found_pc);
+}
+
+test "analyze: renderJson emits addr_width only for memories" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    var overlay = Overlay{};
+    try overlay.put(a, "/virtual/rom.circ", "input[4] pc\nrom code[8, 4](addr = pc)\noutput[8] instr(in = code.out)\n");
+    const result = try analyze(a, "/virtual/rom.circ", overlay);
+
+    var out: std.ArrayList(u8) = .{};
+    try renderJson(out.writer(a), result);
+    try std.testing.expect(std.mem.indexOf(u8, out.items, "\"name\":\"code\",\"kind\":\"rom\",\"width\":8,\"addr_width\":4,\"range\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.items, "\"name\":\"pc\",\"kind\":\"input\",\"width\":4,\"range\"") != null);
+    try std.testing.expect(std.mem.indexOf(u8, out.items, "\"name\":\"pc\",\"kind\":\"input\",\"width\":4,\"addr_width\"") == null);
 }
 
 test "analyze: garbage input yields a syntax diagnostic, not a failure" {

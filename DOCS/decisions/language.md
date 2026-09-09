@@ -162,3 +162,49 @@ The two i64 fields are read by JS as `BigInt`. The full rationale (paired export
 **Decision.** Bumped from `0x01` (pre-multibit) to `0x02`. Both `ComponentRecord` (min) and `FullComponentRecord` (full) carry a `width: u8` byte per component. Slice records carry auxiliary `(lo, hi)` bytes in the min section. Concat records carry their operand list in the full section's auxiliary slot.
 
 See `DOCS/circuit-format.md` for the exact byte layout.
+
+---
+
+## Native memories
+
+The entries below record the language-facing half of the native-memory initiative (`rom`/`ram`, topology v03). The numbered decisions they cite are the eleven locked in `DOCS/PLANS_PROMPT.md`; the runtime and tooling half lives in [runtime-api.md](runtime-api.md) `## Native memories`, and the `--mem` flag gating in [cli.md](cli.md). Reference semantics for users are in `DOCS/language.md` §6.5.
+
+### Memory declarations reuse `CallWidths` and reserve two type names
+
+**Decision.** A memory is declared with the existing instance syntax and exactly two width arguments in instance position: `rom code[8, 4](addr = pc)`, `ram data[8, 4](addr = a, din = d, we = w, clk = clk)`. `[W, A]` is the same `CallWidths` list a parametric sub-circuit call takes, read as data width and address width, so `rom m[W, A]` inside a `<W, A>` sub-circuit binds through `widthFromSpec` for free. `rom` and `ram` are reserved type names: they resolve before import aliases, a sub-circuit file may not shadow them (`E006`), and an import may not alias them (`E011`). The grammar (`lib/grammar/proto-circ.peg`) is unchanged.
+
+**Rationale.** Decision 1's premise was that the front door should cost nothing at the parser: `CallWidths` already parses a comma-separated width list, and the resolver already turns `width_args` into bound widths for parametric calls. Reusing both means memories inherit parametric binding, the `--inspect`/`--analyze` plumbing, and every existing width diagnostic instead of introducing a second declaration form. Reserving the names keeps `rom`/`ram` unambiguous in every file — a user sub-circuit named `rom` would otherwise silently win or lose depending on import order.
+
+**Alternatives.** A dedicated `memory` keyword with named parameters (`rom code(width = 8, depth = 16)`) — clearer to read but a grammar change, a new AST node, and a second width-binding path. Treating memories as built-in macro sub-circuits — a 256×8 RAM would flatten to tens of thousands of primitives in the topology, which is the reason "native" was chosen at all.
+
+### Memory contents are runtime configuration, never source
+
+**Decision.** A declaration carries only the memory's shape. Contents are supplied at run time: by the host through the WASM memory exports, by `--sim`/`--truth-table` through `--mem=<name>=<path>`, or interactively through `--sim`'s `load`/`poke`. Unloaded and unwritten cells read undefined. No `.circ` syntax embeds an initial image, and the topology sections never carry cell contents.
+
+**Rationale.** This is the principle behind decisions 2, 3, 4 and 7. A compiled artifact is then a *machine*, not a machine plus one program: the same `cpu.wasm` runs every program a host loads into it, a teaching deck can swap the ROM between slides without recompiling, and a `.circ` file stays a readable description of wiring rather than a hex dump. It also keeps the wire format small and the `.wasm` reproducible from source alone.
+
+**Alternatives.** An in-source image (`rom code[8, 4] = "prog.hex"` or an inline hex literal) was the first draft and was superseded: it couples a circuit to one program, needs a file-resolution rule in the resolver, and would have to travel in the topology. An optional in-source default image on top of runtime loading was rejected as two mechanisms for one job.
+
+### ROM is combinational; RAM writes on a defined rising edge
+
+**Decision.** Both kinds read asynchronously: `out` is the word at the presented `addr` and follows every address change without a clock. A `ram` writes `din` into the addressed cell when `clk` transitions from *defined low* to *defined high* while `we` is defined high and every `addr` bit is defined; `prev_clk` is stored before the write is evaluated, so the same edge is never counted twice and a `din` change on the same step is captured. `din` is stored masked to `W` with its definedness preserved (a partially undefined `din` writes a partially undefined cell). Any undefined `addr` bit makes `out` fully undefined. `clk` and `we` are ordinary width-1 inputs read with a width-agnostic bit test.
+
+**Rationale.** Decision 5. Async read plus clocked write is the Logisim default model and the one students meet first; a synchronous read port would have doubled the state and made "peek at an address" a two-step dance. Requiring the low side of the edge to be *defined* means the first `set clk 1` after power-on is not an edge — the circuit cannot write on the way out of the all-undefined initial state — which keeps `init()`'s "nothing has happened yet" promise (see runtime-api.md). Storing `prev_clk` before acting makes the write idempotent under re-evaluation, which the engine's event loop relies on.
+
+**Alternatives.** Level-triggered writes (write whenever `we` is high) — simpler, but any glitch on `din` corrupts the cell and the timing model becomes "whatever settles last". Treating `X → 1` as a rising edge — matches some simulators, but it makes power-on behaviour depend on evaluation order. A synchronous-read RAM was deferred; it can be built from this one plus a register once the language has one.
+
+### `ram` breaks combinational loops, `rom` does not
+
+**Decision.** In the `E008` combinational-loop pass, `ram` belongs to the same cycle-breaking class as `and`/`not` (a path through a `ram` does not form a loop); `rom` stays transparent, so a `rom` whose `out` feeds back into its own `addr` is `E008`.
+
+**Rationale.** Decision 6. The pass is component-granular (it does not distinguish ports), so each kind must be classified whole. A `ram` holds state and its write side is clocked, so feedback through it is the normal shape of a register file or a counter's memory — the way an `and`-based latch already passes today. A `rom` is a pure lookup table: `addr → out → addr` with no clock is a genuine combinational loop and would spin the engine exactly as a wire loop does.
+
+**Alternatives.** Making the pass port-aware (a `ram` read path `addr → out` is combinational, the write path is not) would be more precise but is a rewrite of the pass for a distinction no current fixture needs. Marking `rom` cycle-breaking too was rejected: it hides a real oscillation.
+
+### `E017`/`E018` plus reused codes through one port-width helper
+
+**Decision.** Two new codes: `E017` "memory parameter list malformed" for any memory declaration without exactly two width arguments in instance position (`rom m(…)`, `rom m[8](…)`, `rom m[8, 4, 2](…)`, the identifier-list form `rom a, b`, a type-position width `rom[8] m[8, 4]`), with a message that shows the correct shape; `E018` "memory width out of range" for `W ∉ 1..64` or `A ∉ 1..16`. Everything else reuses existing codes through one helper, `memoryPortWidth(mem, port)` (`addr → A`, `din`/`out` → `W`, `we`/`clk` → 1): `E002` for an unknown port, `E004` for a missing required input, `E014` for a width mismatch on any memory port. The helper returns nothing when the argument count is wrong so `E017` never cascades into spurious width errors.
+
+**Rationale.** Decision 11. Diagnostic codes are append-only, so the new ones had to be genuinely new *kinds* of mistake; a wrong port name or a mismatched width on a memory is the same mistake as on a gate and should read the same to a user and to `circ-lsp`. Centralising the per-port width in one function is what let `E002`/`E004`/`E014` gain memory arms without each pass learning the port table separately.
+
+**Alternatives.** One umbrella "invalid memory declaration" code — fewer codes but loses the shape/range distinction that decides the fix. Per-port codes (`E019` bad `we` width, …) — more precise, but the validator already expresses all of them, and each new code is a permanent surface.

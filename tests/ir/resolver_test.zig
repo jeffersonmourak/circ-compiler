@@ -91,7 +91,102 @@ const fixtures = [_]Fixture{
         .source_path = "tests/fixtures/circuits/slice_then_concat.circ",
         .expected_ir_path = "tests/fixtures/expected-ir/slice_then_concat.txt",
     },
+    .{
+        .name = "rom-basic",
+        .source_path = "tests/fixtures/circuits/rom_basic.circ",
+        .expected_ir_path = "tests/fixtures/expected-ir/rom_basic.txt",
+    },
+    .{
+        .name = "ram-basic",
+        .source_path = "tests/fixtures/circuits/ram_basic.circ",
+        .expected_ir_path = "tests/fixtures/expected-ir/ram_basic.txt",
+    },
 };
+
+fn findComponentByName(module: anytype, name: []const u8) ?@TypeOf(module.components[0]) {
+    for (module.components) |component| {
+        const instance_name = component.instance_name orelse continue;
+        if (std.mem.eql(u8, instance_name, name)) return component;
+    }
+    return null;
+}
+
+test "rom/ram resolve as memory components before import aliases" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const source =
+        \\import rom "x.circ"
+        \\input[4] pc
+        \\rom r[8, 4](addr = pc.out)
+        \\output[8] out(in = r.out)
+        \\
+    ;
+    const ast_file = try translate.parseSource(allocator, 0, source);
+    const module = try resolver.resolve(allocator, ast_file, 0);
+
+    const r = findComponentByName(module, "r") orelse return error.TestUnexpectedResult;
+    try std.testing.expect(r.kind == .memory);
+    try std.testing.expectEqual(@as(u8, 8), r.width);
+    const memory = r.kind.memory;
+    try std.testing.expect(memory.mode == .rom);
+    try std.testing.expectEqual(@as(u8, 8), memory.data_width);
+    try std.testing.expectEqual(@as(u8, 4), memory.addr_width);
+    try std.testing.expectEqual(@as(u8, 2), memory.arg_count);
+    try std.testing.expect(!memory.type_width_given);
+}
+
+test "memory width args bind through parametric width bindings" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const source =
+        \\input<W>[W] d
+        \\input<A>[A] a
+        \\input we, clk
+        \\ram m[W, A](addr = a.out, din = d.out, we = we.out, clk = clk.out)
+        \\output[W] q(in = m.out)
+        \\
+    ;
+    const ast_file = try translate.parseSource(allocator, 0, source);
+
+    const bound = try resolver.resolveWithBindings(allocator, ast_file, 0, &.{
+        .{ .name = "W", .value = 8 },
+        .{ .name = "A", .value = 4 },
+    });
+    const m = findComponentByName(bound, "m") orelse return error.TestUnexpectedResult;
+    try std.testing.expect(m.kind.memory.mode == .ram);
+    try std.testing.expectEqual(@as(u8, 8), m.kind.memory.data_width);
+    try std.testing.expectEqual(@as(u8, 4), m.kind.memory.addr_width);
+
+    try std.testing.expectError(
+        error.UnboundParameter,
+        resolver.resolveWithBindings(allocator, ast_file, 0, &.{.{ .name = "W", .value = 8 }}),
+    );
+}
+
+test "memory records arity and type-position width for the validator" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const source =
+        \\input[4] pc
+        \\rom[8] m[8](addr = pc.out)
+        \\output[8] out(in = m.out)
+        \\
+    ;
+    const ast_file = try translate.parseSource(allocator, 0, source);
+    const module = try resolver.resolve(allocator, ast_file, 0);
+
+    const m = findComponentByName(module, "m") orelse return error.TestUnexpectedResult;
+    try std.testing.expectEqual(@as(u8, 1), m.kind.memory.arg_count);
+    try std.testing.expect(m.kind.memory.type_width_given);
+    try std.testing.expectEqual(@as(u8, 8), m.kind.memory.data_width);
+    try std.testing.expectEqual(@as(u8, 1), m.kind.memory.addr_width);
+}
 
 test "resolve ast to ir fixtures" {
     for (fixtures) |fixture| {

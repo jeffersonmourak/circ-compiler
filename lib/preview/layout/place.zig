@@ -129,6 +129,7 @@ fn composeDisplayLabel(
             else
                 node.name,
             .led => try composeLedLabel(arena, node.signal_width, opts.expand_display),
+            .rom, .ram => try std.fmt.allocPrint(arena, "{s} {s}[{d},{d}]", .{ @tagName(p), node.name, node.signal_width, node.addr_width }),
             else => node.name,
         },
         .subcircuit => node.name,
@@ -167,6 +168,8 @@ fn sizeOf(node: VirtualNode, opts: layout.LayoutOptions) sizing.PrimitiveSize {
         .primitive => |p| switch (p) {
             .input_pin, .output_pin => sizing.pinSize(node.name.len, node.signal_width),
             .led => sizing.ledSize(node.signal_width, opts.expand_display),
+            .rom => sizing.memorySize(sizing.memoryLabelLen(3, node.name.len, node.signal_width, node.addr_width), 1),
+            .ram => sizing.memorySize(sizing.memoryLabelLen(3, node.name.len, node.signal_width, node.addr_width), 4),
             // Slice and concat are collapsed in stage 1; the layer
             // should never ask for their size. Return the sentinel
             // zero so a stray call doesn't crash.
@@ -232,6 +235,18 @@ fn resolvePortCoords(arena: std.mem.Allocator, node: VirtualNode, x: u32, y: u32
             .led => {
                 try in_list.append(arena, .{ .port_name = "in", .coord = .{ .x = x -| 1, .y = y + 1 } });
                 // out_port unused on sinks.
+            },
+            .rom => {
+                try in_list.append(arena, .{ .port_name = "addr", .coord = .{ .x = x -| 1, .y = y + 1 } });
+                out_port = .{ .x = x + w, .y = y + 1 };
+            },
+            .ram => {
+                // Four inputs on the odd border rows of a 9-tall box, output centered.
+                const names = [_][]const u8{ "addr", "din", "we", "clk" };
+                for (names, 0..) |name, slot| {
+                    try in_list.append(arena, .{ .port_name = name, .coord = .{ .x = x -| 1, .y = y + 1 + 2 * @as(u32, @intCast(slot)) } });
+                }
+                out_port = .{ .x = x + w, .y = y + h / 2 };
             },
             .wire, .slice, .concat => unreachable, // wires, slices, and concats were collapsed in stage 1.
         },

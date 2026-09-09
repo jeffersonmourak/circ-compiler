@@ -26,6 +26,16 @@ const fixtures = [_]Fixture{
         .expected_ast_path = "tests/fixtures/expected-ast/anonymous_nested.txt",
     },
     .{
+        .name = "rom-basic",
+        .source_path = "tests/fixtures/circuits/rom_basic.circ",
+        .expected_ast_path = "tests/fixtures/expected-ast/rom_basic.txt",
+    },
+    .{
+        .name = "ram-basic",
+        .source_path = "tests/fixtures/circuits/ram_basic.circ",
+        .expected_ast_path = "tests/fixtures/expected-ast/ram_basic.txt",
+    },
+    .{
         .name = "import-file",
         .source_path = "tests/fixtures/circuits/with_import.circ",
         .expected_ast_path = "tests/fixtures/expected-ast/with_import.txt",

@@ -26,7 +26,7 @@
         ▼
    ┌───────────────────────────────────────────────────────────┐
    │  Validator (lib/validator/)                               │
-   │  Stable diagnostic codes E001–E016, W001–W003             │
+   │  Stable diagnostic codes E001–E018, W001–W003             │
    │  Hard errors block emission; --warnings-as-errors promotes│
    └───────────────────────────────────────────────────────────┘
         │
@@ -57,7 +57,7 @@ The engine is pure Zig and oblivious to WebAssembly, JSON, or topology. It model
 
 ### Component kinds
 
-There are eight kinds (`ComponentType` in `lib/circuit.zig`):
+There are nine kinds (`ComponentType` in `lib/circuit.zig`):
 
 | Kind             | Inputs                                  | Output port | Notes                                                              |
 |------------------|-----------------------------------------|-------------|---------------------------------------------------------------------|
@@ -69,6 +69,7 @@ There are eight kinds (`ComponentType` in `lib/circuit.zig`):
 | `led`            | `"in"`                                  | `"out"`     | Visualisation primitive; tracks input state.                       |
 | `slice`          | `"in"`                                  | `"out"`     | Bit-shape kind: masks bits `[lo, hi)` of `from`. Output width is `hi - lo`. Lowered from `a[lo..hi]` and `a[i]`; users never write it directly. |
 | `concat`         | `"operand_0"`, `"operand_1"`, … per op  | `"out"`     | Bit-shape kind: ORs each operand into its bit-position slot. Output width is the sum of operand widths. Lowered from `{a, b, ...}`. |
+| `memory`         | `"addr"` (+ `"din"`, `"we"`, `"clk"` for `.ram`) | `"out"` | Native `rom`/`ram`. Asynchronous read: `out` is `cells[addr]`, undefined when any address bit is; a `.ram` writes `din` on the defined rising edge of `clk` while `we` is high. Cells live on the payload, not in the state pool. |
 
 ### Event-driven propagation
 
@@ -118,7 +119,7 @@ The runtime template is the WASM shell that ships embedded inside every compiled
 
 The template:
 
-- Exports a fixed runtime API to JavaScript: `topology_alloc`, `init`, `run`, `setPin(id, value, defined)`, `getOutputValue(id)`, `getOutputDefined(id)` (see [wasm-api.md](wasm-api.md) for full signatures). The two getters return paired `BitVecState` halves crossed as `i64` / `BigInt`.
+- Exports a fixed runtime API to JavaScript: `topology_alloc`, `init`, `run`, `setPin(id, value, defined)`, `getOutputValue(id)`, `getOutputDefined(id)`, plus the memory export family (`getMemInfo`, `memBuffer`, `memLoad`, `memStore`, `memClear`, `setMemWord`, `getMemValue`, `getMemDefined`) for circuits that declare `rom`/`ram` (see [wasm-api.md](wasm-api.md) for full signatures). The two getters return paired `BitVecState` halves crossed as `i64` / `BigInt`.
 - Imports two log callbacks from the host (`debugEnabled`, `onDebugLog`) — that's it. There is no `onStateChange`; hosts poll `getOutputValue` / `getOutputDefined` after `run()`.
 - Reads the per-circuit topology from the buffer the host loaded via `topology_alloc`, then calls `interpreter.initFromTopology` to materialise the circuit using the engine in `lib/circuit.zig`.
 

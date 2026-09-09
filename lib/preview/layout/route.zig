@@ -494,6 +494,10 @@ fn portByteOf(name: []const u8) u8 {
     if (std.mem.eql(u8, name, "a")) return @intFromEnum(full_format.PortName.a);
     if (std.mem.eql(u8, name, "b")) return @intFromEnum(full_format.PortName.b);
     if (std.mem.eql(u8, name, "out")) return @intFromEnum(full_format.PortName.out);
+    if (std.mem.eql(u8, name, "addr")) return @intFromEnum(full_format.PortName.addr);
+    if (std.mem.eql(u8, name, "din")) return @intFromEnum(full_format.PortName.din);
+    if (std.mem.eql(u8, name, "we")) return @intFromEnum(full_format.PortName.we);
+    if (std.mem.eql(u8, name, "clk")) return @intFromEnum(full_format.PortName.clk);
     return 0xFF;
 }
 

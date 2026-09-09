@@ -1,8 +1,18 @@
 const std = @import("std");
 pub const memory = @import("memory.zig");
+/// Raw memory image codec. Re-exported so every consumer reaches it as
+/// `engine.memimage`; a second relative import from another module would
+/// make Zig reject the file as belonging to two modules.
+pub const memimage = @import("memimage.zig");
 const transport = @import("transport.zig");
 
 const log = @import("log.zig");
+
+// Collect the sibling files' inline tests when this file is the test root.
+test {
+    _ = transport;
+    _ = memimage;
+}
 
 /// Compile-time switch to include benchmark counters on `Circuit`. The
 /// `build_options` module is supplied by `build.zig` per consumer: native and
@@ -29,6 +39,10 @@ const B_PORT_NAME = "b";
 const OUT_PORT_NAME = "out";
 const OUTPUT_PIN_IN_PORT_NAME = "in";
 const OUTPUT_PIN_OUT_PORT_NAME = "out";
+const ADDR_PORT_NAME = "addr";
+const DIN_PORT_NAME = "din";
+const WE_PORT_NAME = "we";
+const CLK_PORT_NAME = "clk";
 
 fn calculateDominantState(circuit: *const Circuit, input_comp_list: std.ArrayList(*Component), width: u8) BitVecState {
     // Per-bit dominance: every bit position where some input reads
@@ -53,6 +67,34 @@ fn calculateDominantState(circuit: *const Circuit, input_comp_list: std.ArrayLis
         .value = high_mask | carry_value,
         .defined = high_mask | carry_defined,
         .width = width,
+    };
+}
+
+/// The word a memory presents on `out`: `cells[addr]` when every address
+/// bit is defined, otherwise fully undefined. Shared by the recalc arm and
+/// the host hooks so a host write and a combinational read cannot disagree.
+/// Precondition: `comp.kind == .memory`.
+pub fn memoryReadOut(circuit: *const Circuit, comp: *const Component) BitVecState {
+    const m = comp.kind.memory;
+    const width: u8 = comp.state_handle.tier;
+    const addr_comp = m.addr orelse return BitVecState.undefined_(width);
+    const addr_state = circuit.readState(addr_comp.state_handle);
+    const addr_mask = widthMask(m.cells.addr_width);
+    if ((addr_state.defined & addr_mask) != addr_mask) return BitVecState.undefined_(width);
+    const index: usize = @intCast(addr_state.value & addr_mask);
+    return .{
+        .value = m.cells.values[index],
+        .defined = m.cells.defined[index],
+        .width = width,
+    };
+}
+
+/// The cell planes of a memory component, or null for any other kind.
+/// Hosts and tools read contents through this, never through the pool.
+pub fn memoryCells(comp: *const Component) ?*const MemCells {
+    return switch (comp.kind) {
+        .memory => |m| &m.cells,
+        else => null,
     };
 }
 
@@ -143,6 +185,37 @@ fn recalculateAndReschedule(
                 .width = width,
             };
         },
+        .memory => |m| {
+            if (m.mode == .ram) {
+                // Edge detection runs in Phase 2, after every same-timestamp
+                // event has been committed, and may run several times per
+                // step (once per changed upstream). `prev_clk` is stored
+                // before acting so the second call sees prev == now and
+                // cannot fire again; updating it on every recalc also keeps
+                // a `we`/`din` change while clk is high from ever writing.
+                const now = if (m.clk) |c| circuit.readState(c.state_handle) else BitVecState.undefined_(1);
+                const rising = bit0High(now) and bit0Low(m.prev_clk);
+                m.prev_clk = now;
+                if (rising) {
+                    const we = if (m.we) |w| circuit.readState(w.state_handle) else BitVecState.undefined_(1);
+                    if (bit0High(we)) {
+                        if (m.addr) |a| {
+                            const addr_state = circuit.readState(a.state_handle);
+                            const addr_mask = widthMask(m.cells.addr_width);
+                            if ((addr_state.defined & addr_mask) == addr_mask) {
+                                const index: usize = @intCast(addr_state.value & addr_mask);
+                                const d = if (m.din) |x| circuit.readState(x.state_handle) else BitVecState.undefined_(width);
+                                const data_mask = widthMask(width);
+                                // Partial-X din is stored as-is, canonical like Pool.write.
+                                m.cells.defined[index] = d.defined & data_mask;
+                                m.cells.values[index] = d.value & d.defined & data_mask;
+                            }
+                        }
+                    }
+                }
+            }
+            calculated_state = memoryReadOut(circuit, component);
+        },
     }
 
     const current_state = circuit.readState(component.state_handle);
@@ -151,6 +224,8 @@ fn recalculateAndReschedule(
             log.info(" - Component (id={d}, type={s}) output changed from {s} -> {s}. Scheduling new event.", .{ component.id, @tagName(component.kind), current_state.tagName(), calculated_state.tagName() });
         }
 
+        // Memories are functional elements, not wiring: they take the gate
+        // delay through the `else` arm.
         const delay = switch (component.kind) {
             .wire, .output_pin, .led, .slice, .concat => WIRE_PROPAGATION_DELAY,
             else => PROPAGATION_DELAY,
@@ -168,6 +243,10 @@ fn recalculateAndReschedule(
 /// stored as `u8` for arithmetic convenience; the assertion in `widthMask`
 /// keeps the legal range to 1..=64.
 pub const MAX_WIDTH: u8 = 64;
+
+/// Widest address a memory may take: 65,536 words keeps a memory's two
+/// cell planes at ~1 MiB.
+pub const MAX_ADDR_WIDTH: u8 = 16;
 
 /// Width-agnostic wire state value type. Carries paired `value` / `defined`
 /// bitmaps and an explicit `width` so equality, flip, and downstream rules
@@ -336,6 +415,17 @@ fn widthMask(width: u8) u64 {
     return (@as(u64, 1) << @as(u6, @intCast(width))) - 1;
 }
 
+/// Bit-0 level tests for control signals (`we`, `clk`). Width-agnostic on
+/// purpose: `isHigh`/`isLow` assert `width == 1`, and a hand-built topology
+/// may drive a control port from a wider signal.
+fn bit0High(s: BitVecState) bool {
+    return (s.defined & 1) != 0 and (s.value & 1) != 0;
+}
+
+fn bit0Low(s: BitVecState) bool {
+    return (s.defined & 1) != 0 and (s.value & 1) == 0;
+}
+
 pub const Timestamp = u64;
 
 pub const Event = struct {
@@ -348,20 +438,55 @@ pub const Event = struct {
     }
 };
 
-pub const ComponentType = enum { input_pin_gate, not_gate, led, and_gate, wire, output_pin, slice, concat };
+pub const ComponentType = enum { input_pin_gate, not_gate, led, and_gate, wire, output_pin, slice, concat, memory };
 
-pub fn toKind(kind: u8) !Component.Kind {
-    return switch (kind) {
-        0 => .input_pin_gate,
-        1 => .not_gate,
-        2 => .led,
-        3 => .and_gate,
-        4 => .wire,
-        5 => .output_pin,
-        6 => .{ .slice = .{} },
-        7 => .{ .concat = .{} },
-        else => return error.InvalidComponentKind,
-    };
+pub const MemoryMode = enum { rom, ram };
+
+/// Cell planes of a memory, one u64 per word, length `1 << addr_width`.
+/// Allocated by `Circuit.createComponent` only — callers leave the slices
+/// empty. Canonical form mirrors `Pool.write`: `values[i] & ~defined[i] == 0`
+/// and no bit at or above the data width; all-zero planes mean every cell
+/// is undefined (unloaded or unwritten).
+pub const MemCells = struct {
+    addr_width: u8,
+    values: []u64 = &.{},
+    defined: []u64 = &.{},
+
+    pub fn wordCount(self: MemCells) usize {
+        return @as(usize, 1) << @intCast(self.addr_width);
+    }
+};
+
+pub const MemoryError = error{ NotAMemory, AddressOutOfRange, BufferTooSmall, InvalidAddrWidth };
+
+/// The payload of a memory component, boxed so that `Component.Kind` (a
+/// union sized by its largest member) does not grow for every gate and
+/// wire in a circuit: an inline payload cost +56 bytes per component
+/// corpus-wide on the engine bench. Created through `memoryKind`, freed by
+/// `Component.deinit`. Cells live here (never in the pool); the pool slot
+/// holds the asynchronously read word on `out`. One driver per port, like
+/// `slice.from`; `din`/`we`/`clk` stay null on a rom because `connect`
+/// refuses to set them.
+pub const MemoryState = struct {
+    mode: MemoryMode,
+    cells: MemCells,
+    addr: ?*Component = null,
+    din: ?*Component = null,
+    we: ?*Component = null,
+    clk: ?*Component = null,
+    /// Last committed clk state, stored before acting on it. The initial
+    /// undefined means the first defined-high clk is not an edge.
+    prev_clk: BitVecState = BitVecState.undefined_(1),
+};
+
+/// Builds the `Kind` for a memory component. The planes are allocated by
+/// `Circuit.createComponent`, which also validates `addr_width`; a kind
+/// that never reaches `createComponent` leaks its box (the engine is
+/// arena-backed, so this only matters to tests that stop early).
+pub fn memoryKind(mode: MemoryMode, addr_width: u8) !Component.Kind {
+    const state = try memory.allocator.create(MemoryState);
+    state.* = .{ .mode = mode, .cells = .{ .addr_width = addr_width } };
+    return .{ .memory = state };
 }
 
 pub const ComponentPortReference = struct { *Component, []const u8 };
@@ -405,6 +530,9 @@ pub const Component = struct {
         /// Wired through `Circuit.connect` with `to_port = "operand_<i>"`;
         /// the engine ensures the slot is set at the right index.
         concat: struct { operands: std.ArrayList(*Component) = .{} },
+        /// Native memory: one engine kind carrying a `mode`, while the wire
+        /// format keeps two kinds (rom=8, ram=9). Boxed — see `MemoryState`.
+        memory: *MemoryState,
     };
 
     pub fn init(id: u32, kind: Kind) !*Component {
@@ -427,6 +555,11 @@ pub const Component = struct {
             .input_pin_gate => |*g| g.inputs.deinit(memory.allocator),
             .slice => {},
             .concat => |*c| c.operands.deinit(memory.allocator),
+            .memory => |m| {
+                memory.allocator.free(m.cells.values);
+                memory.allocator.free(m.cells.defined);
+                memory.allocator.destroy(m);
+            },
         }
         memory.allocator.destroy(self);
     }
@@ -659,6 +792,21 @@ pub const Circuit = struct {
 
     pub fn createComponent(self: *Circuit, kind: Component.Kind, width: u8) !*Component {
         const new_component = try Component.init(self.next_id, kind);
+        errdefer new_component.deinit();
+        switch (new_component.kind) {
+            .memory => |m| {
+                const addr_width = m.cells.addr_width;
+                if (addr_width < 1 or addr_width > MAX_ADDR_WIDTH) return error.InvalidAddrWidth;
+                // Planes are always allocated here; a caller-supplied slice
+                // is a programming error, never a supported path.
+                std.debug.assert(m.cells.values.len == 0 and m.cells.defined.len == 0);
+                m.cells.values = try memory.allocator.alloc(u64, m.cells.wordCount());
+                @memset(m.cells.values, 0);
+                m.cells.defined = try memory.allocator.alloc(u64, m.cells.wordCount());
+                @memset(m.cells.defined, 0);
+            },
+            else => {},
+        }
         // Allocate the state slot before the component is published to
         // `nodes`, so `deinit` (which never sees an in-flight component)
         // does not have to special-case the half-constructed state.
@@ -719,6 +867,17 @@ pub const Circuit = struct {
                     try c.operands.append(memory.allocator, fromComponent);
                 }
                 c.operands.items[idx] = fromComponent;
+            },
+            .memory => |m| {
+                if (std.mem.eql(u8, toPort, ADDR_PORT_NAME)) {
+                    m.addr = fromComponent;
+                } else if (m.mode == .ram and std.mem.eql(u8, toPort, DIN_PORT_NAME)) {
+                    m.din = fromComponent;
+                } else if (m.mode == .ram and std.mem.eql(u8, toPort, WE_PORT_NAME)) {
+                    m.we = fromComponent;
+                } else if (m.mode == .ram and std.mem.eql(u8, toPort, CLK_PORT_NAME)) {
+                    m.clk = fromComponent;
+                } else return error.InvalidInputPort;
             },
         }
     }
@@ -823,6 +982,71 @@ pub const Circuit = struct {
         });
 
         try self.propagate();
+    }
+
+    // ------------------------------------------------------------------
+    // Host memory hooks. Called between drives, when the event queue is
+    // empty (true after every propagateEvent/propagate return). Each
+    // mutator ends in memoryRefresh so `out` follows the cells; the
+    // planes are reached only through these and memoryCells.
+    // ------------------------------------------------------------------
+
+    fn memoryPayload(comp: *Component) MemoryError!*MemoryState {
+        return switch (comp.kind) {
+            .memory => |m| m,
+            else => error.NotAMemory,
+        };
+    }
+
+    /// Re-present `out` after the cells changed. Guarded by the same
+    /// predicate as Phase 1's dedup: an unconditional propagateEvent would
+    /// advance current_time even when nothing changed (its short-circuit),
+    /// and a looser compare would enqueue an event that propagate() dedups
+    /// only after current_time was already moved.
+    fn memoryRefresh(self: *Circuit, comp: *Component) !void {
+        std.debug.assert(self.event_queue.peek() == null);
+        const next = memoryReadOut(self, comp);
+        if (!self.readState(comp.state_handle).equals(next)) try self.propagateEvent(comp, next);
+    }
+
+    /// Write one word, canonicalised to the data width like Pool.write.
+    pub fn memoryWriteWord(self: *Circuit, comp: *Component, addr: usize, state: BitVecState) !void {
+        const m = try memoryPayload(comp);
+        if (addr >= m.cells.wordCount()) return error.AddressOutOfRange;
+        const mask = widthMask(comp.state_handle.tier);
+        m.cells.defined[addr] = state.defined & mask;
+        m.cells.values[addr] = state.value & state.defined & mask;
+        try self.memoryRefresh(comp);
+    }
+
+    /// Every cell becomes undefined.
+    pub fn memoryClear(self: *Circuit, comp: *Component) !void {
+        const m = try memoryPayload(comp);
+        @memset(m.cells.values, 0);
+        @memset(m.cells.defined, 0);
+        try self.memoryRefresh(comp);
+    }
+
+    /// Replace every cell from a raw image (see memimage). A rejected image
+    /// leaves the cells and `out` untouched. Returns the words loaded.
+    pub fn memoryLoadImage(self: *Circuit, comp: *Component, bytes: []const u8) !usize {
+        const m = try memoryPayload(comp);
+        const words = try memimage.decode(bytes, comp.state_handle.tier, m.cells.addr_width, m.cells.values, m.cells.defined);
+        try self.memoryRefresh(comp);
+        return words;
+    }
+
+    /// Export every cell as a raw image (`value & defined`). `buf` must hold
+    /// a full image; returns the bytes written.
+    pub fn memoryStoreImage(self: *const Circuit, comp: *const Component, buf: []u8) MemoryError!usize {
+        _ = self;
+        const m = switch (comp.kind) {
+            .memory => |m| m,
+            else => return error.NotAMemory,
+        };
+        const width = comp.state_handle.tier;
+        if (buf.len < memimage.maxImageSize(width, m.cells.addr_width)) return error.BufferTooSmall;
+        return memimage.encode(m.cells.values, m.cells.defined, width, buf);
     }
 
     pub fn printState(self: *Circuit) void {
@@ -1918,11 +2142,13 @@ test "engine: width-2 slice from a width-4 source extracts bits [1..3)" {
     // Undefined source bits propagate undefined into the slice output at
     // the corresponding output positions.
     //   src value=0b0110, defined=0b1011 (bit 2 undef) → slice[1..3)
-    //   output value=(0b0110 >> 1) & 0b11 = 0b11 & 0b11 = 0b11
+    //   raw shift gives (0b0110 >> 1) & 0b11 = 0b11, but the pool
+    //   canonicalises `value & defined` on write (Pool.write), so the
+    //   committed value is 0b11 & 0b01 = 0b01
     //   output defined=(0b1011 >> 1) & 0b11 = 0b101 & 0b11 = 0b01
     try circuit.propagateEvent(input, BitVecState{ .value = 0b0110, .defined = 0b1011, .width = 4 });
     result = circuit.readState(out.state_handle);
-    try std.testing.expectEqual(@as(u64, 0b11), result.value);
+    try std.testing.expectEqual(@as(u64, 0b01), result.value);
     try std.testing.expectEqual(@as(u64, 0b01), result.defined);
 }
 
@@ -2084,4 +2310,489 @@ test "memory.reset frees the arena and the allocator stays usable" {
     try circuit.propagateEvent(a, BitVecState.high(1));
     try circuit.propagateEvent(b, BitVecState.high(1));
     try std.testing.expect(circuit.readState(g.state_handle).equals(BitVecState.high(1)));
+}
+
+// ============================================================================
+// Memory tests. The kind, plane allocation, connect policy, and the
+// asynchronous read; the RAM write path and the host hooks have their own
+// sections below once they land.
+// ============================================================================
+
+fn romKind(addr_width: u8) !Component.Kind {
+    return memoryKind(.rom, addr_width);
+}
+
+fn ramKind(addr_width: u8) !Component.Kind {
+    return memoryKind(.ram, addr_width);
+}
+
+// Fills every cell with its own index, fully defined.
+fn fillCellsWithIndex(mem: *Component) void {
+    const cells = &mem.kind.memory.cells;
+    const mask = widthMask(mem.state_handle.tier);
+    for (cells.values, cells.defined, 0..) |*value, *defined, i| {
+        value.* = @as(u64, @intCast(i)) & mask;
+        defined.* = mask;
+    }
+}
+
+test "memory: unloaded cells read undefined" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    const addr = try circuit.createComponent(.{ .input_pin_gate = .{} }, 4);
+    const rom = try circuit.createComponent(try romKind(4), 8);
+    try circuit.connect(addr.port(OUT_PORT_NAME), rom.port(ADDR_PORT_NAME));
+
+    try circuit.propagateEvent(addr, BitVecState.fromRaw(3, 0xF, 4));
+    try std.testing.expect(circuit.readState(rom.state_handle).equals(BitVecState.undefined_(8)));
+    try std.testing.expectEqual(@as(u64, 0), memoryCells(rom).?.defined[3]);
+    try std.testing.expectEqual(@as(usize, 16), memoryCells(rom).?.wordCount());
+}
+
+test "memory: async read through undefined addr" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    const addr = try circuit.createComponent(.{ .input_pin_gate = .{} }, 4);
+    const rom = try circuit.createComponent(try romKind(4), 8);
+    const out = try circuit.createComponent(.{ .output_pin = .{} }, 8);
+    try circuit.connect(addr.port(OUT_PORT_NAME), rom.port(ADDR_PORT_NAME));
+    try circuit.connect(rom.port(OUT_PORT_NAME), out.port(OUTPUT_PIN_IN_PORT_NAME));
+    fillCellsWithIndex(rom);
+
+    try circuit.propagateEvent(addr, BitVecState.fromRaw(3, 0xF, 4));
+    try std.testing.expect(circuit.readState(rom.state_handle).equals(BitVecState.fromRaw(3, 0xFF, 8)));
+    try std.testing.expect(circuit.readState(out.state_handle).equals(BitVecState.fromRaw(3, 0xFF, 8)));
+
+    // Bit 3 of the address undefined: the whole word is undefined.
+    try circuit.propagateEvent(addr, BitVecState.fromRaw(3, 0b0111, 4));
+    try std.testing.expect(circuit.readState(rom.state_handle).equals(BitVecState.undefined_(8)));
+    try std.testing.expect(circuit.readState(out.state_handle).equals(BitVecState.undefined_(8)));
+
+    try circuit.propagateEvent(addr, BitVecState.fromRaw(5, 0xF, 4));
+    try std.testing.expect(circuit.readState(out.state_handle).equals(BitVecState.fromRaw(5, 0xFF, 8)));
+}
+
+test "memory: connect policy per mode" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    const src = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const rom = try circuit.createComponent(try romKind(2), 8);
+    const ram = try circuit.createComponent(try ramKind(2), 8);
+
+    try circuit.connect(src.port(OUT_PORT_NAME), rom.port(ADDR_PORT_NAME));
+    for ([_][]const u8{ DIN_PORT_NAME, WE_PORT_NAME, CLK_PORT_NAME, IN_PORT_NAME }) |port_name| {
+        try std.testing.expectError(error.InvalidInputPort, circuit.connect(src.port(OUT_PORT_NAME), rom.port(port_name)));
+    }
+    try std.testing.expect(rom.kind.memory.din == null);
+
+    for ([_][]const u8{ ADDR_PORT_NAME, DIN_PORT_NAME, WE_PORT_NAME, CLK_PORT_NAME }) |port_name| {
+        try circuit.connect(src.port(OUT_PORT_NAME), ram.port(port_name));
+    }
+    try std.testing.expect(ram.kind.memory.addr == src and ram.kind.memory.clk == src);
+    for ([_][]const u8{ IN_PORT_NAME, A_PORT_NAME, B_PORT_NAME }) |port_name| {
+        try std.testing.expectError(error.InvalidInputPort, circuit.connect(src.port(OUT_PORT_NAME), ram.port(port_name)));
+    }
+
+    const unwired = try circuit.createComponent(try romKind(2), 8);
+    try std.testing.expect(memoryReadOut(&circuit, unwired).equals(BitVecState.undefined_(8)));
+    const wire = try circuit.createComponent(.{ .wire = .{} }, 1);
+    try std.testing.expect(memoryCells(wire) == null);
+}
+
+test "memory: createComponent rejects addr_width out of range" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    try std.testing.expectError(error.InvalidAddrWidth, circuit.createComponent(try romKind(0), 8));
+    try std.testing.expectError(error.InvalidAddrWidth, circuit.createComponent(try romKind(17), 8));
+
+    const narrow = try circuit.createComponent(try romKind(1), 8);
+    try std.testing.expectEqual(@as(usize, 2), narrow.kind.memory.cells.values.len);
+    try std.testing.expectEqual(@as(usize, 2), narrow.kind.memory.cells.defined.len);
+
+    const wide = try circuit.createComponent(try ramKind(16), 8);
+    const cells = memoryCells(wide).?;
+    try std.testing.expectEqual(@as(usize, 65536), cells.values.len);
+    try std.testing.expectEqual(@as(usize, 65536), cells.defined.len);
+    for (cells.values, cells.defined) |value, defined| {
+        try std.testing.expectEqual(@as(u64, 0), value);
+        try std.testing.expectEqual(@as(u64, 0), defined);
+    }
+}
+
+test "memory: delay class is gate delay" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    const addr = try circuit.createComponent(.{ .input_pin_gate = .{} }, 2);
+    const rom = try circuit.createComponent(try romKind(2), 4);
+    try circuit.connect(addr.port(OUT_PORT_NAME), rom.port(ADDR_PORT_NAME));
+    fillCellsWithIndex(rom);
+
+    // The input event commits at +PROPAGATION_DELAY, the rom's re-evaluation
+    // lands one gate delay later: a wire-class memory would settle at +6.
+    try circuit.propagateEvent(addr, BitVecState.fromRaw(1, 0x3, 2));
+    try std.testing.expectEqual(@as(Timestamp, 2 * PROPAGATION_DELAY), circuit.current_time);
+    try std.testing.expect(circuit.readState(rom.state_handle).equals(BitVecState.fromRaw(1, 0xF, 4)));
+}
+
+// ----------------------------------------------------------------------------
+// RAM rising-edge write.
+// ----------------------------------------------------------------------------
+
+const RamHarness = struct {
+    circuit: Circuit,
+    addr: *Component,
+    din: *Component,
+    we: *Component,
+    clk: *Component,
+    ram: *Component,
+
+    /// A ram [W, A] with one input pin per port; `we_width` lets a test
+    /// drive the control port from a wider signal.
+    fn init(data_width: u8, addr_width: u8, we_width: u8) !RamHarness {
+        var circuit = try Circuit.init();
+        errdefer circuit.deinit();
+        const addr = try circuit.createComponent(.{ .input_pin_gate = .{} }, addr_width);
+        const din = try circuit.createComponent(.{ .input_pin_gate = .{} }, data_width);
+        const we = try circuit.createComponent(.{ .input_pin_gate = .{} }, we_width);
+        const clk = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+        const ram = try circuit.createComponent(try ramKind(addr_width), data_width);
+        try circuit.connect(addr.port(OUT_PORT_NAME), ram.port(ADDR_PORT_NAME));
+        try circuit.connect(din.port(OUT_PORT_NAME), ram.port(DIN_PORT_NAME));
+        try circuit.connect(we.port(OUT_PORT_NAME), ram.port(WE_PORT_NAME));
+        try circuit.connect(clk.port(OUT_PORT_NAME), ram.port(CLK_PORT_NAME));
+        return .{ .circuit = circuit, .addr = addr, .din = din, .we = we, .clk = clk, .ram = ram };
+    }
+
+    fn deinit(self: *RamHarness) void {
+        self.circuit.deinit();
+    }
+
+    fn drive(self: *RamHarness, pin: *Component, value: u64, defined: u64) !void {
+        try self.circuit.propagateEvent(pin, BitVecState.fromRaw(value, defined, pin.state_handle.tier));
+    }
+
+    fn pulseClock(self: *RamHarness) !void {
+        try self.drive(self.clk, 0, 1);
+        try self.drive(self.clk, 1, 1);
+    }
+
+    fn cell(self: *const RamHarness, index: usize) BitVecState {
+        const cells = memoryCells(self.ram).?;
+        return .{ .value = cells.values[index], .defined = cells.defined[index], .width = self.ram.state_handle.tier };
+    }
+
+    fn expectAllUndefined(self: *const RamHarness) !void {
+        for (memoryCells(self.ram).?.defined) |defined| try std.testing.expectEqual(@as(u64, 0), defined);
+    }
+};
+
+test "ram: writes only on defined-low to defined-high" {
+    var h = try RamHarness.init(8, 2, 1);
+    defer h.deinit();
+    try h.drive(h.we, 1, 1);
+    try h.drive(h.addr, 1, 0b11);
+    try h.drive(h.din, 0xAB, 0xFF);
+
+    // clk undefined -> high is not an edge.
+    try h.drive(h.clk, 1, 1);
+    try h.expectAllUndefined();
+
+    // A defined low -> high transition commits the write.
+    try h.pulseClock();
+    try std.testing.expect(h.cell(1).equals(BitVecState.fromRaw(0xAB, 0xFF, 8)));
+    try std.testing.expect(h.circuit.readState(h.ram.state_handle).equals(BitVecState.fromRaw(0xAB, 0xFF, 8)));
+}
+
+test "ram: requires we high and fully defined addr" {
+    var h = try RamHarness.init(8, 2, 1);
+    defer h.deinit();
+    try h.drive(h.addr, 1, 0b11);
+    try h.drive(h.din, 0xAB, 0xFF);
+
+    try h.drive(h.we, 0, 1);
+    try h.pulseClock();
+    try h.expectAllUndefined();
+
+    try h.drive(h.we, 0, 0);
+    try h.pulseClock();
+    try h.expectAllUndefined();
+
+    try h.drive(h.we, 1, 1);
+    try h.drive(h.addr, 1, 0b01);
+    try h.pulseClock();
+    try h.expectAllUndefined();
+}
+
+test "ram: same-step din is captured" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    // One input drives both clk and din, so the ram is recalculated twice
+    // in the step where x rises and the din commit is same-timestamp.
+    const x = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const we = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const addr = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const ram = try circuit.createComponent(try ramKind(1), 1);
+    try circuit.connect(x.port(OUT_PORT_NAME), ram.port(CLK_PORT_NAME));
+    try circuit.connect(x.port(OUT_PORT_NAME), ram.port(DIN_PORT_NAME));
+    try circuit.connect(we.port(OUT_PORT_NAME), ram.port(WE_PORT_NAME));
+    try circuit.connect(addr.port(OUT_PORT_NAME), ram.port(ADDR_PORT_NAME));
+
+    try circuit.propagateEvent(we, BitVecState.fromRaw(1, 1, 1));
+    try circuit.propagateEvent(addr, BitVecState.fromRaw(0, 1, 1));
+    try circuit.propagateEvent(x, BitVecState.fromRaw(0, 1, 1));
+    try std.testing.expectEqual(@as(u64, 0), memoryCells(ram).?.defined[0]);
+
+    try circuit.propagateEvent(x, BitVecState.fromRaw(1, 1, 1));
+    try std.testing.expectEqual(@as(u64, 1), memoryCells(ram).?.values[0]);
+    try std.testing.expectEqual(@as(u64, 1), memoryCells(ram).?.defined[0]);
+}
+
+test "ram: no double fire when clk and din change together" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+
+    const x = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const we = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const addr = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const ram = try circuit.createComponent(try ramKind(1), 1);
+    try circuit.connect(x.port(OUT_PORT_NAME), ram.port(CLK_PORT_NAME));
+    try circuit.connect(x.port(OUT_PORT_NAME), ram.port(DIN_PORT_NAME));
+    try circuit.connect(we.port(OUT_PORT_NAME), ram.port(WE_PORT_NAME));
+    try circuit.connect(addr.port(OUT_PORT_NAME), ram.port(ADDR_PORT_NAME));
+
+    try circuit.propagateEvent(we, BitVecState.fromRaw(1, 1, 1));
+    try circuit.propagateEvent(addr, BitVecState.fromRaw(0, 1, 1));
+    try circuit.propagateEvent(x, BitVecState.fromRaw(0, 1, 1));
+    try circuit.propagateEvent(x, BitVecState.fromRaw(1, 1, 1));
+
+    // The first of the two recalcs consumed the edge; prev_clk already
+    // equals the committed clk level.
+    try std.testing.expect(ram.kind.memory.prev_clk.equals(circuit.readState(x.state_handle)));
+    try std.testing.expectEqual(@as(u64, 1), memoryCells(ram).?.values[0]);
+
+    // Every later recalc while clk stays high sees prev == now.
+    try circuit.propagateEvent(we, BitVecState.fromRaw(0, 1, 1));
+    try circuit.propagateEvent(we, BitVecState.fromRaw(1, 1, 1));
+    try std.testing.expectEqual(@as(u64, 1), memoryCells(ram).?.values[0]);
+    try std.testing.expectEqual(@as(u64, 1), memoryCells(ram).?.defined[0]);
+    try std.testing.expectEqual(@as(u64, 0), memoryCells(ram).?.defined[1]);
+}
+
+test "ram: level changes while clk high do not write" {
+    var h = try RamHarness.init(8, 2, 1);
+    defer h.deinit();
+    try h.drive(h.addr, 2, 0b11);
+    try h.drive(h.din, 0x5A, 0xFF);
+
+    try h.drive(h.we, 0, 1);
+    try h.pulseClock();
+    try h.expectAllUndefined();
+
+    // we rises while clk is already high: no edge, no write.
+    try h.drive(h.we, 1, 1);
+    try h.expectAllUndefined();
+
+    try h.pulseClock();
+    try std.testing.expect(h.cell(2).equals(BitVecState.fromRaw(0x5A, 0xFF, 8)));
+}
+
+test "ram: partial-X din stored as-is" {
+    var h = try RamHarness.init(8, 2, 1);
+    defer h.deinit();
+    try h.drive(h.we, 1, 1);
+    try h.drive(h.addr, 3, 0b11);
+    try h.drive(h.din, 0b1010, 0b1111_0000);
+    try h.pulseClock();
+
+    const cells = memoryCells(h.ram).?;
+    try std.testing.expectEqual(@as(u64, 0xF0), cells.defined[3]);
+    try std.testing.expectEqual(@as(u64, 0x00), cells.values[3]);
+    try std.testing.expect(h.circuit.readState(h.ram.state_handle).equals(BitVecState.fromRaw(0x00, 0xF0, 8)));
+}
+
+test "ram: width-agnostic we/clk bit test" {
+    var h = try RamHarness.init(8, 2, 4);
+    defer h.deinit();
+    try h.drive(h.addr, 0, 0b11);
+    try h.drive(h.din, 0x11, 0xFF);
+
+    // Bit 0 of a width-4 we decides; the upper bits are ignored.
+    try h.drive(h.we, 0b1110, 0xF);
+    try h.pulseClock();
+    try h.expectAllUndefined();
+
+    try h.drive(h.we, 0b0001, 0xF);
+    try h.pulseClock();
+    try std.testing.expect(h.cell(0).equals(BitVecState.fromRaw(0x11, 0xFF, 8)));
+}
+
+// ----------------------------------------------------------------------------
+// Host memory hooks.
+// ----------------------------------------------------------------------------
+
+const RomHarness = struct {
+    circuit: Circuit,
+    addr: *Component,
+    rom: *Component,
+    out: *Component,
+
+    /// A rom [8, 4] fed by a width-4 input pin and driving an output pin.
+    fn init() !RomHarness {
+        var circuit = try Circuit.init();
+        errdefer circuit.deinit();
+        const addr = try circuit.createComponent(.{ .input_pin_gate = .{} }, 4);
+        const rom = try circuit.createComponent(try romKind(4), 8);
+        const out = try circuit.createComponent(.{ .output_pin = .{} }, 8);
+        try circuit.connect(addr.port(OUT_PORT_NAME), rom.port(ADDR_PORT_NAME));
+        try circuit.connect(rom.port(OUT_PORT_NAME), out.port(OUTPUT_PIN_IN_PORT_NAME));
+        return .{ .circuit = circuit, .addr = addr, .rom = rom, .out = out };
+    }
+
+    fn deinit(self: *RomHarness) void {
+        self.circuit.deinit();
+    }
+
+    fn present(self: *RomHarness, address: u64) !void {
+        try self.circuit.propagateEvent(self.addr, BitVecState.fromRaw(address, 0xF, 4));
+    }
+
+    fn outState(self: *const RomHarness) BitVecState {
+        return self.circuit.readState(self.out.state_handle);
+    }
+};
+
+// Bytes 0..15 as a full [8, 4] image.
+const identity_image = blk: {
+    var image: [16]u8 = undefined;
+    for (&image, 0..) |*byte, i| byte.* = @intCast(i);
+    break :blk image;
+};
+
+test "memory: host write to presented address resyncs out" {
+    var h = try RomHarness.init();
+    defer h.deinit();
+    try h.present(2);
+    try std.testing.expect(h.outState().equals(BitVecState.undefined_(8)));
+
+    const before = h.circuit.current_time;
+    try h.circuit.memoryWriteWord(h.rom, 2, BitVecState.fromRaw(0x5A, 0xFF, 8));
+    try std.testing.expect(h.circuit.readState(h.rom.state_handle).equals(BitVecState.fromRaw(0x5A, 0xFF, 8)));
+    try std.testing.expect(h.outState().equals(BitVecState.fromRaw(0x5A, 0xFF, 8)));
+    try std.testing.expectEqual(before + PROPAGATION_DELAY + WIRE_PROPAGATION_DELAY, h.circuit.current_time);
+}
+
+test "memory: no-op refresh does not bump current_time" {
+    var h = try RomHarness.init();
+    defer h.deinit();
+    _ = try h.circuit.memoryLoadImage(h.rom, &identity_image);
+    try h.present(2);
+    const before = h.circuit.current_time;
+
+    // A cell that is not presented.
+    try h.circuit.memoryWriteWord(h.rom, 7, BitVecState.fromRaw(0x77, 0xFF, 8));
+    try std.testing.expectEqual(before, h.circuit.current_time);
+    // An image whose presented word is unchanged.
+    _ = try h.circuit.memoryLoadImage(h.rom, &identity_image);
+    try std.testing.expectEqual(before, h.circuit.current_time);
+    // The presented cell rewritten with its current value.
+    try h.circuit.memoryWriteWord(h.rom, 2, BitVecState.fromRaw(2, 0xFF, 8));
+    try std.testing.expectEqual(before, h.circuit.current_time);
+
+    try std.testing.expect(h.circuit.event_queue.peek() == null);
+    try std.testing.expect(h.outState().equals(BitVecState.fromRaw(2, 0xFF, 8)));
+}
+
+test "memory: load image replaces all cells and resyncs" {
+    var h = try RomHarness.init();
+    defer h.deinit();
+    try std.testing.expectEqual(@as(usize, 16), try h.circuit.memoryLoadImage(h.rom, &identity_image));
+    try h.present(9);
+    try std.testing.expect(h.outState().equals(BitVecState.fromRaw(9, 0xFF, 8)));
+
+    const before = h.circuit.current_time;
+    try std.testing.expectEqual(@as(usize, 4), try h.circuit.memoryLoadImage(h.rom, identity_image[0..4]));
+    const cells = memoryCells(h.rom).?;
+    for (cells.defined[0..4]) |defined| try std.testing.expectEqual(@as(u64, 0xFF), defined);
+    for (cells.defined[4..]) |defined| try std.testing.expectEqual(@as(u64, 0), defined);
+    try std.testing.expect(h.outState().equals(BitVecState.undefined_(8)));
+    try std.testing.expectEqual(before + PROPAGATION_DELAY + WIRE_PROPAGATION_DELAY, h.circuit.current_time);
+
+    // An empty image is a clear.
+    _ = try h.circuit.memoryLoadImage(h.rom, &identity_image);
+    try std.testing.expectEqual(@as(usize, 0), try h.circuit.memoryLoadImage(h.rom, &.{}));
+    for (cells.defined) |defined| try std.testing.expectEqual(@as(u64, 0), defined);
+}
+
+test "memory: failed load leaves cells untouched" {
+    var h = try RomHarness.init();
+    defer h.deinit();
+    _ = try h.circuit.memoryLoadImage(h.rom, &identity_image);
+    try h.present(3);
+    const before = h.circuit.current_time;
+
+    const oversized = [_]u8{0xAA} ** 17;
+    try std.testing.expectError(error.TooManyWords, h.circuit.memoryLoadImage(h.rom, &oversized));
+    const cells = memoryCells(h.rom).?;
+    for (cells.values, cells.defined, 0..) |value, defined, i| {
+        try std.testing.expectEqual(@as(u64, @intCast(i)), value);
+        try std.testing.expectEqual(@as(u64, 0xFF), defined);
+    }
+    try std.testing.expectEqual(before, h.circuit.current_time);
+    try std.testing.expect(h.outState().equals(BitVecState.fromRaw(3, 0xFF, 8)));
+}
+
+test "memory: store writes value & defined" {
+    var h = try RomHarness.init();
+    defer h.deinit();
+    try h.circuit.memoryWriteWord(h.rom, 1, BitVecState.fromRaw(0x5A, 0xFF, 8));
+    try h.circuit.memoryWriteWord(h.rom, 2, BitVecState.fromRaw(0xFF, 0x0F, 8));
+
+    var buf: [16]u8 = undefined;
+    try std.testing.expectEqual(@as(usize, 16), try h.circuit.memoryStoreImage(h.rom, &buf));
+    try std.testing.expectEqual(@as(u8, 0x00), buf[0]);
+    try std.testing.expectEqual(@as(u8, 0x5A), buf[1]);
+    try std.testing.expectEqual(@as(u8, 0x0F), buf[2]);
+
+    var short: [15]u8 = undefined;
+    try std.testing.expectError(error.BufferTooSmall, h.circuit.memoryStoreImage(h.rom, &short));
+}
+
+test "memory: clear undefines every cell" {
+    var h = try RomHarness.init();
+    defer h.deinit();
+    _ = try h.circuit.memoryLoadImage(h.rom, &identity_image);
+    try h.present(9);
+    const before = h.circuit.current_time;
+
+    try h.circuit.memoryClear(h.rom);
+    const cells = memoryCells(h.rom).?;
+    for (cells.values, cells.defined) |value, defined| {
+        try std.testing.expectEqual(@as(u64, 0), value);
+        try std.testing.expectEqual(@as(u64, 0), defined);
+    }
+    try std.testing.expect(h.outState().equals(BitVecState.undefined_(8)));
+    try std.testing.expectEqual(before + PROPAGATION_DELAY + WIRE_PROPAGATION_DELAY, h.circuit.current_time);
+}
+
+test "memory: hooks reject non-memory and out-of-range" {
+    var h = try RomHarness.init();
+    defer h.deinit();
+    const wire = try h.circuit.createComponent(.{ .wire = .{} }, 8);
+    var buf: [16]u8 = undefined;
+
+    try std.testing.expectError(error.NotAMemory, h.circuit.memoryWriteWord(wire, 0, BitVecState.fromRaw(1, 0xFF, 8)));
+    try std.testing.expectError(error.NotAMemory, h.circuit.memoryClear(wire));
+    try std.testing.expectError(error.NotAMemory, h.circuit.memoryLoadImage(wire, &identity_image));
+    try std.testing.expectError(error.NotAMemory, h.circuit.memoryStoreImage(wire, &buf));
+
+    _ = try h.circuit.memoryLoadImage(h.rom, &identity_image);
+    try std.testing.expectError(error.AddressOutOfRange, h.circuit.memoryWriteWord(h.rom, 16, BitVecState.fromRaw(1, 0xFF, 8)));
+    const cells = memoryCells(h.rom).?;
+    for (cells.values, 0..) |value, i| try std.testing.expectEqual(@as(u64, @intCast(i)), value);
 }

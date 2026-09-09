@@ -1,0 +1,15 @@
+ready proto=1 pins=5 warnings=0
+pin a in 4
+pin d in 8
+pin w in 1
+pin clk in 1
+pin q out 8
+err E_NOMEM nosuch
+err E_IO tests/fixtures/mem/does_not_exist.bin: FileNotFound
+err E_MEMFMT tests/fixtures/mem/too_many_words.bin: 17 words exceed capacity 16
+err E_ADDR data 0x10
+err E_WIDTH data
+err E_NOPIN data
+err E_NOPIN data
+err E_PROTO malformed command
+ok bye
