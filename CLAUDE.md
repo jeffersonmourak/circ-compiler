@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this project is
 
-`circ-compiler` is a one-shot compiler. It takes a `.circ` digital-logic source (plus any siblings it imports) and emits a self-contained `.wasm` artifact whose exports simulate that exact circuit. The compiler is pure Zig (the parser is a langlang-generated Zig file, `lib/parser/parser.zig`, vendored); there is no runtime SDK, no rendering layer, and no JavaScript in the build. Every compiled `.wasm` carries a vendored prebuilt runtime plus two custom sections (`circ.topology.v0.min`, `circ.topology.v0.full`) and exposes a fixed pull-based API: `topology_alloc`, `init`, `run`, `setPin(id, value, defined)`, `getOutputValue(id)`, `getOutputDefined(id)`. The two getters return paired `BitVecState` halves crossed as `i64`/`BigInt`.
+`circ-compiler` is a one-shot compiler. It takes a `.circ` digital-logic source (plus any siblings it imports) and emits a self-contained `.wasm` artifact whose exports simulate that exact circuit. The compiler is pure Zig (the parser is `lib/parser/parser.zig`, generated from `lib/grammar/proto-circ.peg` by the maintainer's langlang fork and vendored); it also builds as a library — `zig build libcirc` (`libcirc.a` + `include/libcirc.h`) and `zig build libcirc-wasm` (`libcirc.wasm`, the module behind the site's `/playground`). There is no runtime SDK, no rendering layer, and no JavaScript in the build. Every compiled `.wasm` carries a vendored prebuilt runtime plus two custom sections (`circ.topology.v0.min`, `circ.topology.v0.full`) and exposes a fixed pull-based API: `topology_alloc`, `init`, `run`, `setPin(id, value, defined)`, `getOutputValue(id)`, `getOutputDefined(id)`. The two getters return paired `BitVecState` halves crossed as `i64`/`BigInt`.
 
 ## Analysis philosophy
 
@@ -21,8 +21,8 @@ confident summary.
 ## Toolchain prerequisites
 
 - Zig 0.15.x.
-- Node on `PATH` for the behavioral WASM harness in `zig build test`.
-- langlang is only needed if you regenerate `lib/parser/parser.zig` from `lib/grammar/proto-circ.peg`. circ uses the maintainer's fork, which adds `-output-language zig` on top of upstream `go/v0.0.12`: `go install github.com/jeffersonmourak/langlang/go/cmd/langlang@v0.0.13-zig.2` (branch head: `@zig-parser-gen`; source and docs at https://github.com/jeffersonmourak/langlang, `go/zig/README.md`). Check with `langlang -version`; `zig build parser:gen` refuses any other version.
+- Node on `PATH` for the behavioral WASM harnesses in `zig build test` (including `tests/e2e/libcirc_wasm_test.zig`).
+- langlang is only needed if you regenerate `lib/parser/parser.zig` from `lib/grammar/proto-circ.peg`. circ uses the maintainer's fork, which adds `-output-language zig` on top of upstream `go/v0.0.12`: `go install github.com/jeffersonmourak/langlang/go/cmd/langlang@v0.0.13-zig.2` (branch head: `@zig-parser-gen`; source and docs at https://github.com/jeffersonmourak/langlang, `go/zig/README.md`). Check with `langlang -version` (`Version: v0.0.13-zig.2 (github.com/jeffersonmourak/langlang/go)`); `zig build parser:gen` refuses any other version.
 
 ## Build and test commands
 
@@ -34,7 +34,7 @@ confident summary.
 | `zig build test-emit` | Emit-zig backend behavioral smoke (`tests/emit/{behavior,project_behavior}_test.zig`). Slow: every fixture spawns a nested `zig build wasm`. Guards the experimental `--emit-zig` pipeline only. |
 | `zig build test-all` | `test` + `test-emit`. The full gate CI runs (see `.github/workflows/pr-tests.yml`). |
 | `zig build bench` | Engine benchmark over the truth-table fixture corpus, compared against `tests/fixtures/bench/engine.bench.golden`. Counters are asserted; wall-clock is not. |
-| `zig build parser:gen` | Regenerates `lib/parser/parser.zig` from `lib/grammar/proto-circ.peg`. Only when the grammar changes; requires the langlang fork (`v0.0.13-zig.2`) on `PATH`, and the step refuses any other version. |
+| `zig build parser:gen` | Regenerates `lib/parser/parser.zig` from `lib/grammar/proto-circ.peg`. Only when the grammar changes; requires the langlang fork (`v0.0.13-zig.2`) on `PATH`, and the step refuses any other version (upstream `go/v0.0.12` fails with `Output language \`zig\` not supported`). |
 | `zig build e2e-linux-docker` | Runs `tests/e2e/linux-docker/run.sh`. Requires Docker. |
 | `zig build libcirc` | Builds the compiler front end as a static C library: `zig-out/lib/libcirc.a` + `zig-out/include/libcirc.h` (see `DOCS/libcirc-api.md`). |
 | `zig build libcirc-smoke` | Compiles `examples/c/analyze.c` against `libcirc.a` and runs it. |
@@ -72,8 +72,8 @@ Hard errors block emission; partial or "best-effort" artifacts are never produce
 .circ source
      │
      ▼
-[lib/syntax + lib/parser]   PEG parser (vendored Zig, generated from
-                            lib/grammar/proto-circ.peg) → Zig AST
+[lib/syntax + lib/parser]   langlang-generated Zig parser (lib/parser/parser.zig,
+                            vendored; generated from lib/grammar/proto-circ.peg) → Zig AST
      │
      ▼
 [lib/resolver]              scan_imports → import_cycle → resolve_bodies.
@@ -118,7 +118,7 @@ Facts that materially shape edits:
 3. **The WASM boundary uses `BitVecState` directly, not the scalar `toInt` encoding.** `setPin(id, value, defined)` and the paired `getOutputValue`/`getOutputDefined` exports cross `(value, defined)` as `i64`/`BigInt`. The legacy width-1 helpers (`toInt`: `low=0, high=1, undefined=2`; `toTransportByte`: enum order `undefined=0, low=1, high=2`) still exist as convenience mirrors for tests and `lib/transport.zig`, but neither is on the host-facing API path anymore.
 4. **Propagation is per-timestamp batched.** `propagate()` drains every event at the current timestamp `T` in Phase 1 (commit state, collect changed), then in Phase 2 walks the outputs of changed components, recalculating and rescheduling. Without that batching, a downstream gate with multiple upstream events at the same `T` can read partial state, dedup the corrective re-enqueue, and stick on the wrong final value. See `DOCS/simulation-engine.md` for the full rationale.
 5. **Delays are compile-time constants:** `PROPAGATION_DELAY = 5`, `WIRE_PROPAGATION_DELAY = 1`. `wire`, `output_pin`, `led`, `slice`, and `concat` use the wire delay; everything else uses the gate delay.
-6. **The allocator is global, not parameterised.** Allocations route through `memory.allocator` from `lib/memory.zig`. On WASM that is `std.heap.wasm_allocator`; on native (test builds) it is a `GeneralPurposeAllocator`. Do not add an allocator parameter to engine functions.
+6. **The allocator is global, not parameterised.** Allocations route through `memory.allocator` from `lib/memory.zig`, an `ArenaAllocator` over `page_allocator` on every target, so `free` only rewinds when the arena is reset. `memory.reset()` (`arena.reset(.free_all)`) exists for libcirc and is called only with no `Circuit`/`Session` alive. Do not add an allocator parameter to engine functions.
 7. **Widths 1 through 64 are wired; pool tiers are lazily allocated per width.** Each tier indexes a separate SoA pool (`tier == width`; tier 0 is unused). `PoolHandle.tier`/`.slot` make every read/write a single dispatch followed by a direct bitmap op against the tier's `(values, defined)` u64 buffers. The width=1 tier packs 64 slots per word; wider tiers store one u64 per slot. Widths > 64 trap at allocation time. The historical roll-out lives in `DOCS/archive/plan-multi-bit-language.md`.
 
 `COLLECT_METRICS` is a compile-time switch wired by `build.zig` per consumer: `false` for native and WASM, `true` only for `zig build bench`. When false, `Circuit.metrics` is `void` and every counter bump is dead-code stripped, so production and test builds are byte-identical to a metrics-free engine.
@@ -214,10 +214,11 @@ A PR is an artifact landing on `main`, where stage and phase numbers have no mea
 ## Files worth knowing about
 
 - `cmd/circ-compile/main.zig`: CLI driver and mode dispatch; a client of `lib/libcirc.zig`.
-- `lib/libcirc.zig` (+ `lib/libcirc/{frontend,modes,json,c_api}.zig`): the front end as a library — one request in, the `.wasm`/preview/truth table/analysis out — and the `circ_*` C ABI over it. `build/frontend_modules.zig` creates the module graph both the CLI and the library share.
+- `lib/parser/parser.zig`: the generated parser (header, `pub const runtime`, `bytecode` tables, `Rule`, `Parser`). Never hand-edit; `zig build parser:gen` rewrites it.
+- `lib/libcirc.zig` (+ `lib/libcirc/{frontend,modes,json,c_api,wasm_root}.zig`): the front end as a library — one request in, the `.wasm`/preview/truth table/analysis out — and the `circ_*` C ABI over it. `build/frontend_modules.zig` creates the module graph both the CLI and the library share.
 - `lib/circuit.zig`: engine, propagation, gate evaluators.
 - `lib/topology/section_writer.zig`: the splice that turns a prebuilt runtime plus two blobs into a final `.wasm`.
 - `templates/main.zig`, `templates/interpreter.zig`: the runtime template embedded into every artifact.
 - `lib/resolver/builtin_circ/{or,nand,nor,xor,xnor}.circ`: macro source files for the five built-ins. `lib/resolver/builtins.zig` is the loader: it `@embedFile`s each `.circ` and exposes them via the `<builtin>/<name>.circ` virtual import path.
 - `tools/bench/main.zig`: bench harness; the fixture-to-circuit mapping is hand-maintained here.
-- `DOCS/architecture.md`, `DOCS/simulation-engine.md`, `DOCS/circuit-format.md`, `DOCS/wasm-api.md`: authoritative refs for the layers above.
+- `DOCS/architecture.md`, `DOCS/simulation-engine.md`, `DOCS/circuit-format.md`, `DOCS/wasm-api.md`, `DOCS/libcirc-api.md`: authoritative refs for the layers above.

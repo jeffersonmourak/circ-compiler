@@ -217,3 +217,11 @@ Append-only log, one entry per shipped slice. Newest at the bottom. See `DOCS/PL
 **Tests:** `grep -c "^### "` → `libcirc.md` 7, `tooling.md` 5; the stale-string sweep over `DOCS/decisions` returns only `tooling.md` lines inside the first entry (History and the cut-over decision); each of the four cross-linked files names `libcirc.md`.
 **Next slice:** Slice 3 — CLAUDE.md and README.
 **Notes:** The "renderer follows the compiler" entry is written for the topology-version step in general and names the v03 sync as the next instance, since that sync is deferred to the post-#79 rebase on this branch.
+
+## 2026-09-08 — Phase 5 — Slice 3: CLAUDE.md and README
+
+**What shipped:** `CLAUDE.md`: the project sentence names the generated parser and both library builds; the toolchain list names the harness that needs Node and the exact `langlang -version` line; the `parser:gen` row says what upstream fails with; the pipeline box reads "langlang-generated Zig parser (lib/parser/parser.zig, vendored; generated from lib/grammar/proto-circ.peg)"; invariant 6 describes the arena over `page_allocator` and `memory.reset()`; "Files worth knowing about" gains `lib/parser/parser.zig`, `wasm_root.zig`, and `DOCS/libcirc-api.md`. `README.md`: the opening paragraph mentions the library; Node joins the prerequisites (tests only); a "Library" section under Usage; the Documentation list gains `DOCS/libcirc-api.md`.
+**Files touched:** `CLAUDE.md`, `README.md`, `DOCS/STATUS.md`.
+**Tests:** `rg -n "CGo|parser\.a\b|CParser|go build|Go 1\.21|parser:archive|parser\.go|wasm_allocator|GeneralPurposeAllocator" CLAUDE.md README.md` is empty; `grep -n "zig build libcirc" CLAUDE.md README.md` finds both build commands in both; the CLAUDE.md build table has one `libcirc` row, one `libcirc-wasm` row and no `parser:archive` row.
+**Next slice:** Slice 4 — `DOCS/index.md`, `DOCS/architecture.md`, `DOCS/circuit-format.md` and the site mirror.
+**Notes:** None.
