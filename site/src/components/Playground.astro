@@ -143,6 +143,17 @@ const initial = catalogue[0];
   import { getSharedClient, type LibcircVersion, type WorkerReply } from '../scripts/libcirc-client.ts';
   import { joinConflicts, requestFor, rootOf, PLAYGROUND_DIR } from '../utils/split-files.ts';
   import { createSplitter } from '../scripts/splitter.ts';
+  import {
+    declarationAt,
+    declsFor,
+    headerSymbolName,
+    linkLayout,
+    rootFileId,
+    rootPathFor,
+    type Declaration,
+    type LinkTable,
+    type PlacedLike,
+  } from '../scripts/source-link.ts';
   import { decodeShare, encodeShare, readHash, shareUrl, webStreamsCodec } from '../utils/share-link.ts';
   import { generateSillyName } from '../utils/sillyname.ts';
   import {
@@ -284,6 +295,38 @@ const initial = catalogue[0];
       if (tab === 'truth') void runTruth(buildStage.seq);
     }
     for (const b of tabs) b.addEventListener('click', () => showTab(b.dataset.tab as Tab));
+
+    // ---- source linking ----
+    // `decls` refreshes on every analysis; `table` only when a new artifact is
+    // drawn. They are deliberately separate: the last good canvas — and so the
+    // table — stays on screen across failing edits while the analysis keeps
+    // moving underneath it.
+    const link = {
+      decls: [] as Declaration[],
+      table: null as LinkTable | null,
+      current: null as Declaration | null,
+    };
+
+    /** Highlight the box a declaration draws as, or clear the highlight. */
+    function highlightComponent(decl: Declaration | null) {
+      const id = decl && link.table ? (link.table.byName.get(decl.name)?.componentId ?? null) : null;
+      sim.view?.view.setHighlight?.(id);
+    }
+
+    /** Mark the truth-table column a declaration names. */
+    function markTableColumn(decl: Declaration | null) {
+      for (const th of tableEl.querySelectorAll<HTMLElement>('th[data-symbol-name]')) {
+        th.classList.toggle('pg-th-linked', decl !== null && th.dataset.symbolName === decl.name);
+      }
+    }
+
+    /** One place decides what the cursor is pointing at. */
+    function setCurrentDeclaration(decl: Declaration | null) {
+      if (decl === link.current) return;
+      link.current = decl;
+      highlightComponent(decl);
+      markTableColumn(decl);
+    }
 
     // ---- the status bar ----
     // One record in, one view out. The label is written only when the state
@@ -1011,6 +1054,12 @@ const initial = catalogue[0];
         doc: activeFile(state.tabs).body,
         theme: mod.currentThemeMode(),
         ariaLabel: 'circ source',
+        onCursor: (index, line, col, lineText) => {
+          // Only the root file's declarations are drawn, so a cursor in a
+          // sibling tab resolves to nothing rather than to the wrong box.
+          const isRoot = index === rootIndex(state.tabs);
+          setCurrentDeclaration(isRoot ? declarationAt(link.decls, line, col, lineText) : null);
+        },
         onChange: (doc, index) => {
           state.tabs = setBody(state.tabs, index, doc);
           renderFileTabs();
@@ -1126,6 +1175,7 @@ const initial = catalogue[0];
       state.diagnostics = state.analysis.diagnostics;
       publishDiagnostics(snapshot, state.analysis);
       renderFileTabs();
+      link.decls = declsFor(state.analysis, rootPathFor(rootOf(state.tabs.files).name));
 
       const errors = state.diagnostics.filter((d) => d.severity === 'error').length;
       state.analyzedDoc = doc;
@@ -1206,8 +1256,11 @@ const initial = catalogue[0];
     function rootInputBits(): number | null {
       const a = state.analysis;
       if (!a) return null;
-      const rootPath = `${PLAYGROUND_DIR}/${rootOf(state.tabs.files).name}`;
-      const rootId = a.files.find((f) => f.path === rootPath)?.file_id ?? 0;
+      const rootId = rootFileId(a.files, rootPathFor(rootOf(state.tabs.files).name));
+      // Null stays null: a 0 here would read as "no input bits" and silently
+      // switch off the only defence against an enumeration that cannot be
+      // stopped once it has started.
+      if (rootId === null) return null;
       return a.symbols.filter((s) => s.file_id === rootId && s.kind === 'input').reduce((n, s) => n + s.width, 0);
     }
 
@@ -1363,7 +1416,15 @@ const initial = catalogue[0];
     type Signal = 0 | 1;
     type CircView = {
       runtime: { topology: { components: { id: number; kind: number; name: string; origin: unknown[] }[] }; setPinSignal(id: number, s: Signal): void; run(): void };
-      view: { refreshState(): void; setInputSignal?(id: number, s: Signal): void };
+      view: {
+        refreshState(): void;
+        setInputSignal?(id: number, s: Signal): void;
+        /** Host hooks added in circ-renderer 2.1.0-alpha.2. Optional here so a
+         *  stale pin degrades to no highlighting rather than a crash — the pin
+         *  test is what makes their absence loud. */
+        setHighlight?(id: number | null): void;
+        getLayout?(): { components: readonly PlacedLike[] };
+      };
       canvas: HTMLCanvasElement;
       destroy(): void;
     };
@@ -1413,6 +1474,11 @@ const initial = catalogue[0];
           },
         } as any)) as unknown as CircView;
         sim.view = view;
+        // The layout is the only place a collapsed macro box exists, so the
+        // join is built from it rather than from the topology.
+        link.table = view.view.getLayout
+          ? linkLayout(link.decls, view.view.getLayout())
+          : null;
         simMount.appendChild(view.canvas);
         simMount.hidden = false;
         simNote.textContent = 'Click input pins to toggle them.';
@@ -1455,6 +1521,8 @@ const initial = catalogue[0];
     hooks.onArtifact = (bytes, reason) => {
       sim.bytes = bytes;
       if (!bytes) {
+        link.table = null;
+        link.current = null;
         sim.view?.destroy();
         sim.view = null;
         simMount.innerHTML = '';

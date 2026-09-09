@@ -129,6 +129,10 @@ export interface EditorOptions {
    *  Phase 1's single-argument shape so a one-document consumer stays
    *  source-compatible; without `setDocuments` it is always 0. */
   onChange?: (doc: string, index: number) => void;
+  /** Fires whenever the selection moves, with the caret's 1-based line and
+   *  UTF-16 column and that line's text — everything a host needs to resolve a
+   *  declaration without reaching into the view. */
+  onCursor?: (index: number, line: number, col: number, lineText: string) => void;
 }
 
 export interface EditorHandle {
@@ -265,6 +269,7 @@ export function createEditor(parent: HTMLElement, options: EditorOptions = {}): 
     compact = false,
     ariaLabel = 'circ source',
     onChange,
+    onCursor,
   } = options;
 
   const themeCompartment = new Compartment();
@@ -300,6 +305,11 @@ export function createEditor(parent: HTMLElement, options: EditorOptions = {}): 
       // selection move or a lint transaction must not be lost when this file
       // is swapped out.
       if (docs[active]) docs[active].state = update.state;
+      if (onCursor && (update.selectionSet || update.docChanged)) {
+        const head = update.state.selection.main.head;
+        const line = update.state.doc.lineAt(head);
+        onCursor(active, line.number, head - line.from + 1, line.text);
+      }
       if (!update.docChanged) return;
       if (update.transactions.some((tr) => tr.annotation(external))) return;
       onChange?.(update.state.doc.toString(), active);

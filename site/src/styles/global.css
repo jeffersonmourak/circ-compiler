@@ -777,6 +777,15 @@ hr {
 .pg-diag-warning button { color: var(--muted); }
 .pg-diag button:disabled { color: var(--muted); cursor: default; text-decoration: none; }
 .pg-diag-counts { color: var(--muted); margin-bottom: 0.5rem; }
+/* Source linking: the truth-table column the cursor's declaration names. */
+.pg-table th[data-symbol-name] { cursor: default; }
+.pg-table th.pg-th-linked,
+.pg-table th[data-symbol-name]:hover,
+.pg-table th[data-symbol-name]:focus-visible {
+  color: var(--accent);
+  outline: none;
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
 .pg-diag-ok { color: var(--muted); }
 .pg-preview {
   margin: 0;
