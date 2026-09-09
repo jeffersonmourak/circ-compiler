@@ -1258,12 +1258,19 @@ a.install-line:hover {
   padding: 0 1rem 0.5rem;
   max-width: none;
   margin: 0;
-  /* A grid item defaults to min-height: auto, which lets the 1fr row grow
-     past the viewport; with overflow: hidden on the body the bottom of the
-     page would then be unreachable, with no scrollbar anywhere. */
+  /* A grid item defaults to min-height: auto, which lets this row grow past
+     the viewport; with overflow: hidden on the body the bottom of the page
+     would then be unreachable, with no scrollbar anywhere. */
   min-height: 0;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  /* Flex, NOT a fixed grid-template-rows. This used to declare two tracks —
+     `auto` for a page header and `minmax(0, 1fr)` for the workbench — which
+     silently broke the moment the header was removed: `.pg` fell into the
+     `auto` track and started sizing to its own content, so the editor stopped
+     filling the pane and changed height with every file. A flex column takes
+     however many children the page has and gives the leftover to whichever one
+     claims `flex: 1`. */
+  display: flex;
+  flex-direction: column;
 }
 [data-layout='app'] .site-footer { padding: 0.4rem 1rem; font-size: 0.75rem; }
 [data-layout='app'] .site-footer-row { margin: 0; }
@@ -1271,6 +1278,9 @@ a.install-line:hover {
 
 [data-layout='app'] .pg {
   margin: 0;
+  /* The workbench is the one child that takes the leftover height; anything
+     above it keeps its own. */
+  flex: 1;
   min-height: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;

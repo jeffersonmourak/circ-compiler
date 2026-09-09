@@ -635,3 +635,24 @@ A project row rolls its files' diagnostics up, so shutting a project does not hi
 4. **The tab stop count went from 22 to 1.** Every sidebar row used to be a `<button>`. The tree is one roving tabindex, and it lands on the row the reader was on, falling back to the active file and then the active project — losing it to row 0 on every redraw would make the whole thing unusable with a keyboard.
 5. **The server still renders a flat fallback.** `.pg-ws-fallback` ships in the HTML and the island removes it on its first render. The tree needs the store for expansion state and the file set, neither of which the server has, so the alternative was shipping an empty box on a slow connection.
 6. **Two changes here are the human's, and one of them dropped a promise.** The page header went, taking the `<h1>` and the "nothing leaves the page" line with it, and the dock's markup was set to ship shut. The store's dock default now matches that markup, or the dock would have popped open on first load. The no-network claim is no longer stated anywhere in the page and its test is deleted, on the human's explicit decision — it is recorded here because a promise that quietly stops being made is worth being able to find later.
+
+## 2026-09-09 — Fix — the editor stopped filling its pane, and a badge that lied
+
+**What shipped:** Two defects the human found in the browser, both introduced by the last two commits.
+
+**The editor sized to its content.** `[data-layout='app'] main` declared `grid-template-rows: auto minmax(0, 1fr)` — one track for the page header, one for the workbench. When the header was removed, `.pg` fell into the `auto` track and started sizing to its own content: the editor no longer filled the pane, and its height changed with every file switch because the line count changed. Nothing errored, nothing failed a gate, and the CSS was still valid. The shell is now a flex column with `.pg` claiming `flex: 1`, so it takes however many children the page has and gives the leftover to the workbench. A fixed track count cannot silently break again.
+
+**A project's badge vanished when you looked away.** Only the open project is analysed, so `visibleNodes` had no counts for any other project and drew no badge — which reads as "the errors are gone" rather than "nobody is looking". The island now remembers each project's roll-up as it is analysed and the tree draws the remembered figure on inactive rows, keeping live counts for the open one. A deleted project takes its memory with it.
+
+**Files touched:** `site/src/styles/global.css`, `site/src/scripts/ws-tree.ts`, `site/src/components/Playground.astro`, `site/test/app-layout.test.ts`, `site/test/ws-tree.test.ts`.
+
+**Tests:** `bun test` 328 pass across 28 files, from 323. `bun --bun run typecheck` 0 errors. Build and `bun run bundle` green. `/playground` gzip 25.2 KB.
+
+**Next slice:** none.
+
+**Notes:**
+
+1. **No gate could have caught the layout bug, and one now does.** happy-dom has no layout engine, so nothing in this repository can measure a box. The guard is therefore a text assertion on the rule itself: the app shell must be flex and must not declare `grid-template-rows`, and `.pg` must claim `flex: 1` with `min-height: 0`. Negative proof: restoring the two-track grid fails it. That is weaker than measuring, and it is what is available.
+2. **The guard's first draft failed on its own comment.** The rule's comment explains the trap by naming `grid-template-rows`, and the assertion read the prose as a declaration. Comments are stripped before matching now. This is the third time in this initiative that a source-scanning test has tripped over English — `file-tabs.ts` over the word `localStorage`, `doc-registry.test.ts` over the word `document`, and now this. A scan of source text should strip comments by default.
+3. **The remembered counts are a memory, not a cache.** They are session-scoped and deliberately not persisted: a count in the envelope would survive a reload with no analysis behind it, and the first thing a reader would do is trust it. Within a session it cannot go stale, because a project's source can only change while that project is the open one.
+4. **The diagnostics path was not at fault, and was checked rather than assumed.** Driving the committed `libcirc.wasm` over a two-file project shows the analysis reporting per-file diagnostics for the imported file, and `countsByFile` placing them on the right row: a non-active FILE inside the open project already kept its badge. Only the project level was wrong.

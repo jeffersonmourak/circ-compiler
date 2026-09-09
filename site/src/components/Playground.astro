@@ -312,6 +312,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     fileNodeId,
     moveFor,
     reveal,
+    sumCounts,
     toggle as toggleExpanded,
     visibleNodes,
     type TreeInput,
@@ -749,6 +750,17 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     /** Ids of the rows the reader has open. Seeded from the envelope, and
      *  written back on every deliberate toggle. */
     let expanded = new Set(store.envelope.ws.expanded);
+    /**
+     * What the last analysis said about each project the reader has opened.
+     *
+     * Only the open project is analysed, so without this a project's badge
+     * disappeared the moment you looked at something else — which reads as
+     * "the errors are gone" rather than "nobody is looking". Session-scoped on
+     * purpose: it is a memory of an analysis, not a cache of one, and it is
+     * dropped rather than persisted so a reload never shows a count that no
+     * longer has an analysis behind it.
+     */
+    const remembered = new Map<string, { errors: number; warnings: number }>();
     /** Index into the flattened tree that holds the single tab stop. */
     let treeFocus = 0;
     let treeNodes: TreeNode[] = [];
@@ -785,6 +797,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         counts: countsByFile(state.tabs.files, state.analysis),
         conflicts: new Map(joinConflicts(state.tabs.files).map((c) => [c.index, CONFLICT_TEXT[c.reason]])),
         expanded,
+        remembered,
       };
     }
 
@@ -1134,6 +1147,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       }
       confirmProject = null;
       const wasActive = store.envelope.activeId === id;
+      remembered.delete(id);
       store.update((draft) => {
         draft.scratch = deleteScratch(draft.scratch, id);
         if (wasActive) draft.activeId = null;
@@ -1742,6 +1756,9 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       state.analysis = JSON.parse(an.text!) as Analysis;
       state.diagnostics = state.analysis.diagnostics;
       publishDiagnostics(snapshot, state.analysis);
+      // So the badge survives switching away from this project.
+      const openId = store.envelope.activeId;
+      if (openId) remembered.set(openId, sumCounts(countsByFile(state.tabs.files, state.analysis)));
       renderTree();
       link.decls = declsFor(state.analysis, rootPathFor(rootOf(state.tabs.files).name));
       renderRoms();

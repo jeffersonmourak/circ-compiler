@@ -11,6 +11,7 @@ import {
   moveFor,
   reveal,
   rollUp,
+  sumCounts,
   toggle,
   visibleNodes,
   type TreeInput,
@@ -126,12 +127,49 @@ describe('visibleNodes', () => {
     expect(mine.kind === 'project' && mine.badge).toBe(4);
   });
 
-  test('an inactive project never claims a severity it cannot know', () => {
-    // It has not been analysed; a 0 badge would be a claim, not an absence.
+  test('an inactive project never borrows the open project’s counts', () => {
+    // `counts` describes the project that is LOADED. Spilling it onto the
+    // others would put the open project's errors on every row in the tree.
     const nodes = visibleNodes(input({ counts: [{ errors: 9, warnings: 9 }, NO_COUNTS] }));
     const other = nodes.find((n) => n.id === 'example:a')!;
     expect(other.kind === 'project' && other.severity).toBeNull();
     expect(other.kind === 'project' && other.badge).toBe(0);
+  });
+
+  test('an inactive project keeps the badge from the last time it was analysed', () => {
+    // Switching away from a broken project used to make its badge vanish,
+    // which reads as "the errors are gone" rather than "nobody is looking".
+    const nodes = visibleNodes(
+      input({ remembered: new Map([['example:a', { errors: 3, warnings: 1 }]]) }),
+    );
+    const remembered = nodes.find((n) => n.id === 'example:a')!;
+    expect(remembered.kind === 'project' && remembered.severity).toBe('error');
+    expect(remembered.kind === 'project' && remembered.badge).toBe(3);
+    // A project nobody has opened still claims nothing.
+    const unseen = nodes.find((n) => n.id === 'example:b')!;
+    expect(unseen.kind === 'project' && unseen.severity).toBeNull();
+  });
+
+  test('the open project always uses live counts, never the remembered ones', () => {
+    // The memory is stale by definition the moment the project is reopened.
+    const nodes = visibleNodes(
+      input({
+        counts: [NO_COUNTS, NO_COUNTS],
+        remembered: new Map([['scratch:1', { errors: 7, warnings: 0 }]]),
+      }),
+    );
+    const open = nodes.find((n) => n.id === 'scratch:1')!;
+    expect(open.kind === 'project' && open.severity).toBeNull();
+    expect(open.kind === 'project' && open.badge).toBe(0);
+  });
+
+  test('a clean remembered project shows no badge rather than a zero', () => {
+    const nodes = visibleNodes(
+      input({ remembered: new Map([['example:a', { errors: 0, warnings: 0 }]]) }),
+    );
+    const clean = nodes.find((n) => n.id === 'example:a')!;
+    expect(clean.kind === 'project' && clean.severity).toBeNull();
+    expect(clean.kind === 'project' && clean.badge).toBe(0);
   });
 
   test('conflicts reach the file row that cannot be written', () => {
@@ -152,6 +190,16 @@ describe('visibleNodes', () => {
     );
     expect(shape(nodes)).toEqual(['group:Yours']);
     expect(nodes[0].kind === 'group' && nodes[0].count).toBe(0);
+  });
+});
+
+describe('sumCounts', () => {
+  test('adds every file up, which is what a project remembers', () => {
+    expect(sumCounts([{ errors: 1, warnings: 2 }, { errors: 3, warnings: 4 }])).toEqual({
+      errors: 4,
+      warnings: 6,
+    });
+    expect(sumCounts([])).toEqual({ errors: 0, warnings: 0 });
   });
 });
 

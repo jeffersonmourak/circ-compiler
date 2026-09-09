@@ -81,6 +81,30 @@ describe('app layout', () => {
     }
   });
 
+  test('the app shell gives its leftover height to the workbench, not to a fixed row', () => {
+    const css = read('src', 'styles', 'global.css');
+    // Comments are stripped first: this rule's own comment explains the trap by
+    // naming `grid-template-rows`, and an assertion that reads prose as if it
+    // were a declaration is the same trap one level up.
+    const declarations = (from: string) => {
+      const body = css.slice(css.indexOf(from) + from.length);
+      return body.slice(0, body.indexOf('}')).replace(/\/\*[\s\S]*?\*\//g, '');
+    };
+    const block = declarations("[data-layout='app'] main {");
+    // This used to be `grid-template-rows: auto minmax(0, 1fr)` — one track for
+    // a page header and one for the workbench. Removing the header dropped
+    // `.pg` into the `auto` track, where it sized to its own content: the
+    // editor stopped filling the pane and changed height with every file
+    // switch, with no error anywhere. A fixed track count must not come back.
+    expect(block).toContain('display: flex');
+    expect(block).not.toContain('grid-template-rows');
+
+    // …and the workbench must be the child that claims the leftover.
+    const pgBlock = declarations("[data-layout='app'] .pg {");
+    expect(pgBlock).toContain('flex: 1');
+    expect(pgBlock).toContain('min-height: 0');
+  });
+
   test('the viewport lock has a 100vh fallback before 100dvh', () => {
     const block = stripComments(css).slice(stripComments(css).indexOf("[data-layout='app'] {"));
     const vh = block.indexOf('height: 100vh');

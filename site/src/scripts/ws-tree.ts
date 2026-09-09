@@ -86,6 +86,16 @@ export interface TreeInput {
   conflicts: ReadonlyMap<number, string>;
   /** Ids of the groups and projects the reader has open. */
   expanded: ReadonlySet<string>;
+  /**
+   * What the last analysis of each project said, by pick id.
+   *
+   * Only one project is loaded at a time, so `counts` describes that one and
+   * nothing else. Without this, switching away from a broken project made its
+   * badge vanish — the reader was told the problem had gone when all that had
+   * gone was the analysis. A project stays in here until it is deleted, and
+   * its source cannot change while it is not the open one.
+   */
+  remembered?: ReadonlyMap<string, TabCounts>;
 }
 
 export interface ProjectInput {
@@ -132,7 +142,11 @@ export function visibleNodes(input: TreeInput): TreeNode[] {
       // nothing, which is worse than no twisty at all.
       const expandable = active && input.files.length > 0;
       const projectOpen = expandable && input.expanded.has(project.id);
-      const roll = active ? rollUp(input.counts) : { severity: null, badge: 0 };
+      // Live counts for the project that is loaded; the last known ones for
+      // every other project that has been visited this session.
+      const roll = active
+        ? rollUp(input.counts)
+        : worst(input.remembered?.get(project.id) ?? { errors: 0, warnings: 0 });
       out.push({
         kind: 'project',
         id: project.id,
@@ -168,16 +182,21 @@ export function visibleNodes(input: TreeInput): TreeNode[] {
   return out;
 }
 
-/** The project row's badge: the whole project's worst news, so a collapsed
- *  project still says that something inside it is broken. */
-export function rollUp(counts: readonly TabCounts[]): { severity: Severity | null; badge: number } {
+/** Every file's diagnostics added up. What the island remembers per project. */
+export function sumCounts(counts: readonly TabCounts[]): TabCounts {
   let errors = 0;
   let warnings = 0;
   for (const c of counts) {
     errors += c.errors;
     warnings += c.warnings;
   }
-  return worst({ errors, warnings });
+  return { errors, warnings };
+}
+
+/** The project row's badge: the whole project's worst news, so a collapsed
+ *  project still says that something inside it is broken. */
+export function rollUp(counts: readonly TabCounts[]): { severity: Severity | null; badge: number } {
+  return worst(sumCounts(counts));
 }
 
 /**
