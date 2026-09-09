@@ -6,11 +6,12 @@
 //
 // It imports nothing playground-specific.
 //
-// Phase 1 slice 1 stands up the surface: the extension set, the theme
+// Phase 1 slice 1 stood up the surface: the extension set, the theme
 // compartment (seeded with an empty spec whose `{ dark }` flag alone selects
-// CodeMirror's dark base variant) and the handle. The circ `StreamLanguage`
-// (slice 2), the derived palette (slice 3) and `lintGutter()` (slice 4) fill
-// in behind the same surface without changing it.
+// CodeMirror's dark base variant) and the handle. Slice 2 added the circ
+// `StreamLanguage` over `../utils/circ-tokens.mjs`; the derived palette
+// (slice 3) and `lintGutter()` (slice 4) fill in behind the same surface
+// without changing it.
 import {
   Annotation,
   Compartment,
@@ -26,7 +27,12 @@ import {
   lineNumbers,
   type KeyBinding,
 } from '@codemirror/view';
-import { indentUnit } from '@codemirror/language';
+import {
+  StreamLanguage,
+  indentUnit,
+  type StreamParser,
+  type StringStream,
+} from '@codemirror/language';
 import {
   history,
   indentLess,
@@ -38,6 +44,12 @@ import {
   undo,
 } from '@codemirror/commands';
 import { setDiagnostics as lintSetDiagnostics, type Diagnostic } from '@codemirror/lint';
+import {
+  copyState,
+  nextToken,
+  startState,
+  type CircTokenState,
+} from '../utils/circ-tokens.mjs';
 
 /**
  * The keymap, hand-rolled from individual commands instead of `defaultKeymap`
@@ -66,6 +78,36 @@ const circKeymap: readonly KeyBinding[] = [
   { key: 'Mod-y', mac: 'Mod-Shift-z', run: redo, preventDefault: true },
   { linux: 'Ctrl-Shift-z', run: redo, preventDefault: true },
 ];
+
+/**
+ * The circ mode: a `StreamParser` over the one token table, not a Lezer
+ * grammar. `token` is the whole adapter — CodeMirror sets `stream.start` before
+ * each call and reads it after, so assigning `stream.pos` is the entire
+ * contract. `readToken` throws `"Stream parser failed to advance stream."`
+ * after ten non-advancing calls, which is why `nextToken` always advances (its
+ * `invalid` catch-all is what guarantees it).
+ *
+ * `languageData.commentTokens` is what makes `Mod-/` (`toggleComment`, bound in
+ * `circKeymap` above) comment circ correctly: the command reads it as
+ * `state.languageDataAt('commentTokens', pos, 1)`.
+ *
+ * Exported for Phase 2/5 reuse; inside this phase only `createEditor` consumes
+ * `circLanguage`.
+ */
+export const circStreamParser: StreamParser<CircTokenState> = {
+  name: 'circ',
+  startState,
+  copyState,
+  token(stream: StringStream, state: CircTokenState): string | null {
+    const { end, tag } = nextToken(stream.string, stream.pos, state);
+    stream.pos = end;
+    return tag;
+  },
+  languageData: { commentTokens: { line: '//' } },
+};
+
+export const circLanguage: StreamLanguage<CircTokenState> =
+  StreamLanguage.define(circStreamParser);
 
 /** Slice 3 moves this declaration into `circ-editor-theme.ts` and re-exports it
  *  from here, so no consumer's import ever changes. */
@@ -132,6 +174,7 @@ export function createEditor(parent: HTMLElement, options: EditorOptions = {}): 
     extensions.push(lineNumbers(), highlightActiveLine(), highlightActiveLineGutter());
   }
   extensions.push(
+    circLanguage,
     history(),
     keymap.of([...circKeymap]),
     EditorState.tabSize.of(2),

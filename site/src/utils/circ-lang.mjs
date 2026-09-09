@@ -5,12 +5,18 @@
 //    the `lang` prop (because <Code> ignores the markdown shikiConfig and only
 //    accepts a bundled-lang string or a LanguageRegistration object inline).
 //
-// Kept in sync with the editor extension's grammar at
-// tools/circ-lsp/syntaxes/circ.tmLanguage.json (same scopes, JSON form).
+// The keyword and builtin-type alternations are built from ./circ-tokens.mjs,
+// the one token table the CodeMirror editor (src/scripts/circ-editor.ts) reads
+// too, so a type can never be highlighted in one and not the other.
+//
+// A third consumer lives out of tree and cannot be edited from this repo: the
+// editor extension's vendored TextMate copy at
+// https://github.com/jeffersonmourak/circ-lsp (syntaxes/circ.tmLanguage.json,
+// same scopes, JSON form), which names this file canonical and drifts from it.
 //
 // Highlights:
 //   declarations   input, output, import
-//   primitives     and, not, wire, led, or, nand, nor, xor, xnor, bus
+//   primitives     and, not, wire, led, or, nand, nor, xor, xnor, bus, rom, ram
 //   numbers        integer widths and bit indices (4, 0..7)
 //   operators      <> (connection), = (port assignment), .. (slice range)
 //   parameters     <W> parameter introductions and named port arguments (in=)
@@ -18,6 +24,8 @@
 //   members        .port references
 //   string lits    "..." (used in `import "<path>"`)
 //   line comments  // ...
+
+import { BUILTIN_MATCH, KEYWORD_MATCH } from './circ-tokens.mjs';
 
 export const circLang = {
   name: 'circ',
@@ -46,7 +54,7 @@ export const circLang = {
     keyword: {
       patterns: [
         {
-          match: '\\b(input|output|import)\\b',
+          match: KEYWORD_MATCH,
           name: 'keyword.declaration.circ',
         },
       ],
@@ -54,7 +62,7 @@ export const circLang = {
     type: {
       patterns: [
         {
-          match: '\\b(and|not|wire|led|or|nand|nor|xor|xnor|bus)\\b',
+          match: BUILTIN_MATCH,
           name: 'support.type.builtin.circ',
         },
       ],
