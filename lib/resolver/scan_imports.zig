@@ -169,7 +169,7 @@ pub fn scanProjectImportsWithOverlay(
                 continue;
             }
 
-            const resolved_path = file_loader.resolveImportPath(allocator, file_path, import_decl.path.text) catch |err| {
+            const resolved_path = file_loader.resolveImportPath(allocator, file_path, import_decl.path.text, overlay) catch |err| {
                 if (err == error.FileNotFound) {
                     try appendImportNotFoundDiagnostic(
                         allocator,

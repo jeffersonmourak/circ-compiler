@@ -537,6 +537,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     resolver_scan_imports_tests_mod.addImport("scan_imports", resolver_scan_imports_mod);
+    resolver_scan_imports_tests_mod.addImport("file_loader", resolver_file_loader_mod);
     resolver_scan_imports_tests_mod.addImport("diagnostics", validator_diagnostics_mod);
     const resolver_scan_imports_tests = b.addTest(.{
         .root_module = resolver_scan_imports_tests_mod,

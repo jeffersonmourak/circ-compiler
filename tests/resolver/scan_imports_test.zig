@@ -1,5 +1,6 @@
 const std = @import("std");
 const scan_imports = @import("scan_imports");
+const file_loader = @import("file_loader");
 const diagnostics = @import("diagnostics");
 
 fn containsPath(paths: []const []const u8, suffix: []const u8) bool {
@@ -81,4 +82,23 @@ test "scan imports emits E011 for alias collisions" {
     defer result.deinit(allocator);
 
     try std.testing.expect(countCode(result.diagnostics.items, .E011) >= 2);
+}
+
+test "scan imports resolves an overlay-only sibling without E009" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var overlay = file_loader.Overlay{};
+    try overlay.put(allocator, "/virtual/dep.circ", "input x\noutput y(in=x)\n");
+    try overlay.put(allocator, "/virtual/root.circ", "import dep \"dep.circ\"\ninput a\ndep d(x=a)\noutput o(in=d.y)\n");
+
+    var result = try scan_imports.scanProjectImportsWithOverlay(allocator, "/virtual/root.circ", overlay);
+    defer result.deinit(allocator);
+
+    try std.testing.expectEqual(@as(usize, 7), result.file_paths.len);
+    try std.testing.expectEqualStrings("/virtual/root.circ", result.file_paths[0]);
+    try std.testing.expectEqualStrings("/virtual/dep.circ", result.file_paths[1]);
+    try std.testing.expectEqual(@as(u32, 1), result.import_table[0].target_file);
+    try std.testing.expectEqual(@as(usize, 0), result.diagnostics.items.len);
 }
