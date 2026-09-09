@@ -404,3 +404,14 @@ Append-only log, one entry per shipped slice. Newest at the bottom. See `DOCS/PL
 **Notes:**
 1. The island's local `CircView` type predated the new hooks, so the typecheck failed until it was widened — the third time that gate has caught something. Both new methods are declared **optional**, so a stale pin degrades to no highlighting rather than a crash; the pin test from slice 2 is what makes their absence loud instead.
 2. Manual checklist — **unrun** (no browser): put the caret on `and c(a=a, b=b)` and watch that box ring on the canvas and its column mark in the truth table.
+
+## 2026-09-09 — Phase 5 — Slice 6: canvas hover drives the editor
+
+**What shipped:** `circ-editor.ts` gains `setLinkHighlight` — a `StateEffect` plus a `StateField` providing decorations, added to the **shared** extension array every document is created with — and an `EditorHandle.setLinkHighlight(span)` that marks a span without moving the caret, the selection or the scroll. The field maps its decoration through each transaction's changes before applying a new effect, so a highlight set just before a keystroke lands on the text it was pointing at rather than on a stale offset; the handle remembers the span and re-applies it after `showDocument`, because the decoration lives in the state being swapped away. In the island, `onHover` is passed to the canvas and resolves the box id through the link table: a declaration in the visible root file is marked in the editor and named in the simulate note, and one the reader cannot see is named in the note **without switching tabs** — a hover must never steal the reader's place.
+**Files touched:** `site/src/scripts/circ-editor.ts`, `site/src/components/Playground.astro`, `site/src/styles/global.css`, `DOCS/STATUS.md`.
+**Tests:** no new cases — the join is slice 4's and the editor wiring is not importable. Ran `bun test` (222 pass across 21 files), `bun --bun run typecheck` (0 errors), `bun --bun run build` (pass), `bun run bundle` (ok; `/playground` 20.4 KB gzip).
+**Next slice:** Slice 7 — truth-table headers and diagnostics rows as highlight sources.
+**Notes:**
+1. The highlight is a background colour rather than a border, so marking a span never shifts the text by a pixel while the reader is reading it.
+2. `onHover` fires only on a change by contract, so the island debounces nothing.
+3. Manual checklist — **unrun** (no browser): hover an AND box and watch its declaration light up; hover one while a sibling tab is open and read the note instead.

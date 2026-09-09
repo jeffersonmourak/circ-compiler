@@ -16,15 +16,18 @@ import {
   Compartment,
   EditorSelection,
   EditorState,
+  StateEffect,
+  StateField,
   type Extension,
-  type StateEffect,
 } from '@codemirror/state';
 import {
+  Decoration,
   EditorView,
   highlightActiveLine,
   highlightActiveLineGutter,
   keymap,
   lineNumbers,
+  type DecorationSet,
   type KeyBinding,
 } from '@codemirror/view';
 import {
@@ -148,6 +151,9 @@ export interface EditorHandle {
   setTheme(mode: ThemeMode): void;
   /** Selects [from, to) in the visible document and scrolls it into view. */
   select(from: number, to?: number): void;
+  /** Marks a span without moving the caret, the selection or the scroll —
+   *  a hover must never steal the reader's place. `null` clears it. */
+  setLinkHighlight(span: { from: number; to: number } | null): void;
   focus(): void;
   destroy(): void;
 
@@ -261,6 +267,34 @@ function themeExtension(mode: ThemeMode): Extension {
   ];
 }
 
+/**
+ * Marks one span as "this is what you are pointing at" — the canvas hovering a
+ * box, a truth-table header, a diagnostics row. One effect and one field, no
+ * view plugin: the decoration has to survive a document swap, and only state
+ * does that.
+ */
+export const setLinkHighlight = StateEffect.define<{ from: number; to: number } | null>();
+
+const linkMark = Decoration.mark({ class: 'cm-circ-linked' });
+
+const linkHighlightField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(deco, tr) {
+    // Map through the edit first, so a highlight set before a keystroke lands
+    // on the text it was pointing at rather than on a stale offset.
+    deco = deco.map(tr.changes);
+    for (const e of tr.effects) {
+      if (!e.is(setLinkHighlight)) continue;
+      deco =
+        e.value === null || e.value.from >= e.value.to
+          ? Decoration.none
+          : Decoration.set([linkMark.range(e.value.from, e.value.to)]);
+    }
+    return deco;
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
+
 export function createEditor(parent: HTMLElement, options: EditorOptions = {}): EditorHandle {
   const {
     doc = '',
@@ -285,6 +319,9 @@ export function createEditor(parent: HTMLElement, options: EditorOptions = {}): 
   }
 
   let active = 0;
+  /** The decoration lives in the state being swapped away, so the handle keeps
+   *  the span and re-applies it after a swap. */
+  let linkSpan: { from: number; to: number } | null = null;
 
   // Built once and shared by every state. Only the theme compartment is
   // per-state, and it is seeded from `themeContent` at creation time.
@@ -294,6 +331,7 @@ export function createEditor(parent: HTMLElement, options: EditorOptions = {}): 
   }
   staticExtensions.push(
     circLanguage,
+    linkHighlightField,
     history(),
     keymap.of([...circKeymap]),
     EditorState.tabSize.of(2),
@@ -339,6 +377,8 @@ export function createEditor(parent: HTMLElement, options: EditorOptions = {}): 
     view.setState(docs[active].state);
     const saved = docs[active].scroll;
     if (saved) view.dispatch({ effects: saved });
+    // The highlight belongs to the state that just went away.
+    if (linkSpan) view.dispatch({ effects: setLinkHighlight.of(linkSpan) });
   };
 
   return {
@@ -376,6 +416,12 @@ export function createEditor(parent: HTMLElement, options: EditorOptions = {}): 
         scrollIntoView: true,
       });
       view.focus();
+    },
+    setLinkHighlight(span: { from: number; to: number } | null) {
+      const clamped =
+        span === null ? null : { from: clampOffset(span.from), to: clampOffset(span.to) };
+      view.dispatch({ effects: setLinkHighlight.of(clamped) });
+      linkSpan = clamped;
     },
     focus() {
       view.focus();

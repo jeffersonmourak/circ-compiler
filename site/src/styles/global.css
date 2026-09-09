@@ -777,6 +777,12 @@ hr {
 .pg-diag-warning button { color: var(--muted); }
 .pg-diag button:disabled { color: var(--muted); cursor: default; text-decoration: none; }
 .pg-diag-counts { color: var(--muted); margin-bottom: 0.5rem; }
+/* Source linking: the span in the editor the canvas is pointing at. A
+   background, not a border, so it never shifts the text by a pixel. */
+.cm-circ-linked {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border-radius: 2px;
+}
 /* Source linking: the truth-table column the cursor's declaration names. */
 .pg-table th[data-symbol-name] { cursor: default; }
 .pg-table th.pg-th-linked,

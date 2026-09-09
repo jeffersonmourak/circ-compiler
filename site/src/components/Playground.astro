@@ -150,6 +150,7 @@ const initial = catalogue[0];
     linkLayout,
     rootFileId,
     rootPathFor,
+    type SourceLink,
     type Declaration,
     type LinkTable,
     type PlacedLike,
@@ -197,7 +198,9 @@ const initial = catalogue[0];
     type FileTabsState,
   } from '../scripts/file-tabs.ts';
   import {
+    indexDoc,
     mapPerTab,
+    rangeToSpan,
     toLintDiagnostics,
     type Analysis,
     type AnalyzeDiagnostic as Diagnostic,
@@ -318,6 +321,43 @@ const initial = catalogue[0];
       for (const th of tableEl.querySelectorAll<HTMLElement>('th[data-symbol-name]')) {
         th.classList.toggle('pg-th-linked', decl !== null && th.dataset.symbolName === decl.name);
       }
+    }
+
+    /**
+     * Mark a declaration's span in the editor without moving the caret. A
+     * hover must never steal the reader's place, so a declaration in another
+     * file is named in the simulate note instead of switching tabs.
+     */
+    function markInEditor(link_: SourceLink | null) {
+      if (!editor) return;
+      if (!link_) {
+        editor.setLinkHighlight(null);
+        if (state.simulateEnabled) simNote.textContent = simNoteBase;
+        return;
+      }
+      const decl = link.decls.find((d) => d.name === link_.name && d.kind === link_.kind);
+      const rootIdx = rootIndex(state.tabs);
+      if (!decl || state.tabs.active !== rootIdx) {
+        editor.setLinkHighlight(null);
+        simNote.textContent = `${link_.name} is declared in ${state.tabs.files[rootIdx]?.name ?? 'the root file'}.`;
+        return;
+      }
+      const files = state.tabs.files;
+      const body = files[rootIdx].body;
+      const index = indexDoc(body);
+      const span = rangeToSpan(
+        index,
+        [{ name: files[rootIdx].name, body, startLine: 0 }],
+        { files: [{ file_id: decl.fileId, path: rootPathFor(files[rootIdx].name) }], diagnostics: [], symbols: [], references: [] } as Analysis,
+        decl.fileId,
+        decl.range,
+      );
+      if (!span) {
+        editor.setLinkHighlight(null);
+        return;
+      }
+      editor.setLinkHighlight(span);
+      simNote.textContent = `${link_.name} — ${decl.kind}`;
     }
 
     /** One place decides what the cursor is pointing at. */
@@ -1429,6 +1469,7 @@ const initial = catalogue[0];
       destroy(): void;
     };
     const simMount = el.querySelector<HTMLElement>('.pg-sim-mount')!;
+    const simNoteBase = 'Click input pins to toggle them; hover one to find it in the source.';
     const sim = {
       view: null as CircView | null,
       bytes: null as Uint8Array | null,
@@ -1472,6 +1513,10 @@ const initial = catalogue[0];
           onPinToggle: (id: number, sig: Signal) => {
             for (const [name, pid] of rootInputs(view)) if (pid === id) sim.pins.set(name, sig);
           },
+          // Fires only on a change, so this needs no debounce of its own.
+          onHover: (id: number | null) => {
+            markInEditor(id === null ? null : (link.table?.byComponentId.get(id) ?? null));
+          },
         } as any)) as unknown as CircView;
         sim.view = view;
         // The layout is the only place a collapsed macro box exists, so the
@@ -1481,7 +1526,7 @@ const initial = catalogue[0];
           : null;
         simMount.appendChild(view.canvas);
         simMount.hidden = false;
-        simNote.textContent = 'Click input pins to toggle them.';
+        simNote.textContent = simNoteBase;
         // Replay the reader's pins by name onto the fresh instance.
         const ids = rootInputs(view);
         for (const name of Array.from(sim.pins.keys())) if (!ids.has(name)) sim.pins.delete(name);
