@@ -36,6 +36,8 @@ confident summary.
 | `zig build bench` | Engine benchmark over the truth-table fixture corpus, compared against `tests/fixtures/bench/engine.bench.golden`. Counters are asserted; wall-clock is not. |
 | `zig build parser:gen` | Regenerates `lib/parser/parser.zig` from `lib/grammar/proto-circ.peg`. Only when the grammar changes; requires the langlang fork (`v0.0.13-zig.2`) on `PATH`, and the step refuses any other version. |
 | `zig build e2e-linux-docker` | Runs `tests/e2e/linux-docker/run.sh`. Requires Docker. |
+| `zig build libcirc` | Builds the compiler front end as a static C library: `zig-out/lib/libcirc.a` + `zig-out/include/libcirc.h` (see `DOCS/libcirc-api.md`). |
+| `zig build libcirc-smoke` | Compiles `examples/c/analyze.c` against `libcirc.a` and runs it. |
 
 Useful environment variables:
 
@@ -208,7 +210,8 @@ A PR is an artifact landing on `main`, where stage and phase numbers have no mea
 
 ## Files worth knowing about
 
-- `cmd/circ-compile/main.zig`: CLI driver and mode dispatch.
+- `cmd/circ-compile/main.zig`: CLI driver and mode dispatch; a client of `lib/libcirc.zig`.
+- `lib/libcirc.zig` (+ `lib/libcirc/{frontend,modes,json,c_api}.zig`): the front end as a library — one request in, the `.wasm`/preview/truth table/analysis out — and the `circ_*` C ABI over it. `build/frontend_modules.zig` creates the module graph both the CLI and the library share.
 - `lib/circuit.zig`: engine, propagation, gate evaluators.
 - `lib/topology/section_writer.zig`: the splice that turns a prebuilt runtime plus two blobs into a final `.wasm`.
 - `templates/main.zig`, `templates/interpreter.zig`: the runtime template embedded into every artifact.

@@ -164,3 +164,16 @@ test "c_api: alloc/free round trip and reset" {
     try std.testing.expectEqual(@as(u32, 0), c_api.circ_version());
     try std.testing.expect(c_api.circ_result_len() > 0);
 }
+
+test "c_api: the documented request literal compiles" {
+    // The literal from DOCS/libcirc-api.md and examples/c/analyze.c.
+    const documented =
+        \\{"root": "/playground/main.circ",
+        \\ "files": {"/playground/main.circ": "input a\nnot n(in=a)\noutput o(in=n.out)\n"},
+        \\ "options": {"color": "never"}}
+    ;
+    try std.testing.expectEqual(@as(u32, 0), call(c_api.circ_compile, documented));
+    try std.testing.expectEqualStrings("\x00asm", result()[0..4]);
+    try std.testing.expectEqual(@as(u32, 0), call(c_api.circ_preview, documented));
+    try std.testing.expect(std.mem.indexOf(u8, result(), "NOT") != null);
+}
