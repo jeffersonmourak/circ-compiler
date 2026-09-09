@@ -2,6 +2,7 @@
 import { url } from '../utils/url.ts';
 import { examples } from '../content/examples.ts';
 import { tour } from '../content/tour.ts';
+import { buildCatalogue } from '../utils/playground-store.ts';
 
 interface Props {
   manifest: { version: string; revision: string; full_version: number };
@@ -9,11 +10,10 @@ interface Props {
 }
 const { manifest, supportedVersions } = Astro.props;
 const wasmHref = url('/wasm/libcirc.wasm');
-const picks = [
-  ...examples.map((e) => ({ id: `example:${e.slug}`, label: e.title, source: e.source, group: 'Examples' })),
-  ...tour.map((t, i) => ({ id: `tour:${i + 1}`, label: `${i + 1}. ${t.title}`, source: t.source, group: 'Tour' })),
-];
-const initial = picks[0];
+// One call feeds the sidebar rows, the embedded blob and the default pick, so
+// they cannot drift from each other or from the shipped content.
+const catalogue = buildCatalogue(examples, tour);
+const initial = catalogue[0];
 ---
 <div
   class="pg"
@@ -22,22 +22,41 @@ const initial = picks[0];
   data-manifest-full-version={manifest.full_version.toString()}
   data-manifest-version={manifest.version}
   data-manifest-revision={manifest.revision}
+  data-default-pick={initial.id}
 >
   <div class="pg-banner" hidden></div>
   <div class="pg-panes">
-    <section class="pg-editor" id="pg-pane-editor">
-      <div class="pg-pane-label">
-        <label for="pg-pick">source</label>
-        <select id="pg-pick" class="pg-pick">
-          {['Examples', 'Tour'].map((group) => (
-            <optgroup label={group}>
-              {picks.filter((p) => p.group === group).map((p) => (
-                <option value={p.id}>{p.label}</option>
+    <!-- A sibling of the two panes, never a track inside them: the divider's
+         arithmetic, its ResizeObserver and its aria-controls all name exactly
+         the editor and output panes. -->
+    <nav class="pg-ws" aria-label="Workspace">
+      <button
+        type="button"
+        class="pg-ws-toggle"
+        aria-expanded="true"
+        aria-controls="pg-ws-body"
+      >Workspace</button>
+      <div class="pg-ws-body" id="pg-ws-body">
+        {(['Examples', 'Tour'] as const).map((group) => (
+          <section class="pg-ws-section">
+            <h2 class="pg-ws-group" id={`pg-ws-h-${group}`}>{group}</h2>
+            <ul class="pg-ws-list" aria-labelledby={`pg-ws-h-${group}`}>
+              {catalogue.filter((c) => c.group === group).map((c) => (
+                <li>
+                  <button type="button" class="pg-ws-row" data-pick={c.id}>{c.label}</button>
+                </li>
               ))}
-            </optgroup>
-          ))}
-        </select>
+            </ul>
+          </section>
+        ))}
+        <section class="pg-ws-section">
+          <h2 class="pg-ws-group" id="pg-ws-h-scratch">Yours</h2>
+          {/* Rendered by the island from the persisted envelope. */}
+          <ul class="pg-ws-list pg-ws-scratch" aria-labelledby="pg-ws-h-scratch"></ul>
+        </section>
       </div>
+    </nav>
+    <section class="pg-editor" id="pg-pane-editor">
       <!-- The file tab strip. Ships empty and hidden: every tab is created by
            the island, and the strip is only unhidden once the editor mounts,
            so a reader never sees N tabs over one combined textarea. -->
@@ -95,14 +114,22 @@ const initial = picks[0];
     {/* The announcement channel: file-tab operations and store notes. */}
     <span class="pg-status" role="status" aria-live="polite"></span>
   </div>
-  <script type="application/json" id="pg-picks" set:html={JSON.stringify(Object.fromEntries(picks.map((p) => [p.id, p.source])))} />
+  {/* Page data, not a module: it never enters the eager module graph, so the
+      content files stay out of the island's bundle. */}
+  <script type="application/json" id="pg-picks" set:html={JSON.stringify(catalogue)} />
 </div>
 
 <script>
   import { LibcircClient, type LibcircVersion, type WorkerReply } from '../scripts/libcirc-client.ts';
   import { joinConflicts, requestFor, rootOf, PLAYGROUND_DIR } from '../utils/split-files.ts';
   import { createSplitter } from '../scripts/splitter.ts';
-  import { createStore, describeNote } from '../utils/playground-store.ts';
+  import {
+    createStore,
+    describeNote,
+    resolveInitial,
+    resolveSource,
+    type CatalogueItem,
+  } from '../utils/playground-store.ts';
   import {
     ANALYZE_DEBOUNCE_MS,
     BUILD_DEBOUNCE_MS,
@@ -152,7 +179,6 @@ const initial = picks[0];
     const source = el.querySelector<HTMLTextAreaElement>('#pg-source')!;
     const editorWrap = el.querySelector<HTMLElement>('.pg-editor-wrap')!;
     const editorHost = el.querySelector<HTMLElement>('#pg-editor')!;
-    const pick = el.querySelector<HTMLSelectElement>('#pg-pick')!;
     const status = el.querySelector<HTMLElement>('.pg-status')!;
     const dot = el.querySelector<HTMLElement>('.pg-dot')!;
     const statusLabel = el.querySelector<HTMLElement>('.pg-status-label')!;
@@ -172,8 +198,11 @@ const initial = picks[0];
     const fileTabList = el.querySelector<HTMLElement>('.pg-filetabs')!;
     const fileError = el.querySelector<HTMLElement>('.pg-filetab-error')!;
     const fileAdd = el.querySelector<HTMLButtonElement>('.pg-file-add')!;
+    const wsRoot = el.querySelector<HTMLElement>('.pg-ws')!;
+    const wsToggle = el.querySelector<HTMLButtonElement>('.pg-ws-toggle')!;
+    const wsScratch = el.querySelector<HTMLElement>('.pg-ws-scratch')!;
     const panels = Array.from(el.querySelectorAll<HTMLElement>('.pg-panel'));
-    const picks = JSON.parse(el.querySelector('#pg-picks')!.textContent || '{}') as Record<string, string>;
+    const catalogue = JSON.parse(el.querySelector('#pg-picks')!.textContent || '[]') as CatalogueItem[];
     const supported = (el.dataset.supportedVersions || '').split(',').filter(Boolean).map(Number);
 
     // One client per wasm URL, shared by every island on the page.
@@ -210,8 +239,9 @@ const initial = picks[0];
     (el as any).__playground = { state, hooks };
 
     // ---- tabs ----
-    function showTab(tab: Tab) {
+    function showTab(tab: Tab, opts: { persist?: boolean } = {}) {
       state.tab = tab;
+      if (opts.persist !== false) store.update((draft) => { draft.tab = tab; });
       for (const b of tabs) b.setAttribute('aria-selected', String(b.dataset.tab === tab));
       for (const p of panels) p.hidden = p.dataset.panel !== tab;
       // A tab switch re-uses the build stage's current sequence rather than
@@ -254,6 +284,88 @@ const initial = picks[0];
     // fields ship with their defaults for later phases to fill.
     const store = createStore();
     store.onNote((note) => { status.textContent = describeNote(note); });
+
+    // ---- the workspace ----
+    /** Load a project by id. A switch replaces the whole document registry, so
+     *  the previous project's text is never one Ctrl-Z away. */
+    function loadProject(id: string, opts: { restoreFile?: string | null } = {}) {
+      const text = resolveSource(id, catalogue, store.envelope.scratch);
+      if (text === null) return false;
+      state.tabs = fromSource(text);
+      const wanted = opts.restoreFile;
+      const index = wanted ? state.tabs.files.findIndex((f) => f.name === wanted) : -1;
+      state.tabs = selectTab(state.tabs, index >= 0 ? index : rootIndex(state.tabs));
+      source.value = toSource(state.tabs);
+      editor?.setDocuments(state.tabs.files.map((f) => f.body), state.tabs.active);
+      store.update((draft) => {
+        draft.activeId = id;
+        draft.activeFile = activeFile(state.tabs).name;
+      });
+      renderFileTabs();
+      renderWorkspace();
+      schedule();
+      return true;
+    }
+
+    function renderWorkspace() {
+      const active = store.envelope.activeId;
+      for (const row of el.querySelectorAll<HTMLElement>('.pg-ws-row')) {
+        if (row.dataset.pick === active) row.setAttribute('aria-current', 'true');
+        else row.removeAttribute('aria-current');
+      }
+      wsScratch.innerHTML = '';
+      const projects = [...store.envelope.scratch].sort((a, b) => b.updatedAt - a.updatedAt);
+      if (projects.length === 0) {
+        const empty = document.createElement('li');
+        empty.className = 'pg-ws-empty';
+        empty.textContent = 'Edit an example to start your own.';
+        wsScratch.appendChild(empty);
+        return;
+      }
+      for (const p of projects) {
+        const li = document.createElement('li');
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'pg-ws-row';
+        row.dataset.pick = p.id;
+        row.textContent = p.name;
+        if (p.id === active) row.setAttribute('aria-current', 'true');
+        li.appendChild(row);
+        wsScratch.appendChild(li);
+      }
+    }
+
+    // Delegated, so client-rendered scratch rows need no per-row wiring.
+    wsRoot.addEventListener('click', (e) => {
+      const row = (e.target as HTMLElement).closest<HTMLElement>('.pg-ws-row');
+      if (!row || !row.dataset.pick) return;
+      loadProject(row.dataset.pick);
+    });
+
+    wsToggle.addEventListener('click', () => {
+      const open = wsToggle.getAttribute('aria-expanded') === 'true';
+      wsToggle.setAttribute('aria-expanded', String(!open));
+      wsRoot.toggleAttribute('data-collapsed', open);
+    });
+
+    // ---- bootstrap ----
+    // Slice 5 adds the `src` and `pick` intents to this same call; slice 3
+    // opens the stored project, or the first catalogue entry on a first visit.
+    {
+      const { outcome, note } = resolveInitial({
+        intent: {},
+        decoded: null,
+        env: store.envelope,
+        catalogue,
+        defaultId: el.dataset.defaultPick ?? catalogue[0]?.id ?? '',
+      });
+      if (outcome.kind !== 'share') {
+        loadProject(outcome.id, { restoreFile: store.envelope.activeFile });
+      }
+      if (note) status.textContent = note;
+      showTab(store.envelope.tab as Tab, { persist: false });
+      renderWorkspace();
+    }
 
     // ---- the pane divider ----
     const panes = el.querySelector<HTMLElement>('.pg-panes')!;
@@ -620,13 +732,6 @@ const initial = picks[0];
     // keystroke keeps one model for both surfaces.
     source.addEventListener('input', () => {
       state.tabs = fromSource(source.value);
-      schedule();
-    });
-    pick.addEventListener('change', () => {
-      state.tabs = fromSource(picks[pick.value] ?? '');
-      source.value = toSource(state.tabs);
-      editor?.setDocuments(state.tabs.files.map((f) => f.body), state.tabs.active);
-      renderFileTabs();
       schedule();
     });
 

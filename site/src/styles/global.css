@@ -1187,6 +1187,67 @@ a.install-line:hover {
    rather than blanked — cleared only when the file set itself changes. */
 .pg-output[data-stale] { opacity: 0.55; transition: opacity 120ms ease; }
 
+/* The workspace sidebar: a sibling of the two panes, never a track inside
+   them. Static appearance here; the workbench geometry is in the app block. */
+.pg-ws {
+  background: var(--pane-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.pg-ws-toggle {
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--pane-label-bg);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  padding: 0.35rem 0.6rem;
+  cursor: pointer;
+}
+.pg-ws-toggle:hover { color: var(--fg); }
+.pg-ws-body { overflow-y: auto; padding: 0.35rem 0; flex: 1; min-height: 0; }
+.pg-ws[data-collapsed] .pg-ws-body { display: none; }
+.pg-ws-section { margin: 0 0 0.4rem; }
+.pg-ws-group {
+  margin: 0;
+  padding: 0.25rem 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.pg-ws-list { list-style: none; margin: 0; padding: 0; }
+.pg-ws-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-left: 2px solid transparent;
+  background: none;
+  color: var(--fg);
+  font-size: 0.8rem;
+  padding: 0.22rem 0.6rem;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pg-ws-row:hover { background: var(--pane-label-bg); }
+.pg-ws-row[aria-current='true'] {
+  border-left-color: var(--accent);
+  color: var(--accent);
+}
+.pg-ws-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.pg-ws-empty { color: var(--muted); font-size: 0.75rem; padding: 0.22rem 0.6rem; }
+
 .pg-statusbar {
   display: flex;
   align-items: center;
@@ -1223,15 +1284,20 @@ a.install-line:hover {
 
 [data-layout='app'] .pg-panes {
   min-height: 0;
-  /* The first pane's share of the space left over after the divider itself,
-     so the three tracks always sum to exactly 100%. */
+  /* Sidebar, then the editor's share of what the two panes have left after the
+     divider itself, so the tracks always sum to exactly 100%. */
   --pg-split-w: 8px;
+  --pg-ws-w: 13rem;
   grid-template-columns:
-    minmax(0, calc(var(--pg-split-main, 0.5) * (100% - var(--pg-split-w))))
+    var(--pg-ws-w)
+    minmax(0, calc(var(--pg-split-main, 0.5) * (100% - var(--pg-ws-w) - var(--pg-split-w))))
     var(--pg-split-w)
     minmax(0, 1fr);
   gap: 0;
 }
+[data-layout='app'] .pg-panes:has(.pg-ws[data-collapsed]) { --pg-ws-w: 7.5rem; }
+[data-layout='app'] .pg-ws { min-height: 0; border-radius: 6px 0 0 6px; border-right: 0; }
+[data-layout='app'] .pg-editor { border-radius: 0; }
 .pg-splitter {
   align-self: stretch;
   background: transparent;
@@ -1276,4 +1342,9 @@ a.install-line:hover {
   [data-layout='app'] .pg-output {
     min-height: 60vh;
   }
+  /* Stacked: the sidebar becomes a band above the panes rather than a column. */
+  [data-layout='app'] .pg-panes { grid-template-columns: 1fr; }
+  [data-layout='app'] .pg-ws { border-radius: 6px; border-right: 1px solid var(--border); }
+  [data-layout='app'] .pg-ws-body { max-height: 12rem; }
+  [data-layout='app'] .pg-editor { border-radius: 6px; }
 }
