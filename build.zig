@@ -645,19 +645,9 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     circ_compile_mod.addImport("cli_args", cli_args_mod);
-    circ_compile_mod.addImport("translate", translate_mod);
-    circ_compile_mod.addImport("resolver", resolver_mod);
     circ_compile_mod.addImport("diagnostics", validator_diagnostics_mod);
-    circ_compile_mod.addImport("validator_run", validator_run_mod);
-    circ_compile_mod.addImport("validator_run_project", validator_run_project_mod);
     circ_compile_mod.addImport("emit_main", emit_main_mod);
     circ_compile_mod.addImport("inspect_dump", cli_inspect_dump_mod);
-    circ_compile_mod.addImport("scan_imports", resolver_scan_imports_mod);
-    circ_compile_mod.addImport("import_cycle", resolver_import_cycle_mod);
-    circ_compile_mod.addImport("resolve_bodies", resolver_resolve_bodies_mod);
-    circ_compile_mod.addImport("ir_types", ir_types_mod);
-    circ_compile_mod.addImport("runtime_embed", runtime_embed_mod);
-    circ_compile_mod.addImport("analyze", analyze_mod);
     circ_compile_mod.addImport("build_info", fe.build_info);
     circ_compile_mod.addImport("libcirc", fe.libcirc);
     const circ_compile_exe = b.addExecutable(.{
@@ -833,9 +823,6 @@ pub fn build(b: *std.Build) void {
 
     const section_writer_mod = fe.section_writer;
 
-    // Wire serializer and section_writer into the circ-compile binary
-    circ_compile_mod.addImport("serializer", topology_serializer_tests_mod);
-    circ_compile_mod.addImport("section_writer", section_writer_mod);
     // Shared with the libcirc driver tests, which import the CLI module and
     // so must see the same golden module object.
     const cli_golden_mod = b.createModule(.{
@@ -862,7 +849,6 @@ pub fn build(b: *std.Build) void {
     const run_libcirc_driver_tests = b.addRunArtifact(libcirc_driver_tests);
     run_libcirc_driver_tests.step.dependOn(&install_runtime.step);
     test_step.dependOn(&run_libcirc_driver_tests.step);
-    // full_serializer and preview_dump added below; the import wiring happens after the modules are created.
 
     const section_writer_tests = b.addTest(.{
         .root_module = section_writer_mod,
@@ -879,7 +865,6 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_topology_full_format_tests.step);
 
     const topology_full_serializer_mod = fe.full_serializer;
-    circ_compile_mod.addImport("full_serializer", topology_full_serializer_mod);
     const topology_full_serializer_tests = b.addTest(.{
         .root_module = topology_full_serializer_mod,
     });
@@ -978,7 +963,6 @@ pub fn build(b: *std.Build) void {
     // Truth-table mode: enumerates input vectors against a native engine.Circuit
     // built from the full topology, then renders to Markdown.
     const truth_table_builder_mod = fe.truth_table_builder;
-    circ_compile_mod.addImport("truth_table_builder", truth_table_builder_mod);
     const truth_table_builder_tests = b.addTest(.{
         .root_module = truth_table_builder_mod,
     });
@@ -986,7 +970,6 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_truth_table_builder_tests.step);
 
     const truth_table_markdown_mod = fe.truth_table_markdown;
-    circ_compile_mod.addImport("truth_table_markdown", truth_table_markdown_mod);
     const truth_table_markdown_tests = b.addTest(.{
         .root_module = truth_table_markdown_mod,
     });
@@ -994,7 +977,6 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_truth_table_markdown_tests.step);
 
     const truth_table_csv_mod = fe.truth_table_csv;
-    circ_compile_mod.addImport("truth_table_csv", truth_table_csv_mod);
     const truth_table_csv_tests = b.addTest(.{
         .root_module = truth_table_csv_mod,
     });
@@ -1002,7 +984,6 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_truth_table_csv_tests.step);
 
     const truth_table_json_mod = fe.truth_table_json;
-    circ_compile_mod.addImport("truth_table_json", truth_table_json_mod);
     const truth_table_json_tests = b.addTest(.{
         .root_module = truth_table_json_mod,
     });
@@ -1081,8 +1062,6 @@ pub fn build(b: *std.Build) void {
 
     // Phase 2 slice 6b: orchestrator composing all five stages
     const preview_layout_orchestrator_mod = fe.preview_layout_orchestrator;
-    circ_compile_mod.addImport("layout_orchestrator", preview_layout_orchestrator_mod);
-    circ_compile_mod.addImport("preview_render", preview_render_mod);
 
     // Phase 2 slice 6b: golden integration tests via the orchestrator + dumpLayout
     const preview_layout_integration_mod = b.createModule(.{
