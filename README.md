@@ -53,6 +53,8 @@ zig build test
 
 This is the fast dev-loop suite. `zig build test-all` additionally runs the slow emit-zig backend smoke (`test-emit`, a nested `zig build wasm` per fixture) and is what CI runs. (Set `CIRC_SKIP_PERF=1` to skip the smoke perf test in noisy CI environments.)
 
+The embedded runtime (`zig-out/lib/circ-runtime.wasm`) is always ReleaseSmall and stripped; `-Dwasm-optimize=<mode>` changes that for both wasm artifacts without touching the CLI's own `-Doptimize`.
+
 The compiler front end is also available as a C library — `zig build libcirc` produces `zig-out/lib/libcirc.a` and `zig-out/include/libcirc.h`, and `zig build libcirc-smoke` builds and runs `examples/c/analyze.c` against it. See `DOCS/libcirc-api.md`.
 
 ## Usage

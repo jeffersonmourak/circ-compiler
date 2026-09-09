@@ -8,6 +8,16 @@ pub fn build(b: *std.Build) void {
 
     const optimize = b.standardOptimizeOption(.{});
 
+    // The two wasm artifacts (circ-runtime.wasm, libcirc.wasm) follow their
+    // own optimize mode: a Debug CLI must still embed a small runtime, and a
+    // Debug wasm build (names + DWARF, ~47x larger) is only for bisecting.
+    const wasm_optimize = b.option(
+        std.builtin.OptimizeMode,
+        "wasm-optimize",
+        "Optimize mode for circ-runtime.wasm and libcirc.wasm (default ReleaseSmall)",
+    ) orelse .ReleaseSmall;
+    const wasm_strip: bool = wasm_optimize != .Debug;
+
     const parser_gen = b.step("parser:gen", "Regenerate lib/parser/parser.zig from lib/grammar/proto-circ.peg (needs the langlang fork on PATH)");
 
     // Only the maintainer's fork emits Zig (upstream go/v0.0.12 rejects
@@ -46,13 +56,15 @@ pub fn build(b: *std.Build) void {
     const runtime_module = b.createModule(.{
         .root_source_file = b.path("templates/main.zig"),
         .target = wasm_target,
-        .optimize = optimize, // Usually ReleaseSmall or ReleaseFast for WASM, but follow global optimize option
+        .optimize = wasm_optimize,
+        .strip = wasm_strip,
     });
     
     runtime_module.addImport("compiled.zig", b.createModule(.{
         .root_source_file = dummy_compiled_file,
         .target = wasm_target,
-        .optimize = optimize,
+        .optimize = wasm_optimize,
+        .strip = wasm_strip,
     }));
     
     // build_options with collect_metrics=false for non-bench circuit consumers.
@@ -72,14 +84,16 @@ pub fn build(b: *std.Build) void {
     const circuit_mod_for_wasm = b.createModule(.{
         .root_source_file = b.path("lib/circuit.zig"),
         .target = wasm_target,
-        .optimize = optimize,
+        .optimize = wasm_optimize,
+        .strip = wasm_strip,
     });
     circuit_mod_for_wasm.addImport("build_options", circuit_options_default_mod);
 
     const memory_mod_for_wasm = b.createModule(.{
         .root_source_file = b.path("lib/memory.zig"),
         .target = wasm_target,
-        .optimize = optimize,
+        .optimize = wasm_optimize,
+        .strip = wasm_strip,
     });
     // memory.zig now imports build_options for the COLLECT_METRICS gate. The
     // WASM runtime keeps it off (zero overhead), same as every non-bench path.
@@ -88,13 +102,15 @@ pub fn build(b: *std.Build) void {
     const transport_mod_for_wasm = b.createModule(.{
         .root_source_file = b.path("lib/transport.zig"),
         .target = wasm_target,
-        .optimize = optimize,
+        .optimize = wasm_optimize,
+        .strip = wasm_strip,
     });
     
     const log_mod_for_wasm = b.createModule(.{
         .root_source_file = b.path("lib/log.zig"),
         .target = wasm_target,
-        .optimize = optimize,
+        .optimize = wasm_optimize,
+        .strip = wasm_strip,
     });
     
     log_mod_for_wasm.addImport("memory.zig", memory_mod_for_wasm);
@@ -108,13 +124,15 @@ pub fn build(b: *std.Build) void {
     const interpreter_mod_for_wasm = b.createModule(.{
         .root_source_file = b.path("templates/interpreter.zig"),
         .target = wasm_target,
-        .optimize = optimize,
+        .optimize = wasm_optimize,
+        .strip = wasm_strip,
     });
     
     const format_mod_for_wasm = b.createModule(.{
         .root_source_file = b.path("lib/topology/format.zig"),
         .target = wasm_target,
-        .optimize = optimize,
+        .optimize = wasm_optimize,
+        .strip = wasm_strip,
     });
     
     interpreter_mod_for_wasm.addImport("format", format_mod_for_wasm);
@@ -147,6 +165,15 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    // The same embed for the wasm target, so libcirc.wasm carries byte for
+    // byte the runtime this build produced.
+    const runtime_embed_wasm_mod = b.createModule(.{
+        .root_source_file = embed_zig_file,
+        .target = wasm_target,
+        .optimize = wasm_optimize,
+        .strip = wasm_strip,
+    });
+    _ = runtime_embed_wasm_mod; // consumed by the libcirc.wasm graph (next slice)
 
     // Version (from the VERSION file) and HEAD revision (git, at configure
     // time) exposed to the CLI's --version flag. A missing file or git
@@ -628,7 +655,8 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    topology_protocol_tests_mod.addImport("format", format_mod_for_wasm);
+    // A native test must not be built from the stripped wasm-target unit.
+    topology_protocol_tests_mod.addImport("format", fe.format);
     topology_protocol_tests_mod.addImport("runtime_embed", runtime_embed_mod);
     const topology_protocol_tests = b.addTest(.{
         .root_module = topology_protocol_tests_mod,
