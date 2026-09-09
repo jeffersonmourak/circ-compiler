@@ -325,6 +325,135 @@ const initial = picks[0];
       return h >>> 0;
     }
 
+    // ---- simulate ----
+    type Signal = 0 | 1;
+    type CircView = {
+      runtime: { topology: { components: { id: number; kind: number; name: string; origin: unknown[] }[] }; setPinSignal(id: number, s: Signal): void; run(): void };
+      view: { refreshState(): void; setInputSignal?(id: number, s: Signal): void };
+      canvas: HTMLCanvasElement;
+      destroy(): void;
+    };
+    const simMount = el.querySelector<HTMLElement>('.pg-sim-mount')!;
+    const sim = {
+      view: null as CircView | null,
+      bytes: null as Uint8Array | null,
+      renderedHash: -1,
+      /** Keyed by root input-pin NAME: ids shift as the source changes. */
+      pins: new Map<string, Signal>(),
+      rendererPromise: null as Promise<typeof import('circ-renderer')> | null,
+      themesPromise: null as Promise<typeof import('../utils/circ-theme.mjs')> | null,
+      assetsHooked: false,
+    };
+    const loadRenderer = () => (sim.rendererPromise ??= import('circ-renderer'));
+    const loadThemes = () => (sim.themesPromise ??= import('../utils/circ-theme.mjs'));
+    const INPUT_PIN = 0; // ComponentKind.InputPin
+
+    function rootInputs(view: CircView): Map<string, number> {
+      const m = new Map<string, number>();
+      for (const c of view.runtime.topology.components) {
+        if (c.kind === INPUT_PIN && c.origin.length === 0) m.set(c.name, c.id);
+      }
+      return m;
+    }
+
+    async function buildSim() {
+      if (!state.simulateEnabled || !sim.bytes) return;
+      const bytes = sim.bytes;
+      const [{ renderCircuit }, themeMod] = await Promise.all([loadRenderer(), loadThemes()]);
+      if (sim.bytes !== bytes) return;
+      const { pickTheme, onAssetsReady } = themeMod;
+      sim.view?.destroy();
+      sim.view = null;
+      simMount.innerHTML = '';
+      try {
+        const view = (await renderCircuit({
+          bytes,
+          cell: 14,
+          padding: 16,
+          interactive: true,
+          theme: pickTheme() as any,
+          // Present once the renderer exposes it; the click handler below is
+          // the fallback that keeps the by-name pin map current either way.
+          onPinToggle: (id: number, sig: Signal) => {
+            for (const [name, pid] of rootInputs(view)) if (pid === id) sim.pins.set(name, sig);
+          },
+        } as any)) as unknown as CircView;
+        sim.view = view;
+        simMount.appendChild(view.canvas);
+        simMount.hidden = false;
+        simNote.textContent = 'Click input pins to toggle them.';
+        // Replay the reader's pins by name onto the fresh instance.
+        const ids = rootInputs(view);
+        for (const name of Array.from(sim.pins.keys())) if (!ids.has(name)) sim.pins.delete(name);
+        let replayed = false;
+        for (const [name, sig] of sim.pins) {
+          const id = ids.get(name)!;
+          if (view.view.setInputSignal) view.view.setInputSignal(id, sig);
+          else view.runtime.setPinSignal(id, sig);
+          replayed = true;
+        }
+        if (replayed && !view.view.setInputSignal) {
+          view.runtime.run();
+          view.view.refreshState();
+        }
+        if (!view.view.setInputSignal) {
+          // Older renderer: keep the by-name map from the click itself.
+          view.canvas.addEventListener('click', () => {
+            for (const [name, id] of ids) {
+              const v = (view.runtime as any).readSignal?.(id);
+              if (v === 0 || v === 1) sim.pins.set(name, v);
+            }
+          });
+        }
+        if (!sim.assetsHooked) {
+          sim.assetsHooked = true;
+          onAssetsReady(() => { void rebuildSim(); });
+        }
+      } catch (err) {
+        simNote.textContent = `Could not render the circuit: ${(err as Error).message}`;
+        simMount.hidden = true;
+      }
+    }
+    async function rebuildSim() {
+      if (!sim.view) return;
+      await buildSim();
+    }
+    hooks.onArtifact = (bytes) => {
+      sim.bytes = bytes;
+      if (!bytes) {
+        sim.view?.destroy();
+        sim.view = null;
+        simMount.innerHTML = '';
+        simMount.hidden = true;
+        simNote.textContent = state.simulateEnabled ? 'Fix the errors to simulate.' : simNote.textContent;
+        sim.renderedHash = -1;
+        return;
+      }
+      simNote.textContent = '';
+      if (state.tab === 'simulate' && state.artifact && sim.renderedHash !== state.artifact.hash) {
+        sim.renderedHash = state.artifact.hash;
+        void buildSim();
+      }
+    };
+    const showTabBase = showTab;
+    for (const b of tabs) {
+      if (b.dataset.tab !== 'simulate') continue;
+      b.addEventListener('click', () => {
+        if (state.artifact && sim.renderedHash !== state.artifact.hash) {
+          sim.renderedHash = state.artifact.hash;
+          void buildSim();
+        } else if (!state.artifact && !sim.bytes) {
+          simNote.textContent = state.simulateEnabled ? 'Compile a circuit first.' : simNote.textContent;
+        }
+      });
+    }
+    void showTabBase;
+    // Theme flips: circ-renderer captures the theme at construction.
+    new MutationObserver(() => { void rebuildSim(); }).observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    });
+
     // Nothing heavy loads until the reader interacts.
     source.addEventListener('focus', () => { void ensureReady(); }, { once: true });
   }
