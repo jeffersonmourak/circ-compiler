@@ -177,6 +177,7 @@ const initial = catalogue[0];
   import { getSharedClient, type LibcircVersion, type WorkerReply } from '../scripts/libcirc-client.ts';
   import { joinConflicts, requestFor, rootOf, PLAYGROUND_DIR } from '../utils/split-files.ts';
   import { createSplitter } from '../scripts/splitter.ts';
+  import { fnv1a } from '../utils/artifact-hash.ts';
   import { capRefusal, mountSettingsDrawer, optionsFor } from '../scripts/settings-drawer.ts';
   import {
     applyRomImages,
@@ -1665,14 +1666,6 @@ const initial = catalogue[0];
       }
     }
 
-    function fnv1a(bytes: Uint8Array): number {
-      let h = 0x811c9dc5;
-      for (let i = 0; i < bytes.length; i++) {
-        h ^= bytes[i];
-        h = Math.imul(h, 0x01000193);
-      }
-      return h >>> 0;
-    }
 
     // ---- simulate ----
     type Signal = 0 | 1;
