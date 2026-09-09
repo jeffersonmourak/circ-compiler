@@ -289,6 +289,7 @@ function emitLlmsTxt(): void {
     '',
     `- [Landing page](${SITE_URL}/index.md): What \`circ\` is, what it isn't, where it runs.`,
     `- [Tour](${SITE_URL}/tour.md): Seven progressive examples from a single NOT gate to a full-adder built from two half-adders.`,
+    `- [Playground](${SITE_URL}/playground): Compile, diagnose, preview, tabulate, and simulate \`.circ\` in the browser — interactive, no \`.md\` twin.`,
     `- [Language reference](${SITE_URL}/reference.md): Every keyword, every diagnostic code, the rules the validator enforces.`,
     ...docs
       .filter((d) => d.dst !== 'reference.md')

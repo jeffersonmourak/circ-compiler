@@ -1,0 +1,21 @@
+---
+import Base from '../layouts/Base.astro';
+import Playground from '../components/Playground.astro';
+import manifest from '../../public/wasm/libcirc.manifest.json';
+import { SUPPORTED_TOPOLOGY_VERSIONS } from '../utils/renderer-versions.ts';
+---
+<Base
+  title="Playground — circ"
+  description="Write circ in the browser: diagnostics, the --preview schematic, a truth table, and a live simulation of the compiled circuit — no install, no server."
+  mdTwin={null}
+>
+  <h1>Playground</h1>
+  <p class="pg-intro">
+    Type a circuit or pick an example. The compiler runs in your browser
+    (<code>libcirc.wasm</code>, built from circ-compiler
+    <code>{manifest.version}</code> at <code>{manifest.revision}</code>); nothing
+    leaves the page. Multi-file projects use <code>// name.circ</code> marker
+    lines, and the last file is the root.
+  </p>
+  <Playground manifest={manifest} supportedVersions={SUPPORTED_TOPOLOGY_VERSIONS} />
+</Base>
