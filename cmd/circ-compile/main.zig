@@ -252,10 +252,10 @@ pub fn run(
 
     const route: libcirc.frontend.Route = switch (args.mode) {
         .inspect => .single_module,
-        // Compile/emit_zig keep the cheaper has_imports gate to avoid the extra
-        // disk I/O on macro-free fixtures (locked by perf-budget tests); preview,
-        // truth_table and sim always go through the project pipeline so implicit
-        // builtin-macro usages (e.g. `xor` without an explicit import) resolve.
+        // Compile/emit_zig take the project route only when the root declares
+        // an import or instantiates a built-in macro (`frontend.usesBuiltinMacro`),
+        // so a macro-free, import-free root still skips the import scan and the
+        // perf budget holds; preview, truth_table and sim always take it.
         .compile, .emit_zig => .project_if_imports,
         .preview, .truth_table, .sim => .project,
     };

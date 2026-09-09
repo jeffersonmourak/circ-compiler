@@ -62,6 +62,9 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - Playground artifacts are committed; the module runs in a Web Worker
 - Not exported through libcirc (`--sim`, `--emit-zig`, `--inspect`)
 
+### [playground.md](playground.md)
+- The compile fast path resolves implicit builtins (usage-aware `.project_if_imports`; `--inspect` unchanged)
+
 ## Conventions
 
 - Decisions use `###` headings inside topic files.

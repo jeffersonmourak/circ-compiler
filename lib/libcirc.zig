@@ -272,6 +272,7 @@ pub fn writeVersionJson(writer: anytype) !void {
 }
 
 test {
+    _ = frontend;
     _ = json;
 }
 

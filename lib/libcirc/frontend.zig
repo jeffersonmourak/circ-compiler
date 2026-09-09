@@ -14,6 +14,7 @@ const file_loader = @import("file_loader");
 const scan_imports = @import("scan_imports");
 const import_cycle = @import("import_cycle");
 const resolve_bodies = @import("resolve_bodies");
+const builtins = @import("builtins");
 
 /// One in-memory source file: `path` is the key imports resolve against.
 pub const File = struct {
@@ -22,9 +23,11 @@ pub const File = struct {
 };
 
 /// Which pipeline the root takes. `.project_if_imports` is the CLI's
-/// compile/emit fast path: a root with no imports skips the import scan.
-/// Preview, truth table, sim and analyze always run the project pipeline so
-/// implicit builtin macros (`xor` without an import) resolve.
+/// compile/emit fast path: the project route is taken when the root declares
+/// an import or instantiates a built-in macro (`usesBuiltinMacro`), so
+/// implicit builtins (`xor` without an import) resolve there too; only a
+/// macro-free, import-free root skips the import scan. Preview, truth table,
+/// sim and analyze always run the project pipeline.
 pub const Route = enum { single_module, project_if_imports, project };
 
 /// Every step that can fail with a hard error. `cliLabel` is the exact
@@ -170,7 +173,7 @@ pub fn run(
 
     const project_route = switch (route) {
         .single_module => false,
-        .project_if_imports => ast_file.imports.len > 0,
+        .project_if_imports => ast_file.imports.len > 0 or usesBuiltinMacro(ir_module),
         .project => true,
     };
 
@@ -246,10 +249,92 @@ pub fn run(
     return finish(front);
 }
 
+/// True when the root instantiates a built-in macro (`or`, `nand`, `nor`,
+/// `xor`, `xnor`) it never imported. The single-module resolve has no
+/// builtin aliases in scope, so such an instance lands as
+/// `.unresolved_name`; only the project pipeline auto-imports
+/// `<builtin>/<name>.circ` for it (`scan_imports`).
+///
+/// Scans the IR, not `ast_file.components[]`: an anonymous nested instance
+/// (`wire w(in = xor(a=a, b=b).out)`) never appears in
+/// `ast_file.components[]`, which covers top-level instances only, while the
+/// resolver flattens it into `ir_module.components`.
+fn usesBuiltinMacro(module: ir.Module) bool {
+    for (module.components) |component| {
+        switch (component.kind) {
+            .unresolved_name => |name| {
+                if (builtins.isMacroImportAlias(name)) return true;
+            },
+            else => {},
+        }
+    }
+    return false;
+}
+
 fn finish(front: Front) Front {
     var out = front;
     const counts = countDiagnostics(out.diagnostics.items);
     out.errors = counts.errors;
     out.warnings = counts.warnings;
     return out;
+}
+
+fn hasCode(list: []const diagnostics.Diagnostic, code: anytype) bool {
+    for (list) |d| if (d.code == code) return true;
+    return false;
+}
+
+fn hasPath(paths: []const []const u8, wanted: []const u8) bool {
+    for (paths) |p| if (std.mem.eql(u8, p, wanted)) return true;
+    return false;
+}
+
+test "frontend: an import-free root that uses a builtin takes the project route" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var failure: Failure = undefined;
+    const front = try run(a, "tests/fixtures/circuits/full_adder_from_builtins.circ", &.{}, .project_if_imports, &failure);
+    try std.testing.expect(front.project != null);
+    try std.testing.expectEqual(@as(usize, 0), front.errors);
+    try std.testing.expectEqual(@as(usize, 0), front.warnings);
+    try std.testing.expect(front.early_stop == null);
+    try std.testing.expect(hasPath(front.file_paths, "<builtin>/xor.circ"));
+    try std.testing.expectEqual(@as(usize, 6), front.file_paths.len);
+}
+
+test "frontend: an anonymous-position builtin still takes the project route" {
+    // The case an `ast_file.components[]` scan would miss. The instance is
+    // never specialized (a pre-existing gap in `resolve_bodies`), so the
+    // project validator reports E012s — but never the E001 this route removes.
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var failure: Failure = undefined;
+    const front = try run(a, "tests/fixtures/circuits/builtin_xor_anonymous.circ", &.{}, .project_if_imports, &failure);
+    try std.testing.expect(front.project != null);
+    try std.testing.expect(!hasCode(front.diagnostics.items, .E001));
+}
+
+test "frontend: a non-macro undeclared name keeps the fast path" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var failure: Failure = undefined;
+    const front = try run(a, "tests/fixtures/circuits/E001_undeclared.circ", &.{}, .project_if_imports, &failure);
+    try std.testing.expect(front.project == null);
+    try std.testing.expectEqual(@as(usize, 1), front.file_paths.len);
+    try std.testing.expectEqual(@as(usize, 1), front.errors);
+    try std.testing.expectEqual(@as(usize, 0), front.warnings);
+    try std.testing.expect(hasCode(front.diagnostics.items, .E001));
+}
+
+test "frontend: a macro-free root keeps the fast path" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var failure: Failure = undefined;
+    const front = try run(a, "tests/fixtures/circuits/stress_grid_10x10.circ", &.{}, .project_if_imports, &failure);
+    try std.testing.expect(front.project == null);
+    try std.testing.expectEqual(@as(usize, 1), front.file_paths.len);
 }

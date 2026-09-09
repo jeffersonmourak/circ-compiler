@@ -1,0 +1,13 @@
+# playground
+
+The entries below record the decisions of the playground-v2 initiative (the site's `/playground` as a workbench: editor, tabs, layout, workspace, source linking, settings, live editors). The fifteen decisions locked at plan time are in `DOCS/PLANS_PROMPT.md`; each phase appends the ones it exercises here as it ships them. The library half of the browser story is in [libcirc.md](libcirc.md).
+
+### The compile fast path resolves implicit builtins
+
+**Decision.** `lib/libcirc/frontend.zig`'s `.project_if_imports` route — the compile and `--emit-zig` fast path — takes the project pipeline when the root declares an import **or** instantiates a built-in macro (`usesBuiltinMacro`: any `.unresolved_name` component in the single-module IR whose name is one of `or`, `nand`, `nor`, `xor`, `xnor`). A macro-free, import-free root still skips the import scan. The predicate scans the resolved IR rather than `ast_file.components[]`, so an anonymous nested instance (`wire w(in = xor(...).out)`) counts. `--inspect` stays `.single_module` and still reports `E001` for an unimported built-in; `tests/fixtures/expected-inspect/canonical_full_adder_root.txt` pins that.
+
+**Rationale.** Preview, truth table, sim and analyze already took the project route, so a single file using `xor` previewed and tabulated fine but returned `E001` from `circ_compile` — the playground's Simulate tab went empty for the tour's own half-adder once the reader deleted the import line the tour calls optional. One predicate fixes the library and the CLI together (both select the route through the same enum), adds no diagnostic (`W003` already skips implicit builtins), and keeps the perf guard: `stress_grid_10x10.circ` contains no macro and stays on the fast path.
+
+**Alternatives.** A site-only hint (never produces an artifact); rewriting the request's `files` in the playground (forks the interchange format and breaks line mapping); `compile → .project` unconditionally (leaves the CLI on the old behaviour and needs a byte-equality spike between the two serializers); a new `options.route` key (unknown keys are status 2, so the site could not send it against the committed module).
+
+**Known remainder.** An anonymous-position built-in is routed correctly but does not compile yet: `resolve_bodies.specializeCallSites` pairs AST instances to IR components positionally over `ast_file.components`, never visiting the anonymous components the resolver appends afterwards, so the parametric built-in falls back to its stub module and validation reports `E012` on `a`, `b` and `out`. `tests/fixtures/circuits/builtin_xor_anonymous.circ` pins the route (no `E001`) and nothing more; closing the gap renumbers specialization ids and is a separate initiative.
