@@ -104,7 +104,11 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(doc.querySelector('.pg-splitter')).not.toBeNull();
     expect(doc.querySelector('.pg-statusbar')).not.toBeNull();
     expect(doc.querySelector('.pg-settings')).not.toBeNull();
-    const panes = Array.from(doc.querySelector('.pg-panes')?.children ?? [], (c) => (c as Element).className);
+    // happy-dom's Element is structurally its own; `className` is all this needs.
+    const panes = Array.from(
+      doc.querySelector('.pg-panes')?.children ?? [],
+      (c) => (c as { className: string }).className,
+    );
     expect(panes).toEqual(['pg-ws', 'pg-editor', 'pg-splitter', 'pg-output']);
   });
 
