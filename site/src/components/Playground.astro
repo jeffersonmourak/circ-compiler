@@ -360,6 +360,25 @@ const initial = catalogue[0];
       simNote.textContent = `${link_.name} — ${decl.kind}`;
     }
 
+    /**
+     * Highlight by declared name, from a source that has a name rather than a
+     * position — a truth-table header, a diagnostics row. `null` restores
+     * whatever the cursor was pointing at, so a passing hover never leaves the
+     * reader's own context behind.
+     */
+    function highlightByName(name: string | null) {
+      if (name === null) {
+        highlightComponent(link.current);
+        markInEditor(link.current ? (link.table?.byName.get(link.current.name) ?? null) : null);
+        markTableColumn(link.current);
+        return;
+      }
+      const decl = link.decls.find((d) => d.name === name) ?? null;
+      highlightComponent(decl);
+      markInEditor(link.table?.byName.get(name) ?? null);
+      markTableColumn(decl);
+    }
+
     /** One place decides what the cursor is pointing at. */
     function setCurrentDeclaration(decl: Declaration | null) {
       if (decl === link.current) return;
@@ -1328,6 +1347,17 @@ const initial = catalogue[0];
       for (const name of [...table.inputs, ...table.outputs]) {
         const th = document.createElement('th');
         th.textContent = name;
+        // Headers are `name` or `name[W]`; the join key is the bare name.
+        const symbol = headerSymbolName(name);
+        th.dataset.symbolName = symbol;
+        // Focusable, so this is not a pointer-only affordance.
+        th.tabIndex = 0;
+        const show = () => highlightByName(symbol);
+        const clear = () => highlightByName(null);
+        th.addEventListener('pointerenter', show);
+        th.addEventListener('focus', show);
+        th.addEventListener('pointerleave', clear);
+        th.addEventListener('blur', clear);
         head.appendChild(th);
       }
       const body = t.createTBody();
@@ -1414,6 +1444,22 @@ const initial = catalogue[0];
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.textContent = diagnosticLabel(m);
+        // Hovering or focusing a row lights up whatever it points at, so the
+        // list is a third way into the picture.
+        if (m.tab !== null) {
+          const show = () => {
+            const line = m.line;
+            const file = state.tabs.files[m.tab!];
+            const decl = file
+              ? declarationAt(link.decls, line, m.column, file.body.split('\n')[line - 1] ?? '')
+              : null;
+            if (decl) highlightByName(decl.name);
+          };
+          btn.addEventListener('pointerenter', show);
+          btn.addEventListener('focus', show);
+          btn.addEventListener('pointerleave', () => highlightByName(null));
+          btn.addEventListener('blur', () => highlightByName(null));
+        }
         // Any row with a span jumps, switching tabs first when the compiler
         // blamed another file. `showDocument` is synchronous, so the select on
         // the next statement lands in the file that just became visible.

@@ -415,3 +415,19 @@ Append-only log, one entry per shipped slice. Newest at the bottom. See `DOCS/PL
 1. The highlight is a background colour rather than a border, so marking a span never shifts the text by a pixel while the reader is reading it.
 2. `onHover` fires only on a change by contract, so the island debounces nothing.
 3. Manual checklist — **unrun** (no browser): hover an AND box and watch its declaration light up; hover one while a sibling tab is open and read the note instead.
+
+## 2026-09-09 — Phase 5 — Slice 7: truth-table headers and diagnostics as highlight sources
+
+**What shipped:** Every truth-table `<th>` carries `data-symbol-name` from `headerSymbolName` (stripping the `[W]` width suffix) and `tabindex="0"`, with `pointerenter`/`focus` showing and `pointerleave`/`blur` clearing — so it is a keyboard affordance, not a pointer-only one. Diagnostics rows do the same, resolving their file-local position through `declarationAt`. Both go through one `highlightByName`, whose `null` case **restores whatever the cursor was pointing at** rather than clearing outright, so a passing hover never leaves the reader's own context behind. Two decision entries landed.
+**Files touched:** `site/src/components/Playground.astro`, `DOCS/decisions/playground.md`, `DOCS/decisions/index.md`, `DOCS/STATUS.md`.
+**Tests:** no new cases — `headerSymbolName` and `declarationAt` are slice 4's. Ran `bun test` (222 pass across 21 files), `bun --bun run typecheck` (0 errors), `bun --bun run build` (pass), `bun run bundle` (ok; `/playground` 20.2 KB gzip against its 120 KB ceiling).
+**Next slice:** none — Phase 5 is complete. Phase 6 (`DOCS/PLANS/PHASE_6_settings_and_rom_images.md`) is next and needs the human's go-ahead.
+**Notes:** Manual checklist — **unrun** (no browser): hover a truth-table column header and watch the box ring and the declaration light up; tab to one and get the same; hover a diagnostics row and see what it points at.
+
+## 2026-09-09 — Phase 5 — close-out
+
+**What shipped:** Phase 5 is complete in seven slices across two repositories. In `circ-renderer` (branch `host-pin-api`, pushed by the human at the phase's hard stop): `2a76686`, adding `onHover`, `setHighlight` and `getLayout` with seven headless tests and version `2.1.0-alpha.2`. In this repo: `c0c92b6`, `49f1d81`, `b9daef5`, `4275b54`, `1b6d27e`, `772b644` and this one. A reader can now move between source and picture in four directions — cursor to canvas, cursor to truth-table column, canvas hover to declaration, and header or diagnostics row to both.
+**Files touched:** none beyond the seven slices; this entry is the phase's measurement of record.
+**Tests:** `bun test` 222 pass across 21 files, up from 196 at the end of Phase 4, plus 23 in the renderer repository. `bun --bun run typecheck` 0 errors; `bun --bun run build` green; `bun run bundle` green with `/playground` at 20.2 KB gzip against its 120 KB ceiling. No ceiling raised. `zig build test-all` untouched by this phase.
+**Next slice:** Phase 6, on the human's go-ahead.
+**Notes:** The whole manual checklist is **unrun**, as it has been for every phase: no browser has been available in any session on this branch, so nobody has seen a ring appear, a declaration light up, or the hover ring that this phase also added to the home and examples pages through the shared theme module. Two things are known to be incomplete by design and are pinned by tests rather than left to be discovered: pointing at a `rom` or `ram` highlights nothing, because the site registers no memory skin and the package's own memory drawing ignores the hover flag — that is Phase 6's, the phase that gives a reader a reason to point at one; and declarations inside a macro stay unresolvable while the renderer draws one collapsed box per instance, so they come back in the join's `unlinked` list rather than silently matching the wrong box.

@@ -83,6 +83,8 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - The fragment is scrubbed at parse time, before anything can read it (a classic inline script beats every deferred module; one-rule-at-a-time precedence)
 - Scratch projects are flat, capped three ways, and never hold shipped text (ids for content, LRU eviction that spares the active project)
 - The first edit forks a shipped example into your own project (fork on change, not on diff; a shared link arrives as your own project)
+- The renderer exposes three host hooks, and the highlight reuses `hovered` (`onHover`, `setHighlight`, `getLayout`; two ids kept apart)
+- Source and picture are joined by declared name, never by span (root file only, top-level boxes only, no snapshotted ranges)
 
 ## Conventions
 

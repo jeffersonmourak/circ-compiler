@@ -172,3 +172,19 @@ The entries below record the decisions of the playground-v2 initiative (the site
 
 **Alternatives.** Overwriting the example in place (loses the shipped text for that reader forever); prompting before forking (a dialogue in front of the first keystroke); forking only on a real diff (unpredictable, and it deletes projects).
 
+### The renderer exposes three host hooks, and the highlight reuses `hovered`
+
+**Decision.** `circ-renderer` gains exactly three additions on its host-pin branch: `RenderOptions.onHover(id | null)`, firing only on a change; `CircCanvas.setHighlight(id | null)`, feeding the **existing** `SkinContext.hovered` flag through a private `highlightId` kept apart from the canvas's own `hoverId`; and `CircCanvas.getLayout()`, the public read accessor. The callback emits a bare id rather than a placed component, because a component object would have to be re-resolved against the layout anyway to reach a collapsed macro's synthetic id, and the accessor is what a name-to-box join needs regardless. The site pins the resulting sha and asserts, in a test, that the installed package's version matches the constant the site records and that both hooks exist on the prototype.
+
+**Rationale.** Reusing `hovered` rather than adding a `highlighted` field means a skin needs one branch, not two, and the package's own skins stay untouched. Keeping the two ids apart is what lets a host highlight survive the pointer leaving the canvas — with one id, moving the mouse away would silently clear an editor-driven highlight. Seven headless tests in the renderer prove all of it with a stub element and no jsdom, including the collapsed-macro case that a topology-only lookup gets wrong.
+
+**Alternatives.** A `highlighted` field on the skin context (two branches in every skin, forever); returning a `PlacedComponent` from the callback (allocates on every pointer move and still cannot answer the macro case); exposing the layout as a getter on the returned view object rather than the canvas (the canvas is what owns the grid it drew).
+
+### Source and picture are joined by declared name, never by span
+
+**Decision.** The link between the editor and the canvas is a join on `(name, kind)` between the root file's analyze symbols and the layout's top-level boxes. Only the root file takes part, and only boxes whose `origin` is empty: a sibling file's declarations and a macro's internals are asserted **excluded** rather than resolved, because the canvas draws one collapsed box per macro instance and never draws what is inside it. A `SourceLink` carries no range — the last good canvas stays on screen across an unbounded run of failing edits while the analysis behind it keeps refreshing, so a snapshotted range would come to point at whatever text had since moved into those columns. Ranges are read from the current declarations at the moment they are used.
+
+**Rationale.** A compiled artifact carries no source positions, so a name is the only thing both sides have. Keeping the table and the declarations as two separately refreshed things is what lets the picture stay useful while the source is temporarily broken, which is the state a reader is in most often.
+
+**Alternatives.** Embedding spans in the topology (a format change for a tooling convenience, and it would still be stale on the dimmed canvas); joining on position within the layout (meaningless — layout order is not source order); resolving into macros by turning on expand mode (a behaviour change that also requires relaxing the top-level filter, and it belongs to whichever initiative wants it).
+
