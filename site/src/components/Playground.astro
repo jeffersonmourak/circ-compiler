@@ -89,6 +89,7 @@ const initial = picks[0];
   import { LibcircClient, type LibcircVersion, type WorkerReply } from '../scripts/libcirc-client.ts';
   import { joinConflicts, requestFor, rootOf, PLAYGROUND_DIR } from '../utils/split-files.ts';
   import { createSplitter } from '../scripts/splitter.ts';
+  import { createStore, describeNote } from '../utils/playground-store.ts';
   import {
     activeFile,
     addFile,
@@ -180,14 +181,40 @@ const initial = picks[0];
     }
     for (const b of tabs) b.addEventListener('click', () => showTab(b.dataset.tab as Tab));
 
+    // ---- persistence ----
+    // One key, one envelope. Phase 3 populates layout.ratios only; the other
+    // fields ship with their defaults for later phases to fill.
+    const store = createStore();
+    store.onNote((note) => { status.textContent = describeNote(note); });
+
     // ---- the pane divider ----
     const panes = el.querySelector<HTMLElement>('.pg-panes')!;
     const separator = el.querySelector<HTMLElement>('.pg-splitter')!;
     const splitter = createSplitter({
       container: panes,
       separator,
-      initial: 0.5,
+      initial: store.envelope.layout.ratios.main ?? 0.5,
       labels: ['editor', 'output'],
+      // Only a drag, a key or a double-click persists; a window resize
+      // re-clamps what is rendered and never commits.
+      onCommit: (ratio) => store.update((draft) => { draft.layout.ratios.main = ratio; }),
+    });
+
+    // Below the breakpoint the panes stack, so the divider means nothing: it
+    // leaves the page and the tab order together. The persisted desktop ratio
+    // is untouched.
+    const narrow = window.matchMedia('(max-width: 800px)');
+    const applyBreakpoint = () => {
+      separator.hidden = narrow.matches;
+      splitter.refresh();
+    };
+    narrow.addEventListener('change', applyBreakpoint);
+    applyBreakpoint();
+
+    // localStorage is synchronous, so a flush on the way out is enough.
+    window.addEventListener('pagehide', () => store.flush());
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') store.flush();
     });
 
     // ---- file tabs ----
