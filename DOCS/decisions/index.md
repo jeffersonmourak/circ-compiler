@@ -64,6 +64,7 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 
 ### [playground.md](playground.md)
 - The compile fast path resolves implicit builtins (usage-aware `.project_if_imports`; `--inspect` unchanged)
+- The JavaScript budget is per page and gzip is the gate (`bun run bundle`, `bundle-budget.json`, the build-free CodeMirror tripwire)
 
 ## Conventions
 

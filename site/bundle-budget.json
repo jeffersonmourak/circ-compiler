@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "$comment": "gzip is summed per file, not over a concatenation: each chunk is a separate HTTP response.",
+  "default": {
+    "gzip": 10240
+  },
+  "routes": {
+    "/playground": {
+      "raw": 368640,
+      "gzip": 122880
+    }
+  },
+  "baseline": {
+    "/": {
+      "files": 2,
+      "raw": 3056,
+      "gzip": 1613
+    },
+    "/download": {
+      "files": 0,
+      "raw": 0,
+      "gzip": 0
+    },
+    "/examples": {
+      "files": 2,
+      "raw": 3056,
+      "gzip": 1613
+    },
+    "/playground": {
+      "files": 2,
+      "raw": 11193,
+      "gzip": 4781
+    },
+    "/reference": {
+      "files": 0,
+      "raw": 0,
+      "gzip": 0
+    },
+    "/reference/circuit-format": {
+      "files": 0,
+      "raw": 0,
+      "gzip": 0
+    },
+    "/reference/getting-started": {
+      "files": 0,
+      "raw": 0,
+      "gzip": 0
+    },
+    "/reference/preview": {
+      "files": 0,
+      "raw": 0,
+      "gzip": 0
+    },
+    "/reference/wasm-api": {
+      "files": 0,
+      "raw": 0,
+      "gzip": 0
+    },
+    "/tour": {
+      "files": 0,
+      "raw": 0,
+      "gzip": 0
+    }
+  }
+}

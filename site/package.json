@@ -10,6 +10,7 @@
     "sync": "bun run scripts/sync-reference.ts",
     "llm-mirror": "bun run scripts/build-llm-mirror.ts",
     "libcirc": "bun run scripts/build-libcirc.ts",
+    "bundle": "bun run scripts/check-bundle.ts",
     "test": "bun test"
   },
   "dependencies": {
