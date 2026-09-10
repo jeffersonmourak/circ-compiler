@@ -72,8 +72,7 @@ output out(in=gate.out)
       "for declaring an unnamed component.",
     source: `input a
 input b
-not inv(in=b)
-and gate1(a=a, b=inv.out)
+and gate1(a=a, b=not(in=b).out)
 output out(in=gate1.out)
 `,
     preview: `╭───╮               ╭───╮

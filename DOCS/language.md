@@ -362,7 +362,11 @@ and g(
 
 Anonymous nesting may nest arbitrarily deep. It is purely a syntactic sugar:
 the resolver lowers it to an unnamed component instance with the same wiring
-rules as a named one.
+rules as a named one. It is accepted inside a component's port binding
+(`and`, `not`, `wire`, `led`, a macro, a sub-circuit) but **not** inside an
+`output` declaration: `output o(in = and(a = a, b = b).out)` loses the nested
+gate's bindings and fails with `E004`. Name the gate, or route it through a
+`wire`, when an output needs it.
 
 ### 4.1 Validation Rules
 
@@ -587,9 +591,14 @@ calls.
 
 ```
 input[8] x, y
-nor[8] n(a = x, b = y)         // bitwise NOR across all 8 bits
+nor n[8](a = x, b = y)         // bitwise NOR across all 8 bits
 output[8] z(in = n.out)
 ```
+
+The width of a macro or sub-circuit instance is passed in *instance* position
+as call-widths (`n[8]`), exactly as for a user sub-circuit (§6.3). A `[N]` in
+*type* position (`nor[8] n(...)`) only sizes primitives; on a macro it leaves
+the callee at width 1 and the call fails with `E014`.
 
 ### 6.5 Memories (`rom`/`ram`)
 
@@ -711,15 +720,18 @@ xor s_gate(a = a, b = b)
 // the xor gate.
 wire sum_w(in = s_gate.out)
 
-// First fan-out: feed the sum into a NOT gate inline.
-// Second fan-out: drive the 'sum' output pin directly from the same wire.
+// The carry bit, named so both an output and the gate below can read it.
+and carry_gate(a = a, b = b)
+
+// First fan-out: feed the sum into a NOT gate inline (an anonymous nested
+// component). Second fan-out: drive the 'sum' output pin from the same wire.
 and busy_gate(
     a = not(in = sum_w.out).out,
-    b = and(a = a, b = b).out          // anonymous AND for the carry bit
+    b = carry_gate.out
 )
 
 output sum  (in = sum_w.out)
-output carry(in = and(a = a, b = b).out)
+output carry(in = carry_gate.out)
 output busy (in = busy_gate.out)
 ```
 
