@@ -11,9 +11,13 @@
 //!      no in-edge from the previous layer (layer 0, back-edge-only sinks)
 //!      have no preference.
 //!   2. Packing. Nodes are placed top to bottom at `max(cursor, preferred)`
-//!      (or `cursor` with no preference), `cursor` advancing past the box plus
-//!      `ROW_GUTTER`, so the ordering is preserved and boxes never touch.
-//!   3. Reverse pass (slice 3) and dummy straightening.
+//!      (or `cursor` with no preference); a box leaves `ROW_GUTTER` free rows
+//!      under the box above it, a dummy (a wire row) needs no gutter on
+//!      either side. The ordering is preserved and boxes never touch.
+//!   3. Reverse pass. Walking layers right to left, a node with exactly one
+//!      out-edge whose wire is not straight moves *down* (never up) to the
+//!      row that straightens it, when its own input wire is not already
+//!      straight and the node below leaves the room.
 //!   4. Columns: a layer is as wide as its widest box; the gap after it is
 //!      `widths.after[layer]` (a stub of the old `COL_GUTTER` until the
 //!      channel stage supplies demand).
@@ -43,13 +47,25 @@ pub fn stubWidths(arena: std.mem.Allocator, num_layers: u32) !ChannelWidths {
     return .{ .after = after };
 }
 
-const Adjacency = struct { ins: [][]const u32 };
-
 fn buildIns(arena: std.mem.Allocator, layered: LayeredGraph) ![][]const u32 {
+    return buildAdj(arena, layered, .ins);
+}
+
+fn buildOuts(arena: std.mem.Allocator, layered: LayeredGraph) ![][]const u32 {
+    return buildAdj(arena, layered, .outs);
+}
+
+fn buildAdj(arena: std.mem.Allocator, layered: LayeredGraph, which: enum { ins, outs }) ![][]const u32 {
     const n = layered.nodes.len;
     var lists = try arena.alloc(std.ArrayList(u32), n);
     for (0..n) |i| lists[i] = .{};
-    for (layered.edges, 0..) |e, ei| try lists[e.dst].append(arena, @intCast(ei));
+    for (layered.edges, 0..) |e, ei| {
+        const key = switch (which) {
+            .ins => e.dst,
+            .outs => e.src,
+        };
+        try lists[key].append(arena, @intCast(ei));
+    }
     const out = try arena.alloc([]const u32, n);
     for (0..n) |i| out[i] = lists[i].items;
     return out;
@@ -84,15 +100,52 @@ pub fn assign(
     const y = try arena.alloc(u32, n);
     @memset(y, 0);
 
-    // Rows: layer by layer, preferred row then packing.
+    // Rows: layer by layer, preferred row then packing. Two cursors: a box
+    // keeps ROW_GUTTER free rows from the box above it, but a dummy — a wire
+    // passing through — may use the row right under a box, and a box may sit
+    // right under a dummy's row.
     var l: u32 = 0;
     while (l < num_layers) : (l += 1) {
-        var cursor: u32 = 0;
+        var box_cursor: u32 = 0;
+        var any_cursor: u32 = 0;
         for (ordering.order[l]) |ni| {
+            const is_box = layered.nodes[ni].real != null;
+            const cursor = if (is_box) box_cursor else any_cursor;
             const preferred = preferredRow(graph, layered, ins, y, h, ni);
             const top = if (preferred) |p| @max(cursor, p) else cursor;
             y[ni] = top;
-            cursor = top + h[ni] + ROW_GUTTER;
+            any_cursor = top + h[ni];
+            box_cursor = if (is_box) top + h[ni] + ROW_GUTTER else top + h[ni];
+        }
+    }
+
+    // Reverse pass: straighten a lone out-wire by moving its source down.
+    if (num_layers >= 2) {
+        const outs = try buildOuts(arena, layered);
+        var lr: u32 = num_layers - 1;
+        while (lr > 0) : (lr -= 1) {
+            const lo = ordering.order[lr - 1];
+            for (lo, 0..) |ni, i| {
+                const es = outs[ni];
+                if (es.len != 1) continue;
+                // An input wire that is already straight is worth more than
+                // the output wire; leave it.
+                if (preferredRow(graph, layered, ins, y, h, ni)) |pref| {
+                    if (pref == y[ni]) continue;
+                }
+                const e = layered.edges[es[0]];
+                const sink_row = inputPortRow(graph, layered, y, e.dst, e.dst_port) orelse continue;
+                const out_off = outputOffset(graph, layered, h, ni);
+                if (sink_row < out_off) continue;
+                const target = sink_row - out_off;
+                if (target <= y[ni]) continue;
+                const room = if (i + 1 < lo.len) blk: {
+                    const next = lo[i + 1];
+                    const gap: u32 = if (layered.nodes[ni].real != null and layered.nodes[next].real != null) ROW_GUTTER else 0;
+                    break :blk target + h[ni] + gap <= y[next];
+                } else true;
+                if (room) y[ni] = target;
+            }
         }
     }
 
@@ -133,6 +186,25 @@ pub fn assign(
         .width = width,
         .height = height,
     };
+}
+
+/// Row offset of a node's output port from its top (0 for a dummy).
+fn outputOffset(graph: VirtualGraph, layered: LayeredGraph, h: []const u32, ni: u32) u32 {
+    const ln = layered.nodes[ni];
+    if (ln.real) |ri| return ports.outputRow(graph.nodes[ri], h[ni]);
+    return 0;
+}
+
+/// Absolute row of the input port `dst_port` on `ni` (a dummy's own row), or
+/// null when the node has no such port.
+fn inputPortRow(graph: VirtualGraph, layered: LayeredGraph, y: []const u32, ni: u32, dst_port: u8) ?u32 {
+    const ln = layered.nodes[ni];
+    if (ln.real) |ri| {
+        const node = graph.nodes[ri];
+        const s = ports.slotIndex(node, dst_port) orelse return null;
+        return y[ni] + ports.inputSlots(node)[s].row;
+    }
+    return y[ni];
 }
 
 /// Absolute row of a node's output port (a dummy's own row).
@@ -318,4 +390,46 @@ test "coords: insertSpacerRow shifts every node at or below the row and grows he
     insertSpacerRow(&c, 4);
     try std.testing.expectEqualSlices(u32, &.{ 0, 5, 9 }, c.y);
     try std.testing.expectEqual(@as(u32, 12), c.height);
+}
+
+test "coords: a lone source is pulled level with its sink" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // pin → and.b only. Forward: the AND's preferred top from b saturates at
+    // 0, so the pin (out row 1) misses b (row 3) by two rows; the reverse
+    // pass moves the pin down, never the AND up.
+    const nodes = try a.alloc(VirtualNode, 2);
+    nodes[0] = try mk(a, 0, .{ .primitive = .input_pin }, &.{}, &.{.{ .dst_id = 1, .src_port = SRC_OUT, .dst_port = DST_B }});
+    nodes[1] = try mk(a, 1, .{ .primitive = .and_gate }, &.{.{ .src_id = 0, .src_port = SRC_OUT, .dst_port = DST_B }}, &.{});
+    const b = try build(a, nodes);
+    try std.testing.expectEqual(@as(u32, 0), b.coords.y[1]);
+    try std.testing.expectEqual(@as(u32, 2), b.coords.y[0]); // out row 3 = b's port row
+}
+
+test "coords: a long edge's dummies stay on one row" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    // pin0 → not → and → out; pin1 → out2 straight across three layers.
+    const nodes = try a.alloc(VirtualNode, 6);
+    nodes[0] = try mk(a, 0, .{ .primitive = .input_pin }, &.{}, &.{.{ .dst_id = 2, .src_port = SRC_OUT, .dst_port = DST_IN }});
+    nodes[1] = try mk(a, 1, .{ .primitive = .input_pin }, &.{}, &.{.{ .dst_id = 5, .src_port = SRC_OUT, .dst_port = DST_IN }});
+    nodes[2] = try mk(a, 2, .{ .primitive = .not_gate }, &.{.{ .src_id = 0, .src_port = SRC_OUT, .dst_port = DST_IN }}, &.{.{ .dst_id = 3, .src_port = SRC_OUT, .dst_port = DST_A }});
+    nodes[3] = try mk(a, 3, .{ .primitive = .and_gate }, &.{.{ .src_id = 2, .src_port = SRC_OUT, .dst_port = DST_A }}, &.{.{ .dst_id = 4, .src_port = SRC_OUT, .dst_port = DST_IN }});
+    nodes[4] = try mk(a, 4, .{ .primitive = .output_pin }, &.{.{ .src_id = 3, .src_port = SRC_OUT, .dst_port = DST_IN }}, &.{});
+    nodes[5] = try mk(a, 5, .{ .primitive = .output_pin }, &.{.{ .src_id = 1, .src_port = SRC_OUT, .dst_port = DST_IN }}, &.{});
+    const b = try build(a, nodes);
+    const c = b.coords;
+    const src_row = c.y[1] + 1;
+    var dummies: usize = 0;
+    for (b.layered.nodes, 0..) |ln, i| {
+        if (ln.real != null) continue;
+        dummies += 1;
+        try std.testing.expectEqual(src_row, c.y[i]);
+    }
+    try std.testing.expectEqual(@as(usize, 2), dummies);
+    // The sink itself is packed under `out` (rows 1..3 plus the gutter), so
+    // the wire ends with one bend; the dummies still run straight to there.
+    try std.testing.expectEqual(@as(u32, 5), c.y[5]);
 }
