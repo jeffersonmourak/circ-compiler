@@ -13,9 +13,19 @@ interface Props {
    * card without this opens on a memory full of unknowns.
    */
   memory?: Record<string, string>;
+  /**
+   * Mount as soon as the card scrolls into view, rather than waiting for a
+   * click.
+   *
+   * Opt-in, not the default: mounting fetches the renderer and this card's
+   * whole `.wasm`, which is right for a gallery a reader is scrolling THROUGH
+   * to see circuits work, and wrong for the landing page, where it would spend
+   * that on every visit before anyone has asked for anything.
+   */
+  autoRun?: boolean;
 }
 
-const { wasm, cell = 14, padding = 16, memory } = Astro.props;
+const { wasm, cell = 14, padding = 16, memory, autoRun = false } = Astro.props;
 const wasmHref = url(`/wasm/${wasm}`);
 // Serialised into the markup rather than passed to the script: the script is
 // hoisted and shared by every canvas on the page, so per-canvas data has to
@@ -28,6 +38,7 @@ const memoryAttr = memory && Object.keys(memory).length > 0 ? JSON.stringify(mem
   data-circ-cell={cell.toString()}
   data-circ-padding={padding.toString()}
   data-circ-memory={memoryAttr}
+  data-circ-autorun={autoRun ? '' : undefined}
 >
   <div class="lc-header">
     <span class="lc-label">live simulation</span>
@@ -70,6 +81,10 @@ const memoryAttr = memory && Object.keys(memory).length > 0 ? JSON.stringify(mem
 
   // Track active views per container so theme toggles can rebuild them.
   const active = new WeakMap<HTMLElement, { view: CircView; opts: { url: string; cell: number; padding: number } }>();
+  /** Cards whose mount has begun. `mount` is async and now has two callers —
+   *  a click and the observer — so without this a card that scrolls into view
+   *  as it is clicked builds two canvases and leaks the first. */
+  const starting = new WeakSet<HTMLElement>();
 
   /**
    * Put the card's images into a freshly built circuit.
@@ -104,6 +119,8 @@ const memoryAttr = memory && Object.keys(memory).length > 0 ? JSON.stringify(mem
     const mountEl = container.querySelector<HTMLElement>('.lc-mount');
     const errorEl = container.querySelector<HTMLElement>('.lc-error');
     if (!launch || !mountEl || !errorEl) return;
+    if (starting.has(container)) return;
+    starting.add(container);
 
     launch.disabled = true;
     launch.textContent = 'Loading…';
@@ -146,6 +163,9 @@ const memoryAttr = memory && Object.keys(memory).length > 0 ? JSON.stringify(mem
       errorEl.hidden = false;
       launch.disabled = false;
       launch.textContent = '▶ Run interactively';
+      // Retryable: whatever failed may not fail twice, and the button is the
+      // only way back.
+      starting.delete(container);
     }
   }
 
@@ -182,11 +202,42 @@ const memoryAttr = memory && Object.keys(memory).length > 0 ? JSON.stringify(mem
     });
   }
 
+  /**
+   * Mount each opted-in card once it is near the viewport.
+   *
+   * `rootMargin` starts the fetch a little before the card is actually on
+   * screen, so a reader scrolling steadily meets a running circuit rather than
+   * a spinner. Each card is unobserved as it mounts: this is a one-shot, not a
+   * visibility toggle, because tearing a circuit down on scroll would throw
+   * away whatever the reader had clocked into it.
+   *
+   * Absent `IntersectionObserver`, nothing happens and the button still works.
+   */
+  function watchForView() {
+    const cards = Array.from(document.querySelectorAll<HTMLElement>('.lc[data-circ-autorun]'));
+    if (cards.length === 0) return;
+    if (typeof IntersectionObserver === 'undefined') return;
+
+    const seen = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const container = entry.target as HTMLElement;
+          seen.unobserve(container);
+          void mount(container);
+        }
+      },
+      { rootMargin: '200px 0px' },
+    );
+    for (const card of cards) seen.observe(card);
+  }
+
   function init() {
     document.querySelectorAll<HTMLElement>('.lc').forEach((container) => {
       const launch = container.querySelector<HTMLButtonElement>('.lc-launch');
       launch?.addEventListener('click', () => mount(container));
     });
+    watchForView();
 
     // When the user toggles light/dark, rebuild any already-mounted canvases
     // with the matching theme.

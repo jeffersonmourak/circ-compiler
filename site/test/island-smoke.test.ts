@@ -51,9 +51,35 @@ function drive<T>(fn: (doc: Window['document']) => T): T {
   }
 }
 
+/**
+ * A recording stand-in for `IntersectionObserver`, which happy-dom does not
+ * implement.
+ *
+ * It has to be a GLOBAL before the island chunk is imported, because the
+ * script wires its observer at import time — so a test cannot install it
+ * afterwards and see anything.
+ */
+export class FakeIntersectionObserver {
+  static instances: FakeIntersectionObserver[] = [];
+  observed: unknown[] = [];
+  unobserved: unknown[] = [];
+  constructor(public readonly callback: (entries: unknown[]) => void, public readonly options?: unknown) {
+    FakeIntersectionObserver.instances.push(this);
+  }
+  observe(el: unknown) { this.observed.push(el); }
+  unobserve(el: unknown) { this.unobserved.push(el); }
+  disconnect() {}
+  /** Report the given elements as on screen, the way a scroll would. */
+  intersect(...els: unknown[]) {
+    this.callback(els.map((target) => ({ target, isIntersecting: true })));
+  }
+}
+
 function installGlobals(window: Window): () => void {
   const g = globalThis as Record<string, unknown>;
   const saved: [string, unknown][] = [];
+  saved.push(['IntersectionObserver', g.IntersectionObserver]);
+  g.IntersectionObserver = FakeIntersectionObserver;
   const keys = [
     'document', 'window', 'location', 'history', 'navigator', 'matchMedia',
     'requestAnimationFrame', 'ResizeObserver', 'MutationObserver', 'HTMLElement',
@@ -479,6 +505,48 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     (doc.querySelector('.pg-mem-hextoggle input') as unknown as { click(): void }).click();
     expect(doc.querySelector('.pg-mem-hex')).toBeNull();
   }));
+
+  test('the gallery watches every canvas, and the landing page watches none', async () => {
+    FakeIntersectionObserver.instances.length = 0;
+    const { doc, errors } = await runIsland('gallery', 'LiveCanvas.astro');
+    expect(errors).toEqual([]);
+
+    // One observer for the page, watching every opted-in card and nothing else.
+    expect(FakeIntersectionObserver.instances).toHaveLength(1);
+    const watcher = FakeIntersectionObserver.instances[0];
+    const cards = Array.from(doc.querySelectorAll('.lc[data-circ-autorun]'));
+    expect(cards.length).toBeGreaterThan(1);
+    // Compared by artifact name rather than by node. A failed `toEqual` on
+    // happy-dom elements makes bun serialise fourteen DOM trees to build its
+    // diff, and the run never finishes — a test whose failure mode is a hang
+    // is worse than no test.
+    const nameOf = (el: unknown) =>
+      (el as { getAttribute(n: string): string | null }).getAttribute('data-circ-wasm');
+    expect(watcher.observed.map(nameOf)).toEqual(cards.map(nameOf));
+    // Started before the card is actually on screen, so a steady scroll meets
+    // a running circuit rather than a spinner.
+    expect((watcher.options as { rootMargin: string }).rootMargin).toContain('200px');
+
+    // A card reported on screen is let go at once: this is a one-shot, not a
+    // visibility toggle, because tearing a circuit down on scroll would throw
+    // away whatever the reader had clocked into it.
+    //
+    // The target is a bare element rather than a card. `mount` returns before
+    // it imports anything when the container holds no launch button, and
+    // letting it get as far as the real renderer hangs this harness — there is
+    // no network here, and the import never settles.
+    const stub = doc.createElement('div');
+    stub.setAttribute('data-circ-wasm', 'stub.wasm');
+    watcher.intersect(stub);
+    expect(watcher.unobserved.map(nameOf)).toEqual(['stub.wasm']);
+
+    // The landing page renders the same component and opts none of its
+    // canvases in: mounting fetches the renderer and a whole `.wasm`, which is
+    // right for a gallery being scrolled through and wrong for the front door.
+    const landing = readFileSync(resolve(DIST, 'index.html'), 'utf8');
+    expect(landing).toContain('class="lc"');
+    expect(landing).not.toContain('data-circ-autorun');
+  });
 
   test('every app-shell container hands its height to exactly one child', () => drive((doc) => {
     // The bug this exists for, twice over: a container declared a fixed set of

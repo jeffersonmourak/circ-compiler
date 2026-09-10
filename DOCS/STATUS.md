@@ -848,3 +848,25 @@ Before this, both cards opened on sixteen unknowns. A memory is the one thing a 
 2. **The first wiring put 2.1 KB gzip on the landing page for a feature behind a click.** Importing the module eagerly took `/` and `/gallery` from 1.6 KB to 3.7 KB, because it pulls `parseRomImage` and its error machinery. It is behind a dynamic import now, in the same lazy chunk the renderer already loads: 0.7 KB gzip fetched on the first Run, and the eager pages went back to 1.8 KB. The remaining 0.2 KB is the import glue.
 3. **The images go in on every mount, including the rebuilds.** A theme toggle or the sprite-ready hook destroys the view and builds a new one, and contents are runtime state of a single instance — so a rebuilt canvas starts empty. Anything the reader had clocked into the ram is lost with the old instance regardless; reloading the declared image is the closest thing to where they were.
 4. **Two gates, in both directions.** The unit tests drive the real artifacts and assert the squares and the address tags word by word, so the ledes' claims are checked rather than asserted. A separate check reads the BUILT gallery and asserts one `data-circ-memory` per card that declares images and none anywhere else — forgetting the prop on the page is otherwise invisible, since the card still renders and the circuit still runs, just on an empty memory. Negative proof: excluding rams fails two cases, dropping the prop fails the built-page one.
+
+## 2026-09-09 — Feature — gallery canvases start themselves
+
+**What shipped:** A gallery card mounts its simulation when it scrolls into view instead of waiting for a click. `rootMargin: 200px` starts the fetch a little before the card is on screen, so a reader scrolling steadily meets a running circuit rather than a spinner. The button stays as the manual path, and as the whole behaviour where `IntersectionObserver` is absent.
+
+It is a **one-shot**, not a visibility toggle: each card is unobserved as it mounts. Tearing a circuit down on scroll-out would throw away whatever the reader had clocked into it, and rebuilding it on scroll-in would re-fetch the artifact.
+
+**Opt-in, and the landing page does not take it.** `autoRun` defaults to false. Mounting fetches the renderer and that card's whole `.wasm`, which is right for a gallery a reader is scrolling through to watch circuits work, and wrong for the front door, where it would spend that on every visit before anyone has asked for anything.
+
+**Files touched:** `site/src/components/LiveCanvas.astro`, `site/src/pages/gallery.astro`, `site/test/island-smoke.test.ts`.
+
+**Tests:** `bun test` 404 pass across 31 files, from 403. `bun --bun run typecheck` 0 errors. Build and `bun run bundle` green. `/gallery` and `/` are 2.0 KB gzip against a 10 KB ceiling, up 0.2 KB for the observer.
+
+**Next slice:** none.
+
+**Notes:**
+
+1. **`mount` has two callers now, so it needed a guard.** A card that scrolls into view as it is clicked would otherwise build two canvases and leak the first. A `WeakSet` records the ones that have begun, and a FAILED mount removes itself again — whatever failed may not fail twice, and the button is the only way back.
+2. **A test whose failure mode is a hang is worse than no test.** The first version compared observed elements to card elements with `toEqual`. On success that is fine; on failure bun serialises fourteen happy-dom trees to build its diff and the run never finishes — which is what happened, and it read as a passing suite because the grep for `(fail)` found nothing. The assertions compare `data-circ-wasm` strings now, and the same regression fails in 300 ms with a legible diff.
+3. **The harness could not observe anything before this.** happy-dom implements no `IntersectionObserver`, and the island wires its observer at import time, so a stand-in installed afterwards sees nothing. A recording fake is now installed with the other globals, before the chunk is imported.
+4. **The test intersects a bare element, not a card.** `mount` returns before importing anything when the container holds no launch button. Letting it reach the real renderer hangs the harness: there is no network here and the dynamic import never settles.
+5. **Three negative proofs.** Dropping the `watchForView()` call, deleting the `unobserve`, and opting the landing page in each fail the test. All three reverted.
