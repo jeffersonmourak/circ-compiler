@@ -870,3 +870,24 @@ It is a **one-shot**, not a visibility toggle: each card is unobserved as it mou
 3. **The harness could not observe anything before this.** happy-dom implements no `IntersectionObserver`, and the island wires its observer at import time, so a stand-in installed afterwards sees nothing. A recording fake is now installed with the other globals, before the chunk is imported.
 4. **The test intersects a bare element, not a card.** `mount` returns before importing anything when the container holds no launch button. Letting it reach the real renderer hangs the harness: there is no network here and the dynamic import never settles.
 5. **Three negative proofs.** Dropping the `watchForView()` call, deleting the `unobserve`, and opting the landing page in each fail the test. All three reverted.
+
+## 2026-09-09 — Content — both ripple-carry adders move onto buses
+
+**What shipped:** The 2-bit and 4-bit adders take `input[N] a, b` and return `output[N] s` plus a scalar `cout`, instead of nine and ten loose scalar pins. The truth table now reads as arithmetic: one column per operand rather than one per bit. The carry chain is unchanged, because it cannot be anything else — a ripple-carry adder ripples.
+
+The two now read as the same circuit at two widths, which the loose-bit versions did not.
+
+Also carries the human's `autoRun` on the landing-page hero.
+
+**Files touched:** `site/src/content/examples.ts`, `site/src/pages/index.astro`, `site/public/wasm/{two,four}-bit-adder.wasm`, `site/test/adders.test.ts` (new), `site/test/island-smoke.test.ts`.
+
+**Tests:** `bun test` 408 pass across 32 files, from 404. `bun --bun run typecheck` 0 errors. Build, `bun run bundle` and `zig build test-all` green.
+
+**Next slice:** none.
+
+**Notes:**
+
+1. **The obvious multibit version is wrong, and the compiler will not say so.** Computing propagate and generate bit-parallel — `xor p[4](a=a, b=b)` and `and[4] g(a=a, b=b)`, then slicing each lane out for the carry chain — compiles clean, previews clean, and gets **33 of 256 rows wrong**. A parametric macro's output cannot be sliced at all (`E002: slice range exceeds source width 1`), and buffering it through a `wire[4]` first makes the slice compile but produces wrong values downstream. `alu_4bit_multibit.circ` documents both traps in its own comments; this is the second circuit to hit them. Slicing the INPUT buses and keeping the per-bit logic scalar avoids both and is what shipped.
+2. **A rewrite of arithmetic needed a behavioural gate, so it has one.** `site/test/adders.test.ts` drives the committed artifacts over their whole input space — 16 pairs and 256 pairs — and checks `a + b == s + cout·2^N`, with an undefined output reported as its own failure rather than as a wrong number. That is the only thing that would have caught the version above: it draws, it runs, and it is wrong. Negative proof: dropping the propagated carry out of bit 2 fails 50 pairs.
+3. **`four-bit-adder` no longer claims a `repoPath`.** It was `tests/fixtures/circuits/four_bit_adder.circ` verbatim, and the fixture is still the scalar version with its own golden outputs. The gate that pins a `repoPath` to its fixture byte for byte would have failed, correctly, so the claim is dropped rather than the fixture edited.
+4. **A test asserted an intent that has since changed.** The last entry recorded the landing page deliberately opting out of auto-run, and a smoke assertion encoded it. The human has opted the hero in, so the assertion was the thing that was wrong. It now checks the invariant that survives either choice: every canvas that asks to auto-run is watched, and no canvas that did not ask is.

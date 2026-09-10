@@ -506,7 +506,7 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(doc.querySelector('.pg-mem-hex')).toBeNull();
   }));
 
-  test('the gallery watches every canvas, and the landing page watches none', async () => {
+  test('every canvas that asks to auto-run is watched, and nothing else is', async () => {
     FakeIntersectionObserver.instances.length = 0;
     const { doc, errors } = await runIsland('gallery', 'LiveCanvas.astro');
     expect(errors).toEqual([]);
@@ -540,12 +540,15 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     watcher.intersect(stub);
     expect(watcher.unobserved.map(nameOf)).toEqual(['stub.wasm']);
 
-    // The landing page renders the same component and opts none of its
-    // canvases in: mounting fetches the renderer and a whole `.wasm`, which is
-    // right for a gallery being scrolled through and wrong for the front door.
+    // The landing page renders the same component and opts its hero in too, so
+    // the flag is a per-canvas decision rather than a page-shaped one. What
+    // the observer must never do is watch a canvas that did NOT ask.
     const landing = readFileSync(resolve(DIST, 'index.html'), 'utf8');
     expect(landing).toContain('class="lc"');
-    expect(landing).not.toContain('data-circ-autorun');
+    expect(landing).toContain('data-circ-autorun');
+    const optedOut = Array.from(doc.querySelectorAll('.lc:not([data-circ-autorun])'));
+    expect(watcher.observed).toHaveLength(cards.length);
+    for (const el of optedOut) expect(watcher.observed).not.toContain(el);
   });
 
   test('every app-shell container hands its height to exactly one child', () => drive((doc) => {

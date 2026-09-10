@@ -273,141 +273,158 @@ output[8] out(in = code.out)
     slug: 'two-bit-adder',
     title: '2-bit ripple-carry adder',
     level: 'advanced',
-    lede: 'A half-adder for the low bit and a full-adder above it. The lower bit’s carry feeds into the upper bit’s `cin`.',
-    source: `// 2-bit ripple-carry adder: (a1 a0) + (b1 b0) → (cout s1 s0)
-import xor "<builtin>/xor.circ"
+    lede: 'The operands are buses, so the truth table reads as arithmetic rather than as four loose bits. A ripple-carry adder still takes them apart: the carry is the one part of an addition that cannot be done in parallel.',
+    source: `import xor "<builtin>/xor.circ"
 import or  "<builtin>/or.circ"
-input a0, a1, b0, b1
 
-// Lower bit (half adder)
-xor s0_xor(a=a0, b=b0)
-and s0_carry(a=a0, b=b0)
+// Two-bit operands and a two-bit sum, plus the carry that falls off the top.
+input[2] a, b
 
-// Upper bit (full adder, cin = s0_carry.out)
-xor s1_x1(a=a1, b=b1)
-xor s1_x2(a=s1_x1.out, b=s0_carry.out)
-and s1_a1(a=a1, b=b1)
-and s1_a2(a=s1_x1.out, b=s0_carry.out)
-or  s1_or(a=s1_a1.out, b=s1_a2.out)
+// A bus has to be taken apart to reach a single lane. Each slice goes
+// through a wire, which is what gives the lane a name to wire from.
+wire a0(in=a[0])
+wire a1(in=a[1])
+wire b0(in=b[0])
+wire b1(in=b[1])
 
-output s0  (in=s0_xor.out)
-output s1  (in=s1_x2.out)
-output cout(in=s1_or.out)
+// Bit 0 is a half adder: nothing carries into it.
+xor s0(a=a0.out, b=b0.out)
+and c0(a=a0.out, b=b0.out)
+
+// Bit 1 is a full adder fed by that carry.
+xor p1(a=a1.out, b=b1.out)
+xor s1(a=p1.out, b=c0.out)
+and g1(a=a1.out, b=b1.out)
+and t1(a=p1.out, b=c0.out)
+or  c1(a=g1.out, b=t1.out)
+
+// Low bit first, which is how a concat reads.
+output[2] s(in={s0.out, s1.out})
+output cout(in=c1.out)
 `,
-    preview: `╭────╮     ╭───╮              ╭───╮             ╭──────────╮     ╭──────╮
-│ a1 ├○──●▶┤   │         ╭───▶┤   │           ╭▶┤          │ ╭──▶┤ cout │
-╰────╯   │ │AND├○╮       │    │AND├○╮         │ │[or:s1_or]├○╯   ╰──────╯
-       ╭─┼▶┤   │ ├───────┼───▶┤   │ ╰─────────┼▶┤          │
-       │ │ ╰───╯ │       │    ╰───╯           │ ╰──────────╯
-       │ │       ├───────┼────────────────────╯
-╭────╮ │ │ ╭───╮ │       │    ╭───────────╮                      ╭────╮
-│ b1 ├○●╭┼▶┤   │ │       ●───▶┤           │                    ╭▶┤ s0 │
-╰────╯ │││ │AND├○●       │    │[xor:s1_x2]├○╮                  │ ╰────╯
-       ││├▶┤   │ ╰───────┼───▶┤           │ │                  │
-       │││ ╰───╯         │    ╰───────────╯ │                  │
-       │││               │                  │                  │
-╭────╮ │││ ╭───────────╮ │                  │                  │ ╭────╮
-│ a0 ├○●●┼▶┤           │ │                  ╰──────────────────┼▶┤ s1 │
-╰────╯ │││ │[xor:s1_x1]├○●                                     │ ╰────╯
-       ╰┼┼▶┤           │                                       │
-        ││ ╰───────────╯                                       │
-        ││                                                     │
-╭────╮  ││ ╭────────────╮                                      │
-│ b0 ├○─┴┼▶┤            │                                      │
-╰────╯   │ │[xor:s0_xor]├○─────────────────────────────────────╯
-         ╰▶┤            │
-           ╰────────────╯                                                `,
+    preview: `╭──────╮     ╭───╮          ╭───╮          ╭───────╮     ╭──────╮
+│ a[2] ├●─●─▶┤   │      ╭──▶┤   │        ╭▶┤       │ ╭──▶┤ cout │
+╰──────╯  │  │AND├○╮    │   │AND├○╮      │ │[or:c1]├○╯   ╰──────╯
+         ╭●─▶┤   │ ├────┼──▶┤   │ ╰──────┼▶┤       │             
+         ││  ╰───╯ │    │   ╰───╯        │ ╰───────╯             
+         ││        ├────┼────────────────╯                       
+╭──────╮ ││  ╭───╮ │    │   ╭────────╮                   ╭──────╮
+│ b[2] ├●●●─▶┤   │ │    ●──▶┤        │ ╭────────────────▶┤ s[2] │
+╰──────╯ ││  │AND├○●    │   │[xor:s1]├○╯                 ╰──────╯
+         ●●─▶┤   │ ╰────┼──▶┤        │                           
+         ││  ╰───╯      │   ╰────────╯                           
+         ││             │                                        
+         ││  ╭────────╮ │                                        
+         │●─▶┤        │ │                                        
+         ││  │[xor:p1]├○●                                        
+         ●┼─▶┤        │                                          
+         ││  ╰────────╯                                          
+         ││                                                      
+         ││  ╭────────╮                                          
+         │╰─▶┤        │                                          
+         │   │[xor:s0]├                                          
+         ╰──▶┤        │                                          
+             ╰────────╯                                          `,
     wasm: 'two-bit-adder.wasm',
   },
   {
     slug: 'four-bit-adder',
     title: '4-bit ripple-carry adder',
     level: 'advanced',
-    lede: 'Four full adders chained by their carry, the point where the ripple delay starts to show in the schematic.',
-    source: `// 4-bit ripple-carry adder: (a3 a2 a1 a0) + (b3 b2 b1 b0) → (cout s3 s2 s1 s0).
-// Bit 0 is a half adder; bits 1-3 are full adders chained via the previous
-// bit's carry-out. Largest arithmetic fixture in the suite at 256 rows.
-input a0, a1, a2, a3, b0, b1, b2, b3
+    lede: 'The same adder twice as wide, and visibly the same shape: four lanes off a pair of buses, each carrying into the next. 256 rows, and the sum is one column rather than four.',
+    source: `import xor "<builtin>/xor.circ"
+import or  "<builtin>/or.circ"
 
-// Bit 0 (half adder)
-xor s0_xor(a=a0, b=b0)
-and s0_carry(a=a0, b=b0)
+// Four-bit operands and a four-bit sum, plus the carry that falls off the top.
+input[4] a, b
 
-// Bit 1 (full adder, cin = s0_carry.out)
-xor s1_x1(a=a1, b=b1)
-xor s1_x2(a=s1_x1.out, b=s0_carry.out)
-and s1_a1(a=a1, b=b1)
-and s1_a2(a=s1_x1.out, b=s0_carry.out)
-or s1_or(a=s1_a1.out, b=s1_a2.out)
+// A bus has to be taken apart to reach a single lane. Each slice goes
+// through a wire, which is what gives the lane a name to wire from.
+wire a0(in=a[0])
+wire a1(in=a[1])
+wire a2(in=a[2])
+wire a3(in=a[3])
+wire b0(in=b[0])
+wire b1(in=b[1])
+wire b2(in=b[2])
+wire b3(in=b[3])
 
-// Bit 2 (full adder, cin = s1_or.out)
-xor s2_x1(a=a2, b=b2)
-xor s2_x2(a=s2_x1.out, b=s1_or.out)
-and s2_a1(a=a2, b=b2)
-and s2_a2(a=s2_x1.out, b=s1_or.out)
-or s2_or(a=s2_a1.out, b=s2_a2.out)
+// Bit 0 is a half adder: nothing carries into it.
+xor s0(a=a0.out, b=b0.out)
+and c0(a=a0.out, b=b0.out)
 
-// Bit 3 (full adder, cin = s2_or.out)
-xor s3_x1(a=a3, b=b3)
-xor s3_x2(a=s3_x1.out, b=s2_or.out)
-and s3_a1(a=a3, b=b3)
-and s3_a2(a=s3_x1.out, b=s2_or.out)
-or s3_or(a=s3_a1.out, b=s3_a2.out)
+// Bits 1 to 3 are full adders, each fed by the carry below it. Every one is
+// the same five gates: propagate, sum, generate, this bit's carry, and the
+// or that lets either source of a carry through.
+xor p1(a=a1.out, b=b1.out)
+xor s1(a=p1.out, b=c0.out)
+and g1(a=a1.out, b=b1.out)
+and t1(a=p1.out, b=c0.out)
+or  c1(a=g1.out, b=t1.out)
 
-output s0(in=s0_xor.out)
-output s1(in=s1_x2.out)
-output s2(in=s2_x2.out)
-output s3(in=s3_x2.out)
-output cout(in=s3_or.out)
+xor p2(a=a2.out, b=b2.out)
+xor s2(a=p2.out, b=c1.out)
+and g2(a=a2.out, b=b2.out)
+and t2(a=p2.out, b=c1.out)
+or  c2(a=g2.out, b=t2.out)
+
+xor p3(a=a3.out, b=b3.out)
+xor s3(a=p3.out, b=c2.out)
+and g3(a=a3.out, b=b3.out)
+and t3(a=p3.out, b=c2.out)
+or  c3(a=g3.out, b=t3.out)
+
+// Low bit first, which is how a concat reads.
+output[4] s(in={s0.out, s1.out, s2.out, s3.out})
+output cout(in=c3.out)
 `,
-    preview: `╭────╮     ╭───╮              ╭───╮             ╭──────────╮     ╭───╮             ╭──────────╮     ╭───╮             ╭──────────╮     ╭──────╮
-│ a1 ├○──●▶┤   │         ╭───▶┤   │           ╭▶┤          │   ╭▶┤   │           ╭▶┤          │   ╭▶┤   │           ╭▶┤          │ ╭──▶┤ cout │
-╰────╯   │ │AND├○╮       │    │AND├○╮         │ │[or:s1_or]├○● │ │AND├○╮         │ │[or:s2_or]├○● │ │AND├○╮         │ │[or:s3_or]├○╯   ╰──────╯
-       ╭─┼▶┤   │ │  ╭────┼───▶┤   │ ╰─────────┼▶┤          │ ●─┼▶┤   │ ╰─────────┼▶┤          │ ●─┼▶┤   │ ╰─────────┼▶┤          │
-       │ │ ╰───╯ │  │    │    ╰───╯           │ ╰──────────╯ │ │ ╰───╯           │ ╰──────────╯ │ │ ╰───╯           │ ╰──────────╯
-       │ │       ╰──┼────┼────────────────────╯              │ │                 │              │ │                 │
-╭────╮ │ │ ╭───╮    │    │    ╭───────────╮                  │ │ ╭───────────╮   │              │ │ ╭───────────╮   │                  ╭────╮
-│ b1 ├○●╭┼▶┤   │    │    ●───▶┤           │                  │ ●▶┤           │   │              │ ●▶┤           │   │                ╭▶┤ s0 │
-╰────╯ │││ │AND├○─╮ │    │    │[xor:s1_x2]├○╮                │ │ │[xor:s2_x2]├○╮ │              │ │ │[xor:s3_x2]├○╮ │                │ ╰────╯
-       ││├▶┤   │  │ ●────┼───▶┤           │ │                ╰─┼▶┤           │ │ │              ╰─┼▶┤           │ │ │                │
-       │││ ╰───╯  │ │    │    ╰───────────╯ │                  │ ╰───────────╯ │ │                │ ╰───────────╯ │ │                │
-       │││        ╰─●────┼──────────────────┼──────────────────┼───────────────┼─╯                │               │ │                │
-╭────╮ │││ ╭───╮    │    │                  │                  │               │                  │               │ │                │ ╭────╮
-│ a2 ├○●●┼▶┤   │    │    │                  ╰──────────────────┼───────────────┼──────────────────┼───────────────┼─┼────────────────┼▶┤ s1 │
-╰────╯ │││ │AND├○───●────┼─────────────────────────────────────┼───────────────┼──────────────────┼───────────────┼─╯                │ ╰────╯
-       ││├▶┤   │    │    │                                     │               │                  │               │                  │
-       │││ ╰───╯    │    │                                     │               │                  │               │                  │
-       │││          │    │                                     │               │                  │               │                  │
-╭────╮ │││ ╭───╮    │    │                                     │               │                  │               │                  │ ╭────╮
-│ b2 ├○┼┼┼▶┤   │    │    │                                     │               ╰──────────────────┼───────────────┼──────────────────┼▶┤ s2 │
-╰────╯ │││ │AND├○───●    │                                     │                                  │               │                  │ ╰────╯
-       ││├▶┤   │         │                                     │                                  │               │                  │
-       │││ ╰───╯         │                                     │                                  │               │                  │
-       │││               │                                     │                                  │               │                  │
-╭────╮ │││ ╭───────────╮ │                                     │                                  │               │                  │ ╭────╮
-│ a3 ├○●┼┼▶┤           │ │                                     │                                  │               ╰──────────────────┼▶┤ s3 │
-╰────╯ │││ │[xor:s1_x1]├○●                                     │                                  │                                  │ ╰────╯
-       ╰┼┼▶┤           │                                       │                                  │                                  │
-        ││ ╰───────────╯                                       │                                  │                                  │
-        ││                                                     │                                  │                                  │
-╭────╮  ││ ╭───────────╮                                       │                                  │                                  │
-│ b3 ├○─┴┼▶┤           │                                       │                                  │                                  │
-╰────╯   │ │[xor:s2_x1]├○──────────────────────────────────────●                                  │                                  │
-         ├▶┤           │                                                                          │                                  │
-         │ ╰───────────╯                                                                          │                                  │
-         │                                                                                        │                                  │
-╭────╮   │ ╭───────────╮                                                                          │                                  │
-│ a0 ├○──●▶┤           │                                                                          │                                  │
-╰────╯   │ │[xor:s3_x1]├○─────────────────────────────────────────────────────────────────────────●                                  │
-         ├▶┤           │                                                                                                             │
-         │ ╰───────────╯                                                                                                             │
-         │                                                                                                                           │
-╭────╮   │ ╭────────────╮                                                                                                            │
-│ b0 ├○──┼▶┤            │                                                                                                            │
-╰────╯   │ │[xor:s0_xor]├○───────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-         ╰▶┤            │
-           ╰────────────╯                                                                                                                      `,
-    repoPath: 'tests/fixtures/circuits/four_bit_adder.circ',
+    preview: `╭──────╮     ╭───╮          ╭───╮          ╭───────╮     ╭───╮          ╭───────╮     ╭───╮          ╭───────╮     ╭──────╮
+│ a[4] ├●─●─▶┤   │      ╭──▶┤   │        ╭▶┤       │   ╭▶┤   │        ╭▶┤       │   ╭▶┤   │        ╭▶┤       │ ╭──▶┤ cout │
+╰──────╯  │  │AND├○╮    │   │AND├○╮      │ │[or:c1]├○● │ │AND├○╮      │ │[or:c2]├○● │ │AND├○╮      │ │[or:c3]├○╯   ╰──────╯
+         ╭●─▶┤   │ │  ╭─┼──▶┤   │ ╰──────┼▶┤       │ ●─┼▶┤   │ ╰──────┼▶┤       │ ●─┼▶┤   │ ╰──────┼▶┤       │             
+         ││  ╰───╯ │  │ │   ╰───╯        │ ╰───────╯ │ │ ╰───╯        │ ╰───────╯ │ │ ╰───╯        │ ╰───────╯             
+         ││        ╰──┼─┼────────────────╯           │ │              │           │ │              │                       
+╭──────╮ ││  ╭───╮    │ │   ╭────────╮               │ │ ╭────────╮   │           │ │ ╭────────╮   │               ╭──────╮
+│ b[4] ├●●●─▶┤   │    │ ●──▶┤        │               │ ●▶┤        │   │           │ ●▶┤        │ ╭─┼──────────────▶┤ s[4] │
+╰──────╯ ││  │AND├○─╮ │ │   │[xor:s1]├               │ │ │[xor:s2]├   │           │ │ │[xor:s3]├○╯ │               ╰──────╯
+         ●●─▶┤   │  │ ●─┼──▶┤        │               ╰─┼▶┤        │   │           ╰─┼▶┤        │   │                       
+         ││  ╰───╯  │ │ │   ╰────────╯                 │ ╰────────╯   │             │ ╰────────╯   │                       
+         ││         ╰─●─┼──────────────────────────────┼──────────────╯             │              │                       
+         ││  ╭───╮    │ │                              │                            │              │                       
+         │●─▶┤   │    │ │                              │                            │              │                       
+         ││  │AND├○───●─┼──────────────────────────────┼────────────────────────────┼──────────────╯                       
+         ●●─▶┤   │    │ │                              │                            │                                      
+         ││  ╰───╯    │ │                              │                            │                                      
+         ││           │ │                              │                            │                                      
+         ││  ╭───╮    │ │                              │                            │                                      
+         │●─▶┤   │    │ │                              │                            │                                      
+         ││  │AND├○───● │                              │                            │                                      
+         ●●─▶┤   │      │                              │                            │                                      
+         ││  ╰───╯      │                              │                            │                                      
+         ││             │                              │                            │                                      
+         ││  ╭────────╮ │                              │                            │                                      
+         │●─▶┤        │ │                              │                            │                                      
+         ││  │[xor:p1]├○●                              │                            │                                      
+         ●●─▶┤        │                                │                            │                                      
+         ││  ╰────────╯                                │                            │                                      
+         ││                                            │                            │                                      
+         ││  ╭────────╮                                │                            │                                      
+         │●─▶┤        │                                │                            │                                      
+         ││  │[xor:p2]├○───────────────────────────────●                            │                                      
+         ●●─▶┤        │                                                             │                                      
+         ││  ╰────────╯                                                             │                                      
+         ││                                                                         │                                      
+         ││  ╭────────╮                                                             │                                      
+         │●─▶┤        │                                                             │                                      
+         ││  │[xor:p3]├○────────────────────────────────────────────────────────────●                                      
+         ●┼─▶┤        │                                                                                                    
+         ││  ╰────────╯                                                                                                    
+         ││                                                                                                                
+         ││  ╭────────╮                                                                                                    
+         │╰─▶┤        │                                                                                                    
+         │   │[xor:s0]├                                                                                                    
+         ╰──▶┤        │                                                                                                    
+             ╰────────╯                                                                                                    `,
     wasm: 'four-bit-adder.wasm',
   },
   {
