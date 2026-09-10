@@ -355,7 +355,7 @@ describe.skipIf(skip)('per-tab mapping against the committed module', () => {
   test('no diagnostic is blamed on a builtin source for the shipped content', async () => {
     // TODO(phase2)-C: Phase 0 resolves implicit builtins on the compile route,
     // so `<builtin>/…` entries appear in analysis.files. This asserts none of
-    // them ever carries a DIAGNOSTIC for the 22 shipped sources, which is what
+    // them ever carries a DIAGNOSTIC for the 21 shipped sources, which is what
     // would put an unclickable, confusing row in the reader's list.
     const w = await lib();
     let builtinDiagnostics = 0;

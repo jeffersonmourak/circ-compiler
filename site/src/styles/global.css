@@ -1076,32 +1076,6 @@ a.install-line:hover {
 .status-note p { margin: 0; max-width: none; }
 .status-note strong { color: var(--accent); }
 
-/* ---------- tour ---------- */
-.tour-intro { max-width: var(--measure); margin: 0 0 2.5rem; color: var(--fg); }
-.tour-step {
-  margin: 3rem 0;
-  padding-top: 2rem;
-  border-top: 1px solid var(--border);
-}
-.tour-step:first-of-type {
-  border-top: none;
-  padding-top: 0;
-  margin-top: 1rem;
-}
-.tour-step h2 {
-  margin-top: 0;
-  font-size: 1.35rem;
-}
-.tour-step h2 .step-num {
-  display: inline-block;
-  font-family: var(--font-mono);
-  font-size: 0.85rem;
-  color: var(--muted);
-  margin-right: 0.5rem;
-  font-weight: 500;
-}
-.tour-prose { max-width: var(--measure); margin-bottom: 1.5rem; }
-
 /* ---------- examples ---------- */
 .examples-intro { max-width: var(--measure); margin: 0 0 2.5rem; }
 .examples-tier { margin-top: 3.5rem; }
@@ -1381,7 +1355,7 @@ a.install-line:hover {
 /* ---------- The playground as an app layout ----------
    Opted into by `layout="app"` on Base.astro, which stamps data-layout on
    <body>. Every rule here is scoped to that attribute, so no other page — and
-   no <LiveEditor> on /tour or /gallery — is ever matched. Nothing here
+   no live editor outside the playground — is ever matched. Nothing here
    touches a .lc-mount selector: that block is shared with LiveCanvas.astro,
    which / and /gallery render. */
 [data-layout='app'] {
@@ -1749,7 +1723,7 @@ a.install-line:hover {
   [data-layout='app'] .pg-editor { border-radius: 6px; }
 }
 
-/* "Open in playground" — a plain link, no script, on the examples and tour
+/* "Open in playground" — a plain link, no script, on the gallery
    pages. Those pages must stay script-free, so nothing here needs one. */
 .oip {
   display: inline-block;
@@ -1761,51 +1735,3 @@ a.install-line:hover {
 }
 .oip:hover { border-bottom-color: var(--accent); }
 
-/* ---------- Live editors in the docs ----------
-   A snippet a reader can type into. It ships inert and looks like a code
-   block until it is touched, so a page costs nothing to read. */
-.le {
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  overflow: hidden;
-  margin: 1.5rem 0 2rem;
-  background: var(--pane-bg);
-}
-.le-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0.25rem 0.6rem;
-  border-bottom: 1px solid var(--border);
-  background: var(--pane-label-bg);
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  color: var(--muted);
-}
-.le-expand { text-decoration: none; }
-.le-expand:hover { text-decoration: underline; }
-.le-expand:not([href]) { opacity: 0.5; cursor: not-allowed; }
-.le-editor-wrap { height: var(--le-height, 14rem); overflow: auto; }
-.le-editor { height: 100%; }
-.le-editor .cm-editor { height: 100%; }
-.le-editor .cm-scroller { overflow: auto; }
-.le-source {
-  margin: 0;
-  padding: 0.6rem 0.85rem;
-  font-family: var(--font-mono-strict, var(--font-mono));
-  font-size: 0.8rem;
-  white-space: pre;
-  cursor: text;
-}
-.le-output { border-top: 1px solid var(--border); }
-.le-output:empty { display: none; }
-.le-preview {
-  margin: 0;
-  padding: 0.6rem 0.85rem;
-  font-family: var(--font-mono-strict, var(--font-mono));
-  font-size: 0.75rem;
-  line-height: 1;
-  overflow-x: auto;
-}
-.le[data-stale] .le-output { opacity: 0.55; }

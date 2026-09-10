@@ -190,7 +190,7 @@ describe('webStreamsCodec', () => {
 
 describe('every shipped source survives a share round-trip under the cap', () => {
   test('through #src= and through #src0=', async () => {
-    expect(sources).toHaveLength(22);
+    expect(sources).toHaveLength(21);
     for (const source of sources) {
       const deflated = await encodeShare(source, zlibCodec);
       expect(deflated.ok).toBe(true);

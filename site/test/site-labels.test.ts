@@ -49,8 +49,8 @@ const titleOf = (page: string): string | null => page.match(/title="([^"]+)"/)?.
 describe('the site calls each page one thing', () => {
   test('the nav is not empty, or this whole file proves nothing', () => {
     // A regex that silently matches nothing is the way a test like this rots.
-    expect(navLinks().length).toBeGreaterThanOrEqual(4);
-    expect(footerLinks().length).toBeGreaterThanOrEqual(3);
+    expect(navLinks().length).toBeGreaterThanOrEqual(3);
+    expect(footerLinks().length).toBeGreaterThanOrEqual(2);
     expect(navLinks().map(([route]) => route)).toContain('/gallery');
   });
 

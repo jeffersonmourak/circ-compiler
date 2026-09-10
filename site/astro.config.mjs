@@ -15,6 +15,10 @@ export default defineConfig({
   // emits a meta-refresh page here rather than a 404. Keep it.
   redirects: {
     '/examples': '/gallery',
+    // The tour page is gone; its seven circuits live on in the playground's
+    // workspace, which is where a reader arriving from an old link wants to
+    // end up.
+    '/tour': '/playground',
   },
   markdown: {
     shikiConfig: {

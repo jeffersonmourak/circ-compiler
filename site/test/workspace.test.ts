@@ -78,11 +78,11 @@ const project = (id: string, updatedAt: number, source = 'input a\n'): ScratchPr
 });
 
 describe('catalogue', () => {
-  test('buildCatalogue yields the 22 shipped items with the expected ids', () => {
-    expect(catalogue).toHaveLength(22);
+  test('buildCatalogue yields the 21 shipped items with the expected ids', () => {
+    expect(catalogue).toHaveLength(21);
     expect(catalogue.filter((c) => c.group === 'Introduction')).toHaveLength(5);
     expect(catalogue.filter((c) => c.group === 'Building blocks')).toHaveLength(5);
-    expect(catalogue.filter((c) => c.group === 'Advanced')).toHaveLength(5);
+    expect(catalogue.filter((c) => c.group === 'Advanced')).toHaveLength(4);
     expect(catalogue.filter((c) => c.group === 'Tour')).toHaveLength(7);
     expect(catalogue.map((c) => c.id)).toEqual([
       ...examples.map((e) => `example:${e.slug}`),

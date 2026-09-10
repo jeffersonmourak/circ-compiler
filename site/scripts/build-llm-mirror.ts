@@ -3,7 +3,6 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { execSync } from 'node:child_process';
 import { docs, DOCS_DIR, PUBLIC_DIR, SITE_URL, type Doc } from './lib/site-config.ts';
-import { tour } from '../src/content/tour.ts';
 import { examples } from '../src/content/examples.ts';
 
 const REPO_ROOT = resolve(PUBLIC_DIR, '..', '..');
@@ -68,31 +67,6 @@ function emitDocTwin(d: Doc): void {
   body = rewriteLinks(body);
 
   writeTwin(d.dst, header(d.title, d.description) + body, srcPath);
-}
-
-function renderTourStep(step: (typeof tour)[number], index: number): string {
-  return `## Step ${index + 1}. ${step.title}
-
-${step.prose}
-
-### Source
-
-${fence('circ', step.source)}
-
-### \`circ-compile --preview\`
-
-${fence('', step.preview)}`;
-}
-
-function emitTourTwin(): void {
-  const intro = header(
-    'A short tour',
-    "A progressive walkthrough of `circ`. Each step adds one new idea on top of the previous one. By the end you'll have read enough to feel at home in the language reference.",
-  ).trimEnd();
-  const steps = tour.map(renderTourStep).join('\n\n');
-  const footer = `Done. The [language reference](${SITE_URL}/reference.md) covers the full surface — every keyword, every diagnostic code, the rules the validator enforces. The [gallery](${SITE_URL}/gallery.md) has more circuits to read through.`;
-
-  writeTwin('tour.md', `${intro}\n\n\n${steps}\n\n${footer}\n`, 'src/content/tour.ts');
 }
 
 function renderExample(ex: (typeof examples)[number]): string {
@@ -288,7 +262,6 @@ function emitLlmsTxt(): void {
     '## Docs',
     '',
     `- [Landing page](${SITE_URL}/index.md): What \`circ\` is, what it isn't, where it runs.`,
-    `- [Tour](${SITE_URL}/tour.md): Seven progressive examples from a single NOT gate to a full-adder built from two half-adders.`,
     `- [Playground](${SITE_URL}/playground): Compile, diagnose, preview, tabulate, and simulate \`.circ\` in the browser — interactive, no \`.md\` twin.`,
     `- [Language reference](${SITE_URL}/reference.md): Every keyword, every diagnostic code, the rules the validator enforces.`,
     ...docs
@@ -322,7 +295,6 @@ function stripDiscoveryBanner(body: string): string {
 function emitLlmsFullTxt(): void {
   const sections: Array<{ path: string; label: string }> = [
     { path: 'index.md', label: 'Landing page' },
-    { path: 'tour.md', label: 'Tour' },
     { path: 'reference.md', label: 'Language reference' },
     { path: 'reference/getting-started.md', label: 'Getting started' },
     { path: 'reference/circuit-format.md', label: 'Circuit file format' },
@@ -355,7 +327,6 @@ function emitLlmsFullTxt(): void {
 }
 
 for (const d of docs) emitDocTwin(d);
-emitTourTwin();
 emitExamplesTwin();
 emitLandingTwin();
 emitDownloadTwin();

@@ -46,7 +46,7 @@ const named = (name: string, body: string): NamedFile => ({ name, body });
 
 describe('joinFiles', () => {
   test('round-trips every example and tour source byte for byte', () => {
-    expect(sources).toHaveLength(22);
+    expect(sources).toHaveLength(21);
     for (const source of sources) expect(joinFiles(splitFiles(source))).toBe(source);
   });
 

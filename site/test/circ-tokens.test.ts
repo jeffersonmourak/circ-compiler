@@ -30,10 +30,10 @@ const pairsOf = (line: string): [string, string][] =>
     .map((t) => [line.slice(t.from, t.to), t.tag as string]);
 
 describe('circ tokens', () => {
-  test('the shipped corpus is the 15 examples and the 7 tour steps', () => {
-    expect(examples.length).toBe(15);
+  test('the shipped corpus is the 14 examples and the 7 tour steps', () => {
+    expect(examples.length).toBe(14);
     expect(tour.length).toBe(7);
-    expect(sources.length).toBe(22);
+    expect(sources.length).toBe(21);
   });
 
   test('tokenizeLine partitions every shipped source', () => {

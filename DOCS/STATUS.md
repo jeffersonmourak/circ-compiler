@@ -805,3 +805,25 @@ Also carries the human's edit commenting out the per-example "Source: …" links
 3. **A stale generated twin was being shipped.** `public/examples.md` survived the rename because the mirror writes twins but never removes one it has stopped writing, and `public/` is copied into `dist/` wholesale — so the build carried both `examples.md` and `gallery.md`, with only the second reachable from `llms.txt`. Removed by hand. The mirror still has no sweep step; a future rename will leave the same litter.
 4. **The `.md` twin has no redirect and cannot have one.** `/examples.md` is now a 404. `llms.txt` is the documented entry point and names `gallery.md`, so a crawler that starts where it is told is unaffected; one that had bookmarked the old twin is not.
 5. **Two imports are left unused on purpose.** The human's edit comments out the "Source: …" block with an HTML comment, which Astro strips entirely, so `GITHUB_REPO` and `GITHUB_PUBLIC` are now dead on that page. The import stays: the block reads as staged for return, and removing it would break the restore. `astro check` counts this as a hint, not a warning, so the gate is unaffected.
+
+## 2026-09-09 — Content — the tour page goes, its circuits stay
+
+**What shipped:** `/tour` is gone as a page. Its seven circuits are not: they remain in `src/content/tour.ts` and in the playground's workspace under the Tour group, which is what the reader keeps. The old path redirects to `/playground`, where those circuits now live.
+
+Deleted with the page, because nothing else reached them: `LiveEditor.astro`, `src/scripts/live-editor.ts`, `src/utils/live-editor-config.ts`, their test, the tour and live-editor stylesheets, the mirror's `tour.md` twin and its two index entries, and the smoke test that mounted seven inert editors.
+
+Also adds `site/.node-version` pinning 22.19.0, the one arm64 Node on this machine.
+
+**Files touched:** `site/.node-version` (new), `site/astro.config.mjs`, `site/src/components/{Nav,Footer}.astro`, `site/src/styles/global.css`, `site/scripts/build-llm-mirror.ts`, `site/bundle-budget.json`, `site/.gitignore`, `site/test/island-smoke.test.ts`, plus five test files whose corpus counts moved. Removed: `site/src/pages/tour.astro`, `site/src/components/LiveEditor.astro`, `site/src/scripts/live-editor.ts`, `site/src/utils/live-editor-config.ts`, `site/test/live-editor-config.test.ts`, `site/public/wasm/alu-4bit.wasm`.
+
+**Tests:** `bun test` 387 pass across 30 files, from 399 across 31 — the live-editor file and the tour smoke case are gone, and the corpus is one example smaller. `bun --bun run typecheck` 0 errors. Build, `bun run bundle` and `zig build test-all` green.
+
+**Next slice:** none.
+
+**Notes:**
+
+1. **The human's tree also dropped `alu-4bit`, and the artifact gate caught what that left behind.** `site/public/wasm/alu-4bit.wasm` was still committed and reachable from nothing; `content-artifacts.test.ts` named it as an orphan, which is exactly the direction that test exists for. Removed. Four other tests counted the corpus and moved from 15 examples and 22 sources to 14 and 21.
+2. **Ten previews no longer byte-match `circ-compile --preview`.** An editor stripped trailing whitespace across `examples.ts`. Compared against `scripts/.compiled.json`: ten differ by trailing spaces alone and none by anything else, and `<pre>` renders both identically — so this is a fidelity note, not a defect. Nothing asserts that fidelity today; a regeneration will silently restore the spaces and produce a large no-op diff.
+3. **Two dev servers racing a build is what made the build hang.** A stray `astro dev` from earlier in the session plus a restarted one both watch and rewrite `public/`, which the build's mirror step also writes; `bun --bun run build` sat for ten minutes with no output. Killing both and rebuilding took two seconds. Do not run a build with a dev server up.
+4. **`compact` on the editor module now has no consumer.** It was built for `<LiveEditor>` and documented as shipping ahead of need. Left in place rather than removed: taking it out means editing the module the playground depends on, to delete something whose comment already says it exists without a caller.
+5. **The Tour group keeps its name in the workspace.** The circuits are still a progressive walkthrough, so the label still describes them, even with no page of that name to open.

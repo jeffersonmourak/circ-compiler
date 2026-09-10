@@ -541,16 +541,4 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(declarationsOf("[data-layout='app'] .pg-editor .pg-cm .cm-editor {")).toContain('height: 100%');
     expect(declarationsOf("[data-layout='app'] .pg-editor .pg-cm .cm-scroller {")).toContain('overflow: auto');
   }));
-
-  test('the tour mounts one inert editor per step', async () => {
-    const { doc, errors } = await runIsland('tour', 'LiveEditor.astro');
-    expect(errors).toEqual([]);
-
-    expect(doc.querySelectorAll('.le').length).toBe(7);
-    // Inert until touched: no editor DOM, the source still readable.
-    expect(doc.querySelectorAll('.cm-editor')).toHaveLength(0);
-    expect(doc.querySelector('.le-source')?.hasAttribute('hidden')).toBe(false);
-    // And the expand link works before any script has run.
-    expect(doc.querySelector('.le-expand')?.getAttribute('href')).toContain('#pick=tour:1');
-  });
 });
