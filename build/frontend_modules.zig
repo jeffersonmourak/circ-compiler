@@ -321,6 +321,7 @@ pub fn create(b: *std.Build, opts: Options) Modules {
     libcirc.addImport("preview_render_color", preview_render_color);
     libcirc.addImport("runtime_embed", opts.runtime_embed);
     libcirc.addImport("build_info", build_info);
+    libcirc.addImport("builtins", builtins);
     const c_api = mk.module("lib/libcirc/c_api.zig");
     c_api.addImport("libcirc", libcirc);
 

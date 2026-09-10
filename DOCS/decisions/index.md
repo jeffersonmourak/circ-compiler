@@ -62,6 +62,35 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - Playground artifacts are committed; the module runs in a Web Worker
 - Not exported through libcirc (`--sim`, `--emit-zig`, `--inspect`)
 
+### [playground.md](playground.md)
+- The compile fast path resolves implicit builtins (usage-aware `.project_if_imports`; `--inspect` unchanged)
+- The JavaScript budget is per page and gzip is the gate (`bun run bundle`, `bundle-budget.json`, the build-free CodeMirror tripwire)
+- The editor is CodeMirror 6 with a hand-written StreamLanguage (six exact-pinned packages, no meta-package, no autocomplete/search)
+- The editor chunk loads on idle, not on interaction (dynamic `import()` after paint, textarea fallback, ungated lazy chunk)
+- One token table, two consumers (`circ-tokens.mjs` feeds the TextMate grammar and the CodeMirror tokenizer; `rom`/`ram` were the bug)
+- The editor palette is derived from the shiki themes (one `TAG_SCOPES` table, last-scope-wins, the TextMate `fontStyle` split into real CSS properties)
+- Analyze offsets are mapped in a pure module (byte columns + `SplitFile.startLine` → absolute UTF-16 offsets; both producers; the snapshot guard)
+- The marker format does not fork; `joinFiles` is its inverse (`isFileName`, `joinConflicts`, `NamedFile`, the three normalisations)
+- The last file is the root; reorder is how you change it (no root field, `rootOf` is position)
+- One editor state per file is what makes undo per-file (state-per-file, the pure index registry, the theme fan-out)
+- Diagnostics are mapped once per tab, and listed once overall (file-local offsets, the total mapper, the per-tab staleness guard)
+- The playground is an `app` layout variant of `Base.astro` (one `data-layout` attribute, scoped rules, `min-height: 0`)
+- The splitter is one custom property and a WAI-ARIA separator (intent versus rendered ratio, pointer capture, nullable key handling)
+- One localStorage key, one schema-versioned envelope (`normalize` drops unknown keys, LRU eviction, retry once, session disable)
+- The status bar is a pure function of one input record (fixed precedence, the label written only on a kind change)
+- Two debounces, a sequence counter per stage (claimed at fire time, guarded at every await, last good output dimmed)
+- A share link carries the source in the fragment, under two keys (`#src=` deflate, `#src0=` plain, an 8 KB cap, failures as values)
+- The fragment is scrubbed at parse time, before anything can read it (a classic inline script beats every deferred module; one-rule-at-a-time precedence)
+- Scratch projects are flat, capped three ways, and never hold shipped text (ids for content, LRU eviction that spares the active project)
+- The first edit forks a shipped example into your own project (fork on change, not on diff; a shared link arrives as your own project)
+- The renderer exposes three host hooks, and the highlight reuses `hovered` (`onHover`, `setHighlight`, `getLayout`; two ids kept apart)
+- Source and picture are joined by declared name, never by span (root file only, top-level boxes only, no snapshotted ranges)
+- Settings are the envelope's sixth field, and the option names are the wire's (per-op projection, no second normaliser)
+- One field is the truth-table cap, read by the pre-flight and by the request (decision 13's two enforcement points, merged)
+- ROM images are session state, and the page refuses what the library would (same checks, same order; a ram gets no box)
+- A live editor ships inert and shares one worker (touch-activated, one client per page, the editor chunk stays lazy)
+- An expand link carries a reference when it can, and a source when it must (id while unedited; a told-about degrade over the cap)
+
 ## Conventions
 
 - Decisions use `###` headings inside topic files.

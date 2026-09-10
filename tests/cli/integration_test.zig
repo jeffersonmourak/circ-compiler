@@ -236,6 +236,18 @@ test "cli inspect clean fixture exits 0 and matches golden stdout" {
     try expectStdoutMatchesFixture(result.stdout, "tests/fixtures/expected-inspect/clean_inverter.txt");
 }
 
+test "cli inspect full_adder project root still reports E001 for 'or'" {
+    // `--inspect` is the `.single_module` route, untouched by the usage-aware
+    // compile fast path: an unimported builtin stays undeclared there.
+    try buildCli();
+    var result = try run(&.{ "zig-out/bin/circ-compile", "tests/fixtures/projects/full_adder/root.circ", "--inspect" });
+    defer result.deinit(std.testing.allocator);
+
+    try std.testing.expectEqual(@as(i32, 1), exitCode(result.term));
+    try std.testing.expectEqual(@as(usize, 0), result.stderr.len);
+    try expectStdoutMatchesFixture(result.stdout, "tests/fixtures/expected-inspect/canonical_full_adder_root.txt");
+}
+
 test "cli inspect memory fixture exits 0 and matches golden stdout" {
     try buildCli();
     var result = try run(&.{ "zig-out/bin/circ-compile", "tests/fixtures/circuits/rom_basic.circ", "--inspect" });

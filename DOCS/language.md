@@ -216,14 +216,19 @@ import half_adder "half_adder.circ"
 
 `import` makes a sibling `.circ` file available under an alias in the current
 file. The path is resolved relative to the importing file. Built-in macros
-live at the virtual path `<builtin>/<name>.circ` and are auto-imported as soon
-as the file participates in the project pipeline (i.e. has at least one
-explicit `import`); to use a built-in in a single-file program with no other
-imports, write the import explicitly:
+live at the virtual path `<builtin>/<name>.circ` and are auto-imported
+whenever a file uses one — a single-file program may write `xor s(a=a, b=b)`
+with no `import` at all, and every mode (compile, preview, truth table, sim,
+analyze) resolves it through the project pipeline. Writing the import
+explicitly is still valid, and is the clearer form when a file mixes
+built-ins with its own siblings:
 
 ```
 import xor "<builtin>/xor.circ"
 ```
+
+The one exception is `--inspect`, which stays a single-module debugging view
+and reports an unimported built-in as `E001`.
 
 ### 3.5 Memories (declaration shape)
 

@@ -15,10 +15,15 @@
 // mode rebuilds via the onAssetsReady hook in LiveCanvas just like dark.
 //
 // Active theme is selected at click-load time via pickTheme() reading the
-// data-theme attribute on <html>. Toggling the site theme later requires
-// destroying and re-creating the canvas (handled in LiveCanvas.astro).
+// data-theme attribute on <html>. Toggling the site theme later hands the
+// other palette to the live canvas through `setTheme` (LiveCanvas.astro and
+// Playground.astro both do); nothing is rebuilt.
+//
+// Typed through JSDoc so the components that pass a theme to `renderCircuit`
+// get the renderer's own `CircView` back, with this palette's keys, and need
+// no cast. `PaletteKey` is exported for them.
 
-import { ComponentKind } from 'circ-renderer';
+import { ComponentKind, memoryLabel, traceWire, wireColorKey, wireStyleOf } from 'circ-renderer';
 import { loadAssets } from './circ-assets.mjs';
 
 /* ───── async sprite loading ───────────────────────────────────────── */
@@ -59,6 +64,9 @@ const colorsDark = {
   wireIdle: '#dee2e6',
   wireActive: 'hsl(134 61% 41% / 1)',
   wireUndefined: '#3a2752',
+  // A defined multi-bit wire: the badge above it says the number, so the
+  // wire itself does not need to be green or grey.
+  wireBus: '#d0bfff',
   label: '#ffffff',
   labelMuted: '#aaa',
   // Used for labels drawn ON a component's surface (centered on the gate
@@ -85,6 +93,9 @@ const colorsDark = {
 // on the lavender pane-bg (#f4eefb). Uses the same PNG sprites as dark
 // mode; the canvas is transparent so sprite pixels composite onto the
 // pane's lavender bg instead of a black canvas paint.
+/** @typedef {keyof typeof colorsDark} PaletteKey */
+
+/** @type {Record<PaletteKey, string>} */
 const colorsLight = {
   background: '#f4eefb',
   grid: '#d4c8e8',
@@ -95,6 +106,7 @@ const colorsLight = {
   wireIdle: '#5d3a96',
   wireActive: 'hsl(134 61% 32% / 1)',
   wireUndefined: '#a89cc0',
+  wireBus: '#5f3dc4',
   label: '#443856',
   labelMuted: '#8a7e9a',
   // White on the component surface — see colorsDark.labelOnComponent.
@@ -233,6 +245,32 @@ function spriteForSubcircuit(type) {
   }
 }
 
+/**
+ * A ring around a component's box, drawn when the pointer is over it or when
+ * the host highlighted it — the canvas feeds both through the same `hovered`
+ * flag, so one branch covers an editor cursor and a mouse alike.
+ *
+ * A ring rather than a fill: every skin below already uses fill and stroke to
+ * say what the component IS and what it is DOING, and a highlight must not
+ * overwrite either.
+ */
+const drawHoverRing = (ctx, cell, component, theme) => {
+  const pad = cell * 0.18;
+  const x = component.x * cell - pad;
+  const y = component.y * cell - pad;
+  const w = component.width * cell + pad * 2;
+  const h = component.height * cell + pad * 2;
+  const r = Math.min(cell * 0.4, w / 2, h / 2);
+  ctx.save();
+  ctx.strokeStyle = theme.colors.inputHover;
+  ctx.lineWidth = Math.max(1, cell * 0.09);
+  ctx.beginPath();
+  if (typeof ctx.roundRect === 'function') ctx.roundRect(x, y, w, h, r);
+  else ctx.rect(x, y, w, h);
+  ctx.stroke();
+  ctx.restore();
+};
+
 /* ───── skins ──────────────────────────────────────────────────────── */
 
 const drawInputPin = ({ ctx, cell, component, outputSignal, hovered, theme }) => {
@@ -270,7 +308,7 @@ const drawInputPin = ({ ctx, cell, component, outputSignal, hovered, theme }) =>
   drawTailDot(ctx, cell, tailEdge, portY, outputSignal, theme);
 };
 
-const drawOutputPin = ({ ctx, cell, component, inputSignals, theme }) => {
+const drawOutputPin = ({ ctx, cell, component, inputSignals, theme, hovered }) => {
   const x = component.x * cell;
   const y = component.y * cell;
   const w = component.width * cell;
@@ -303,9 +341,10 @@ const drawOutputPin = ({ ctx, cell, component, inputSignals, theme }) => {
   }
 
   if (slot) drawTailDot(ctx, cell, tailEdge, dotY, sig, theme);
+
 };
 
-const drawLed = ({ ctx, cell, component, inputSignals, theme }) => {
+const drawLed = ({ ctx, cell, component, inputSignals, theme, hovered }) => {
   const cx = (component.x + component.width / 2) * cell;
   const cy = (component.y + component.height / 2) * cell;
   const r = Math.min(component.width, component.height) * cell * 0.4;
@@ -345,9 +384,10 @@ const drawLed = ({ ctx, cell, component, inputSignals, theme }) => {
   );
 
   if (slot) drawTailDot(ctx, cell, tailEdge, dotY, sig, theme);
+
 };
 
-const drawNot = ({ ctx, cell, component, inputSignals, outputSignal, theme }) => {
+const drawNot = ({ ctx, cell, component, inputSignals, outputSignal, theme, hovered }) => {
   const x0 = component.x * cell;
   const y0 = component.y * cell;
   const w = component.width * cell;
@@ -398,9 +438,10 @@ const drawNot = ({ ctx, cell, component, inputSignals, outputSignal, theme }) =>
   drawTailDot(ctx, cell, rightEdge, outDotY, outputSignal, theme);
 
   drawNameBelow(ctx, cell, component.name, x0, y0, w, h, theme.colors.labelMuted, -cell * 15);
+
 };
 
-const drawAnd = ({ ctx, cell, component, inputSignals, outputSignal, theme }) => {
+const drawAnd = ({ ctx, cell, component, inputSignals, outputSignal, theme, hovered }) => {
   const x0 = component.x * cell;
   const y0 = component.y * cell;
   const w = component.width * cell;
@@ -460,9 +501,10 @@ const drawAnd = ({ ctx, cell, component, inputSignals, outputSignal, theme }) =>
     ctx.textBaseline = 'middle';
     ctx.fillText(component.name, x0 + w / 2, y0 + h / 2);
   }
+
 };
 
-const drawSubcircuit = ({ ctx, cell, component, inputSignals, outputSignal, theme }) => {
+const drawSubcircuit = ({ ctx, cell, component, inputSignals, outputSignal, theme, hovered }) => {
   const x0 = component.x * cell;
   const y0 = component.y * cell;
   const w = component.width * cell;
@@ -519,6 +561,74 @@ const drawSubcircuit = ({ ctx, cell, component, inputSignals, outputSignal, them
   drawTailDot(ctx, cell, rightEdge, outDotY, outputSignal, theme);
 
   drawNameBelow(ctx, cell, component.name, x0, y0, w, h, theme.colors.labelMuted);
+
+};
+
+/**
+ * A bit-shape or memory box: the same rounded box the collapsed macro draws,
+ * with the site's tails and a name below. These four kinds used to fall
+ * through to the package's default skins and render in a foreign visual
+ * language beside the sprite-drawn gates.
+ */
+const drawBox = ({ ctx, cell, component, inputSignals, outputSignal, theme }, label, borderColor) => {
+  const x0 = component.x * cell;
+  const y0 = component.y * cell;
+  const w = component.width * cell;
+  const h = component.height * cell;
+  const gap = cell * 0.45;
+  const leftEdge = x0 + w * 0.08 - gap;
+  const rightEdge = x0 + w * 0.92 + gap;
+
+  const inDotYs = [];
+  for (let i = 0; i < component.inPorts.length; i++) {
+    const slot = component.inPorts[i];
+    const sig = inputSignals[i] ?? 2;
+    const portY = slot.coord.y * cell + cell / 2;
+    inDotYs.push(portY);
+    drawTailLine(ctx, leftEdge, slot.coord.x * cell + cell / 2, portY, sig, theme);
+  }
+  const outDotY = component.outPort.y * cell + cell / 2;
+  drawTailLine(ctx, rightEdge, component.outPort.x * cell + cell / 2, outDotY, outputSignal, theme);
+
+  ctx.strokeStyle = borderColor;
+  ctx.fillStyle = theme.colors.fillIdle;
+  ctx.lineWidth = Math.max(2, cell * 0.12);
+  const r = cell * 0.25;
+  ctx.beginPath();
+  ctx.roundRect(x0 + cell * 0.08, y0 + cell * 0.08, w - cell * 0.16, h - cell * 0.16, r);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = theme.colors.label;
+  ctx.font = `600 ${Math.round(cell * 0.75)}px ui-monospace, "JetBrains Mono", monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, x0 + w / 2, y0 + h / 2);
+
+  for (let i = 0; i < component.inPorts.length; i++) {
+    drawTailDot(ctx, cell, leftEdge, inDotYs[i], inputSignals[i] ?? 2, theme);
+  }
+  drawTailDot(ctx, cell, rightEdge, outDotY, outputSignal, theme);
+};
+
+/** `[i]` or `[lo:hi]`, the way the compiler's own preview writes a slice. */
+const drawSlice = (args) => {
+  const { lo, hi } = args.component.slice ?? { lo: 0, hi: 1 };
+  drawBox(args, hi - lo <= 1 ? `[${lo}]` : `[${lo}:${hi}]`, args.theme.colors.stroke);
+};
+
+const drawConcat = (args) => {
+  drawBox(args, '{·}', args.theme.colors.stroke);
+};
+
+/** `rom code[8,4]` — the label text comes from the renderer, so the canvas
+ *  and the preview cannot spell a memory two ways. Named below like a macro. */
+const drawMemory = (args) => {
+  const { component, ctx, cell, theme } = args;
+  const kind = component.kind.tag === 'primitive' ? component.kind.kind : ComponentKind.Rom;
+  const label = memoryLabel(kind, component.name, component.bitWidth, component.memory?.addrWidth ?? 0);
+  drawBox(args, label, theme.colors.macro);
+  const x0 = component.x * cell, y0 = component.y * cell;
+  drawNameBelow(ctx, cell, component.name, x0, y0, component.width * cell, component.height * cell, theme.colors.labelMuted);
 };
 
 /* ───── theme objects ──────────────────────────────────────────────── */
@@ -531,48 +641,23 @@ const drawSubcircuit = ({ ctx, cell, component, inputSignals, outputSignal, them
  * over recorded crossings so wires of different signals read as
  * separate strands rather than fusing at intersections.
  */
-function wireRenderer({ ctx, cell, wire, signal, theme }) {
-  ctx.strokeStyle =
-    signal === 1
-      ? theme.colors.wireActive
-      : signal === 0
-        ? theme.colors.wireIdle
-        : theme.colors.wireUndefined;
-  ctx.lineWidth = 4;
+/**
+ * A wire in the palette's colour for what it carries. A bus with a defined
+ * value is a bus, whatever its bits: the badge above it says the number. The
+ * route — every segment, arcing over its crossings — is traced by the
+ * renderer's own `traceWire`, the same function its default painter uses, so
+ * the site cannot draw a jump anywhere the renderer would not.
+ */
+function wireRenderer({ ctx, cell, wire, value, theme }) {
+  const style = wireStyleOf(value);
+  ctx.strokeStyle = theme.colors[wireColorKey(style)];
+  // A touch heavier for a bus, so it reads as more than one bit.
+  ctx.lineWidth = style === 'bus' ? 6 : 4;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  const arcRadius = cell * 0.4;
-  for (const seg of wire.segments) {
-    const horiz = seg.from.y === seg.to.y;
-    const startX = seg.from.x * cell + cell / 2;
-    const startY = seg.from.y * cell + cell / 2;
-    const endX = seg.to.x * cell + cell / 2;
-    const endY = seg.to.y * cell + cell / 2;
-    if (!horiz) {
-      ctx.beginPath();
-      ctx.moveTo(startX, startY);
-      ctx.lineTo(endX, endY);
-      ctx.stroke();
-      continue;
-    }
-    const [segLo, segHi] = [startX, endX].sort((a, b) => a - b);
-    const y = startY;
-    const jumps = wire.crossings
-      .filter((c) => c.y === seg.from.y && c.x * cell + cell / 2 >= segLo && c.x * cell + cell / 2 <= segHi)
-      .map((c) => c.x * cell + cell / 2)
-      .sort((a, b) => a - b);
-    ctx.beginPath();
-    let cursor = segLo;
-    for (const jx of jumps) {
-      ctx.moveTo(cursor, y);
-      ctx.lineTo(jx - arcRadius, y);
-      ctx.arc(jx, y, arcRadius, Math.PI, 0, false);
-      cursor = jx + arcRadius;
-    }
-    ctx.moveTo(cursor, y);
-    ctx.lineTo(segHi, y);
-    ctx.stroke();
-  }
+  ctx.beginPath();
+  traceWire(ctx, wire, cell);
+  ctx.stroke();
 }
 
 const skins = {
@@ -581,6 +666,10 @@ const skins = {
   [ComponentKind.Led]: drawLed,
   [ComponentKind.NotGate]: drawNot,
   [ComponentKind.AndGate]: drawAnd,
+  [ComponentKind.Slice]: drawSlice,
+  [ComponentKind.Concat]: drawConcat,
+  [ComponentKind.Rom]: drawMemory,
+  [ComponentKind.Ram]: drawMemory,
   subcircuit: drawSubcircuit,
 };
 
@@ -598,17 +687,24 @@ const sharedRenderers = {
   wire: wireRenderer,
   // No port markers — each skin draws its own tail.
   portMarker: () => {},
+  // The ring around a hovered or host-highlighted component, drawn by the
+  // canvas after every skin. One hook, every kind — including the four above
+  // that used to fall through to defaults that never read `hovered`.
+  highlight: ({ ctx, cell, component, theme }) => drawHoverRing(ctx, cell, component, theme),
 };
 
+/** @type {import('circ-renderer').CircTheme<PaletteKey>} */
 export const blogTheme = {
   colors: colorsDark,
   ...sharedRenderers,
 };
 
+/** @type {import('circ-renderer').CircTheme<PaletteKey>} */
 export const blogThemeLight = {
   colors: colorsLight,
   ...sharedRenderers,
 };
 
+/** @returns {import('circ-renderer').CircTheme<PaletteKey>} */
 export const pickTheme = () =>
   document.documentElement.dataset.theme === 'dark' ? blogTheme : blogThemeLight;

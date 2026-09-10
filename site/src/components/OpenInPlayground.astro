@@ -1,0 +1,23 @@
+---
+// A link into the playground that names content by id, never by value. Zero
+// JavaScript: the page it links to is the one that knows how to open it.
+//
+// The id is checked here, at build time, against the same catalogue the
+// playground renders its rows from — so a renamed slug fails the build rather
+// than shipping a link that silently opens the wrong thing.
+import { url } from '../utils/url.ts';
+import { examples } from '../content/examples.ts';
+import { tour } from '../content/tour.ts';
+import { buildCatalogue } from '../utils/playground-store.ts';
+
+interface Props {
+  id: string;
+  label?: string;
+}
+const { id, label = 'Open in playground' } = Astro.props;
+
+if (!buildCatalogue(examples, tour).some((c) => c.id === id)) {
+  throw new Error(`OpenInPlayground: '${id}' is not in the playground catalogue`);
+}
+---
+<a class="oip" href={`${url('/playground')}#pick=${id}`}>{label} &rarr;</a>

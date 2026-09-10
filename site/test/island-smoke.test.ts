@@ -1,0 +1,713 @@
+// Runs the REAL built playground island against the REAL built HTML in a
+// headless DOM.
+//
+// This exists because two gates could not see island scripts at all: `bun test`
+// cannot import an `.astro` file, and the build strips types without resolving
+// names. An undefined identifier in the island therefore shipped green once,
+// and only a browser found it. This catches that class in the suite.
+//
+// It needs `dist/`, so it skips when there has been no build. Run
+// `bun --bun run build` first; the standing gate order already does.
+import { afterEach, describe, expect, test } from 'bun:test';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { CATALOGUE_GROUPS, buildCatalogue } from '../src/utils/playground-store.ts';
+import { examples } from '../src/content/examples.ts';
+import { tour } from '../src/content/tour.ts';
+import { resolve } from 'node:path';
+import { Window } from 'happy-dom';
+
+const SITE = resolve(import.meta.dir, '..');
+const DIST = resolve(SITE, 'dist');
+const hasBuild = existsSync(resolve(DIST, 'playground', 'index.html'));
+
+/** Errors this harness provokes by not being a browser. */
+const HARNESS_ONLY = [
+  /ModuleNotFound resolving .*libcirc\.worker/, // no worker outside a browser
+  /Window is not defined/, // the editor's own measure pass reaches a real Window
+];
+
+let restore: (() => void) | null = null;
+/** The playground's window, kept so a later test can drive its DOM: the island
+ *  module is imported once per process and cannot be mounted twice. */
+let lastWindow: Window | null = null;
+
+/**
+ * Re-point the globals at an already-built window, run `fn`, put them back.
+ *
+ * A test that only reads the document does not need this, but one that DRIVES
+ * it does: the island allocates through the global `document`, and `afterEach`
+ * has already restored that by the time a later test runs. Without this, a
+ * click handler that calls `document.createElement` throws inside the event
+ * dispatch, where nothing surfaces it — the assertion just sees a DOM that
+ * did not change, which reads as a product bug rather than a harness one.
+ */
+function drive<T>(fn: (doc: Window['document']) => T): T {
+  if (!lastWindow) throw new Error('no window: the mounting test must run first');
+  const undo = installGlobals(lastWindow);
+  try {
+    return fn(lastWindow.document);
+  } finally {
+    undo();
+  }
+}
+
+/** `drive` for a handler that keeps working after the click returns — a
+ *  share that awaits an encode and a clipboard write. The globals stay
+ *  installed until `fn`'s promise settles, not just until it returns. */
+async function driveAsync<T>(fn: (doc: Window['document']) => Promise<T>): Promise<T> {
+  if (!lastWindow) throw new Error('no window: the mounting test must run first');
+  const undo = installGlobals(lastWindow);
+  try {
+    return await fn(lastWindow.document);
+  } finally {
+    undo();
+  }
+}
+
+/**
+ * A recording stand-in for `IntersectionObserver`, which happy-dom does not
+ * implement.
+ *
+ * It has to be a GLOBAL before the island chunk is imported, because the
+ * script wires its observer at import time — so a test cannot install it
+ * afterwards and see anything.
+ */
+export class FakeIntersectionObserver {
+  static instances: FakeIntersectionObserver[] = [];
+  observed: unknown[] = [];
+  unobserved: unknown[] = [];
+  constructor(public readonly callback: (entries: unknown[]) => void, public readonly options?: unknown) {
+    FakeIntersectionObserver.instances.push(this);
+  }
+  observe(el: unknown) { this.observed.push(el); }
+  unobserve(el: unknown) { this.unobserved.push(el); }
+  disconnect() {}
+  /** Report the given elements as on screen, the way a scroll would. */
+  intersect(...els: unknown[]) {
+    this.callback(els.map((target) => ({ target, isIntersecting: true })));
+  }
+}
+
+function installGlobals(window: Window): () => void {
+  const g = globalThis as Record<string, unknown>;
+  const saved: [string, unknown][] = [];
+  saved.push(['IntersectionObserver', g.IntersectionObserver]);
+  g.IntersectionObserver = FakeIntersectionObserver;
+  const keys = [
+    'document', 'window', 'location', 'history', 'navigator', 'matchMedia',
+    'requestAnimationFrame', 'ResizeObserver', 'MutationObserver', 'HTMLElement',
+    'HTMLInputElement', 'HTMLSelectElement', 'HTMLTextAreaElement', 'HTMLAnchorElement',
+    'HTMLButtonElement', 'Node', 'Element', 'Event', 'CustomEvent', 'KeyboardEvent',
+    'MouseEvent', 'InputEvent', 'FocusEvent', 'localStorage',
+    'getComputedStyle', 'DOMException', 'CSS',
+  ];
+  for (const k of keys) {
+    const v = (window as unknown as Record<string, unknown>)[k];
+    if (v === undefined) continue;
+    saved.push([k, g[k]]);
+    g[k] = v;
+  }
+  saved.push(['window', g.window]);
+  g.window = window;
+  saved.push(['requestIdleCallback', g.requestIdleCallback]);
+  g.requestIdleCallback = (fn: () => void) => setTimeout(fn, 0);
+
+  return () => {
+    for (const [k, v] of saved) {
+      if (v === undefined) delete g[k];
+      else g[k] = v;
+    }
+  };
+}
+
+function installDom(html: string) {
+  const window = new Window({ url: 'http://localhost/playground' });
+  // The chunk is imported by hand below, so the page's own <script src> tags
+  // are stripped rather than fetched over a network that is not there.
+  window.document.write(html.replace(/<script\b[^>]*\bsrc=[^>]*><\/script>/g, ''));
+  restore = installGlobals(window);
+  return window;
+}
+
+afterEach(() => {
+  restore?.();
+  restore = null;
+});
+
+/** A module is imported once per process, so each page's island is run once
+ *  and every assertion about it lives in that one test. */
+async function runIsland(page: string, chunkPrefix: string) {
+  const html = readFileSync(resolve(DIST, page, 'index.html'), 'utf8');
+  const window = installDom(html);
+  const errors: string[] = [];
+  (window as unknown as { addEventListener(t: string, f: (e: { message: string }) => void): void })
+    .addEventListener('error', (e) => errors.push(e.message));
+
+  if (page === 'playground') lastWindow = window;
+  const chunk = readdirSync(resolve(DIST, '_astro')).find((f) => f.startsWith(chunkPrefix));
+  if (!chunk) throw new Error(`no ${chunkPrefix} chunk in dist/_astro`);
+  // The throw this guards against is the whole point: an undefined identifier
+  // in an island fails right here rather than in someone's browser.
+  await import(resolve(DIST, '_astro', chunk));
+  await new Promise((r) => setTimeout(r, 300));
+
+  const real = errors.filter((m) => !HARNESS_ONLY.some((re) => re.test(m)));
+  return { doc: window.document, errors: real };
+}
+
+describe.skipIf(!hasBuild)('the built islands run', () => {
+  test('the playground mounts its editor, tabs and workbench', async () => {
+    const { doc, errors } = await runIsland('playground', 'Playground.astro');
+    expect(errors).toEqual([]);
+
+
+    // The editor took over from the fallback.
+    expect(doc.querySelectorAll('.cm-editor')).toHaveLength(1);
+    expect(doc.querySelector('#pg-editor')?.hasAttribute('hidden')).toBe(false);
+    expect(doc.querySelector('#pg-source')).toBeNull();
+    expect(doc.querySelector('.cm-content')?.textContent?.length ?? 0).toBeGreaterThan(0);
+
+    // The workspace is a tree, and the server-rendered fallback list is gone.
+    const catalogue = buildCatalogue(examples, tour);
+    expect(doc.querySelector('.pg-tree')?.getAttribute('role')).toBe('tree');
+    expect(doc.querySelector('.pg-ws-fallback')).toBeNull();
+
+    // One row per group, plus the projects of whichever groups are open. Every
+    // group is shut on a fresh envelope except "Yours" and the one holding the
+    // project that loaded, so this is far fewer rows than the flat list was.
+    const groupRows = Array.from(
+      doc.querySelectorAll('.pg-tree-group .pg-tree-label'),
+      (n) => (n as { textContent: string }).textContent,
+    );
+    expect(groupRows).toEqual([...CATALOGUE_GROUPS.filter((g) => catalogue.some((c) => c.group === g)), 'Yours']);
+    expect(doc.querySelectorAll('.pg-tree-project').length).toBeLessThan(catalogue.length);
+
+    // The default pick is open, revealed inside its group, and showing files.
+    const openProject = doc.querySelector('.pg-tree-project[aria-current="true"]')!;
+    expect(openProject).not.toBeNull();
+    expect(openProject.getAttribute('aria-expanded')).toBe('true');
+    const files = doc.querySelectorAll('.pg-tree-file');
+    expect(files.length).toBeGreaterThanOrEqual(1);
+    // …with exactly one of them marked as the file the editor is showing.
+    expect(doc.querySelectorAll('.pg-tree-file[aria-current="true"]')).toHaveLength(1);
+
+    // The editor's own file strip is gone: the tree is the only place files
+    // live, which is the whole point of the move.
+    expect(doc.querySelector('.pg-files')).toBeNull();
+    expect(doc.querySelectorAll('.pg-filetab')).toHaveLength(0);
+
+    // A roving tabindex, so the whole tree is one tab stop rather than 22.
+    const stops = Array.from(doc.querySelectorAll('.pg-tree-row')).filter(
+      (r) => (r as unknown as { tabIndex: number }).tabIndex === 0,
+    );
+    expect(stops).toHaveLength(1);
+    // The editor panel is labelled by the current file row, not by a tab.
+    const labelledBy = doc.querySelector('.pg-editor-wrap')?.getAttribute('aria-labelledby') ?? '';
+    expect(labelledBy).not.toBe('');
+    expect(doc.querySelector(`#${labelledBy}`)?.classList.contains('pg-tree-file')).toBe(true);
+
+    // The dock: two panels under the editor, diagnostics open and selected.
+    const dock = doc.querySelector('.pg-dock') as unknown as { dataset: Record<string, string> } | null;
+    expect(dock).not.toBeNull();
+    // Shut on a fresh envelope: the tree carries the error badge now, so the
+    // dock is for reading the messages rather than for noticing them.
+    expect(dock!.dataset.open).toBe('false');
+    const dockTabs = Array.from(
+      doc.querySelectorAll('.pg-dock-tabs [role=tab]'),
+      (b) => (b as unknown as { dataset: Record<string, string> }).dataset.dock,
+    );
+    expect(dockTabs).toEqual(['diagnostics', 'settings', 'memory']);
+    expect(doc.querySelector('.pg-dock-tab[data-dock="diagnostics"]')?.getAttribute('aria-selected')).toBe('true');
+    expect(doc.querySelector('[data-dock-panel="settings"]')?.hasAttribute('hidden')).toBe(true);
+
+    // The memory tab exists in the markup but is hidden: the default pick
+    // declares no rom or ram, and a permanently empty tab is a worse answer
+    // than no tab. Its panel ships hidden with it.
+    expect(doc.querySelector('.pg-dock-tab[data-dock="memory"]')?.hasAttribute('hidden')).toBe(true);
+    expect(doc.querySelector('[data-dock-panel="memory"]')?.hasAttribute('hidden')).toBe(true);
+    expect(doc.querySelector('.pg-mem')?.textContent).toBe('');
+    // The rom image boxes left Settings for it, and left nothing behind.
+    expect(doc.querySelector('[data-dock-panel="settings"] .pg-rom-group')).toBeNull();
+    expect(doc.querySelector('[data-dock-panel="settings"] .pg-rom-box')).toBeNull();
+
+    // Both moved OUT of the output pane. A duplicate left behind would give
+    // the settings two sets of live controls bound to one store.
+    const output = doc.querySelector('.pg-output')!;
+    expect(output.querySelectorAll('.pg-diag')).toHaveLength(0);
+    expect(output.querySelectorAll('[data-setting]')).toHaveLength(0);
+    expect(doc.querySelectorAll('.pg-diag')).toHaveLength(1);
+    const editorPane = doc.querySelector('.pg-editor')!;
+    expect(editorPane.querySelectorAll('[data-setting]').length).toBeGreaterThan(0);
+    expect(editorPane.querySelector('.pg-dock')).not.toBeNull();
+
+    // The output strip is the three compiled views, diagnostics gone.
+    const outTabs = Array.from(
+      doc.querySelectorAll('.pg-tabs [role=tab]'),
+      (b) => (b as unknown as { dataset: Record<string, string> }).dataset.tab,
+    );
+    expect(outTabs).toEqual(['preview', 'truth', 'simulate']);
+    expect(doc.querySelector('.pg-tabs [data-tab="preview"]')?.getAttribute('aria-selected')).toBe('true');
+
+    // The tooltip exists and is empty — no analysis lands in this harness, so
+    // the truth tab is not blocked and must say nothing.
+    const tip = doc.querySelector('#pg-tab-tip-truth')!;
+    expect(tip.getAttribute('role')).toBe('tooltip');
+    expect(tip.textContent).toBe('');
+    expect(doc.querySelector('.pg-tabs [data-tab="truth"]')?.getAttribute('aria-disabled')).toBe('false');
+
+    // The workbench furniture, and the panes grid in order.
+    expect(doc.querySelector('.pg-splitter')).not.toBeNull();
+    expect(doc.querySelector('.pg-statusbar')).not.toBeNull();
+    expect(doc.querySelector('.pg-settings')).not.toBeNull();
+    // happy-dom's Element is structurally its own; `className` is all this needs.
+    const panes = Array.from(
+      doc.querySelector('.pg-panes')?.children ?? [],
+      (c) => (c as { className: string }).className,
+    );
+    expect(panes).toEqual(['pg-ws', 'pg-editor', 'pg-splitter', 'pg-output']);
+  });
+
+  test('the dock collapses and reopens, and remembers which panel', () => drive((doc) => {
+    // The playground module is imported once per process, so this reuses the
+    // document the test above left behind rather than mounting a second one.
+    const dock = doc.querySelector('.pg-dock') as unknown as { dataset: Record<string, string> };
+    const toggle = doc.querySelector('.pg-dock-toggle') as unknown as { click(): void; textContent: string };
+    const diagTab = doc.querySelector('.pg-dock-tab[data-dock="diagnostics"]') as unknown as { click(): void };
+    const setTab = doc.querySelector('.pg-dock-tab[data-dock="settings"]') as unknown as { click(): void };
+    const body = doc.querySelector('.pg-dock-body')!;
+
+    expect(dock.dataset.open).toBe('false');
+    toggle.click();
+    expect(dock.dataset.open).toBe('true');
+    expect(toggle.textContent).toBe('Hide');
+    toggle.click();
+    expect(dock.dataset.open).toBe('false');
+    expect(toggle.textContent).toBe('Show');
+    toggle.click();
+
+    // Switching panel keeps the dock open and moves the selection with it.
+    setTab.click();
+    expect(dock.dataset.open).toBe('true');
+    expect(doc.querySelector('[data-dock-panel="settings"]')?.hasAttribute('hidden')).toBe(false);
+    expect(doc.querySelector('[data-dock-panel="diagnostics"]')?.hasAttribute('hidden')).toBe(true);
+
+    // Clicking the panel already showing is the collapse gesture.
+    setTab.click();
+    expect(dock.dataset.open).toBe('false');
+    // …and clicking the OTHER panel while collapsed reopens on that one.
+    diagTab.click();
+    expect(dock.dataset.open).toBe('true');
+    expect(doc.querySelector('[data-dock-panel="diagnostics"]')?.hasAttribute('hidden')).toBe(false);
+    expect(body).not.toBeNull();
+  }));
+
+  test('a group collapses and reopens, taking its projects with it', () => drive((doc) => {
+    const rows = () => Array.from(doc.querySelectorAll('.pg-tree-row'));
+    const openGroup = doc.querySelector('.pg-tree-group[aria-expanded="true"]') as unknown as
+      { click(): void; getAttribute(n: string): string | null };
+    const before = rows().length;
+
+    openGroup.click();
+    const shut = rows().length;
+    // Shutting a group removes its projects — and the open project's files
+    // with them — rather than leaving hidden rows the arrow keys could reach.
+    expect(shut).toBeLessThan(before);
+    expect(doc.querySelector('.pg-tree-group[aria-expanded="true"]')).not.toBe(openGroup);
+
+    openGroup.click();
+    expect(rows().length).toBe(before);
+    expect(openGroup.getAttribute('aria-expanded')).toBe('true');
+
+    // Still exactly one tab stop after two redraws.
+    const stops = rows().filter((r) => (r as unknown as { tabIndex: number }).tabIndex === 0);
+    expect(stops).toHaveLength(1);
+  }));
+
+  test('files are added, switched and deleted from the tree', () => drive((doc) => {
+    // Everything here used to live on the strip above the editor. This is the
+    // proof that moving it did not quietly drop half of it.
+    const fileRows = () => Array.from(doc.querySelectorAll('.pg-tree-file'));
+    const labelOf = (r: unknown): string =>
+      (r as { querySelector(s: string): { textContent: string } | null })
+        .querySelector('.pg-tree-label')?.textContent ?? '';
+    const click = (el: unknown) => (el as { click(): void }).click();
+
+    expect(fileRows()).toHaveLength(1);
+    const firstName = labelOf(fileRows()[0]);
+
+    // The ＋ on the open project row is the add-file control the strip had.
+    const add = doc.querySelector('.pg-tree-project[aria-current="true"] .pg-tree-add');
+    expect(add).not.toBeNull();
+    click(add);
+    expect(fileRows()).toHaveLength(2);
+
+    // The last file is the root, and only it carries the chip.
+    const roots = fileRows().filter((r) => (r as unknown as Element).querySelector('.pg-tree-root'));
+    expect(roots).toHaveLength(1);
+    expect(labelOf(roots[0])).toBe(labelOf(fileRows()[1]));
+    // Adding a file selects it, and exactly one row is ever current.
+    expect(doc.querySelectorAll('.pg-tree-file[aria-current="true"]')).toHaveLength(1);
+
+    // A new file is inserted BEFORE the root, so the root stays last and the
+    // original file is still the one the compiler starts from.
+    expect(labelOf(fileRows()[1])).toBe(firstName);
+    // Switching files by clicking a row.
+    click(fileRows()[1]);
+    expect(labelOf(doc.querySelector('.pg-tree-file[aria-current="true"]'))).toBe(firstName);
+
+    // Delete is two presses, as it was on the strip: the first only arms. The
+    // button is named rather than taken by position — a file row carries a
+    // rename control too, and "the first action" is not a stable thing to mean.
+    const deleteOn = (sel: string) => doc.querySelector(`${sel} .pg-tree-action[aria-label^="Delete"]`);
+    click(deleteOn('.pg-tree-file'));
+    expect(fileRows()).toHaveLength(2);
+    expect(doc.querySelector('.pg-tree-file[data-confirm="true"]')).not.toBeNull();
+    click(deleteOn('.pg-tree-file[data-confirm="true"]'));
+    expect(fileRows()).toHaveLength(1);
+
+    // …and the last remaining file refuses to go, so a project always has one.
+    click(deleteOn('.pg-tree-file'));
+    click(deleteOn('.pg-tree-file'));
+    expect(fileRows()).toHaveLength(1);
+  }));
+
+  test('a file is renamed from the tree, and a bad name is refused', () => drive((doc) => {
+    const fileRows = () => Array.from(doc.querySelectorAll('.pg-tree-file'));
+    const labelOf = (r: unknown): string =>
+      (r as { querySelector(s: string): { textContent: string } | null })
+        .querySelector('.pg-tree-label')?.textContent ?? '';
+    const click = (el: unknown) => (el as { click(): void }).click();
+    const press = (el: unknown, key: string) =>
+      (el as { dispatchEvent(e: unknown): void }).dispatchEvent(
+        new (globalThis as unknown as { KeyboardEvent: new (t: string, o: unknown) => unknown })
+          .KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }),
+      );
+
+    const before = labelOf(fileRows()[0]);
+    const renameBtn = doc.querySelector('.pg-tree-file .pg-tree-action[aria-label^="Rename"]');
+    expect(renameBtn).not.toBeNull();
+
+    // The label is swapped for an input carrying the current name.
+    click(renameBtn);
+    let input = doc.querySelector('.pg-tree-file .pg-ws-input') as unknown as
+      { value: string; getAttribute(n: string): string | null; blur(): void };
+    expect(input).not.toBeNull();
+    expect(input.value).toBe(before);
+
+    // A name the marker format cannot represent is refused in place: the input
+    // stays, and the reason lands in the tree's error line.
+    input.value = 'not a file name!';
+    press(doc.querySelector('.pg-tree-file .pg-ws-input'), 'Enter');
+    expect(doc.querySelector('.pg-tree-file .pg-ws-input')).not.toBeNull();
+    expect(doc.querySelector('.pg-ws-error')?.textContent ?? '').not.toBe('');
+    expect(labelOf(fileRows()[0])).toBe('');
+
+    // Escape reverts, leaving the original name and clearing the complaint.
+    press(doc.querySelector('.pg-tree-file .pg-ws-input'), 'Escape');
+    expect(doc.querySelector('.pg-tree-file .pg-ws-input')).toBeNull();
+    expect(labelOf(fileRows()[0])).toBe(before);
+    expect(doc.querySelector('.pg-ws-error')?.textContent ?? '').toBe('');
+
+    // A legal name commits, and the row shows it.
+    click(doc.querySelector('.pg-tree-file .pg-tree-action[aria-label^="Rename"]'));
+    input = doc.querySelector('.pg-tree-file .pg-ws-input') as never;
+    input.value = 'renamed.circ';
+    press(doc.querySelector('.pg-tree-file .pg-ws-input'), 'Enter');
+    expect(doc.querySelector('.pg-tree-file .pg-ws-input')).toBeNull();
+    expect(labelOf(fileRows()[0])).toBe('renamed.circ');
+
+    // F2 opens the same editor, so the keyboard path did not go away.
+    press(fileRows()[0], 'F2');
+    expect(doc.querySelector('.pg-tree-file .pg-ws-input')).not.toBeNull();
+    press(doc.querySelector('.pg-tree-file .pg-ws-input'), 'Escape');
+    expect(labelOf(fileRows()[0])).toBe('renamed.circ');
+  }));
+
+  test('the memory grid refuses a bad word without closing, and Load image opens', () => drive((doc) => {
+    // The panel exists only once an analysis reports a memory, and no headless
+    // harness can run the worker that produces one — so the island's own seam
+    // is handed a minimal analysis declaring `rom code[8, 4]`.
+    const island = (doc.querySelector('.pg') as unknown as {
+      __playground: { state: Record<string, unknown>; renderMemory(): void };
+    }).__playground;
+    const files = (island.state.tabs as { files: { name: string }[] }).files;
+    const rootName = files[files.length - 1].name;
+    island.state.analysis = {
+      files: [{ file_id: 0, path: `/playground/${rootName}` }],
+      diagnostics: [],
+      symbols: [{ file_id: 0, kind: 'rom', name: 'code', width: 8, addr_width: 4, range: {} }],
+      references: [],
+    };
+    island.renderMemory();
+
+    const click = (el: unknown) => (el as { click(): void }).click();
+    const press = (el: unknown, key: string) =>
+      (el as { dispatchEvent(e: unknown): void }).dispatchEvent(
+        new (globalThis as unknown as { KeyboardEvent: new (t: string, o: unknown) => unknown })
+          .KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }),
+      );
+    const fire = (el: unknown, type: string) =>
+      (el as { dispatchEvent(e: unknown): void }).dispatchEvent(
+        new (globalThis as unknown as { Event: new (t: string, o: unknown) => unknown })
+          .Event(type, { bubbles: true }),
+      );
+    const cells = () => Array.from(doc.querySelectorAll('.pg-mem-cell'));
+    const errorLine = () => doc.querySelector('.pg-mem-error')?.textContent ?? '';
+
+    // The tab is no longer hidden, and the grid is the memory's exact size.
+    expect(doc.querySelector('.pg-dock-tab[data-dock="memory"]')?.hasAttribute('hidden')).toBe(false);
+    expect(cells()).toHaveLength(16);
+    expect(cells().every((c) => (c as unknown as { textContent: string }).textContent === '?')).toBe(true);
+
+    // Open a cell.
+    const cell = cells()[0] as unknown as { dispatchEvent(e: unknown): void };
+    fire(cell, 'dblclick');
+    const input = () => doc.querySelector('.pg-mem-input') as unknown as
+      { value: string; maxLength: number; getAttribute(n: string): string | null } | null;
+    expect(input()).not.toBeNull();
+
+    // Characters that cannot begin any legal word never land.
+    const box = input()!;
+    box.value = 'zqg!';
+    fire(doc.querySelector('.pg-mem-input'), 'input');
+    expect(input()!.value).toBe('');
+
+    // The shipped default value format is binary, so nine binary digits is the
+    // overflow case for an eight-bit word. A word too wide is refused IN
+    // PLACE: the editor stays open holding what was typed, and the reason
+    // appears under the grid rather than in the status bar at the page foot.
+    box.value = '100000000';
+    press(doc.querySelector('.pg-mem-input'), 'Enter');
+    expect(input()).not.toBeNull();
+    expect(input()!.value).toBe('100000000');
+    expect(input()!.getAttribute('aria-invalid')).toBe('true');
+    expect(errorLine()).toContain('255');
+
+    // Typing again is the reader answering the complaint, so it clears.
+    box.value = '11111111';
+    fire(doc.querySelector('.pg-mem-input'), 'input');
+    expect(input()!.getAttribute('aria-invalid')).toBe('false');
+    expect(errorLine()).toBe('');
+
+    // …and a legal word commits and closes.
+    press(doc.querySelector('.pg-mem-input'), 'Enter');
+    expect(doc.querySelector('.pg-mem-input')).toBeNull();
+    expect((cells()[0] as unknown as { textContent: string }).textContent).toBe('11111111');
+
+    // "Load image" actually opens the hex box and the file picker. It did
+    // nothing before: a checkbox is an INPUT, and the panel's own guard against
+    // redrawing a field being typed into swallowed the redraw.
+    expect(doc.querySelector('.pg-mem-hex')).toBeNull();
+    const toggle = doc.querySelector('.pg-mem-hextoggle input') as unknown as
+      { checked: boolean; focus(): void; click(): void };
+    expect(doc.querySelector('.pg-mem-hextoggle')?.textContent).toContain('Load image');
+    // Focused and clicked, not just `checked = true`: a real click focuses the
+    // box, and the focus is the whole bug. Setting the property from outside
+    // leaves the document focused elsewhere and the defect cannot reproduce.
+    toggle.focus();
+    toggle.click();
+    expect(toggle.checked).toBe(true);
+    expect(doc.querySelector('.pg-mem-hex')).not.toBeNull();
+    expect(doc.querySelector('.pg-rom-box')).not.toBeNull();
+    expect(doc.querySelector('.pg-mem-file')?.getAttribute('type')).toBe('file');
+    // The hex reflects the word just written through the grid.
+    expect((doc.querySelector('.pg-rom-box') as unknown as { value: string }).value).toBe('ff');
+
+    // Unticking closes it again.
+    (doc.querySelector('.pg-mem-hextoggle input') as unknown as { focus(): void; click(): void }).focus();
+    (doc.querySelector('.pg-mem-hextoggle input') as unknown as { click(): void }).click();
+    expect(doc.querySelector('.pg-mem-hex')).toBeNull();
+  }));
+
+  test('Download follows the artifact, and saves it under the project\'s name', async () => {
+    // No harness can run the worker that builds an artifact, so the island's
+    // state is handed one directly and its refresh seam is called, the way
+    // the compile reply does.
+    type Island = {
+      state: { artifact: unknown; stale: boolean };
+      refreshActions(): void;
+      setStale(stale: boolean): void;
+    };
+    const saved: { name: string; href: string }[] = [];
+    const island = drive((doc) => {
+      const button = doc.querySelector('.pg-download') as unknown as { disabled: boolean; title: string };
+      expect(button.disabled).toBe(true);
+      expect(button.title).toBe('Compile a circuit first');
+      // The anchor the click creates is caught here, before happy-dom tries
+      // to navigate to a blob: URL.
+      doc.addEventListener('click', (e) => {
+        const t = (e as { target: { tagName?: string; download?: string; href?: string } }).target;
+        if (t.tagName === 'A' && t.download) {
+          saved.push({ name: t.download, href: t.href ?? '' });
+          (e as { preventDefault(): void }).preventDefault();
+        }
+      }, true);
+      return (doc.querySelector('.pg') as unknown as { __playground: Island }).__playground;
+    });
+
+    island.state.artifact = { bytes: new Uint8Array([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0]), hash: 7, size: 8 };
+    island.state.stale = false;
+    island.refreshActions();
+    drive((doc) => {
+      const button = doc.querySelector('.pg-download') as unknown as { disabled: boolean; title: string; click(): void; hasAttribute(n: string): boolean };
+      expect(button.disabled).toBe(false);
+      expect(button.title).toMatch(/^Download [a-z0-9-]+\.wasm \(8 B\)$/);
+      expect(button.hasAttribute('data-stale')).toBe(false);
+      button.click();
+      expect(saved).toHaveLength(1);
+      expect(saved[0].name).toMatch(/^[a-z0-9-]+\.wasm$/);
+      expect(saved[0].href.startsWith('blob:')).toBe(true);
+      expect(doc.querySelector('.pg-status')?.textContent).toMatch(/^Saved [a-z0-9-]+\.wasm \(8 B\)\.$/);
+      expect(doc.querySelector('.pg-download')?.getAttribute('data-state')).toBe('done');
+      // The anchor was a means, not a leftover.
+      expect(doc.querySelector('.pg-status-actions a')).toBeNull();
+    });
+
+    // A build the source has moved past is still offered, and says so. This
+    // goes through the island's own setStale, the path the compile reply
+    // takes, so a refresh dropped from it fails here.
+    island.setStale(true);
+    drive((doc) => {
+      const button = doc.querySelector('.pg-download') as unknown as { disabled: boolean; title: string; hasAttribute(n: string): boolean };
+      expect(button.disabled).toBe(false);
+      expect(button.hasAttribute('data-stale')).toBe(true);
+      expect(button.title).toContain('the source has changed');
+    });
+
+    // And no build is no button.
+    island.state.artifact = null;
+    island.setStale(false);
+    drive((doc) => {
+      expect((doc.querySelector('.pg-download') as unknown as { disabled: boolean }).disabled).toBe(true);
+    });
+  });
+
+  test('Share copies a link and says so on the button and in the status line', async () => {
+    const written: string[] = [];
+    await driveAsync(async (doc) => {
+      // happy-dom's clipboard is a stub; record what the island hands it.
+      const nav = globalThis.navigator as unknown as { clipboard?: { writeText(t: string): Promise<void> } };
+      Object.defineProperty(nav, 'clipboard', {
+        configurable: true,
+        value: { writeText: async (t: string) => { written.push(t); } },
+      });
+      (doc.querySelector('.pg-share') as unknown as { click(): void }).click();
+      // The handler is async — an encode through a CompressionStream and the
+      // clipboard write — so the globals have to outlive the click.
+      await new Promise((r) => setTimeout(r, 100));
+      expect(written).toHaveLength(1);
+      expect(written[0]).toMatch(/#src0?=[A-Za-z0-9_-]+$/);
+      expect(doc.querySelector('.pg-status')?.textContent).toMatch(/^Link copied \(\d+ characters\)\.$/);
+      expect(doc.querySelector('.pg-share')?.getAttribute('data-state')).toBe('done');
+      expect(doc.querySelector('.pg-share .pg-action-label')?.textContent).toBe('Copied');
+      expect((doc.querySelector('.pg-share') as unknown as { disabled: boolean }).disabled).toBe(false);
+    });
+  });
+
+  test('every canvas that asks to auto-run is watched, and nothing else is', async () => {
+    FakeIntersectionObserver.instances.length = 0;
+    const { doc, errors } = await runIsland('gallery', 'LiveCanvas.astro');
+    expect(errors).toEqual([]);
+
+    // One observer for the page, watching every opted-in card and nothing else.
+    expect(FakeIntersectionObserver.instances).toHaveLength(1);
+    const watcher = FakeIntersectionObserver.instances[0];
+    const cards = Array.from(doc.querySelectorAll('.lc[data-circ-autorun]'));
+    expect(cards.length).toBeGreaterThan(1);
+    // Compared by artifact name rather than by node. A failed `toEqual` on
+    // happy-dom elements makes bun serialise fourteen DOM trees to build its
+    // diff, and the run never finishes — a test whose failure mode is a hang
+    // is worse than no test.
+    const nameOf = (el: unknown) =>
+      (el as { getAttribute(n: string): string | null }).getAttribute('data-circ-wasm');
+    expect(watcher.observed.map(nameOf)).toEqual(cards.map(nameOf));
+    // Started before the card is actually on screen, so a steady scroll meets
+    // a running circuit rather than a spinner.
+    expect((watcher.options as { rootMargin: string }).rootMargin).toContain('200px');
+
+    // A card reported on screen is let go at once: this is a one-shot, not a
+    // visibility toggle, because tearing a circuit down on scroll would throw
+    // away whatever the reader had clocked into it.
+    //
+    // The target is a bare element rather than a card. `mount` returns before
+    // it imports anything when the container holds no launch button, and
+    // letting it get as far as the real renderer hangs this harness — there is
+    // no network here, and the import never settles.
+    const stub = doc.createElement('div');
+    stub.setAttribute('data-circ-wasm', 'stub.wasm');
+    watcher.intersect(stub);
+    expect(watcher.unobserved.map(nameOf)).toEqual(['stub.wasm']);
+
+    // The landing page renders the same component and opts its hero in too, so
+    // the flag is a per-canvas decision rather than a page-shaped one. What
+    // the observer must never do is watch a canvas that did NOT ask.
+    const landing = readFileSync(resolve(DIST, 'index.html'), 'utf8');
+    expect(landing).toContain('class="lc"');
+    expect(landing).toContain('data-circ-autorun');
+    const optedOut = Array.from(doc.querySelectorAll('.lc:not([data-circ-autorun])'));
+    expect(watcher.observed).toHaveLength(cards.length);
+    for (const el of optedOut) expect(watcher.observed).not.toContain(el);
+  });
+
+  test('every app-shell container hands its height to exactly one child', () => drive((doc) => {
+    // The bug this exists for, twice over: a container declared a fixed set of
+    // grid rows, and then the page turned out to have a different number of
+    // children than tracks — `main` after its header was deleted, and `.pg`
+    // whose banner is hidden in the normal case. Both times the pane that was
+    // supposed to fill the viewport quietly landed in an `auto` track and
+    // started sizing to its own content, with no error and every gate green.
+    //
+    // So the invariant is checked against the DOM as it actually renders, not
+    // against the CSS alone: a fixed track count must match the children that
+    // are really there, and anything else must be a flex column whose
+    // height-taking child says so.
+    const css = readFileSync(resolve(SITE, 'src', 'styles', 'global.css'), 'utf8');
+    const declarationsOf = (selector: string): string => {
+      const at = css.indexOf(selector);
+      expect(at === -1 ? `${selector} (no such rule)` : selector).toBe(selector);
+      const body = css.slice(at + selector.length);
+      return body.slice(0, body.indexOf('}')).replace(/\/\*[\s\S]*?\*\//g, '');
+    };
+    /** `auto minmax(0, 1fr) auto` is three tracks, not five words. */
+    const trackCount = (value: string): number =>
+      value.replace(/[a-z-]+\([^)]*\)/gi, 'X').trim().split(/\s+/).filter(Boolean).length;
+    /** A `<script>` and a `[hidden]` element generate no box, so neither is a
+     *  grid item. This is exactly what both bugs turned on. */
+    const rendered = (el: unknown): boolean => {
+      const e = el as { tagName: string; hasAttribute(n: string): boolean };
+      return e.tagName !== 'SCRIPT' && e.tagName !== 'STYLE' && !e.hasAttribute('hidden');
+    };
+
+    const chain: [string, string][] = [
+      ['main', '.pg'],
+      ['.pg', '.pg-panes'],
+    ];
+
+    for (const [selector, fills] of chain) {
+      const el = doc.querySelector(selector)!;
+      expect(el).not.toBeNull();
+      const kids = Array.from(el.children).filter(rendered);
+      const block = declarationsOf(`[data-layout='app'] ${selector} {`);
+
+      // A container that hands height down must be allowed to shrink first.
+      expect(block).toContain('min-height: 0');
+
+      const rows = block.match(/grid-template-rows:([^;]+);/);
+      if (rows) {
+        // Allowed, but only while the tracks and the real children agree.
+        expect(trackCount(rows[1])).toBe(kids.length);
+      } else {
+        expect(block).toContain('display: flex');
+        expect(block).toContain('flex-direction: column');
+        // …and the child that takes the leftover has to claim it.
+        expect(declarationsOf(`[data-layout='app'] ${fills} {`)).toContain('flex: 1');
+        expect(doc.querySelector(fills)?.parentElement).toBe(el);
+      }
+    }
+
+    // The editor's own chain is flex all the way down to CodeMirror, which
+    // sizes to its content unless something gives it a height.
+    expect(declarationsOf("[data-layout='app'] .pg-editor .pg-cm .cm-editor {")).toContain('height: 100%');
+    expect(declarationsOf("[data-layout='app'] .pg-editor .pg-cm .cm-scroller {")).toContain('overflow: auto');
+  }));
+});

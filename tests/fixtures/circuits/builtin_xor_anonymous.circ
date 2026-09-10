@@ -1,0 +1,6 @@
+// The only macro usage sits in anonymous position, so it never appears in
+// ast_file.components[]; only the IR scan (lib/ir/resolver.zig) sees it.
+// Import-free on purpose: this is the fast-path case.
+input a, b
+wire w(in = xor(a = a, b = b).out)
+output out(in = w.out)

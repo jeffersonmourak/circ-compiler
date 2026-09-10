@@ -167,7 +167,7 @@ Bits set beyond the declared width are silently masked. See [`DOCS/wasm-api.md`]
 
 ## 5. Use a built-in macro (`xor`)
 
-Built-in gates `or`, `nand`, `nor`, `xor`, and `xnor` are auto-imported when a file is part of a project — i.e. when the parser sees at least one `import` declaration. To use a built-in in an otherwise standalone file, add an explicit import to the virtual `<builtin>/` filesystem:
+Built-in gates `or`, `nand`, `nor`, `xor`, and `xnor` are auto-imported whenever a file uses one: the compiler takes the project pipeline for any root that declares an import *or* instantiates a built-in, so a standalone file can write `xor x(a=a, b=b)` with no `import` line. The explicit import from the virtual `<builtin>/` filesystem remains valid and is the form used below:
 
 ```text
 // examples/xor_demo.circ
@@ -184,7 +184,7 @@ zig-out/bin/circ-compile examples/xor_demo.circ -o examples/xor.wasm
 zig-out/bin/circ-compile examples/xor_demo.circ --inspect
 ```
 
-> **v0 papercut.** When the file has no user imports, single-file mode does not auto-import built-ins, so a bare `xor` raises `E001: undeclared name 'xor'`. The explicit `import xor "<builtin>/xor.circ"` is the workaround until the CLI is updated to run the project pipeline unconditionally.
+> **v0 papercut.** `--inspect` alone stays in single-module mode and does not auto-import built-ins, so a bare `xor` shows up there as `E001: undeclared name 'xor'`. Compile (`-o`), `--emit-zig`, `--preview`, `--truth-table` and `--sim` all resolve it; add the explicit `import xor "<builtin>/xor.circ"` only if you want `--inspect`'s view of the file to be clean.
 
 Once a file participates in the project pipeline, root-pin component IDs are assigned in a flat layout that includes the built-in macro's expanded gates. The simplest way to discover them is to scan in JS:
 

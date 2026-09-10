@@ -50,7 +50,9 @@ const { code } = Astro.props;
 
   document.querySelectorAll<HTMLButtonElement>('.copy-btn').forEach((btn) => {
     const label = btn.querySelector('.copy-btn-text');
-    let resetTimer: ReturnType<typeof setTimeout> | undefined;
+    // `window.setTimeout` returns a number in the browser; the ambient node
+    // typing of the bare global does not apply to it.
+    let resetTimer: number | undefined;
     btn.addEventListener('click', async () => {
       const ok = await copyText(snippetText(btn));
       if (label) label.textContent = ok ? 'Copied' : 'Failed';

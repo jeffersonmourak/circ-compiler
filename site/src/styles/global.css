@@ -36,6 +36,7 @@
   --code-bg: #e8def0;
   --pane-bg: #f4eefb;
   --pane-label-bg: #ebe4f5;
+  --danger: #a83737;
 
   --font-prose: 'Ronzino', ui-sans-serif, system-ui, -apple-system, "Segoe UI",
     Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -65,6 +66,7 @@
   --code-bg: #1f1438;
   --pane-bg: #0c0517;
   --pane-label-bg: #13091f;
+  --danger: #ff6b8a;
 
   color-scheme: dark;
 }
@@ -335,6 +337,9 @@ hr {
 }
 @media (prefers-reduced-motion: reduce) {
   .heart { animation: none; }
+  .pg-splitter::before { transition: none; }
+  .pg-dot[data-state='compiling'] { animation: none; }
+  .pg-output[data-stale] { transition: none; }
 }
 
 /* Responsive theme-toggle placement: top nav on desktop, footer on mobile.
@@ -415,6 +420,9 @@ hr {
   flex: 1;
   font-size: 0.88rem;
   line-height: 1.55;
+  /* The pane clips, so the scroll has to live here. A four-bit adder's
+     schematic is far wider than half a column and must stay reachable. */
+  overflow-x: auto;
 }
 /* ASCII previews need wider line-height for diagrams to read clearly, and a
    strict system mono so box-drawing glyphs stay on the character grid. */
@@ -482,7 +490,13 @@ hr {
 }
 .lc-mount canvas {
   max-width: 100%;
-  height: auto;
+  /* The renderer sets width AND height inline, in px. `max-width` shrinks
+     the width past an inline width, but a plain `height: auto` loses to the
+     inline height, so a wide circuit used to keep its full height at a
+     narrower width: squashed sideways, unreadable. `!important` is the one
+     way a stylesheet wins over an inline declaration; the renderer hit-tests
+     and positions from the rendered rect, so a uniform shrink stays exact. */
+  height: auto !important;
   display: block;
 }
 .lc-error {
@@ -526,7 +540,6 @@ hr {
 
 /* ---------- Playground ---------- */
 .pg { margin: 1rem 0 2rem; }
-.pg-intro { max-width: var(--measure); }
 .pg-banner {
   margin: 0 0 1rem;
   padding: 0.6rem 0.85rem;
@@ -594,6 +607,38 @@ hr {
   tab-size: 2;
   outline: none;
 }
+/* The editing surface: the CodeMirror mount and the fallback textarea share
+   one flex column so either one fills the pane. Geometry only — the editor's
+   colours come from its own EditorView.theme compartment, never from here. */
+.pg-editor-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 18rem;
+}
+.pg-cm {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 18rem;
+  overflow: hidden;
+}
+/* display:flex above outranks the UA stylesheet's [hidden] { display: none },
+   the same trap .lc-mount[hidden] documents further up this file. */
+.pg-cm[hidden] { display: none; }
+.pg-cm .cm-editor {
+  flex: 1;
+  min-height: 0;
+}
+.pg-cm .cm-scroller {
+  font-family: var(--font-mono-strict);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  overflow: auto;
+}
+.pg-cm .cm-content { padding: 0.75rem 0; }
+.pg-cm .cm-line { padding: 0 0.85rem; }
 .pg-status {
   padding: 0.4rem 0.85rem;
   border-top: 1px solid var(--border);
@@ -606,7 +651,11 @@ hr {
   gap: 0;
   border-bottom: 1px solid var(--border);
   background: var(--pane-label-bg);
-  overflow-x: auto;
+  /* The tooltip is positioned against this strip, so it cannot be the thing
+     that scrolls — `overflow-x: auto` here would clip it. The tabs are three
+     short words and wrap sooner than they overflow. */
+  flex-wrap: wrap;
+  position: relative;
 }
 .pg-tabs button {
   font: inherit;
@@ -625,6 +674,46 @@ hr {
   color: var(--accent);
   border-bottom-color: var(--accent);
 }
+/* Blocked, not disabled: the element stays focusable so the reason below is
+   reachable without a pointer. `not-allowed` is the only cursor that says the
+   click will be refused before it is. */
+.pg-tabs button[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.pg-tabs button[aria-disabled="true"][aria-selected="true"] { border-bottom-color: currentColor; }
+/* The tooltip. Empty and unlinked whenever the tab is available, so there is
+   nothing to show; `:empty` makes that structural rather than a class the
+   island has to remember to remove. */
+.pg-tab-tip {
+  position: absolute;
+  top: 100%;
+  left: 0.5rem;
+  right: 0.5rem;
+  z-index: 5;
+  margin-top: 0.25rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.18);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 100ms ease;
+  pointer-events: none;
+}
+.pg-tabs button[aria-disabled="true"]:hover ~ .pg-tab-tip,
+.pg-tabs button[aria-disabled="true"]:focus-visible ~ .pg-tab-tip {
+  opacity: 1;
+  visibility: visible;
+}
+.pg-tab-tip:empty { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .pg-tab-tip { transition: none; }
+}
 .pg-panel { padding: 0.75rem 0.85rem; overflow: auto; flex: 1; }
 .pg-panel[hidden] { display: none; }
 .pg-diag { list-style: none; margin: 0; padding: 0; font-family: var(--font-mono); font-size: 0.85rem; }
@@ -640,6 +729,319 @@ hr {
 }
 .pg-diag button:hover { text-decoration: underline; }
 .pg-diag-error button { color: var(--accent); }
+.pg-diag-warning button { color: var(--muted); }
+.pg-diag button:disabled { color: var(--muted); cursor: default; text-decoration: none; }
+.pg-diag-counts { color: var(--muted); margin-bottom: 0.5rem; }
+/* ---------- the editor's dock ----------
+   A collapsible strip under the editing surface holding the two panels that
+   are about the SOURCE rather than the compiled result: diagnostics and
+   settings. It is `flex: 0 0 auto` so the editor above it takes the slack. */
+.pg-dock {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-top: 1px solid var(--border);
+  background: var(--pane-bg);
+}
+.pg-dock-bar {
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+  background: var(--pane-label-bg);
+}
+.pg-dock-tabs {
+  display: flex;
+  gap: 0;
+  overflow-x: auto;
+  flex: 1;
+  min-width: 0;
+  scrollbar-width: thin;
+}
+.pg-dock-tab {
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 0.4rem 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.pg-dock-tab:hover { color: var(--fg); }
+.pg-dock-tab[aria-selected="true"] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+/* Collapsed, nothing is "selected" in a way the reader can see, so the
+   underline would be a lie about what is on screen. */
+.pg-dock[data-open="false"] .pg-dock-tab[aria-selected="true"] {
+  border-bottom-color: transparent;
+  color: var(--muted);
+}
+.pg-dock-badge {
+  font-size: 0.68rem;
+  line-height: 1;
+  padding: 0.15rem 0.35rem;
+  border-radius: 999px;
+  background: var(--border);
+  color: var(--fg);
+}
+.pg-dock-badge[data-severity="error"] { background: var(--danger); color: var(--bg); }
+.pg-dock-badge[hidden] { display: none; }
+.pg-dock-toggle {
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  padding: 0.4rem 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pg-dock-toggle:hover { color: var(--fg); }
+.pg-dock-body {
+  /* A share of the pane rather than a fixed height, so the dock stays usable
+     on a short viewport and never crowds the editor out on a tall one. */
+  height: var(--pg-dock-h, 12rem);
+  overflow: auto;
+  border-top: 1px solid var(--border);
+}
+.pg-dock[data-open="false"] .pg-dock-body { display: none; }
+.pg-dock-panel { padding: 0.6rem 0.85rem; }
+.pg-dock-panel[hidden] { display: none; }
+/* Settings, now a dock panel rather than a drawer of its own. */
+.pg-settings { font-size: 0.8rem; }
+.pg-settings-group {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 0;
+  padding: 0.5rem 0 0.35rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.pg-settings-group:first-child { border-top: 0; padding-top: 0; }
+.pg-settings-group legend {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 0;
+}
+.pg-settings-group label { display: inline-flex; align-items: center; gap: 0.3rem; }
+.pg-settings-group input[type='number'] { width: 4rem; }
+.pg-settings-hint { color: var(--muted); font-size: 0.7rem; flex-basis: 100%; }
+.pg-rom-meta { color: var(--muted); font-size: 0.7rem; }
+.pg-rom-error { color: var(--danger); font-size: 0.72rem; }
+
+/* ---------- the renderer's value dialog ----------
+   A click on a bus pin opens circ-renderer's own dialog on <body>: a field, a
+   slider and Apply / Clear / Close. Its inline styles are the renderer's
+   legible default; these put it in the site's palette. The class names are
+   part of the renderer's documented surface (README, "Driving a bus pin"),
+   and the pin test asserts they are still what the installed version emits. */
+.circ-pin-editor {
+  background: var(--pane-bg) !important;
+  color: var(--fg) !important;
+  border-color: var(--border) !important;
+  font-family: var(--font-mono-strict) !important;
+  font-size: 0.8rem !important;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.28) !important;
+}
+.circ-pin-editor__name { color: var(--muted); opacity: 1 !important; }
+.circ-pin-editor__field {
+  background: var(--bg) !important;
+  color: var(--fg) !important;
+  border-color: var(--accent) !important;
+}
+.circ-pin-editor__field[aria-invalid='true'] {
+  border-color: var(--danger) !important;
+  background: color-mix(in srgb, var(--danger) 12%, var(--bg)) !important;
+}
+.circ-pin-editor__slider { accent-color: var(--accent); }
+.circ-pin-editor__actions button {
+  font-size: 0.7rem !important;
+  color: var(--muted) !important;
+  border-color: var(--border) !important;
+  border-radius: 4px;
+}
+.circ-pin-editor__actions button:hover { color: var(--fg) !important; border-color: var(--accent) !important; }
+.circ-pin-editor__apply { color: var(--fg) !important; border-color: var(--accent) !important; }
+
+/* ---------- the memory panel ----------
+   A rom or ram keeps its contents as runtime state, so this panel is a live
+   window onto a running circuit rather than a view of the artifact. */
+.pg-mem { display: flex; flex-direction: column; gap: 1rem; }
+.pg-mem-item { display: flex; flex-direction: column; gap: 0.4rem; }
+.pg-mem-item + .pg-mem-item { border-top: 1px solid var(--border); padding-top: 0.8rem; }
+.pg-mem-head { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
+.pg-mem-name { margin: 0; font-family: var(--font-mono); font-size: 0.85rem; }
+.pg-mem-shape { color: var(--muted); font-family: var(--font-mono); font-size: 0.7rem; }
+.pg-mem-controls { display: flex; flex-direction: column; gap: 0.4rem; }
+/* Whether a circuit is behind the grid or only an image is. */
+.pg-mem-live {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0 0.35rem;
+}
+.pg-mem-live[data-live='true'] { color: var(--accent); border-color: var(--accent); }
+/* The hex escape hatch, behind its checkbox. */
+.pg-mem-hextoggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--muted);
+  cursor: pointer;
+  margin-left: auto;
+}
+.pg-mem-hextoggle:hover { color: var(--fg); }
+.pg-mem-hex { display: flex; flex-direction: column; gap: 0.3rem; }
+.pg-mem-file { font-size: 0.7rem; color: var(--muted); }
+.pg-mem-imglabel {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.pg-rom-box {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  min-height: 3.5rem;
+  resize: vertical;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
+  width: 100%;
+}
+.pg-mem-buttons { display: flex; align-items: center; gap: 0.35rem; }
+.pg-mem-btn {
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.15rem 0.45rem;
+  cursor: pointer;
+}
+.pg-mem-btn:hover:not(:disabled) { color: var(--fg); border-color: var(--accent); }
+.pg-mem-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.pg-mem-idle { color: var(--muted); font-size: 0.75rem; margin: 0; }
+/* The refusal line, directly under the grid so it sits beside the cell that
+   was refused rather than in the status bar at the bottom of the page. */
+.pg-mem-error { color: var(--danger); font-size: 0.72rem; margin: 0; }
+.pg-mem-error:empty { display: none; }
+.pg-mem-nav { display: flex; align-items: center; gap: 0.35rem; }
+.pg-mem-range { font-family: var(--font-mono); font-size: 0.7rem; color: var(--muted); }
+.pg-mem-jump {
+  width: 5rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
+  padding: 0.1rem 0.3rem;
+}
+/* The dump. It scrolls on its own axis: a 64-bit word in binary is 64
+   characters, and eight of those across must not widen the dock. */
+.pg-mem-table {
+  margin: 0.1rem 0 0.2rem;
+  border-collapse: collapse;
+  font-family: var(--font-mono-strict);
+  font-size: 0.72rem;
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
+.pg-mem-addr {
+  text-align: right;
+  color: var(--muted);
+  font-weight: normal;
+  padding: 0.1rem 0.5rem 0.1rem 0;
+  position: sticky;
+  left: 0;
+  background: var(--pane-bg);
+}
+.pg-mem-cell {
+  padding: 0.1rem 0.35rem;
+  cursor: text;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.pg-mem-cell:hover { border-color: var(--border); }
+.pg-mem-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* A word nothing has written is not a zero, and must not read like one. */
+.pg-mem-cell[data-unknown='true'] { color: var(--muted); opacity: 0.6; }
+/* …and a zero that exists only because a LATER word was written is not a
+   value the reader chose. The image format has no hole to offer, so the mark
+   is the only place that distinction survives. */
+.pg-mem-cell[data-implied='true'] {
+  color: var(--muted);
+  font-style: italic;
+  border-bottom: 1px dotted var(--muted);
+}
+.pg-mem-input {
+  width: 100%;
+  min-width: 3rem;
+  font: inherit;
+  font-family: var(--font-mono-strict);
+  border: 1px solid var(--accent);
+  background: var(--bg);
+  color: var(--fg);
+  padding: 0;
+}
+/* A refused word keeps its editor open, so the cell has to say so itself. */
+.pg-mem-input[aria-invalid='true'] {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, var(--bg));
+}
+/* The count beside the tab label, so a collapsed dock still says how many. */
+.pg-dock-count {
+  font-size: 0.68rem;
+  line-height: 1;
+  padding: 0.15rem 0.35rem;
+  border-radius: 999px;
+  background: var(--border);
+  color: var(--fg);
+}
+.pg-dock-count[hidden] { display: none; }
+.pg-dock-tab[hidden] { display: none; }
+
+/* Source linking: the span in the editor the canvas is pointing at. A
+   background, not a border, so it never shifts the text by a pixel. */
+.cm-circ-linked {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border-radius: 2px;
+}
+/* Source linking: the truth-table column the cursor's declaration names. */
+.pg-table th[data-symbol-name] { cursor: default; }
+.pg-table th.pg-th-linked,
+.pg-table th[data-symbol-name]:hover,
+.pg-table th[data-symbol-name]:focus-visible {
+  color: var(--accent);
+  outline: none;
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
 .pg-diag-ok { color: var(--muted); }
 .pg-preview {
   margin: 0;
@@ -653,7 +1055,14 @@ hr {
 .pg-table th { background: var(--pane-label-bg); }
 .pg-table-note { color: var(--muted); font-size: 0.85rem; margin: 0 0 0.5rem; }
 .pg-sim-note { color: var(--muted); font-size: 0.9rem; }
-.pg-sim-mount { padding: 0; }
+/* The workbench does not shrink a circuit to fit: it keeps every cell at its
+   drawn size and lets the panel scroll both ways, since a large circuit
+   squeezed into the pane is a picture of a circuit rather than one a reader
+   can follow. Block layout with auto margins centres a small circuit and
+   left-aligns a wide one, so no pixel is ever pushed out of reach the way
+   flex centring does (see the .lc-mount mobile note above). */
+.pg-sim-mount { padding: 0; display: block; overflow: visible; }
+.pg-sim-mount canvas { max-width: none; margin-inline: auto; }
 
 /* ---------- landing ---------- */
 .landing-tagline {
@@ -714,34 +1123,16 @@ a.install-line:hover {
 .status-note p { margin: 0; max-width: none; }
 .status-note strong { color: var(--accent); }
 
-/* ---------- tour ---------- */
-.tour-intro { max-width: var(--measure); margin: 0 0 2.5rem; color: var(--fg); }
-.tour-step {
-  margin: 3rem 0;
-  padding-top: 2rem;
-  border-top: 1px solid var(--border);
-}
-.tour-step:first-of-type {
-  border-top: none;
-  padding-top: 0;
-  margin-top: 1rem;
-}
-.tour-step h2 {
-  margin-top: 0;
-  font-size: 1.35rem;
-}
-.tour-step h2 .step-num {
-  display: inline-block;
-  font-family: var(--font-mono);
-  font-size: 0.85rem;
-  color: var(--muted);
-  margin-right: 0.5rem;
-  font-weight: 500;
-}
-.tour-prose { max-width: var(--measure); margin-bottom: 1.5rem; }
-
 /* ---------- examples ---------- */
 .examples-intro { max-width: var(--measure); margin: 0 0 2.5rem; }
+.examples-tier { margin-top: 3.5rem; }
+.examples-tier:first-of-type { margin-top: 0; }
+.examples-tier > h2 {
+  margin: 0 0 0.3rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid var(--border);
+}
+.examples-tier-blurb { max-width: var(--measure); margin: 0 0 2rem; }
 .examples-grid {
   display: flex;
   flex-direction: column;
@@ -757,6 +1148,7 @@ a.install-line:hover {
   padding-top: 0;
   border-top: none;
 }
+.examples-tier + .examples-tier { border-top: none; }
 .example-card h3 {
   margin: 0 0 0.4rem;
   font-size: 1.2rem;
@@ -1006,3 +1398,401 @@ a.install-line:hover {
 
 .download-source { max-width: var(--measure); }
 .download-source .install-snippet { margin: 1rem 0; }
+
+/* ---------- The playground as an app layout ----------
+   Opted into by `layout="app"` on Base.astro, which stamps data-layout on
+   <body>. Every rule here is scoped to that attribute, so no other page — and
+   no live editor outside the playground — is ever matched. Nothing here
+   touches a .lc-mount selector: that block is shared with LiveCanvas.astro,
+   which / and /gallery render. */
+[data-layout='app'] {
+  height: 100vh; /* fallback first */
+  height: 100dvh;
+  /*overflow: hidden;*/
+  display: grid;
+  /* Same fallback-first pair as the height above, and for a worse reason: an
+     engine that does not know `dvh` drops the WHOLE declaration rather than
+     one track, which leaves the rows implicit and lands the workbench in an
+     auto row — the exact failure that made the editor size to its own content
+     twice before. */
+  grid-template-rows: 4.0625rem calc(100vh - 4.0625rem) auto;
+  grid-template-rows: 4.0625rem calc(100dvh - 4.0625rem) auto;
+}
+[data-layout='app'] main {
+  padding: 0 1rem 0.5rem;
+  max-width: none;
+  margin: 0;
+  /* A grid item defaults to min-height: auto, which lets this row grow past
+     the viewport; with overflow: hidden on the body the bottom of the page
+     would then be unreachable, with no scrollbar anywhere. */
+  min-height: 0;
+  /* Flex, NOT a fixed grid-template-rows. This used to declare two tracks —
+     `auto` for a page header and `minmax(0, 1fr)` for the workbench — which
+     silently broke the moment the header was removed: `.pg` fell into the
+     `auto` track and started sizing to its own content, so the editor stopped
+     filling the pane and changed height with every file. A flex column takes
+     however many children the page has and gives the leftover to whichever one
+     claims `flex: 1`. */
+  display: flex;
+  flex-direction: column;
+}
+[data-layout='app'] .site-footer { padding: 0.4rem 1rem; margin-top: 0; font-size: 0.75rem; }
+[data-layout='app'] .site-footer-row { margin: 0; }
+
+
+[data-layout='app'] .pg {
+  margin: 0;
+  /* The workbench is the one child that takes the leftover height; anything
+     above it keeps its own. */
+  flex: 1;
+  min-height: 0;
+  /* Flex for the same reason `main` is, and this one is worse: the three
+     tracks this used to declare — banner, panes, status bar — only lined up
+     when the banner was VISIBLE, which it almost never is. With it hidden
+     there were two items for three tracks, so the panes took the `auto` row
+     and sized to their content while the status bar took the 1fr. That is why
+     the editor grew and shrank with the line count of whichever file was
+     open. A column with one `flex: 1` child does not care how many of its
+     siblings are currently displayed. */
+  display: flex;
+  flex-direction: column;
+}
+/* The last good outputs stay on screen while the source is broken, dimmed
+   rather than blanked — cleared only when the file set itself changes. */
+.pg-output[data-stale] { opacity: 0.55; transition: opacity 120ms ease; }
+
+/* The workspace sidebar: a sibling of the two panes, never a track inside
+   them. Static appearance here; the workbench geometry is in the app block. */
+.pg-ws {
+  background: var(--pane-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.pg-ws-toggle {
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--pane-label-bg);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  padding: 0.35rem 0.6rem;
+  cursor: pointer;
+}
+.pg-ws-toggle:hover { color: var(--fg); }
+.pg-ws-body { overflow-y: auto; padding: 0.35rem 0; flex: 1; min-height: 0; }
+.pg-ws[data-collapsed] .pg-ws-body { display: none; }
+/* ---------- the workspace explorer ----------
+   One tree, three levels. Indentation comes from a --depth custom property the
+   island sets per row, so a level is one number rather than a selector per
+   depth, and the hit target still spans the full width at every level. */
+.pg-tree { display: flex; flex-direction: column; }
+.pg-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  width: 100%;
+  min-width: 0;
+  padding: 0.22rem 0.4rem 0.22rem calc(0.35rem + var(--depth, 0) * 0.85rem);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  border-left: 2px solid transparent;
+}
+.pg-tree-row:hover { background: var(--pane-label-bg); color: var(--fg); }
+.pg-tree-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.pg-tree-group { color: var(--fg); letter-spacing: 0.04em; text-transform: uppercase; font-size: 0.7rem; }
+/* The open project, and the file inside it the editor is showing. The bar is
+   what the editor's tab strip used to say by being selected. */
+.pg-tree-row[aria-current='true'] { color: var(--accent); }
+.pg-tree-file[aria-current='true'] {
+  background: var(--pane-label-bg);
+  border-left-color: var(--accent);
+}
+.pg-tree-twisty {
+  flex: 0 0 0.75rem;
+  font-size: 0.6rem;
+  line-height: 1;
+  color: var(--muted);
+}
+.pg-tree-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pg-tree-root {
+  font-size: 0.6rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0 0.2rem;
+}
+/* The badge that used to sit on the editor tab. It is the reason a project can
+   be collapsed safely: shut, the project row still carries its files' worst. */
+.pg-tree-badge {
+  flex: 0 0 auto;
+  font-size: 0.65rem;
+  line-height: 1;
+  padding: 0.1rem 0.3rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+.pg-tree-badge[data-severity='error'] { color: var(--danger); border-color: var(--danger); }
+.pg-tree-conflict { color: var(--accent); font-size: 0.72rem; }
+/* Row controls stay hidden until the row is hovered or holds focus, so a tree
+   of twenty projects is not a wall of glyphs. `focus-within` is what keeps
+   them reachable with a keyboard. */
+.pg-tree-actions { display: none; gap: 0.05rem; }
+.pg-tree-row > .pg-tree-action { display: none; }
+.pg-tree-row:hover .pg-tree-actions,
+.pg-tree-row:focus-within .pg-tree-actions,
+.pg-tree-row:hover > .pg-tree-action,
+.pg-tree-row:focus-within > .pg-tree-action { display: flex; }
+.pg-tree-action {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 0.75rem;
+  line-height: 1;
+  padding: 0.1rem 0.2rem;
+  cursor: pointer;
+}
+.pg-tree-action:hover { color: var(--fg); }
+.pg-tree-row[data-confirm='true'] { border-left-color: var(--danger); }
+/* An armed row shows its controls whether or not it is hovered — the reader
+   has to be able to reach the second press. The wrapper has to be shown too:
+   a `display: flex` child of a `display: none` parent is still not rendered. */
+.pg-tree-row[data-confirm='true'] .pg-tree-actions { display: flex; }
+.pg-tree-row[data-confirm='true'] > .pg-tree-action,
+.pg-tree-row[data-confirm='true'] .pg-tree-action[aria-label^='Delete'] {
+  display: flex;
+  color: var(--danger);
+}
+.pg-tree-row[data-drop='true'] { background: var(--pane-label-bg); box-shadow: inset 0 -2px 0 var(--accent); }
+.pg-ws-error { color: var(--danger); font-size: 0.72rem; margin: 0.3rem 0.5rem 0; }
+.pg-ws-error:empty { display: none; }
+
+.pg-ws-section { margin: 0 0 0.4rem; }
+.pg-ws-group {
+  margin: 0;
+  padding: 0.25rem 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.pg-ws-list { list-style: none; margin: 0; padding: 0; }
+.pg-ws-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-left: 2px solid transparent;
+  background: none;
+  color: var(--fg);
+  font-size: 0.8rem;
+  padding: 0.22rem 0.6rem;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pg-ws-row:hover { background: var(--pane-label-bg); }
+.pg-ws-row[aria-current='true'] {
+  border-left-color: var(--accent);
+  color: var(--accent);
+}
+.pg-ws-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.pg-ws-empty { color: var(--muted); font-size: 0.72rem; padding: 0.2rem 0.4rem 0.35rem 1.2rem; }
+.pg-ws-new {
+  position: absolute;
+  top: 0.15rem;
+  right: 0.3rem;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1;
+  padding: 0.15rem 0.3rem;
+  cursor: pointer;
+}
+.pg-ws-new:hover { color: var(--fg); }
+.pg-ws { position: relative; }
+.pg-ws-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.8rem;
+  font-family: inherit;
+  border: 1px solid var(--accent);
+  background: var(--bg);
+  color: var(--fg);
+  padding: 0 0.2rem;
+}
+
+.pg-statusbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.5rem;
+  border-top: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--muted);
+  min-height: 1.9rem;
+  flex-wrap: wrap;
+}
+.pg-status-spacer { flex: 1; }
+.pg-status-actions { display: flex; align-items: center; gap: 0.3rem; }
+/* The two status-bar actions: Download .wasm and Share. One shape, an icon
+   and a label each; a label flashes ("Copied", "Saved") through data-state. */
+.pg-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--pane-label-bg);
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 0.72rem;
+  line-height: 1.2;
+  padding: 0.15rem 0.5rem;
+  cursor: pointer;
+  transition: border-color 120ms, color 120ms, background 120ms;
+}
+.pg-action-icon { width: 0.85rem; height: 0.85rem; flex: none; }
+.pg-action:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.pg-action:disabled { opacity: 0.45; cursor: not-allowed; }
+.pg-action[data-state='done'] { border-color: var(--accent); color: var(--accent); }
+.pg-action[data-state='failed'] { border-color: var(--danger); color: var(--danger); }
+/* A build the source has moved past is still worth saving, but say so. */
+.pg-download[data-stale] .pg-action-icon { opacity: 0.6; }
+.pg-download[data-stale] .pg-action-label::after { content: ' (stale)'; opacity: 0.7; }
+.pg-share-fallback {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  width: 14rem;
+  border: 1px solid var(--accent);
+  background: var(--bg);
+  color: var(--fg);
+}
+.pg-status-label { color: var(--fg); }
+.pg-status-identity { opacity: 0.75; }
+.pg-status { color: var(--accent); }
+.pg-status:empty { display: none; }
+.pg-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--muted);
+  flex: none;
+}
+.pg-dot[data-state='live'] { background: var(--accent); }
+.pg-dot[data-state='error'] { background: var(--danger); }
+.pg-dot[data-state='compiling'] {
+  background: var(--accent-soft);
+  animation: pg-pulse 1s ease-in-out infinite;
+}
+@keyframes pg-pulse {
+  50% { opacity: 0.35; }
+}
+
+[data-layout='app'] .pg-panes {
+  /* The one child of `.pg` that takes the leftover height. */
+  flex: 1;
+  min-height: 0;
+  /* Sidebar, then the editor's share of what the two panes have left after the
+     divider itself, so the tracks always sum to exactly 100%. */
+  --pg-split-w: 8px;
+  --pg-ws-w: 13rem;
+  grid-template-columns:
+    var(--pg-ws-w)
+    minmax(0, calc(var(--pg-split-main, 0.5) * (100% - var(--pg-ws-w) - var(--pg-split-w))))
+    var(--pg-split-w)
+    minmax(0, 1fr);
+  gap: 0;
+}
+[data-layout='app'] .pg-panes:has(.pg-ws[data-collapsed]) { --pg-ws-w: 7.5rem; }
+[data-layout='app'] .pg-ws { min-height: 0; border-radius: 6px 0 0 6px; border-right: 0; }
+[data-layout='app'] .pg-editor { border-radius: 0; }
+.pg-splitter {
+  align-self: stretch;
+  background: transparent;
+  border: 0;
+  cursor: col-resize;
+  /* Or a touch drag is stolen by the page's own scrolling. */
+  touch-action: none;
+  position: relative;
+}
+.pg-splitter::before {
+  content: '';
+  position: absolute;
+  inset: 0 3px;
+  background: var(--border);
+  border-radius: 1px;
+  transition: background 120ms ease;
+}
+.pg-splitter:hover::before,
+.pg-splitter:focus-visible::before { background: var(--accent); }
+.pg-splitter:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.pg-splitter[hidden] { display: none; }
+[data-layout='app'] .pg-editor,
+[data-layout='app'] .pg-output {
+  min-height: 0;
+}
+/* The base editor theme gives .cm-editor no height of its own, so the pane
+   needs one, and the scroller needs a vertical overflow to go with it. */
+/* The wrap's 18rem floor was harmless while it was the only flexible child of
+   the pane. With the dock below it, that floor is what would push the dock out
+   of a viewport-locked pane, and .pg-editor clips. */
+[data-layout='app'] .pg-editor .pg-editor-wrap { min-height: 0; }
+[data-layout='app'] .pg-editor .pg-cm { min-height: 0; }
+[data-layout='app'] .pg-editor .pg-cm .cm-editor { height: 100%; }
+[data-layout='app'] .pg-editor .pg-cm .cm-scroller { overflow: auto; }
+
+@media (max-width: 800px) {
+  /* Below the breakpoint the workbench stops being viewport-locked: two panes
+     crushed into one 1fr row under min-height: 0 would be unusable, so the
+     page scrolls vertically instead. */
+  [data-layout='app'] {
+    height: auto;
+    overflow: visible;
+  }
+  [data-layout='app'] main { overflow: visible; }
+  [data-layout='app'] .pg-editor,
+  [data-layout='app'] .pg-output {
+    min-height: 60vh;
+  }
+  /* Stacked: the sidebar becomes a band above the panes rather than a column. */
+  [data-layout='app'] .pg-panes { grid-template-columns: 1fr; }
+  [data-layout='app'] .pg-ws { border-radius: 6px; border-right: 1px solid var(--border); }
+  [data-layout='app'] .pg-ws-body { max-height: 12rem; }
+  [data-layout='app'] .pg-editor { border-radius: 6px; }
+}
+
+/* "Open in playground" — a plain link, no script, on the gallery
+   pages. Those pages must stay script-free, so nothing here needs one. */
+.oip {
+  display: inline-block;
+  margin-top: 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+.oip:hover { border-bottom-color: var(--accent); }
+

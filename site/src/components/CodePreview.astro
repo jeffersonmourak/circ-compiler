@@ -38,7 +38,7 @@ const codeLang = lang ?? circLang;
   <div class="cp-panes">
     <div class="cp-pane cp-source">
       <div class="cp-pane-label">source</div>
-      <Code code={source.trim()} lang={codeLang as any} themes={shikiThemes} defaultColor={false} />
+      <Code code={source.trim()} lang={codeLang as any} themes={shikiThemes as any} defaultColor={false} />
     </div>
     <div class="cp-pane cp-preview">
       <div class="cp-pane-label">

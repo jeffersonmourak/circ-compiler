@@ -7,16 +7,38 @@ interface Props {
   /** Pixels per layout cell. Default keeps small circuits readable on mobile. */
   cell?: number;
   padding?: number;
+  /**
+   * Starting contents for the circuit's memories, by declared name: hex bytes,
+   * little-endian. A rom or ram holds nothing until something loads it, so a
+   * card without this opens on a memory full of unknowns.
+   */
+  memory?: Record<string, string>;
+  /**
+   * Mount as soon as the card scrolls into view, rather than waiting for a
+   * click.
+   *
+   * Opt-in, not the default: mounting fetches the renderer and this card's
+   * whole `.wasm`, which is right for a gallery a reader is scrolling THROUGH
+   * to see circuits work, and wrong for the landing page, where it would spend
+   * that on every visit before anyone has asked for anything.
+   */
+  autoRun?: boolean;
 }
 
-const { wasm, cell = 14, padding = 16 } = Astro.props;
+const { wasm, cell = 14, padding = 16, memory, autoRun = false } = Astro.props;
 const wasmHref = url(`/wasm/${wasm}`);
+// Serialised into the markup rather than passed to the script: the script is
+// hoisted and shared by every canvas on the page, so per-canvas data has to
+// travel on the element.
+const memoryAttr = memory && Object.keys(memory).length > 0 ? JSON.stringify(memory) : undefined;
 ---
 <div
   class="lc"
   data-circ-wasm={wasmHref}
   data-circ-cell={cell.toString()}
   data-circ-padding={padding.toString()}
+  data-circ-memory={memoryAttr}
+  data-circ-autorun={autoRun ? '' : undefined}
 >
   <div class="lc-header">
     <span class="lc-label">live simulation</span>
@@ -32,11 +54,14 @@ const wasmHref = url(`/wasm/${wasm}`);
   // renderer + WASM are dynamically imported on first click so a reader who
   // never opens any simulation pays zero bytes for them on initial load.
 
-  type CircView = {
-    runtime: { destroy(): void };
-    canvas: HTMLCanvasElement;
-    destroy(): void;
-  };
+  // TYPE only: erased at build, so a reader who never opens a simulation pays
+  // nothing for it — the same rule the renderer and the theme module already
+  // follow on this page. The view is the renderer's own, over the site's
+  // palette, so there is no local restatement to fall behind it.
+  import type { CircView } from 'circ-renderer';
+  import type { PaletteKey } from '../utils/circ-theme.mjs';
+
+  type View = CircView<PaletteKey>;
 
   let rendererPromise: Promise<typeof import('circ-renderer')> | null = null;
   let themesPromise: Promise<typeof import('../utils/circ-theme.mjs')> | null = null;
@@ -46,7 +71,35 @@ const wasmHref = url(`/wasm/${wasm}`);
     (themesPromise ??= import('../utils/circ-theme.mjs'));
 
   // Track active views per container so theme toggles can rebuild them.
-  const active = new WeakMap<HTMLElement, { view: CircView; opts: { url: string; cell: number; padding: number } }>();
+  const active = new WeakMap<HTMLElement, { view: View; opts: { url: string; cell: number; padding: number } }>();
+  /** Cards whose mount has begun. `mount` is async and now has two callers —
+   *  a click and the observer — so without this a card that scrolls into view
+   *  as it is clicked builds two canvases and leaks the first. */
+  const starting = new WeakSet<HTMLElement>();
+
+  /**
+   * Put the card's images into a freshly built circuit.
+   *
+   * Called on every mount, including the theme and sprite rebuilds: contents
+   * are runtime state of one instance, so a rebuilt canvas starts empty and
+   * would silently lose them. A failure is logged and nothing else — a card
+   * with one bad image should still show its circuit.
+   */
+  async function applyMemory(container: HTMLElement, view: View) {
+    // Checked before the import, so a card with no memory never fetches the
+    // chunk at all.
+    if (!container.dataset.circMemory) return;
+    const { loadMemoryImages, readMemoryAttr } = await import('../scripts/canvas-memory.ts');
+    const images = readMemoryAttr(container.dataset.circMemory);
+    if (Object.keys(images).length === 0) return;
+    const result = loadMemoryImages(view.runtime, images);
+    for (const [name, message] of result.errors) {
+      console.error('LiveCanvas: could not load memory', name, message);
+    }
+    // Every memory mutator re-presents its own output, so the circuit is
+    // already correct; the canvas just has to be told to repaint.
+    if (result.applied.length > 0) view.view.refreshState();
+  }
 
   async function mount(container: HTMLElement) {
     const wasmUrl = container.dataset.circWasm!;
@@ -57,6 +110,8 @@ const wasmHref = url(`/wasm/${wasm}`);
     const mountEl = container.querySelector<HTMLElement>('.lc-mount');
     const errorEl = container.querySelector<HTMLElement>('.lc-error');
     if (!launch || !mountEl || !errorEl) return;
+    if (starting.has(container)) return;
+    starting.add(container);
 
     launch.disabled = true;
     launch.textContent = 'Loading…';
@@ -68,13 +123,14 @@ const wasmHref = url(`/wasm/${wasm}`);
         loadThemes(),
       ]);
       const { pickTheme, onAssetsReady } = themeMod;
-      const view = (await renderCircuit({
+      const view = await renderCircuit({
         url: wasmUrl,
         cell,
         padding,
         interactive: true,
-        theme: pickTheme() as any,
-      })) as unknown as CircView;
+        theme: pickTheme(),
+      });
+      await applyMemory(container, view);
       mountEl.innerHTML = '';
       mountEl.appendChild(view.canvas);
       mountEl.hidden = false;
@@ -84,11 +140,10 @@ const wasmHref = url(`/wasm/${wasm}`);
       // First mount also registers the sprite-ready hook. The PNG gate
       // sprites are decoded asynchronously by circ-theme; canvases that
       // mounted before they finished show vector fallback. Once sprites
-      // resolve, rebuild every active canvas so the dark theme picks them
-      // up. Light theme has useSprites:false, so its rebuild is a visual
-      // no-op (vectors → vectors), but keeping the logic uniform avoids
-      // needing to inspect the active theme here.
-      onAssetsReady(() => { rebuildAll().catch(() => {}); });
+      // resolve, re-theme every active canvas so the dark theme picks them
+      // up. Light theme has useSprites:false, so for it this is a visual
+      // no-op, but keeping the logic uniform avoids inspecting the theme.
+      onAssetsReady(() => { rethemeAll().catch(() => {}); });
     } catch (err) {
       console.error('LiveCanvas: failed to load', wasmUrl, err);
       errorEl.textContent =
@@ -98,35 +153,59 @@ const wasmHref = url(`/wasm/${wasm}`);
       errorEl.hidden = false;
       launch.disabled = false;
       launch.textContent = '▶ Run interactively';
+      // Retryable: whatever failed may not fail twice, and the button is the
+      // only way back.
+      starting.delete(container);
     }
   }
 
-  // Tear down and re-mount every active canvas with the current theme.
-  // Used by both the data-theme MutationObserver and the sprite-ready
-  // hook, since circ-renderer captures the theme at construction time
-  // and there's no in-place re-theme API.
-  async function rebuildAll() {
-    const [{ renderCircuit }, { pickTheme }] = await Promise.all([
-      loadRenderer(),
-      loadThemes(),
-    ]);
-    document.querySelectorAll<HTMLElement>('.lc').forEach(async (container) => {
+  /**
+   * Re-theme every active canvas in place.
+   *
+   * Used by both the data-theme MutationObserver and the sprite-ready hook.
+   * This used to destroy each canvas and build another, and a canvas's
+   * contents are runtime state of one instance: the reader's toggled pins,
+   * typed bus values and loaded memory images all went with it, and the
+   * images had to be put back by hand. `setTheme` swaps the theme and
+   * redraws; nothing is lost and nothing needs replaying.
+   */
+  async function rethemeAll() {
+    const { pickTheme } = await loadThemes();
+    document.querySelectorAll<HTMLElement>('.lc').forEach((container) => {
       const cur = active.get(container);
       if (!cur) return;
-      const mountEl = container.querySelector<HTMLElement>('.lc-mount');
-      if (!mountEl) return;
-      cur.view.destroy();
-      const view = (await renderCircuit({
-        url: cur.opts.url,
-        cell: cur.opts.cell,
-        padding: cur.opts.padding,
-        interactive: true,
-        theme: pickTheme() as any,
-      })) as unknown as CircView;
-      mountEl.innerHTML = '';
-      mountEl.appendChild(view.canvas);
-      active.set(container, { view, opts: cur.opts });
+      cur.view.view.setTheme(pickTheme());
     });
+  }
+
+  /**
+   * Mount each opted-in card once it is near the viewport.
+   *
+   * `rootMargin` starts the fetch a little before the card is actually on
+   * screen, so a reader scrolling steadily meets a running circuit rather than
+   * a spinner. Each card is unobserved as it mounts: this is a one-shot, not a
+   * visibility toggle, because tearing a circuit down on scroll would throw
+   * away whatever the reader had clocked into it.
+   *
+   * Absent `IntersectionObserver`, nothing happens and the button still works.
+   */
+  function watchForView() {
+    const cards = Array.from(document.querySelectorAll<HTMLElement>('.lc[data-circ-autorun]'));
+    if (cards.length === 0) return;
+    if (typeof IntersectionObserver === 'undefined') return;
+
+    const seen = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const container = entry.target as HTMLElement;
+          seen.unobserve(container);
+          void mount(container);
+        }
+      },
+      { rootMargin: '200px 0px' },
+    );
+    for (const card of cards) seen.observe(card);
   }
 
   function init() {
@@ -134,10 +213,11 @@ const wasmHref = url(`/wasm/${wasm}`);
       const launch = container.querySelector<HTMLButtonElement>('.lc-launch');
       launch?.addEventListener('click', () => mount(container));
     });
+    watchForView();
 
-    // When the user toggles light/dark, rebuild any already-mounted canvases
-    // with the matching theme.
-    const observer = new MutationObserver(() => { rebuildAll().catch(() => {}); });
+    // When the user toggles light/dark, re-theme any already-mounted canvases
+    // in place.
+    const observer = new MutationObserver(() => { rethemeAll().catch(() => {}); });
     observer.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ['data-theme'],

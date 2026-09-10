@@ -10,6 +10,16 @@ export default defineConfig({
   site,
   output: 'static',
   trailingSlash: 'ignore',
+  // The gallery lived at /examples until it was renamed. The repository is
+  // public, so that path may already be linked or indexed; a static build
+  // emits a meta-refresh page here rather than a 404. Keep it.
+  redirects: {
+    '/examples': '/gallery',
+    // The tour page is gone; its seven circuits live on in the playground's
+    // workspace, which is where a reader arriving from an old link wants to
+    // end up.
+    '/tour': '/playground',
+  },
   markdown: {
     shikiConfig: {
       themes: shikiThemes,

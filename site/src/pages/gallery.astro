@@ -1,0 +1,62 @@
+---
+import Base from '../layouts/Base.astro';
+import CodePreview from '../components/CodePreview.astro';
+import OpenInPlayground from '../components/OpenInPlayground.astro';
+import LiveCanvas from '../components/LiveCanvas.astro';
+import { examples, type ExampleLevel } from '../content/examples.ts';
+import { GITHUB_REPO, GITHUB_PUBLIC } from '../utils/url.ts';
+
+// Three tiers, shallow end first. Each carries a one-line brief so a reader
+// landing mid-page knows what they are looking at without scrolling back up.
+const TIERS: { level: ExampleLevel; title: string; blurb: string }[] = [
+  {
+    level: 'intro',
+    title: 'Introduction',
+    blurb: 'One idea each: gates and wiring, the built-in macros, and the bit-shape syntax.',
+  },
+  {
+    level: 'medium',
+    title: 'Building blocks',
+    blurb: 'The standard combinational parts, each built from the primitives above.',
+  },
+  {
+    level: 'advanced',
+    title: 'Advanced',
+    blurb: 'Where width, state and macros meet — multi-bit arithmetic, feedback and memory.',
+  },
+];
+const tiers = TIERS.map((t) => ({ ...t, items: examples.filter((e) => e.level === t.level) })).filter(
+  (t) => t.items.length > 0,
+);
+---
+<Base
+  title="Gallery — circ"
+  description="A collection of circ circuits. Source on the left, the --preview ASCII schematic on the right, and a live interactive simulator where available."
+>
+  <h1>Gallery</h1>
+
+  <p class="examples-intro">
+      A collection of interactive <i><strong>circ</strong>uit</i> examples in three tiers: an
+    <a href="#intro">introduction</a> that adds one language feature at a time,
+    the <a href="#medium">building blocks</a> those primitives compose into, and
+    <a href="#advanced">advanced</a> circuits where width, state and macros meet.
+  </p>
+
+  {tiers.map((tier) => (
+  <section class="examples-tier">
+    <h2 id={tier.level}>{tier.title}</h2>
+    <p class="muted examples-tier-blurb">{tier.blurb}</p>
+    <div class="examples-grid">
+    {tier.items.map((ex) => (
+      <article class="example-card" id={ex.slug}>
+        <h3>{ex.title}</h3>
+        <p class="lede">{ex.lede}</p>
+        <CodePreview source={ex.source} preview={ex.preview} />
+        <OpenInPlayground id={`example:${ex.slug}`} />
+        {ex.wasm && <LiveCanvas wasm={ex.wasm} memory={ex.memory} autoRun />}
+      </article>
+    ))}
+    </div>
+  </section>
+  ))}
+</Base>

@@ -3,7 +3,6 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { execSync } from 'node:child_process';
 import { docs, DOCS_DIR, PUBLIC_DIR, SITE_URL, type Doc } from './lib/site-config.ts';
-import { tour } from '../src/content/tour.ts';
 import { examples } from '../src/content/examples.ts';
 
 const REPO_ROOT = resolve(PUBLIC_DIR, '..', '..');
@@ -70,31 +69,6 @@ function emitDocTwin(d: Doc): void {
   writeTwin(d.dst, header(d.title, d.description) + body, srcPath);
 }
 
-function renderTourStep(step: (typeof tour)[number], index: number): string {
-  return `## Step ${index + 1}. ${step.title}
-
-${step.prose}
-
-### Source
-
-${fence('circ', step.source)}
-
-### \`circ-compile --preview\`
-
-${fence('', step.preview)}`;
-}
-
-function emitTourTwin(): void {
-  const intro = header(
-    'A short tour',
-    "A progressive walkthrough of `circ`. Each step adds one new idea on top of the previous one. By the end you'll have read enough to feel at home in the language reference.",
-  ).trimEnd();
-  const steps = tour.map(renderTourStep).join('\n\n');
-  const footer = `Done. The [language reference](${SITE_URL}/reference.md) covers the full surface — every keyword, every diagnostic code, the rules the validator enforces. The [examples gallery](${SITE_URL}/examples.md) has more circuits to read through.`;
-
-  writeTwin('tour.md', `${intro}\n\n\n${steps}\n\n${footer}\n`, 'src/content/tour.ts');
-}
-
 function renderExample(ex: (typeof examples)[number]): string {
   const repoNote = ex.repoPath ? `\n\nSource file in the repo: \`${ex.repoPath}\`.` : '';
   return `## ${ex.title}
@@ -112,12 +86,12 @@ ${fence('', ex.preview)}${repoNote}`;
 
 function emitExamplesTwin(): void {
   const intro = header(
-    'Examples',
-    'A gallery of `circ` circuits — primitives, multi-bit arithmetic, and stateful latches. Each entry shows the source and its `--preview` output.',
+    'Gallery',
+    'A collection of `circ` circuits — primitives, multi-bit arithmetic, and stateful latches. Each entry shows the source and its `--preview` output.',
   ).trimEnd();
   const body = examples.map(renderExample).join('\n\n');
 
-  writeTwin('examples.md', `${intro}\n\n\n${body}\n`, 'src/content/examples.ts');
+  writeTwin('gallery.md', `${intro}\n\n\n${body}\n`, 'src/content/examples.ts');
 }
 
 // Source of truth for the hero snippet on the landing page lives in
@@ -288,7 +262,6 @@ function emitLlmsTxt(): void {
     '## Docs',
     '',
     `- [Landing page](${SITE_URL}/index.md): What \`circ\` is, what it isn't, where it runs.`,
-    `- [Tour](${SITE_URL}/tour.md): Seven progressive examples from a single NOT gate to a full-adder built from two half-adders.`,
     `- [Playground](${SITE_URL}/playground): Compile, diagnose, preview, tabulate, and simulate \`.circ\` in the browser — interactive, no \`.md\` twin.`,
     `- [Language reference](${SITE_URL}/reference.md): Every keyword, every diagnostic code, the rules the validator enforces.`,
     ...docs
@@ -296,9 +269,9 @@ function emitLlmsTxt(): void {
       .map((d) => `- [${d.title}](${SITE_URL}/${d.dst}): ${d.description}`),
     `- [Download](${SITE_URL}/download.md): Pre-built \`circ-compile\` binaries for Linux, macOS, and Windows.`,
     '',
-    '## Examples',
+    '## Gallery',
     '',
-    `- [Examples gallery](${SITE_URL}/examples.md): Curated \`.circ\` programs with their \`--preview\` output.`,
+    `- [Gallery](${SITE_URL}/gallery.md): Curated \`.circ\` programs with their \`--preview\` output.`,
     '',
     '## Optional',
     '',
@@ -322,13 +295,12 @@ function stripDiscoveryBanner(body: string): string {
 function emitLlmsFullTxt(): void {
   const sections: Array<{ path: string; label: string }> = [
     { path: 'index.md', label: 'Landing page' },
-    { path: 'tour.md', label: 'Tour' },
     { path: 'reference.md', label: 'Language reference' },
     { path: 'reference/getting-started.md', label: 'Getting started' },
     { path: 'reference/circuit-format.md', label: 'Circuit file format' },
     { path: 'reference/wasm-api.md', label: 'WASM runtime API' },
     { path: 'reference/preview.md', label: 'ASCII preview' },
-    { path: 'examples.md', label: 'Examples gallery' },
+    { path: 'gallery.md', label: 'Gallery' },
     { path: 'download.md', label: 'Download' },
   ];
 
@@ -355,7 +327,6 @@ function emitLlmsFullTxt(): void {
 }
 
 for (const d of docs) emitDocTwin(d);
-emitTourTwin();
 emitExamplesTwin();
 emitLandingTwin();
 emitDownloadTwin();

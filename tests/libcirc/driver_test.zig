@@ -196,9 +196,9 @@ test "driver: truth table refusals" {
 const compile_fixtures = [_][]const u8{
     "tests/fixtures/circuits/inverter.circ",
     "tests/fixtures/circuits/and_gate.circ",
-    // full_adder_from_builtins is deliberately absent: `compile` takes the
-    // import-free fast path, which does not resolve implicit builtins, so
-    // the CLI itself exits 1 on it (preview/truth-table take the project route).
+    // An import-free root that uses `xor`/`or`: the compile fast path is
+    // usage-aware, so the CLI and the library both take the project route.
+    "tests/fixtures/circuits/full_adder_from_builtins.circ",
     "tests/fixtures/circuits/chain.circ",
     "tests/fixtures/circuits/slice_basic.circ",
     "tests/fixtures/circuits/stress_grid_10x10.circ",

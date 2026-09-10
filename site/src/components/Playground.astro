@@ -2,6 +2,7 @@
 import { url } from '../utils/url.ts';
 import { examples } from '../content/examples.ts';
 import { tour } from '../content/tour.ts';
+import { CATALOGUE_GROUPS, buildCatalogue } from '../utils/playground-store.ts';
 
 interface Props {
   manifest: { version: string; revision: string; full_version: number };
@@ -9,53 +10,228 @@ interface Props {
 }
 const { manifest, supportedVersions } = Astro.props;
 const wasmHref = url('/wasm/libcirc.wasm');
-const picks = [
-  ...examples.map((e) => ({ id: `example:${e.slug}`, label: e.title, source: e.source, group: 'Examples' })),
-  ...tour.map((t, i) => ({ id: `tour:${i + 1}`, label: `${i + 1}. ${t.title}`, source: t.source, group: 'Tour' })),
-];
-const initial = picks[0];
+// One call feeds the sidebar rows, the embedded blob and the default pick, so
+// they cannot drift from each other or from the shipped content.
+const catalogue = buildCatalogue(examples, tour);
+const initial = catalogue[0];
+// Only the groups that actually have rows, so an empty tier renders no heading.
+// The slug is what the heading's id is built from: a group label may contain a
+// space, and an id may not.
+const groups = CATALOGUE_GROUPS.map((group) => ({
+  group,
+  slug: group.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+  items: catalogue.filter((c) => c.group === group),
+})).filter((g) => g.items.length > 0);
 ---
 <div
   class="pg"
   data-libcirc-wasm={wasmHref}
   data-supported-versions={supportedVersions.join(',')}
   data-manifest-full-version={manifest.full_version.toString()}
+  data-manifest-version={manifest.version}
+  data-manifest-revision={manifest.revision}
+  data-default-pick={initial.id}
 >
+  <!-- A classic script, executed during parsing, so the fragment is gone from
+       location.href before any deferred module runs — PostHog's real init
+       among them. The island reads the stashed copy instead. -->
+  <script is:inline>
+    (function () {
+      try {
+        var h = location.hash;
+        if (/^#(src=|src0=|pick=)/.test(h) || /[#&](src|src0|pick)=/.test(h)) {
+          window.__circShareHash = h;
+          history.replaceState(history.state, '', location.pathname + location.search);
+        }
+      } catch (_) {
+        // A blocked History API leaves the fragment in place; the island still
+        // reads it from location.hash.
+      }
+    })();
+  </script>
   <div class="pg-banner" hidden></div>
   <div class="pg-panes">
-    <section class="pg-editor">
-      <div class="pg-pane-label">
-        <label for="pg-pick">source</label>
-        <select id="pg-pick" class="pg-pick">
-          {['Examples', 'Tour'].map((group) => (
-            <optgroup label={group}>
-              {picks.filter((p) => p.group === group).map((p) => (
-                <option value={p.id}>{p.label}</option>
-              ))}
-            </optgroup>
+    <!-- A sibling of the two panes, never a track inside them: the divider's
+         arithmetic, its ResizeObserver and its aria-controls all name exactly
+         the editor and output panes. -->
+    <nav class="pg-ws" aria-label="Workspace">
+      <button
+        type="button"
+        class="pg-ws-toggle"
+        aria-expanded="true"
+        aria-controls="pg-ws-body"
+      >Workspace</button>
+      <button type="button" class="pg-ws-new" aria-label="New project">+</button>
+      <div class="pg-ws-body" id="pg-ws-body">
+        {/* The pre-hydration fallback: every project, flat, as ordinary links
+            into the picker. The island replaces this whole subtree with a real
+            `role=tree` once it runs — expansion state and the open project's
+            file children both need the store, which the server does not have.
+            Kept rather than shipped empty so the sidebar is never a blank box
+            on a slow connection. */}
+        <ul class="pg-ws-fallback">
+          {groups.map(({ group, slug, items }) => (
+            <li class="pg-ws-section">
+              <h2 class="pg-ws-group" id={`pg-ws-h-${slug}`}>{group}</h2>
+              <ul class="pg-ws-list" aria-labelledby={`pg-ws-h-${slug}`}>
+                {items.map((c) => (
+                  <li>
+                    <button type="button" class="pg-ws-row" data-pick={c.id}>{c.label}</button>
+                  </li>
+                ))}
+              </ul>
+            </li>
           ))}
-        </select>
+        </ul>
+        {/* One line under the tree, naming the first file that cannot be
+            written back to the combined source. */}
+        <p class="pg-ws-error" role="alert"></p>
       </div>
-      <textarea
-        id="pg-source"
-        class="pg-source"
-        spellcheck="false"
-        autocomplete="off"
-        autocapitalize="off"
-        aria-label="circ source"
-        rows="18"
-      >{initial.source}</textarea>
-      <div class="pg-status" aria-live="polite">Type to compile.</div>
+    </nav>
+    <section class="pg-editor" id="pg-pane-editor">
+      <div class="pg-editor-wrap" id="pg-editor-panel" role="tabpanel">
+        <div id="pg-editor" class="pg-cm" hidden></div>
+        <textarea
+          id="pg-source"
+          class="pg-source"
+          spellcheck="false"
+          autocomplete="off"
+          autocapitalize="off"
+          aria-label="circ source"
+          rows="18"
+        >{initial.source}</textarea>
+      </div>
+      <!-- The dock. Both of its panels are about the SOURCE rather than the
+           compiled result, which is why they sit under the editor instead of
+           competing with the preview for the output pane. It ships open so a
+           reader with no stored envelope sees their diagnostics. -->
+      <div class="pg-dock" data-open="false">
+        <div class="pg-dock-bar">
+          <div class="pg-dock-tabs" role="tablist" aria-label="Editor panel">
+            <button
+              type="button"
+              role="tab"
+              class="pg-dock-tab"
+              id="pg-dock-tab-diagnostics"
+              data-dock="diagnostics"
+              aria-selected="true"
+              aria-controls="pg-dock-panel-diagnostics"
+            >Diagnostics<span class="pg-dock-badge" hidden></span></button>
+            <button
+              type="button"
+              role="tab"
+              class="pg-dock-tab"
+              id="pg-dock-tab-settings"
+              data-dock="settings"
+              aria-selected="false"
+              aria-controls="pg-dock-panel-settings"
+            >Settings</button>
+            {/* Present but hidden until the circuit declares a rom or a ram.
+                A memory's contents are runtime state rather than part of the
+                artifact, so there is nothing to show for a circuit that has
+                none, and a permanently empty tab would be a worse answer than
+                no tab. The island unhides it from the analysis. */}
+            <button
+              type="button"
+              role="tab"
+              class="pg-dock-tab"
+              id="pg-dock-tab-memory"
+              data-dock="memory"
+              aria-selected="false"
+              aria-controls="pg-dock-panel-memory"
+              hidden
+            >Memory<span class="pg-dock-count" hidden></span></button>
+          </div>
+          <button
+            type="button"
+            class="pg-dock-toggle"
+            aria-expanded="true"
+            aria-controls="pg-dock-body"
+          >Hide</button>
+        </div>
+        <div class="pg-dock-body" id="pg-dock-body">
+          <div
+            class="pg-dock-panel"
+            id="pg-dock-panel-diagnostics"
+            data-dock-panel="diagnostics"
+            role="tabpanel"
+            aria-labelledby="pg-dock-tab-diagnostics"
+          ><ul class="pg-diag"></ul></div>
+          <div
+            class="pg-dock-panel"
+            id="pg-dock-panel-memory"
+            data-dock-panel="memory"
+            role="tabpanel"
+            aria-labelledby="pg-dock-tab-memory"
+            hidden
+          ><div class="pg-mem"></div></div>
+          <div
+            class="pg-dock-panel"
+            id="pg-dock-panel-settings"
+            data-dock-panel="settings"
+            role="tabpanel"
+            aria-labelledby="pg-dock-tab-settings"
+            hidden
+          >
+            <div class="pg-settings">
+              <fieldset class="pg-settings-group">
+                <legend>Preview</legend>
+                <label><input type="checkbox" data-setting="expandMacros" /> Expand macros</label>
+                <label><input type="checkbox" data-setting="expandDisplay" /> Expand display</label>
+              </fieldset>
+              <fieldset class="pg-settings-group">
+                <legend>Truth table</legend>
+                <label for="pg-set-format">Format</label>
+                <select id="pg-set-format" data-setting="format">
+                  <option value="json">table</option>
+                  <option value="markdown">markdown</option>
+                  <option value="csv">csv</option>
+                </select>
+                <label for="pg-set-values">Values</label>
+                <select id="pg-set-values" data-setting="valueFormat">
+                  <option value="binary">binary</option>
+                  <option value="hex">hex</option>
+                  <option value="decimal">decimal</option>
+                </select>
+                <label for="pg-set-cap">Input-bit cap</label>
+                <input id="pg-set-cap" type="number" min="1" max="24" step="1" data-setting="truthTableCap" />
+                <span class="pg-settings-hint">2^cap rows; the enumeration cannot be stopped once started.</span>
+              </fieldset>
+              <fieldset class="pg-settings-group">
+                <legend>Compile</legend>
+                <label><input type="checkbox" data-setting="warningsAsErrors" /> Treat warnings as errors</label>
+              </fieldset>
+            </div>
+          </div>
+        </div>
+      </div>
     </section>
-    <section class="pg-output">
+    <div
+      class="pg-splitter"
+      role="separator"
+      tabindex="0"
+      aria-orientation="vertical"
+      aria-label="Resize the editor and output panes"
+      aria-controls="pg-pane-editor pg-pane-output"
+    ></div>
+    <section class="pg-output" id="pg-pane-output">
       <div class="pg-tabs" role="tablist">
-        <button type="button" role="tab" data-tab="diagnostics" aria-selected="true">Diagnostics</button>
-        <button type="button" role="tab" data-tab="preview" aria-selected="false">Preview</button>
-        <button type="button" role="tab" data-tab="truth" aria-selected="false">Truth table</button>
+        <button type="button" role="tab" data-tab="preview" aria-selected="true">Preview</button>
+        <button
+          type="button"
+          role="tab"
+          data-tab="truth"
+          aria-selected="false"
+          aria-describedby="pg-tab-tip-truth"
+        >Truth table</button>
         <button type="button" role="tab" data-tab="simulate" aria-selected="false">Simulate</button>
+        {/* Empty and invisible until the tab is actually blocked; the island
+            fills it with the same sentence the panel shows. `role=tooltip`
+            plus the aria-describedby above is what makes the reason reachable
+            without a pointer. */}
+        <span class="pg-tab-tip" id="pg-tab-tip-truth" role="tooltip"></span>
       </div>
-      <div class="pg-panel" data-panel="diagnostics"><ul class="pg-diag"></ul></div>
-      <div class="pg-panel" data-panel="preview" hidden><pre class="pg-preview"></pre></div>
+      <div class="pg-panel" data-panel="preview"><pre class="pg-preview"></pre></div>
       <div class="pg-panel" data-panel="truth" hidden><div class="pg-table"></div></div>
       <div class="pg-panel" data-panel="simulate" hidden>
         <div class="pg-sim-note"></div>
@@ -63,98 +239,2160 @@ const initial = picks[0];
       </div>
     </section>
   </div>
-  <script type="application/json" id="pg-picks" set:html={JSON.stringify(Object.fromEntries(picks.map((p) => [p.id, p.source])))} />
+  <div class="pg-statusbar">
+    <span class="pg-dot" data-state="idle" aria-hidden="true"></span>
+    <span class="pg-status-label">Idle</span>
+    <span class="pg-status-detail">Type to compile.</span>
+    <span class="pg-status-spacer"></span>
+    {/* Rendered from the committed manifest so the bar is never blank before
+        the version handshake resolves; the island overwrites it after. */}
+    <span class="pg-status-identity">circ {manifest.version} · {manifest.revision} · CIRF v{manifest.full_version}</span>
+    <span class="pg-status-actions">
+      {/* Disabled until a build exists; the island keeps the title current. */}
+      <button type="button" class="pg-action pg-download" disabled title="Compile a circuit first">
+        <svg class="pg-action-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <path d="M8 2v7.5M4.75 6.5 8 9.75l3.25-3.25M3 12.5h10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span class="pg-action-label">Download .wasm</span>
+      </button>
+      <button type="button" class="pg-action pg-share" title="Copy a link to this circuit">
+        <svg class="pg-action-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <path d="M6.5 9.5 9.5 6.5M7 4.5l1.3-1.3a2.5 2.5 0 0 1 3.5 3.5L10.5 8M5.5 8 4.2 9.3a2.5 2.5 0 0 0 3.5 3.5L9 11.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span class="pg-action-label">Share</span>
+      </button>
+    </span>
+    {/* The announcement channel: file-tab operations and store notes. */}
+    <span class="pg-status" role="status" aria-live="polite"></span>
+  </div>
+  {/* Page data, not a module: it never enters the eager module graph, so the
+      content files stay out of the island's bundle. */}
+  <script type="application/json" id="pg-picks" set:html={JSON.stringify(catalogue)} />
 </div>
 
 <script>
-  import { LibcircClient, type LibcircVersion, type WorkerReply } from '../scripts/libcirc-client.ts';
-  import { splitFiles, requestFor, PLAYGROUND_DIR, type SplitFile } from '../utils/split-files.ts';
-  import { byteColToUtf16, caretOffset } from '../utils/columns.ts';
+  import { getSharedClient, type LibcircVersion, type WorkerReply } from '../scripts/libcirc-client.ts';
+  // TYPE only: erased at build, so the renderer stays behind its dynamic import.
+  import type { BitValue, CircRuntime, CircView } from 'circ-renderer';
+  import type { PaletteKey } from '../utils/circ-theme.mjs';
+  // A VALUE, but from the topology-only entry point: the decoder and its enum,
+  // nothing of the canvas, so the eager bundle stays what it was.
+  import { ComponentKind } from 'circ-renderer/topology';
+  import { joinConflicts, requestFor, rootOf, PLAYGROUND_DIR } from '../utils/split-files.ts';
+  import { createSplitter } from '../scripts/splitter.ts';
+  import { fnv1a } from '../utils/artifact-hash.ts';
+  import { artifactFileName } from '../utils/artifact-name.ts';
+  import { mountSettingsDrawer, optionsFor, truthTableRefusal } from '../scripts/settings-drawer.ts';
+  import { formatBytes } from '../scripts/pipeline.ts';
+  import {
+    applyRomImages,
+    maxWords,
+    parseRomImage,
+    preloadsFor,
+    romPlan,
+    romSymbols,
+    type MemorySymbol,
+  } from '../utils/rom-image.ts';
+  import {
+    UNKNOWN,
+    cellWidth,
+    clampWindow,
+    dumpRows,
+    formatAddress,
+    maskFor,
+    pageContaining,
+    pageCount,
+    parseAddress,
+    parseWord,
+    type AddressWindow,
+    type Cell,
+  } from '../scripts/memory-panel.ts';
+  import { editWord, imageCells, imageFromBytes } from '../scripts/rom-words.ts';
+  import {
+    declarationAt,
+    declsFor,
+    headerSymbolName,
+    linkLayout,
+    rootFileId,
+    rootPathFor,
+    type SourceLink,
+    type Declaration,
+    type LinkTable,
+  } from '../scripts/source-link.ts';
+  import { decodeShare, encodeShare, readHash, shareUrl, webStreamsCodec } from '../utils/share-link.ts';
+  import { generateSillyName } from '../utils/sillyname.ts';
+  import {
+    createStore,
+    describeNote,
+    createScratch,
+    deleteScratch,
+    duplicateScratch,
+    idKind,
+    renameScratch,
+    resolveInitial,
+    resolveSource,
+    touchScratch,
+    uniqueName,
+    NEW_PROJECT_SOURCE,
+    CATALOGUE_GROUPS,
+    type CatalogueItem,
+  } from '../utils/playground-store.ts';
+  import {
+    ANALYZE_DEBOUNCE_MS,
+    BUILD_DEBOUNCE_MS,
+    Stage,
+    outputsShouldClear,
+    shouldCompile,
+    statusFor,
+    type StatusInput,
+  } from '../scripts/pipeline.ts';
+  import {
+    activeFile,
+    addFile,
+    canDelete,
+    countsByFile,
+    deleteFile,
+    fromSource,
+    moveFile,
+    nameError,
+    renameFile,
+    rootIndex,
+    select as selectTab,
+    setBody,
+    toSource,
+    type FileTabsState,
+  } from '../scripts/file-tabs.ts';
+  import {
+    fileNodeId,
+    moveFor,
+    reveal,
+    sumCounts,
+    toggle as toggleExpanded,
+    visibleNodes,
+    type TreeInput,
+    type TreeKey,
+    type TreeNode,
+  } from '../scripts/ws-tree.ts';
+  import {
+    indexDoc,
+    mapPerTab,
+    rangeToSpan,
+    toLintDiagnostics,
+    type Analysis,
+    type AnalyzeDiagnostic as Diagnostic,
+    type TabbedDiagnostic,
+  } from '../scripts/circ-diagnostics.ts';
 
-  type Tab = 'diagnostics' | 'preview' | 'truth' | 'simulate';
-  interface Range { start_line: number; start_col: number; end_line: number; end_col: number }
-  interface Diagnostic { file_id: number; severity: string; code: string; range: Range; message: string }
-  interface Analysis {
-    files: { file_id: number; path: string }[];
-    diagnostics: Diagnostic[];
-    symbols: { file_id: number; name: string; kind: string; width: number }[];
-  }
+  type Tab = 'preview' | 'truth' | 'simulate';
+  type DockTab = 'diagnostics' | 'settings' | 'memory';
+  /** A mapped diagnostic plus the file tab it belongs to; `null` when the
+   *  compiler blamed a file with no tab (a `<builtin>/…` source, or a stale
+   *  path from a reply that outlived a rename). */
+  type MappedRow = TabbedDiagnostic;
   interface TruthTable { inputs: string[]; outputs: string[]; rows: { in: (number | null)[]; out: (number | null)[] }[] }
 
-  const UI_INPUT_BITS_CAP = 12;
-  const DEBOUNCE_MS = 250;
 
   const root = document.querySelector<HTMLElement>('.pg');
   if (root) init(root);
 
   function init(el: HTMLElement) {
     const source = el.querySelector<HTMLTextAreaElement>('#pg-source')!;
-    const pick = el.querySelector<HTMLSelectElement>('#pg-pick')!;
+    const editorWrap = el.querySelector<HTMLElement>('.pg-editor-wrap')!;
+    const editorHost = el.querySelector<HTMLElement>('#pg-editor')!;
     const status = el.querySelector<HTMLElement>('.pg-status')!;
+    const dot = el.querySelector<HTMLElement>('.pg-dot')!;
+    const statusLabel = el.querySelector<HTMLElement>('.pg-status-label')!;
+    const statusDetail = el.querySelector<HTMLElement>('.pg-status-detail')!;
+    const statusIdentity = el.querySelector<HTMLElement>('.pg-status-identity')!;
     const banner = el.querySelector<HTMLElement>('.pg-banner')!;
     const diagList = el.querySelector<HTMLUListElement>('.pg-diag')!;
+    const outputPane = el.querySelector<HTMLElement>('.pg-output')!;
     const previewEl = el.querySelector<HTMLElement>('.pg-preview')!;
     const tableEl = el.querySelector<HTMLElement>('.pg-table')!;
     const simNote = el.querySelector<HTMLElement>('.pg-sim-note')!;
-    const tabs = Array.from(el.querySelectorAll<HTMLButtonElement>('[role=tab]'));
+    // Narrowed to the OUTPUT strip: an unscoped [role=tab] would also collect
+    // the file tabs, and showTab() would then clobber their aria-selected and
+    // blank the output pane.
+    const tabs = Array.from(el.querySelectorAll<HTMLButtonElement>('.pg-tabs [role=tab]'));
+    const wsRoot = el.querySelector<HTMLElement>('.pg-ws')!;
+    const wsToggle = el.querySelector<HTMLButtonElement>('.pg-ws-toggle')!;
+    const wsBody = el.querySelector<HTMLElement>('.pg-ws-body')!;
+    const wsNew = el.querySelector<HTMLButtonElement>('.pg-ws-new')!;
+    const wsError = el.querySelector<HTMLElement>('.pg-ws-error')!;
+    const shareBtn = el.querySelector<HTMLButtonElement>('.pg-share')!;
+    const downloadBtn = el.querySelector<HTMLButtonElement>('.pg-download')!;
+    const statusActions = el.querySelector<HTMLElement>('.pg-status-actions')!;
     const panels = Array.from(el.querySelectorAll<HTMLElement>('.pg-panel'));
-    const picks = JSON.parse(el.querySelector('#pg-picks')!.textContent || '{}') as Record<string, string>;
+    // The dock: the editor's own strip, distinct from both the output tabs
+    // above and the file tabs. Its [role=tab] query is scoped for the same
+    // reason .pg-tabs's is.
+    const dock = el.querySelector<HTMLElement>('.pg-dock')!;
+    const dockTabs = Array.from(el.querySelectorAll<HTMLButtonElement>('.pg-dock-tabs [role=tab]'));
+    const dockPanels = Array.from(el.querySelectorAll<HTMLElement>('.pg-dock-panel'));
+    const dockToggle = el.querySelector<HTMLButtonElement>('.pg-dock-toggle')!;
+    const dockBadge = el.querySelector<HTMLElement>('.pg-dock-badge')!;
+    const memTab = el.querySelector<HTMLButtonElement>('.pg-dock-tab[data-dock="memory"]')!;
+    const memCount = el.querySelector<HTMLElement>('.pg-dock-count')!;
+    const memPanel = el.querySelector<HTMLElement>('.pg-mem')!;
+    const truthTab = el.querySelector<HTMLButtonElement>('.pg-tabs [data-tab="truth"]')!;
+    const truthTip = el.querySelector<HTMLElement>('#pg-tab-tip-truth')!;
+    const catalogue = JSON.parse(el.querySelector('#pg-picks')!.textContent || '[]') as CatalogueItem[];
     const supported = (el.dataset.supportedVersions || '').split(',').filter(Boolean).map(Number);
 
-    const client = new LibcircClient(el.dataset.libcircWasm!);
+    // One client per wasm URL, shared by every island on the page.
+    const client = getSharedClient(el.dataset.libcircWasm!);
+    // Two independent debounces, each with its own sequence counter.
+    const analyzeStage = new Stage(ANALYZE_DEBOUNCE_MS);
+    const buildStage = new Stage(BUILD_DEBOUNCE_MS);
+
     const state = {
-      gen: 0,
-      files: [] as SplitFile[],
+      /** Bumped on every edit; the freshness key the two stages compare. */
+      doc: 0,
+      analyzedDoc: null as number | null,
+      /** The file NAME list as of the outputs currently on screen. */
+      renderedFiles: [] as string[],
+      stale: false,
+      /** The pipeline's single source of truth: the file set and which tab is
+       *  visible. The combined string is never stored — it is computed on
+       *  demand with `toSource(state.tabs)`. Never read off the DOM. */
+      tabs: fromSource(source.value) as FileTabsState,
       analysis: null as Analysis | null,
       diagnostics: [] as Diagnostic[],
-      artifact: null as { bytes: Uint8Array; hash: number } | null,
-      tab: 'diagnostics' as Tab,
+      /** `state.diagnostics` mapped onto absolute offsets in the combined
+       *  document. Refreshed by BOTH producers in the pipeline. */
+      mapped: [] as MappedRow[],
+      artifact: null as { bytes: Uint8Array; hash: number; size: number } | null,
+      tab: 'preview' as Tab,
       version: null as LibcircVersion | null,
       simulateEnabled: true,
     };
     // Slice 8 attaches the simulator here.
-    const hooks = { onArtifact: null as null | ((bytes: Uint8Array | null) => void) };
-    (el as any).__playground = { state, hooks };
+    const hooks = {
+      onArtifact: null as null | ((bytes: Uint8Array | null, reason: 'built' | 'files-changed') => void),
+      /** Re-read the artifact into the Download button; set once the status
+       *  actions are wired, called from every place the artifact changes. */
+      refreshActions: null as null | (() => void),
+    };
+    // `renderMemory` is a deliberate test seam alongside the two above: the
+    // memory panel only exists once an analysis reports a rom or a ram, and no
+    // headless harness can run the worker that produces one. The smoke test
+    // sets `state.analysis` and calls this.
+    // `refreshActions` and `setStale` are seams too: the Download button
+    // follows the artifact, which only the worker produces, so the smoke test
+    // hands the state one and flips staleness the way the compile reply does.
+    (el as any).__playground = {
+      state,
+      hooks,
+      renderMemory: () => renderMemory({ force: true }),
+      refreshActions: () => hooks.refreshActions?.(),
+      setStale: (stale: boolean) => setStale(stale),
+    };
 
     // ---- tabs ----
-    function showTab(tab: Tab) {
+    /**
+     * Why the truth table is unavailable, or null. Recomputed from state
+     * rather than cached, because all three of its inputs — the error count,
+     * the root's input width, and the cap — move independently.
+     */
+    function truthBlock(): string | null {
+      const errors = state.mapped.filter((m) => m.severity === 'error');
+      const first = errors[0];
+      return truthTableRefusal(
+        {
+          errors: errors.length,
+          // Code and message only. The file and line are one click away in the
+          // dock right below, and a tooltip is not the place for a position.
+          firstError: first ? `${first.code} ${first.message}` : null,
+          bits: rootInputBits(),
+        },
+        settings(),
+      );
+    }
+
+    /**
+     * Paint the truth tab's availability.
+     *
+     * `aria-disabled`, never the `disabled` attribute: a disabled button is
+     * unfocusable and swallows pointer events in most browsers, which would
+     * take the tooltip — the only place the reason is stated — away from
+     * exactly the readers who need it most. The click handler enforces it.
+     */
+    function applyTruthGate() {
+      const reason = truthBlock();
+      truthTab.setAttribute('aria-disabled', String(reason !== null));
+      truthTip.textContent = reason ?? '';
+      // A tooltip pointing at an empty element says nothing; drop the link
+      // entirely rather than describing the tab as ''.
+      if (reason === null) truthTab.removeAttribute('aria-describedby');
+      else truthTab.setAttribute('aria-describedby', 'pg-tab-tip-truth');
+      // Blocked while it is the open tab: say so in the panel rather than
+      // moving the reader somewhere they did not ask to go. Transient errors
+      // are constant while typing, and a tab that flees mid-keystroke is worse
+      // than one that explains itself.
+      if (reason !== null && state.tab === 'truth') {
+        tableEl.innerHTML = '';
+        tableEl.textContent = reason;
+      }
+    }
+
+    function showTab(tab: Tab, opts: { persist?: boolean } = {}) {
       state.tab = tab;
+      if (opts.persist !== false) store.update((draft) => { draft.tab = tab; });
       for (const b of tabs) b.setAttribute('aria-selected', String(b.dataset.tab === tab));
       for (const p of panels) p.hidden = p.dataset.panel !== tab;
-      if (tab === 'preview') void runPreview(state.gen);
-      if (tab === 'truth') void runTruth(state.gen);
+      // A tab switch re-uses the build stage's current sequence rather than
+      // claiming a new one, so a compile already in flight stays current and
+      // its artifact still lands.
+      if (tab === 'preview') void runPreview(buildStage.seq);
+      if (tab === 'truth') void runTruth(buildStage.seq);
     }
-    for (const b of tabs) b.addEventListener('click', () => showTab(b.dataset.tab as Tab));
+    for (const b of tabs) {
+      b.addEventListener('click', () => {
+        const tab = b.dataset.tab as Tab;
+        // The gate lives here rather than in showTab: a restore from the
+        // envelope must still be able to land on a blocked tab, or a reader
+        // who left the page on the truth table would come back to a pane that
+        // silently moved. Refusing here also keeps the reason on screen.
+        if (tab === 'truth' && b.getAttribute('aria-disabled') === 'true') {
+          const reason = truthTip.textContent;
+          if (reason) status.textContent = reason;
+          return;
+        }
+        showTab(tab);
+      });
+    }
+
+    // ---- the editor's dock ----
+    /** Move the selection. DOM only — no store write and no re-render, so the
+     *  memory tab's own availability check can use it without recursing back
+     *  through the render that called it. */
+    function selectDockPanel(tab: DockTab) {
+      for (const b of dockTabs) b.setAttribute('aria-selected', String(b.dataset.dock === tab));
+      for (const p of dockPanels) p.hidden = p.dataset.dockPanel !== tab;
+    }
+
+    function showDockTab(tab: DockTab, opts: { persist?: boolean } = {}) {
+      selectDockPanel(tab);
+      if (opts.persist !== false) store.update((draft) => { draft.dock.tab = tab; });
+      // Reading a memory is deferred until someone is looking at it, so
+      // arriving on the tab is when the contents are actually fetched.
+      if (tab === 'memory') renderMemory();
+    }
+
+    function setDockOpen(open: boolean, opts: { persist?: boolean } = {}) {
+      dock.dataset.open = String(open);
+      dockToggle.setAttribute('aria-expanded', String(open));
+      dockToggle.textContent = open ? 'Hide' : 'Show';
+      if (opts.persist !== false) store.update((draft) => { draft.dock.open = open; });
+    }
+
+    for (const b of dockTabs) {
+      b.addEventListener('click', () => {
+        const tab = b.dataset.dock as DockTab;
+        // Clicking the panel you are already on, while open, closes the dock —
+        // the gesture every editor with a bottom panel uses. Clicking the other
+        // panel while closed opens it on that panel.
+        if (dock.dataset.open === 'true' && b.getAttribute('aria-selected') === 'true') {
+          setDockOpen(false);
+          return;
+        }
+        // Picking a tab by hand outranks any pending restore.
+        memDeferred = false;
+        showDockTab(tab);
+        setDockOpen(true);
+      });
+    }
+    dockToggle.addEventListener('click', () => setDockOpen(dock.dataset.open !== 'true'));
+
+    // ---- source linking ----
+    // `decls` refreshes on every analysis; `table` only when a new artifact is
+    // drawn. They are deliberately separate: the last good canvas — and so the
+    // table — stays on screen across failing edits while the analysis keeps
+    // moving underneath it.
+    const link = {
+      decls: [] as Declaration[],
+      table: null as LinkTable | null,
+      current: null as Declaration | null,
+    };
+
+    /** Highlight the box a declaration draws as, or clear the highlight. */
+    function highlightComponent(decl: Declaration | null) {
+      const id = decl && link.table ? (link.table.byName.get(decl.name)?.componentId ?? null) : null;
+      sim.view?.view.setHighlight?.(id);
+    }
+
+    /** Mark the truth-table column a declaration names. */
+    function markTableColumn(decl: Declaration | null) {
+      for (const th of tableEl.querySelectorAll<HTMLElement>('th[data-symbol-name]')) {
+        th.classList.toggle('pg-th-linked', decl !== null && th.dataset.symbolName === decl.name);
+      }
+    }
+
+    /**
+     * Mark a declaration's span in the editor without moving the caret. A
+     * hover must never steal the reader's place, so a declaration in another
+     * file is named in the simulate note instead of switching tabs.
+     */
+    function markInEditor(link_: SourceLink | null) {
+      if (!editor) return;
+      if (!link_) {
+        editor.setLinkHighlight(null);
+        if (state.simulateEnabled) simNote.textContent = simNoteBase;
+        return;
+      }
+      const decl = link.decls.find((d) => d.name === link_.name && d.kind === link_.kind);
+      const rootIdx = rootIndex(state.tabs);
+      if (!decl || state.tabs.active !== rootIdx) {
+        editor.setLinkHighlight(null);
+        simNote.textContent = `${link_.name} is declared in ${state.tabs.files[rootIdx]?.name ?? 'the root file'}.`;
+        return;
+      }
+      const files = state.tabs.files;
+      const body = files[rootIdx].body;
+      const index = indexDoc(body);
+      const span = rangeToSpan(
+        index,
+        [{ name: files[rootIdx].name, body, startLine: 0 }],
+        { files: [{ file_id: decl.fileId, path: rootPathFor(files[rootIdx].name) }], diagnostics: [], symbols: [], references: [] } as Analysis,
+        decl.fileId,
+        decl.range,
+      );
+      if (!span) {
+        editor.setLinkHighlight(null);
+        return;
+      }
+      editor.setLinkHighlight(span);
+      simNote.textContent = `${link_.name} — ${decl.kind}`;
+    }
+
+    /**
+     * Highlight by declared name, from a source that has a name rather than a
+     * position — a truth-table header, a diagnostics row. `null` restores
+     * whatever the cursor was pointing at, so a passing hover never leaves the
+     * reader's own context behind.
+     */
+    function highlightByName(name: string | null) {
+      if (name === null) {
+        highlightComponent(link.current);
+        markInEditor(link.current ? (link.table?.byName.get(link.current.name) ?? null) : null);
+        markTableColumn(link.current);
+        return;
+      }
+      const decl = link.decls.find((d) => d.name === name) ?? null;
+      highlightComponent(decl);
+      markInEditor(link.table?.byName.get(name) ?? null);
+      markTableColumn(decl);
+    }
+
+    /** One place decides what the cursor is pointing at. */
+    function setCurrentDeclaration(decl: Declaration | null) {
+      if (decl === link.current) return;
+      link.current = decl;
+      highlightComponent(decl);
+      markTableColumn(decl);
+    }
+
+    // ---- the status bar ----
+    // One record in, one view out. The label is written only when the state
+    // KIND changes, so the bar does not churn per keystroke; the per-keystroke
+    // text lives in the non-live detail span, and the separate `.pg-status`
+    // span stays the only announcement channel.
+    const pipe: StatusInput = {
+      ready: false,
+      loading: false,
+      analyzing: false,
+      building: false,
+      errors: 0,
+      warnings: 0,
+      artifactBytes: null,
+      stale: false,
+      failure: null,
+    };
+    let lastKind = '';
+    function renderStatus() {
+      const view = statusFor(pipe);
+      if (view.kind !== lastKind) {
+        statusLabel.textContent = view.label;
+        dot.dataset.state = view.kind;
+        lastKind = view.kind;
+      }
+      statusDetail.textContent = view.detail;
+    }
+
+    // ---- persistence ----
+    // One key, one envelope. Phase 3 populates layout.ratios only; the other
+    // fields ship with their defaults for later phases to fill.
+    const store = createStore();
+    store.onNote((note) => { status.textContent = describeNote(note); });
+
+    // ---- the workspace ----
+    /** Load a project by id. A switch replaces the whole document registry, so
+     *  the previous project's text is never one Ctrl-Z away. */
+    function loadProject(id: string, opts: { restoreFile?: string | null } = {}) {
+      const text = resolveSource(id, catalogue, store.envelope.scratch);
+      if (text === null) return false;
+      state.tabs = fromSource(text);
+      const wanted = opts.restoreFile;
+      const index = wanted ? state.tabs.files.findIndex((f) => f.name === wanted) : -1;
+      state.tabs = selectTab(state.tabs, index >= 0 ? index : rootIndex(state.tabs));
+      source.value = toSource(state.tabs);
+      editor?.setDocuments(state.tabs.files.map((f) => f.body), state.tabs.active);
+      store.update((draft) => {
+        draft.activeId = id;
+        draft.activeFile = activeFile(state.tabs).name;
+      });
+      // Open the group holding what just loaded, and the project itself, so the
+      // sidebar always contains the thing the editor is showing. A reader who
+      // then shuts it keeps it shut until they switch projects again.
+      const opened = reveal(expanded, treeInput(), id);
+      if (opened.size !== expanded.size) {
+        expanded = opened;
+        persistExpanded();
+      }
+      renderTree({ keepFocusOn: null });
+      renderWorkspace();
+      schedule();
+      return true;
+    }
+
+    /** The scratch project whose delete is armed, or null. */
+    let confirmProject: string | null = null;
+
+    /** What each join conflict means for the reader, in one line. */
+    const CONFLICT_TEXT: Record<string, string> = {
+      'blank-body': 'this file is empty, so the next file would merge into it',
+      'marker-in-body': 'a `// name.circ` line after code starts a new file here',
+      'illegal-name': 'this name cannot be written as a file marker',
+      'duplicate-name': 'another file has this name, so one of them is dropped',
+    };
+
+    /** Index of the file whose delete is armed, or null. A second Delete (or
+     *  the × on the row) removes it; anything else disarms. */
+    let confirmIndex: number | null = null;
+    let confirmTimer: number | null = null;
+
+    const nowMs = () => Date.now();
+
+    /**
+     * Write the current text back to the envelope. A content project is never
+     * overwritten: the first edit forks it into a scratch project, which is
+     * what keeps a shipped example the shipped example.
+     */
+    function persistSource() {
+      const id = store.envelope.activeId;
+      const source = toSource(state.tabs);
+      const fileName = activeFile(state.tabs).name;
+      if (id && idKind(id) === 'scratch') {
+        store.update((draft) => {
+          draft.scratch = touchScratch(draft.scratch, id, source, nowMs()).list;
+          draft.activeFile = fileName;
+        });
+        return;
+      }
+      const label = catalogue.find((c) => c.id === id)?.label ?? 'Untitled';
+      let created: string | null = null;
+      store.update((draft) => {
+        const r = createScratch(draft.scratch, {
+          name: label,
+          source,
+          now: nowMs(),
+          keep: draft.activeId,
+        });
+        if (!r.created) return;
+        draft.scratch = r.list;
+        draft.activeId = r.created.id;
+        draft.activeFile = fileName;
+        created = r.created.id;
+      });
+      if (created) {
+        status.textContent = `Copied into your own project so the example stays as it shipped.`;
+        renderWorkspace();
+      }
+    }
+
+    function newProject() {
+      let created: string | null = null;
+      store.update((draft) => {
+        const r = createScratch(draft.scratch, {
+          name: uniqueName('Untitled', draft.scratch.map((p) => p.name)),
+          source: NEW_PROJECT_SOURCE,
+          now: nowMs(),
+          keep: draft.activeId,
+        });
+        if (!r.created) return;
+        draft.scratch = r.list;
+        created = r.created.id;
+      });
+      if (created) loadProject(created);
+    }
+
+    // ---- the workspace explorer ----
+    // One tree, three levels: group folders, the projects inside them, and —
+    // under the one project the editor holds — its files. It is the only place
+    // files live now: the strip that used to sit above the editor carried the
+    // active-file indicator and the per-file error badge, and both of those
+    // belong next to the project they describe rather than over the text.
+
+    /** Ids of the rows the reader has open. Seeded from the envelope, and
+     *  written back on every deliberate toggle. */
+    let expanded = new Set(store.envelope.ws.expanded);
+    /**
+     * What the last analysis said about each project the reader has opened.
+     *
+     * Only the open project is analysed, so without this a project's badge
+     * disappeared the moment you looked at something else — which reads as
+     * "the errors are gone" rather than "nobody is looking". Session-scoped on
+     * purpose: it is a memory of an analysis, not a cache of one, and it is
+     * dropped rather than persisted so a reload never shows a count that no
+     * longer has an analysis behind it.
+     */
+    const remembered = new Map<string, { errors: number; warnings: number }>();
+    /** Index into the flattened tree that holds the single tab stop. */
+    let treeFocus = 0;
+    let treeNodes: TreeNode[] = [];
+
+    const groupSlug = (label: string) => label.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
+    /** The tree as data. Rebuilt on every render rather than cached: each of
+     *  its inputs — the catalogue, the scratch list, the file set, the
+     *  analysis — moves on its own schedule. */
+    function treeInput(): TreeInput {
+      // "Yours" is not a catalogue group — it comes from the envelope — so the
+      // array is typed off TreeInput rather than inferred from CATALOGUE_GROUPS.
+      const groups: TreeInput['groups'][number][] = CATALOGUE_GROUPS
+        .filter((g) => catalogue.some((c) => c.group === g))
+        .map((g) => ({
+          id: groupSlug(g),
+          label: g as string,
+          projects: catalogue
+            .filter((c) => c.group === g)
+            .map((c) => ({ id: c.id, label: c.label, editable: false })),
+        }));
+      groups.push({
+        id: 'yours',
+        label: 'Yours',
+        projects: [...store.envelope.scratch]
+          .sort((a, b) => b.updatedAt - a.updatedAt)
+          .map((p) => ({ id: p.id, label: p.name, editable: true })),
+      });
+      return {
+        groups,
+        activeId: store.envelope.activeId,
+        files: state.tabs.files,
+        activeFile: state.tabs.active,
+        counts: countsByFile(state.tabs.files, state.analysis),
+        conflicts: new Map(joinConflicts(state.tabs.files).map((c) => [c.index, CONFLICT_TEXT[c.reason]])),
+        expanded,
+        remembered,
+      };
+    }
+
+    function persistExpanded() {
+      store.update((draft) => { draft.ws.expanded = [...expanded]; });
+    }
+
+    /** Open a row and redraw. */
+    function expandNode(id: string, open: boolean) {
+      if (expanded.has(id) === open) return;
+      expanded = toggleExpanded(expanded, id);
+      persistExpanded();
+      renderTree();
+    }
+
+    /** The row that should hold the tab stop after a redraw: whatever the
+     *  reader was on if it still exists, else the active file, else the active
+     *  project. Losing the tab stop into row 0 on every keystroke would make
+     *  the tree unusable with a keyboard. */
+    function preferredFocus(nodes: readonly TreeNode[], wantedId: string | null): number {
+      if (wantedId) {
+        const at = nodes.findIndex((n) => n.id === wantedId);
+        if (at >= 0) return at;
+      }
+      const file = nodes.findIndex((n) => n.kind === 'file' && n.active);
+      if (file >= 0) return file;
+      const project = nodes.findIndex((n) => n.kind === 'project' && n.active);
+      return project >= 0 ? project : 0;
+    }
+
+    function badgeEl(severity: 'error' | 'warning', count: number): HTMLElement {
+      const badge = document.createElement('span');
+      badge.className = 'pg-tree-badge';
+      badge.dataset.severity = severity;
+      badge.textContent = String(count);
+      // The accessible name already carries the counts in words.
+      badge.setAttribute('aria-hidden', 'true');
+      return badge;
+    }
+
+    function iconButton(cls: string, glyph: string, label: string, onClick: () => void): HTMLButtonElement {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = cls;
+      b.textContent = glyph;
+      b.setAttribute('aria-label', label);
+      // A real tab stop, unlike the old strip's close control: `treeitem` is
+      // not on ARIA's presentational-children list, so a nested button here IS
+      // announced. That was the one thing `role=tab` could never allow.
+      b.tabIndex = -1;
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        onClick();
+      });
+      return b;
+    }
+
+    function renderTree(opts: { keepFocusOn?: string | null } = {}) {
+      const wantedId = opts.keepFocusOn !== undefined
+        ? opts.keepFocusOn
+        : (treeNodes[treeFocus]?.id ?? null);
+      treeNodes = visibleNodes(treeInput());
+      treeFocus = preferredFocus(treeNodes, wantedId);
+
+      const tree = document.createElement('div');
+      tree.className = 'pg-tree';
+      tree.setAttribute('role', 'tree');
+      tree.setAttribute('aria-label', 'Projects and files');
+
+      treeNodes.forEach((node, i) => {
+        const row = document.createElement('div');
+        row.className = `pg-tree-row pg-tree-${node.kind}`;
+        row.setAttribute('role', 'treeitem');
+        row.setAttribute('aria-level', String(node.level));
+        row.dataset.node = node.id;
+        row.dataset.index = String(i);
+        row.style.setProperty('--depth', String(node.level - 1));
+        // Roving tabindex: one stop for the whole tree.
+        row.tabIndex = i === treeFocus ? 0 : -1;
+
+        const parts: string[] = [node.label];
+
+        if (node.kind === 'group') {
+          row.setAttribute('aria-expanded', String(node.expanded));
+          parts.push(`${node.count} project${node.count === 1 ? '' : 's'}`);
+        }
+
+        // The twisty. Always present on an openable row, always absent
+        // otherwise: a disabled-looking triangle that does nothing is worse
+        // than the indent alone.
+        const twisty = document.createElement('span');
+        twisty.className = 'pg-tree-twisty';
+        twisty.setAttribute('aria-hidden', 'true');
+        const openable = node.kind === 'group' || (node.kind === 'project' && node.expandable);
+        twisty.textContent = openable ? (node.expanded ? '▾' : '▸') : '';
+        row.appendChild(twisty);
+
+        const name = document.createElement('span');
+        name.className = 'pg-tree-label';
+        name.textContent = node.label;
+        row.appendChild(name);
+
+        if (node.kind === 'project') {
+          row.dataset.pick = node.id;
+          if (node.expandable) row.setAttribute('aria-expanded', String(node.expanded));
+          if (node.active) {
+            row.setAttribute('aria-current', 'true');
+            parts.push('open');
+          }
+          if (node.severity) {
+            row.appendChild(badgeEl(node.severity, node.badge));
+            parts.push(`${node.badge} ${node.severity}${node.badge === 1 ? '' : 's'}`);
+          }
+          if (node.editable) {
+            const actions = document.createElement('span');
+            actions.className = 'pg-tree-actions';
+            const id = node.id;
+            const label = node.label;
+            actions.appendChild(iconButton('pg-tree-action', '✎', `Rename ${label}`, () => startRenameProject(id)));
+            actions.appendChild(
+              iconButton('pg-tree-action', '⧉', `Duplicate ${label}`, () => duplicateProject(id)),
+            );
+            const del = iconButton('pg-tree-action', '×', `Delete ${label}`, () => armOrDeleteProject(id));
+            if (confirmProject === id) {
+              del.dataset.confirm = 'true';
+              del.setAttribute('aria-label', `Delete ${label}? Activate again to confirm`);
+            }
+            actions.appendChild(del);
+            row.appendChild(actions);
+          }
+          if (node.active) {
+            const add = iconButton('pg-tree-action pg-tree-add', '＋', 'Add a file', addNewFile);
+            row.appendChild(add);
+          }
+        }
+
+        if (node.kind === 'file') {
+          row.dataset.index = String(i);
+          row.dataset.file = String(node.index);
+          if (node.active) {
+            row.setAttribute('aria-selected', 'true');
+            row.setAttribute('aria-current', 'true');
+          }
+          if (node.root) {
+            const chip = document.createElement('span');
+            chip.className = 'pg-tree-root';
+            chip.textContent = 'root';
+            chip.setAttribute('aria-hidden', 'true');
+            row.appendChild(chip);
+            parts.push('root file');
+          }
+          if (node.severity) {
+            row.appendChild(badgeEl(node.severity, node.badge));
+            parts.push(`${node.badge} ${node.severity}${node.badge === 1 ? '' : 's'}`);
+          } else {
+            parts.push('no diagnostics');
+          }
+          if (node.conflict) {
+            const mark = document.createElement('span');
+            mark.className = 'pg-tree-conflict';
+            mark.textContent = '⚠';
+            mark.setAttribute('aria-hidden', 'true');
+            row.appendChild(mark);
+            parts.push(`unsaveable: ${node.conflict}`);
+          }
+          const fileIndex = node.index;
+          const armed = confirmIndex === fileIndex;
+          if (armed) row.dataset.confirm = 'true';
+          // Same shape as a project row's controls, so a file is renamed the
+          // way a project is rather than only through F2 — which is reachable
+          // but undiscoverable, and unusable without a keyboard.
+          const fileActions = document.createElement('span');
+          fileActions.className = 'pg-tree-actions';
+          fileActions.appendChild(
+            iconButton('pg-tree-action', '✎', `Rename ${node.label}`, () => startRename(fileIndex)),
+          );
+          fileActions.appendChild(
+            iconButton('pg-tree-action', '×', `Delete ${node.label}`, () => armOrDelete(fileIndex)),
+          );
+          row.appendChild(fileActions);
+
+          // Pointer reorder, an enhancement over Alt+Arrow and never the only
+          // path: a drag is impossible with a keyboard.
+          row.draggable = true;
+          row.addEventListener('dragstart', (e) => {
+            e.dataTransfer?.setData('text/plain', String(fileIndex));
+            if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+          });
+          row.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+            row.dataset.drop = 'true';
+          });
+          row.addEventListener('dragleave', () => { delete row.dataset.drop; });
+          row.addEventListener('drop', (e) => {
+            e.preventDefault();
+            delete row.dataset.drop;
+            const from = Number(e.dataTransfer?.getData('text/plain'));
+            if (Number.isInteger(from)) reorder(from, fileIndex);
+          });
+          if (armed) {
+            parts.length = 0;
+            parts.push(`Delete ${node.label}? Press Delete again to confirm`);
+          }
+        }
+
+        row.setAttribute('aria-label', parts.join(', '));
+        row.addEventListener('click', () => activate(i));
+        tree.appendChild(row);
+
+        // An open folder with nothing in it says so, rather than looking like
+        // a row that failed to render. Only "Yours" can be empty today.
+        if (node.kind === 'group' && node.expanded && node.count === 0) {
+          const empty = document.createElement('div');
+          empty.className = 'pg-ws-empty';
+          empty.textContent = 'Edit an example to start your own.';
+          tree.appendChild(empty);
+        }
+      });
+
+      wsBody.querySelector('.pg-tree')?.remove();
+      wsBody.querySelector('.pg-ws-fallback')?.remove();
+      wsBody.insertBefore(tree, wsError);
+
+      // One line naming the first file that cannot be written back, so the
+      // reader learns why a row is marked rather than only that it is.
+      const first = joinConflicts(state.tabs.files)[0];
+      wsError.textContent = first
+        ? `${state.tabs.files[first.index].name}: ${CONFLICT_TEXT[first.reason]}`
+        : '';
+
+      // The editor panel is labelled by whichever file row is current.
+      const activeRow = tree.querySelector<HTMLElement>('.pg-tree-file[aria-current="true"]');
+      if (activeRow) {
+        activeRow.id = `pg-tree-file-${state.tabs.active}`;
+        editorWrap.setAttribute('aria-labelledby', activeRow.id);
+      } else {
+        editorWrap.removeAttribute('aria-labelledby');
+      }
+    }
+
+    /** Kept for the callers that predate the tree; the tree is the workspace. */
+    const renderWorkspace = renderTree;
+
+    function focusNode(index: number) {
+      treeFocus = Math.max(0, Math.min(index, treeNodes.length - 1));
+      for (const row of wsBody.querySelectorAll<HTMLElement>('.pg-tree-row')) {
+        row.tabIndex = Number(row.dataset.index) === treeFocus ? 0 : -1;
+      }
+      wsBody.querySelector<HTMLElement>(`.pg-tree-row[data-index="${treeFocus}"]`)?.focus();
+    }
+
+    /** Focus the row showing file `index`, which is what every file operation
+     *  wants afterwards. */
+    function focusFileTab(index: number) {
+      const at = treeNodes.findIndex((n) => n.kind === 'file' && n.index === index);
+      if (at >= 0) focusNode(at);
+    }
+
+    /** Enter, Space, or a click. A folder toggles; a project loads; a file
+     *  opens in the editor. */
+    function activate(index: number) {
+      const node = treeNodes[index];
+      if (!node) return;
+      treeFocus = index;
+      if (node.kind === 'group') {
+        expandNode(node.id, !node.expanded);
+        focusNode(index);
+        return;
+      }
+      if (node.kind === 'project') {
+        disarm();
+        confirmProject = null;
+        if (node.active && node.expandable) {
+          // Already open: the click is about its files, not about loading it
+          // again, so it works the twisty.
+          expandNode(node.id, !node.expanded);
+          focusNode(index);
+          return;
+        }
+        loadProject(node.id);
+        return;
+      }
+      showFile(node.index);
+    }
+
+    wsBody.addEventListener('keydown', (e) => {
+      const row = (e.target as HTMLElement).closest<HTMLElement>('.pg-tree-row');
+      if (!row) return;
+      const index = Number(row.dataset.index);
+      const node = treeNodes[index];
+      if (!node) return;
+
+      // Alt+Arrow moves a FILE. Checked before the plain arrows and always
+      // prevented: Alt+ArrowLeft is Back on Windows and Linux, and losing the
+      // page mid-edit would cost the reader real work.
+      if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+        e.preventDefault();
+        if (node.kind === 'file') reorder(node.index, node.index + (e.key === 'ArrowDown' ? 1 : -1));
+        return;
+      }
+
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        activate(index);
+        return;
+      }
+      if (e.key === 'F2') {
+        e.preventDefault();
+        if (node.kind === 'file') startRename(node.index);
+        else if (node.kind === 'project' && node.editable) startRenameProject(node.id);
+        return;
+      }
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        if (node.kind === 'file') armOrDelete(node.index);
+        else if (node.kind === 'project' && node.editable) armOrDeleteProject(node.id);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        confirmProject = null;
+        disarm();
+        return;
+      }
+
+      const move = moveFor(treeNodes, index, e.key as TreeKey);
+      if (!move) return;
+      // Only consumed keys are prevented: Home and End must still work inside
+      // a rename input, and the arrows must still move the caret in the editor.
+      e.preventDefault();
+      if (move.kind === 'focus') focusNode(move.index);
+      else expandNode(move.id, move.kind === 'expand');
+    });
+
+    // ---- project operations ----
+    function duplicateProject(id: string) {
+      let created: string | null = null;
+      store.update((draft) => {
+        const r = duplicateScratch(draft.scratch, id, { now: nowMs() });
+        if (!r || !r.created) return;
+        draft.scratch = r.list;
+        created = r.created.id;
+      });
+      if (created) loadProject(created);
+    }
+
+    function armOrDeleteProject(id: string) {
+      const name = store.envelope.scratch.find((p) => p.id === id)?.name ?? id;
+      // Two presses, as for a file: a project is not undoable.
+      if (confirmProject !== id) {
+        confirmProject = id;
+        status.textContent = `Delete ${name}? Activate the × again to confirm.`;
+        renderTree();
+        return;
+      }
+      confirmProject = null;
+      const wasActive = store.envelope.activeId === id;
+      remembered.delete(id);
+      store.update((draft) => {
+        draft.scratch = deleteScratch(draft.scratch, id);
+        if (wasActive) draft.activeId = null;
+      });
+      status.textContent = `Deleted ${name}.`;
+      if (wasActive) loadProject(el.dataset.defaultPick ?? catalogue[0].id);
+      else renderTree({ keepFocusOn: null });
+    }
+
+    /** Swaps the row's label for an input. Escape reverts; a blur commits. */
+    function startRenameProject(id: string) {
+      const current = store.envelope.scratch.find((p) => p.id === id);
+      const row = wsBody.querySelector<HTMLElement>(`.pg-tree-row[data-node="${CSS.escape(id)}"]`);
+      const nameEl = row?.querySelector<HTMLElement>('.pg-tree-label');
+      if (!current || !row || !nameEl) return;
+      const input = document.createElement('input');
+      input.className = 'pg-ws-input';
+      input.value = current.name;
+      input.setAttribute('aria-label', 'Project name');
+      let done = false;
+      const finish = (commit: boolean) => {
+        if (done) return;
+        done = true;
+        if (commit && input.value.trim() !== '') {
+          store.update((draft) => { draft.scratch = renameScratch(draft.scratch, id, input.value); });
+        }
+        renderTree({ keepFocusOn: id });
+        focusNode(treeFocus);
+      };
+      input.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+        else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+      });
+      input.addEventListener('blur', () => finish(true));
+      nameEl.replaceWith(input);
+      input.focus();
+      input.select();
+    }
+
+    wsNew.addEventListener('click', newProject);
+
+    wsToggle.addEventListener('click', () => {
+      const open = wsToggle.getAttribute('aria-expanded') === 'true';
+      wsToggle.setAttribute('aria-expanded', String(!open));
+      wsRoot.toggleAttribute('data-collapsed', open);
+    });
+
+    // ---- share ----
+    /** Copy `text`, or fall back to a focused read-only input the reader can
+     *  select. Never leaves the button pending. */
+    async function copyText(text: string): Promise<boolean> {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch {
+        const input = document.createElement('input');
+        input.className = 'pg-share-fallback';
+        input.readOnly = true;
+        input.value = text;
+        statusActions.appendChild(input);
+        input.focus();
+        input.select();
+        input.addEventListener('blur', () => input.remove(), { once: true });
+        return false;
+      }
+    }
+
+    /** Flash a button's label for a moment — "Copied", "Saved" — then put it
+     *  back. The status line carries the full sentence; this is the glance. */
+    function flash(button: HTMLButtonElement, text: string, state: 'done' | 'failed' = 'done') {
+      const label = button.querySelector<HTMLElement>('.pg-action-label');
+      if (!label) return;
+      const was = label.textContent;
+      label.textContent = text;
+      button.dataset.state = state;
+      window.setTimeout(() => {
+        label.textContent = was;
+        delete button.dataset.state;
+      }, 1600);
+    }
+
+    shareBtn.addEventListener('click', async () => {
+      if (shareBtn.disabled) return;
+      shareBtn.disabled = true;
+      try {
+        const source = toSource(state.tabs);
+        const result = await encodeShare(source, webStreamsCodec());
+        if (!result.ok) {
+          // Past the cap the link is useless, so offer the thing that is not.
+          const copied = await copyText(source);
+          flash(shareBtn, copied ? 'Source copied' : 'Too long', copied ? 'done' : 'failed');
+          status.textContent = copied
+            ? `Too long to put in a link (${result.chars} characters, limit ${result.cap}); the source is on your clipboard.`
+            : `Too long to put in a link (${result.chars} characters, limit ${result.cap}); the source is selected below.`;
+          return;
+        }
+        const link = shareUrl(location.href, result.fragment);
+        // A phone has a share sheet, and a link is what it is for; a desktop
+        // reader wants the link on the clipboard, where the sheet would only
+        // be in the way. Dismissing the sheet is not a failure.
+        const sheet = typeof navigator.share === 'function' && matchMedia('(pointer: coarse)').matches;
+        if (sheet) {
+          try {
+            await navigator.share({ title: `${activeLabel()} — circ`, url: link });
+            flash(shareBtn, 'Shared');
+            status.textContent = `Link shared (${result.chars} characters).`;
+            return;
+          } catch (err) {
+            if ((err as { name?: string }).name === 'AbortError') return;
+            // Anything else falls through to the clipboard.
+          }
+        }
+        const copied = await copyText(link);
+        flash(shareBtn, copied ? 'Copied' : 'Select below', copied ? 'done' : 'failed');
+        status.textContent = copied
+          ? `Link copied (${result.chars} characters).`
+          : 'Link selected below — copy it with your keyboard.';
+      } finally {
+        shareBtn.disabled = false;
+      }
+    });
+
+    // ---- download ----
+    /** The name the tree shows for the open project: an example's title, a
+     *  scratch project's name. */
+    function activeLabel(): string {
+      const id = store.envelope.activeId;
+      if (!id) return 'circuit';
+      if (idKind(id) === 'scratch') return store.envelope.scratch.find((p) => p.id === id)?.name ?? 'circuit';
+      return catalogue.find((c) => c.id === id)?.label ?? 'circuit';
+    }
+
+    /**
+     * The button follows the artifact: disabled with no build, and with a
+     * build it says what it would save and whether the source has moved on
+     * since. Called wherever the artifact or its staleness changes.
+     */
+    function refreshActions() {
+      const a = state.artifact;
+      downloadBtn.disabled = !a;
+      downloadBtn.title = !a
+        ? 'Compile a circuit first'
+        : state.stale
+          ? `Download the last good build, ${artifactFileName(activeLabel())} (${formatBytes(a.size)}) — the source has changed since it was built`
+          : `Download ${artifactFileName(activeLabel())} (${formatBytes(a.size)})`;
+      if (state.stale && a) downloadBtn.dataset.stale = '';
+      else delete downloadBtn.dataset.stale;
+    }
+
+    downloadBtn.addEventListener('click', () => {
+      const a = state.artifact;
+      if (!a) return;
+      const name = artifactFileName(activeLabel());
+      // A copy, not a view: the worker transferred this buffer and a later
+      // build may replace it while the download is still being written.
+      const blob = new Blob([a.bytes.slice() as BlobPart], { type: 'application/wasm' });
+      const href = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = href;
+      link.download = name;
+      link.hidden = true;
+      // In the document for the click, so the page's own listeners see it.
+      statusActions.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(href), 1000);
+      flash(downloadBtn, 'Saved');
+      status.textContent = state.stale
+        ? `Saved ${name} (${formatBytes(a.size)}) from the last good build; the source has changed since.`
+        : `Saved ${name} (${formatBytes(a.size)}).`;
+    });
+    hooks.refreshActions = refreshActions;
+
+    // ---- settings ----
+    const settings = () => store.envelope.settings;
+    /** The reader's ROM text, per memory. Session state: an image can be
+     *  megabytes once hex-encoded, far past what the envelope may hold. */
+    const romImages = new Map<string, string>();
+    const currentRoms = (): MemorySymbol[] => {
+      const a = state.analysis;
+      if (!a) return [];
+      return romSymbols(a.symbols, rootFileId(a.files, rootPathFor(rootOf(state.tabs.files).name)));
+    };
+    const preloads = () => preloadsFor(romImages, currentRoms());
+
+    // ---- the memory panel ----
+    // A rom or ram keeps its contents as RUNTIME STATE: the artifact carries
+    // the shape and nothing else, so everything shown here is read back from a
+    // running circuit one word at a time. That is also why the tab only exists
+    // when something is declared — for a circuit with no memory there is not
+    // an empty table to show, there is nothing at all.
+
+    /** How many words one page of the dump holds, and how many per row. */
+    const MEM_PAGE = 64;
+    const MEM_PER_ROW = 8;
+    /** Where each memory's dump is scrolled to, by declared name. */
+    const memWindows = new Map<string, number>();
+    /** Addresses holding a zero the reader never typed, per rom. The image
+     *  cannot tell a chosen zero from a gap it had to fill, so the distinction
+     *  is carried beside it. */
+    const romImplied = new Map<string, Set<number>>();
+    /** Roms whose hex escape hatch is showing. */
+    const hexOpen = new Set<string>();
+
+    /** The running circuit's runtime, or null when nothing is simulating or
+     *  the artifact predates memories. Contents can only be read while the
+     *  Simulate tab has built a view. */
+    function memHost(): CircRuntime | null {
+      const rt = sim.view?.runtime;
+      return rt && rt.hasMemory ? rt : null;
+    }
+
+    /** The id of a declared memory in the running circuit, from the runtime's
+     *  own list and checked against the analysis's shape, so a drifted
+     *  artifact reads nothing rather than reading the wrong memory. */
+    function memIdOf(mem: MemorySymbol): number | null {
+      const host = memHost();
+      if (!host) return null;
+      const found = host.memories().find(
+        (m) => m.name === mem.name && m.info.width === mem.width && m.info.addrWidth === mem.addrWidth,
+      );
+      return found ? found.id : null;
+    }
+
+    function readCell(host: CircRuntime, id: number, addr: number): Cell {
+      return host.readMemWord(id, addr);
+    }
+
+    /** The tab appears and disappears with the declared set. */
+    function updateMemTab() {
+      const mems = currentRoms();
+      memTab.hidden = mems.length === 0;
+      memCount.hidden = mems.length === 0;
+      memCount.textContent = String(mems.length);
+      memTab.setAttribute(
+        'aria-label',
+        `Memory, ${mems.length} declared`,
+      );
+      // A dock left on a tab that no longer exists would show a blank panel
+      // with no tab selected, so the selection steps aside — WITHOUT writing
+      // the store, because the circuit may get its memory back on the next
+      // keystroke, and because a reader who reloaded onto this tab should land
+      // back on it once the analysis says it exists.
+      if (mems.length === 0 && currentDockTab() === 'memory') {
+        memDeferred = true;
+        selectDockPanel('diagnostics');
+      } else if (mems.length > 0 && memDeferred) {
+        memDeferred = false;
+        selectDockPanel('memory');
+      }
+    }
+
+    /** Set when the memory tab was the stored choice but nothing was declared
+     *  yet, so the selection can go back to it once something is. */
+    let memDeferred = false;
+
+    /** True only when the memory dump is actually on screen. Every visible
+     *  word is a call across the wasm boundary, so nothing reads one otherwise. */
+    function memVisible(): boolean {
+      return dock.dataset.open === 'true' && currentDockTab() === 'memory' && !memTab.hidden;
+    }
+
+    function currentDockTab(): DockTab {
+      const selected = dockTabs.find((b) => b.getAttribute('aria-selected') === 'true');
+      return (selected?.dataset.dock as DockTab) ?? 'diagnostics';
+    }
+
+    /** Rebuild the whole panel. Cheap: the number of declared memories is
+     *  small, and only one page of one memory is ever read. */
+    function renderMemory(opts: { force?: boolean } = {}) {
+      updateMemTab();
+      const mems = currentRoms();
+      if (mems.length === 0) {
+        memPanel.innerHTML = '';
+        return;
+      }
+      // Typing in the hex box must not destroy the box being typed into, so a
+      // rebuild is skipped while a TEXT FIELD inside the panel has focus and
+      // nothing structural changed. `force` overrides that, and every path
+      // that changes contents uses it: after a cell edit the focus is still
+      // inside the panel, and skipping there would swallow the edit that was
+      // just made.
+      const signature = mems.map((m) => `${m.name}:${m.kind}:${m.width}:${m.addrWidth}`).join('|');
+      const active = document.activeElement;
+      // Only a field that is being TYPED INTO can be destroyed mid-keystroke.
+      // This used to say "any INPUT", which included the checkbox that opens
+      // the hex editor — so the click that ticked it also suppressed the
+      // redraw that was supposed to show what it opened, and it did nothing.
+      const typing = active !== null
+        && memPanel.contains(active)
+        && (active.tagName === 'TEXTAREA'
+          || (active.tagName === 'INPUT' && (active as HTMLInputElement).type === 'text'));
+      if (!opts.force && memPanel.dataset.signature === signature && typing) {
+        for (const mem of mems) updateRomStatus(mem);
+        return;
+      }
+      memPanel.dataset.signature = signature;
+      memPanel.innerHTML = '';
+      for (const mem of mems) memPanel.appendChild(renderOneMemory(mem));
+    }
+
+    /**
+     * What each address holds, and where that came from.
+     *
+     * One grid serves both jobs the panel used to split between a textarea and
+     * a dump. A running circuit is the truth when there is one; otherwise a rom
+     * shows its pending image, and a ram shows nothing, because a ram has no
+     * image and its contents do not exist until it runs.
+     */
+    function cellsFor(mem: MemorySymbol): {
+      read: (addr: number) => Cell;
+      live: boolean;
+      editable: boolean;
+      note: string | null;
+    } {
+      const host = memHost();
+      const id = host ? memIdOf(mem) : null;
+      if (host && id !== null) {
+        return {
+          read: (addr) => readCell(host, id, addr),
+          live: true,
+          editable: true,
+          note: null,
+        };
+      }
+      if (mem.kind === 'ram') {
+        return {
+          read: () => ({ value: 0n, defined: 0n }),
+          live: false,
+          editable: false,
+          note: 'A ram holds nothing until the circuit runs. Open the Simulate tab to fill it.',
+        };
+      }
+      const cells = imageCells(romImages.get(mem.name) ?? '', mem);
+      if (!cells.ok) {
+        return { read: () => ({ value: 0n, defined: 0n }), live: false, editable: false, note: cells.message };
+      }
+      const mask = maskFor(mem.width);
+      return {
+        read: (addr) => {
+          const word = cells.cells[addr];
+          return word === null ? { value: 0n, defined: 0n } : { value: word, defined: mask };
+        },
+        live: false,
+        editable: true,
+        note: 'Not running: this is the image that will be loaded. Open the Simulate tab to watch it live.',
+      };
+    }
+
+    function renderOneMemory(mem: MemorySymbol): HTMLElement {
+      const total = maxWords(mem.addrWidth);
+      const source = cellsFor(mem);
+      const wrap = document.createElement('section');
+      wrap.className = 'pg-mem-item';
+      wrap.dataset.name = mem.name;
+
+      const head = document.createElement('div');
+      head.className = 'pg-mem-head';
+      const title = document.createElement('h3');
+      title.className = 'pg-mem-name';
+      title.textContent = mem.name;
+      head.appendChild(title);
+      const shape = document.createElement('span');
+      shape.className = 'pg-mem-shape';
+      shape.textContent = `${mem.kind} [${mem.width}, ${mem.addrWidth}] · ${total} word${total === 1 ? '' : 's'}`;
+      head.appendChild(shape);
+      const live = document.createElement('span');
+      live.className = 'pg-mem-live';
+      live.dataset.live = String(source.live);
+      live.textContent = source.live ? 'running' : 'not running';
+      head.appendChild(live);
+      wrap.appendChild(head);
+
+      // --- the grid, which is now the editor as well as the view
+      const win = clampWindow(memWindows.get(mem.name) ?? 0, MEM_PAGE, total);
+      const pages = pageCount(MEM_PAGE, total);
+      if (pages > 1) wrap.appendChild(pageNav(mem, win, total));
+      wrap.appendChild(gridTable(mem, source, win));
+      const gridError = document.createElement('p');
+      gridError.className = 'pg-mem-error';
+      gridError.id = memErrorId(mem);
+      gridError.setAttribute('role', 'alert');
+      wrap.appendChild(gridError);
+
+      if (source.note) {
+        const note = document.createElement('p');
+        note.className = 'pg-mem-idle';
+        note.textContent = source.note;
+        wrap.appendChild(note);
+      }
+
+      // --- controls
+      const controls = document.createElement('div');
+      controls.className = 'pg-mem-controls';
+
+      const buttons = document.createElement('div');
+      buttons.className = 'pg-mem-buttons';
+      const clear = document.createElement('button');
+      clear.type = 'button';
+      clear.className = 'pg-mem-btn';
+      clear.textContent = 'Clear';
+      clear.title = mem.kind === 'rom'
+        ? 'Empty the image, so every word is unknown again'
+        : 'Make every word unknown again';
+      clear.disabled = mem.kind === 'ram' && !source.live;
+      clear.addEventListener('click', () => clearMemory(mem));
+      buttons.appendChild(clear);
+
+      if (source.live) {
+        const refresh = document.createElement('button');
+        refresh.type = 'button';
+        refresh.className = 'pg-mem-btn';
+        refresh.textContent = 'Refresh';
+        refresh.title = 'Read the contents again';
+        refresh.addEventListener('click', () => renderMemory({ force: true }));
+        buttons.appendChild(refresh);
+      }
+
+      if (mem.kind === 'rom') {
+        // The hex is behind a checkbox: it is the escape hatch for pasting a
+        // blob or loading a file, not the thing a reader should have to use.
+        const toggle = document.createElement('label');
+        toggle.className = 'pg-mem-hextoggle';
+        const box = document.createElement('input');
+        box.type = 'checkbox';
+        box.checked = hexOpen.has(mem.name);
+        box.addEventListener('change', () => {
+          if (box.checked) hexOpen.add(mem.name);
+          else hexOpen.delete(mem.name);
+          renderMemory({ force: true });
+        });
+        toggle.appendChild(box);
+        toggle.appendChild(document.createTextNode(' Load image'));
+        buttons.appendChild(toggle);
+      }
+      controls.appendChild(buttons);
+
+      if (mem.kind === 'rom' && hexOpen.has(mem.name)) controls.appendChild(hexEditor(mem));
+
+      const meta = document.createElement('div');
+      meta.className = 'pg-rom-meta';
+      controls.appendChild(meta);
+      const err = document.createElement('div');
+      err.className = 'pg-rom-error';
+      controls.appendChild(err);
+      wrap.appendChild(controls);
+
+      if (mem.kind === 'rom') updateRomStatus(mem, wrap);
+      return wrap;
+    }
+
+    /** The hex textarea and the file picker, both writing the same image. */
+    function hexEditor(mem: MemorySymbol): HTMLElement {
+      const holder = document.createElement('div');
+      holder.className = 'pg-mem-hex';
+
+      const boxId = `pg-rom-${mem.name}`;
+      const label = document.createElement('label');
+      label.className = 'pg-mem-imglabel';
+      label.htmlFor = boxId;
+      label.textContent = 'Image, hex bytes, little-endian';
+      holder.appendChild(label);
+
+      const box = document.createElement('textarea');
+      box.id = boxId;
+      box.className = 'pg-rom-box';
+      box.spellcheck = false;
+      box.value = romImages.get(mem.name) ?? '';
+      box.placeholder = `${(mem.width + 7) >> 3} byte${(mem.width + 7) >> 3 === 1 ? '' : 's'} per word`;
+      box.addEventListener('input', () => {
+        setImage(mem, box.value, new Set(), { redraw: false });
+        updateRomStatus(mem);
+      });
+      // Typing hex and then leaving redraws the grid against the new image.
+      box.addEventListener('change', () => renderMemory({ force: true }));
+      holder.appendChild(box);
+
+      const file = document.createElement('input');
+      file.type = 'file';
+      file.className = 'pg-mem-file';
+      file.setAttribute('aria-label', `Load a binary image into ${mem.name}`);
+      file.addEventListener('change', () => {
+        const chosen = file.files?.[0];
+        if (!chosen) return;
+        void chosen.arrayBuffer().then((buffer) => {
+          const result = imageFromBytes(new Uint8Array(buffer), mem);
+          if (!result.ok) {
+            status.textContent = result.message;
+            return;
+          }
+          // A loaded file is entirely the reader's choice, so nothing in it is
+          // implied.
+          setImage(mem, result.text, new Set());
+          status.textContent = `Loaded ${chosen.name} into ${mem.name}.`;
+        });
+      });
+      holder.appendChild(file);
+      return holder;
+    }
+
+    function pageNav(mem: MemorySymbol, win: AddressWindow, total: number): HTMLElement {
+      const nav = document.createElement('div');
+      nav.className = 'pg-mem-nav';
+      const back = document.createElement('button');
+      back.type = 'button';
+      back.className = 'pg-mem-btn';
+      back.textContent = '◀';
+      back.setAttribute('aria-label', 'Previous page');
+      back.disabled = win.start === 0;
+      back.addEventListener('click', () => {
+        memWindows.set(mem.name, Math.max(0, win.start - MEM_PAGE));
+        renderMemory();
+      });
+      nav.appendChild(back);
+
+      const range = document.createElement('span');
+      range.className = 'pg-mem-range';
+      range.textContent =
+        `${formatAddress(win.start, mem.addrWidth)}–${formatAddress(win.start + win.count - 1, mem.addrWidth)}`;
+      nav.appendChild(range);
+
+      const fwd = document.createElement('button');
+      fwd.type = 'button';
+      fwd.className = 'pg-mem-btn';
+      fwd.textContent = '▶';
+      fwd.setAttribute('aria-label', 'Next page');
+      fwd.disabled = win.start + win.count >= total;
+      fwd.addEventListener('click', () => {
+        memWindows.set(mem.name, win.start + MEM_PAGE);
+        renderMemory();
+      });
+      nav.appendChild(fwd);
+
+      const jump = document.createElement('input');
+      jump.className = 'pg-mem-jump';
+      jump.setAttribute('aria-label', `Go to an address in ${mem.name}`);
+      jump.placeholder = 'addr';
+      jump.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        const addr = parseAddress(jump.value, mem.addrWidth);
+        if (addr === null) {
+          status.textContent = `Not an address in ${mem.name}. Hex, or d for decimal.`;
+          return;
+        }
+        memWindows.set(mem.name, pageContaining(addr, MEM_PAGE, total).start);
+        renderMemory();
+      });
+      nav.appendChild(jump);
+      return nav;
+    }
+
+    function gridTable(
+      mem: MemorySymbol,
+      source: ReturnType<typeof cellsFor>,
+      win: AddressWindow,
+    ): HTMLElement {
+      const implied = romImplied.get(mem.name) ?? new Set<number>();
+      const table = document.createElement('table');
+      table.className = 'pg-mem-table';
+      const body = document.createElement('tbody');
+      const rows = dumpRows(source.read, win, MEM_PER_ROW, mem.width, settings().valueFormat);
+      for (const row of rows) {
+        const tr = document.createElement('tr');
+        const th = document.createElement('th');
+        th.scope = 'row';
+        th.className = 'pg-mem-addr';
+        th.textContent = formatAddress(row.base, mem.addrWidth);
+        tr.appendChild(th);
+        for (const c of row.cells) {
+          const td = document.createElement('td');
+          td.className = 'pg-mem-cell';
+          td.textContent = c.text;
+          if (!c.known) td.dataset.unknown = 'true';
+          // A zero that is only there because a later word was written is not
+          // a value the reader chose, and must not read like one.
+          const isImplied = mem.kind === 'rom' && implied.has(c.addr) && c.known;
+          if (isImplied) td.dataset.implied = 'true';
+          const where = `${mem.name} at ${formatAddress(c.addr, mem.addrWidth)}`;
+          const said = isImplied
+            ? `${c.text}, filled to reach a later word`
+            : c.text;
+          if (source.editable) {
+            td.tabIndex = 0;
+            td.setAttribute('role', 'button');
+            td.setAttribute('aria-label', `${where} is ${said}. Activate to change it.`);
+            const edit = () => editCell(td, mem, c.addr);
+            td.addEventListener('dblclick', edit);
+            td.addEventListener('keydown', (e) => {
+              if (e.key !== 'Enter' && e.key !== ' ') return;
+              e.preventDefault();
+              e.stopPropagation();
+              edit();
+            });
+          } else {
+            td.setAttribute('aria-label', `${where} is ${said}`);
+          }
+          tr.appendChild(td);
+        }
+        body.appendChild(tr);
+      }
+      table.appendChild(body);
+      return table;
+    }
+
+    /** Replace a memory's image, and push it wherever it has to go. */
+    function setImage(
+      mem: MemorySymbol,
+      text: string,
+      implied: ReadonlySet<number>,
+      opts: { redraw?: boolean } = {},
+    ) {
+      romImages.set(mem.name, text);
+      romImplied.set(mem.name, new Set(implied));
+      applyToView();
+      void runTruth(buildStage.seq);
+      if (opts.redraw !== false) renderMemory({ force: true });
+    }
+
+    /** Swap one cell for an input. Enter writes it; Escape leaves it alone. */
+    function editCell(td: HTMLElement, mem: MemorySymbol, addr: number) {
+      const format = settings().valueFormat;
+      const previous = td.textContent ?? '';
+      const input = document.createElement('input');
+      input.className = 'pg-mem-input';
+      input.type = 'text';
+      input.value = previous === UNKNOWN ? '' : previous;
+      input.setAttribute('aria-label', `${mem.name} at ${formatAddress(addr, mem.addrWidth)}`);
+      input.setAttribute('aria-invalid', 'false');
+      input.setAttribute('aria-describedby', memErrorId(mem));
+      input.autocomplete = 'off';
+      input.spellcheck = false;
+      // A generous cap rather than a tight one: the longest legal input is not
+      // the widest rendering, because `0x` and `_` are both allowed.
+      input.maxLength = cellWidth(mem.width, format) + 4;
+      let done = false;
+
+      const complain = (message: string) => {
+        input.setAttribute('aria-invalid', 'true');
+        setMemError(mem, message);
+        // Stay open. A refusal that closes the editor throws away what the
+        // reader typed and makes them find the cell again to try once more.
+        input.focus();
+        input.select();
+      };
+
+      const finish = (commit: boolean) => {
+        if (done) return;
+        if (!commit) {
+          done = true;
+          setMemError(mem, '');
+          renderMemory({ force: true });
+          return;
+        }
+        const parsed = parseWord(input.value, mem.width, format);
+        if (!parsed.ok) {
+          complain(parsed.message);
+          return;
+        }
+        done = true;
+        setMemError(mem, '');
+        const unknown = parsed.defined === 0n;
+        if (mem.kind === 'rom') writeRomWord(mem, addr, unknown ? null : parsed.value);
+        else writeLiveWord(mem, addr, parsed.value, parsed.defined);
+      };
+
+      // Characters that cannot begin any legal word never make it in, so the
+      // only refusals left are about VALUE — too large for the width, or the
+      // wrong base — which cannot be prevented by filtering.
+      input.addEventListener('input', () => {
+        const cleaned = input.value.replace(/[^0-9a-fA-FxX_?]/g, '');
+        if (cleaned !== input.value) {
+          const at = input.selectionStart ?? cleaned.length;
+          input.value = cleaned;
+          const back = Math.max(0, at - 1);
+          input.setSelectionRange(back, back);
+        }
+        // Typing again is the reader answering the complaint; drop it.
+        if (input.getAttribute('aria-invalid') === 'true') {
+          input.setAttribute('aria-invalid', 'false');
+          setMemError(mem, '');
+        }
+      });
+
+      input.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+        else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+      });
+      // Clicking away from a word that will not parse abandons it rather than
+      // trapping focus in the cell, the way a file rename does.
+      input.addEventListener('blur', () => {
+        if (done) return;
+        const parsed = parseWord(input.value, mem.width, format);
+        finish(parsed.ok);
+        if (!parsed.ok) {
+          done = true;
+          setMemError(mem, '');
+          renderMemory({ force: true });
+        }
+      });
+      td.textContent = '';
+      td.appendChild(input);
+      input.focus();
+      input.select();
+    }
+
+    const memErrorId = (mem: MemorySymbol) => `pg-mem-err-${mem.name}`;
+
+    /** The line under a memory's grid. Cleared by the next keystroke. */
+    function setMemError(mem: MemorySymbol, message: string) {
+      const wrap = memPanel.querySelector<HTMLElement>(`.pg-mem-item[data-name="${CSS.escape(mem.name)}"]`);
+      const line = wrap?.querySelector<HTMLElement>('.pg-mem-error');
+      if (line) line.textContent = message;
+    }
+
+    /** A rom is edited through its IMAGE, so the truth table and the canvas
+     *  both see the change and a reload cannot lose it. */
+    function writeRomWord(mem: MemorySymbol, addr: number, value: bigint | null) {
+      const text = romImages.get(mem.name) ?? '';
+      const implied = romImplied.get(mem.name) ?? new Set<number>();
+      const result = editWord(text, implied, mem, addr, value);
+      if (!result.ok) {
+        status.textContent = result.message;
+        renderMemory({ force: true });
+        return;
+      }
+      const filled = [...result.edit.implied].filter((a) => !implied.has(a));
+      setImage(mem, result.edit.text, result.edit.implied);
+      status.textContent = filled.length > 0
+        ? `${mem.name}[${formatAddress(addr, mem.addrWidth)}] set. An image is a prefix, so ${filled.length} earlier word${filled.length === 1 ? '' : 's'} became zero.`
+        : `${mem.name}[${formatAddress(addr, mem.addrWidth)}] ${value === null ? 'is unknown again' : 'set'}.`;
+    }
+
+    /** A ram has no image, so it is written straight into the running circuit. */
+    function writeLiveWord(mem: MemorySymbol, addr: number, value: bigint, defined: bigint) {
+      const host = memHost();
+      const id = memIdOf(mem);
+      if (!host || id === null) {
+        status.textContent = `${mem.name} is not running.`;
+        renderMemory({ force: true });
+        return;
+      }
+      const rc = host.writeMemWord(id, addr, value, defined);
+      status.textContent = rc === 0
+        ? `${mem.name}[${formatAddress(addr, mem.addrWidth)}] ${defined === 0n ? 'is unknown again' : 'set'}.`
+        : `${mem.name} refused the write (code ${rc}).`;
+      sim.view?.view.refreshState();
+      renderMemory({ force: true });
+    }
+
+    function clearMemory(mem: MemorySymbol) {
+      if (mem.kind === 'rom') {
+        // Emptying the image is what clears a rom: an empty image is a legal
+        // instruction that reaches the runtime as memClear.
+        setImage(mem, '', new Set());
+        status.textContent = `${mem.name} cleared; every word is unknown.`;
+        return;
+      }
+      const host = memHost();
+      const id = memIdOf(mem);
+      if (!host || id === null) return;
+      const rc = host.clearMem(id);
+      status.textContent = rc === 0
+        ? `${mem.name} cleared; every word is unknown.`
+        : `${mem.name} refused the clear (code ${rc}).`;
+      sim.view?.view.refreshState();
+      renderMemory({ force: true });
+    }
+
+    /** Say what the current rom text amounts to, or why it does not. */
+    /**
+     * `into` is the row being built, which is NOT in the panel yet: the
+     * caller appends it after this returns. Looking it up by name at that
+     * moment finds nothing, and the line silently stays blank.
+     */
+    function updateRomStatus(mem: MemorySymbol, into?: HTMLElement) {
+      const wrap = into
+        ?? memPanel.querySelector<HTMLElement>(`.pg-mem-item[data-name="${CSS.escape(mem.name)}"]`);
+      if (!wrap) return;
+      const meta = wrap.querySelector<HTMLElement>('.pg-rom-meta');
+      const err = wrap.querySelector<HTMLElement>('.pg-rom-error');
+      if (!meta || !err || mem.kind !== 'rom') return;
+      const text = romImages.get(mem.name) ?? '';
+      const parsed = parseRomImage(text, mem);
+      if (parsed.ok) {
+        err.textContent = '';
+        meta.textContent = text.trim() === ''
+          ? 'No image; the rom starts undefined.'
+          : `${parsed.words} of ${maxWords(mem.addrWidth)} words`;
+      } else {
+        meta.textContent = '';
+        err.textContent = parsed.message;
+      }
+    }
+
+    /** The name the rest of the island already calls. */
+    function renderRoms() {
+      renderMemory();
+    }
+
+    /** Push every valid image into the running canvas. Called after a rebuild
+     *  and after an edit, because both change what is loaded. */
+    function applyToView() {
+      const view = sim.view;
+      if (!view) return;
+      const mems = currentRoms();
+      const plan = romPlan(romImages, mems);
+      const result = applyRomImages(view.runtime, plan, mems);
+      for (const mem of mems) updateRomStatus(mem);
+      if (result.applied.length > 0) view.view.refreshState();
+    }
+
+    mountSettingsDrawer(el, {
+      get: settings,
+      set: (mutate) => {
+        const before = settings().valueFormat;
+        store.update((draft) => mutate(draft.settings));
+        // The cap is a setting, so changing one can unblock or block the tab.
+        applyTruthGate();
+        // Both output panes read a setting, so both are re-run.
+        void runPreview(buildStage.seq);
+        void runTruth(buildStage.seq);
+        // The canvas re-spells its badges in place; nothing is rebuilt and
+        // nothing the reader typed or loaded is touched.
+        if (settings().valueFormat !== before) sim.view?.view.setValueFormat(settings().valueFormat);
+        schedule();
+      },
+    });
+
+    // ---- bootstrap ----
+    // The share decode is async, so the whole bootstrap is: the editor is
+    // created only once the source is settled, and nothing renders twice.
+    async function bootstrap() {
+      const hash = (window as { __circShareHash?: string }).__circShareHash ?? location.hash;
+      const intent = readHash(hash);
+      const decoded = intent.src ? await decodeShare(hash, webStreamsCodec()) : null;
+      const { outcome, note } = resolveInitial({
+        intent,
+        decoded,
+        env: store.envelope,
+        catalogue,
+        defaultId: el.dataset.defaultPick ?? catalogue[0]?.id ?? '',
+      });
+
+      if (outcome.kind === 'share') {
+        // A shared source becomes a project of the reader's own, so editing it
+        // does not need a second fork.
+        let created: string | null = null;
+        store.update((draft) => {
+          const r = createScratch(draft.scratch, {
+            name: uniqueName(generateSillyName(), draft.scratch.map((p) => p.name)),
+            source: outcome.source,
+            now: nowMs(),
+            keep: draft.activeId,
+          });
+          if (!r.created) return;
+          draft.scratch = r.list;
+          created = r.created.id;
+        });
+        if (created) {
+          loadProject(created);
+          status.textContent = 'Opened the shared circuit as a new project.';
+        } else {
+          status.textContent = 'That shared circuit is too large to open.';
+        }
+      } else {
+        loadProject(outcome.id, { restoreFile: store.envelope.activeFile });
+        if (note) status.textContent = note;
+      }
+
+      showTab(store.envelope.tab as Tab, { persist: false });
+      showDockTab(store.envelope.dock.tab, { persist: false });
+      setDockOpen(store.envelope.dock.open, { persist: false });
+      renderDockBadge();
+      applyTruthGate();
+      renderWorkspace();
+
+      whenIdle(() => {
+        void loadEditor().then(mountEditor, () => {
+          status.textContent = 'Rich editor unavailable; using the plain text box.';
+        });
+      });
+    }
+
+    // ---- the pane divider ----
+    const panes = el.querySelector<HTMLElement>('.pg-panes')!;
+    const separator = el.querySelector<HTMLElement>('.pg-splitter')!;
+    const splitter = createSplitter({
+      container: panes,
+      separator,
+      initial: store.envelope.layout.ratios.main ?? 0.5,
+      labels: ['editor', 'output'],
+      // Only a drag, a key or a double-click persists; a window resize
+      // re-clamps what is rendered and never commits.
+      onCommit: (ratio) => store.update((draft) => { draft.layout.ratios.main = ratio; }),
+    });
+
+    // Below the breakpoint the panes stack, so the divider means nothing: it
+    // leaves the page and the tab order together. The persisted desktop ratio
+    // is untouched.
+    const narrow = window.matchMedia('(max-width: 800px)');
+    const applyBreakpoint = () => {
+      separator.hidden = narrow.matches;
+      splitter.refresh();
+    };
+    narrow.addEventListener('change', applyBreakpoint);
+    applyBreakpoint();
+
+    // localStorage is synchronous, so a flush on the way out is enough.
+    window.addEventListener('pagehide', () => store.flush());
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') store.flush();
+    });
+
+    // ---- file tabs ----
+    function showFile(index: number) {
+      const next = selectTab(state.tabs, index);
+      if (next === state.tabs) {
+        // Already active: still move focus there, so a click always lands.
+        focusFileTab(state.tabs.active);
+        return;
+      }
+      state.tabs = next;
+      editor?.showDocument(state.tabs.active);
+      renderTree();
+      focusFileTab(state.tabs.active);
+      // No schedule(): the source did not change, only which file is visible.
+    }
+
+
+    function disarm() {
+      if (confirmIndex === null) return;
+      confirmIndex = null;
+      if (confirmTimer !== null) window.clearTimeout(confirmTimer);
+      confirmTimer = null;
+      renderTree();
+    }
+
+    function armOrDelete(index: number) {
+      if (!canDelete(state.tabs)) {
+        status.textContent = 'The last file cannot be deleted.';
+        return;
+      }
+      if (confirmIndex !== index) {
+        confirmIndex = index;
+        if (confirmTimer !== null) window.clearTimeout(confirmTimer);
+        confirmTimer = window.setTimeout(disarm, 4000);
+        renderTree();
+        status.textContent = `Delete ${state.tabs.files[index].name}? Press Delete again, or the ×, to confirm.`;
+        return;
+      }
+      const name = state.tabs.files[index].name;
+      const wasRoot = index === rootIndex(state.tabs);
+      confirmIndex = null;
+      if (confirmTimer !== null) window.clearTimeout(confirmTimer);
+      confirmTimer = null;
+      state.tabs = deleteFile(state.tabs, index);
+      editor?.removeDocument(index);
+      editor?.showDocument(state.tabs.active);
+      renderTree();
+      focusFileTab(state.tabs.active);
+      status.textContent = wasRoot
+        ? `Deleted ${name}. ${rootOf(state.tabs.files).name} is now the root.`
+        : `Deleted ${name}.`;
+      schedule();
+    }
+
+    function addNewFile() {
+      disarm();
+      state.tabs = addFile(state.tabs);
+      const index = state.tabs.active;
+      editor?.insertDocument(index, state.tabs.files[index].body);
+      editor?.showDocument(index);
+      renderTree();
+      focusFileTab(index);
+      status.textContent = `Added ${state.tabs.files[index].name}.`;
+      schedule();
+    }
+
+    /** Swaps the tab's name span for an input. Committing needs a valid name;
+     *  Escape reverts, and a blur commits only if the name is legal. */
+    function startRename(index: number) {
+      disarm();
+      const tab = wsBody.querySelector<HTMLElement>(`.pg-tree-file[data-file="${index}"]`);
+      const nameEl = tab?.querySelector<HTMLElement>('.pg-tree-label');
+      if (!tab || !nameEl) return;
+      const input = document.createElement('input');
+      input.className = 'pg-ws-input';
+      input.value = state.tabs.files[index].name;
+      input.setAttribute('aria-label', 'File name');
+      input.setAttribute('aria-invalid', 'false');
+      let done = false;
+
+      const finish = (commit: boolean) => {
+        if (done) return;
+        done = true;
+        wsError.textContent = '';
+        if (commit) {
+          const next = renameFile(state.tabs, index, input.value);
+          if (next !== state.tabs) {
+            state.tabs = next;
+            status.textContent =
+              `Renamed to ${input.value}. Imports are not rewritten — update them yourself if this file is imported.`;
+            renderTree();
+            focusFileTab(index);
+            schedule();
+            return;
+          }
+        }
+        renderTree();
+        focusFileTab(index);
+      };
+
+      input.addEventListener('keydown', (e) => {
+        e.stopPropagation(); // the tree's own arrow handling must not fire
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const problem = nameError(state.tabs, index, input.value);
+          if (problem) {
+            input.setAttribute('aria-invalid', 'true');
+            wsError.textContent = problem;
+            return;
+          }
+          finish(true);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          finish(false);
+        }
+      });
+      // A blur commits when the name is legal and reverts silently otherwise.
+      input.addEventListener('blur', () => finish(nameError(state.tabs, index, input.value) === null));
+
+      nameEl.replaceWith(input);
+      input.focus();
+      input.select();
+    }
+
+    /** Reorder. Moving a tab past the end is how the root changes, so the move
+     *  is announced whenever the last position is involved. */
+    function reorder(from: number, to: number) {
+      disarm();
+      const next = moveFile(state.tabs, from, to);
+      if (next === state.tabs) return;
+      const wasRoot = rootOf(state.tabs.files).name;
+      state.tabs = next;
+      editor?.moveDocument(from, to);
+      editor?.showDocument(state.tabs.active);
+      renderTree();
+      focusFileTab(state.tabs.active);
+      const nowRoot = rootOf(state.tabs.files).name;
+      if (nowRoot !== wasRoot) status.textContent = `${nowRoot} is now the root.`;
+      schedule();
+    }
 
     // ---- editor ----
+    // The textarea is the fallback editing surface: it edits and compiles on
+    // its own, and it is removed from the DOM only once CodeMirror has mounted.
     source.addEventListener('keydown', (e) => {
       if (e.key === 'Tab') {
         e.preventDefault();
         source.setRangeText('  ', source.selectionStart, source.selectionEnd, 'end');
+        state.tabs = fromSource(source.value);
         schedule();
       }
     });
-    let timer: number | null = null;
+    /** Every edit arms both stages: the fast one paints squiggles, the slow one
+     *  builds. They never wait on each other. */
     function schedule() {
-      if (timer !== null) window.clearTimeout(timer);
-      timer = window.setTimeout(() => { timer = null; void fire(); }, DEBOUNCE_MS);
+      state.doc += 1;
+      state.stale = true;
+      analyzeStage.schedule((seq) => void runAnalyze(seq));
+      buildStage.schedule((seq) => void runBuild(seq));
     }
-    source.addEventListener('input', schedule);
-    pick.addEventListener('change', () => {
-      source.value = picks[pick.value] ?? '';
-      void fire();
+    // The fallback surface edits the COMBINED text; re-splitting on every
+    // keystroke keeps one model for both surfaces.
+    source.addEventListener('input', () => {
+      state.tabs = fromSource(source.value);
+      persistSource();
+      schedule();
     });
+
+    // ---- the CodeMirror island, loaded on idle ----
+    // A deliberate, recorded exception to "nothing heavy loads before
+    // interaction": on /playground the editor IS the page, so a first-focus
+    // gate would show a bare textarea to every visitor who reads before
+    // typing. It does not extend to libcirc.wasm, whose ensureReady() gate
+    // sits on the editor host's focusin below.
+    type EditorMod = typeof import('../scripts/circ-editor.ts');
+    let editorMod: EditorMod | null = null;
+    let editor: ReturnType<EditorMod['createEditor']> | null = null;
+    let editorPromise: Promise<EditorMod> | null = null;
+    const loadEditor = () => (editorPromise ??= import('../scripts/circ-editor.ts'));
+
+    function mountEditor(mod: EditorMod) {
+      editorMod = mod;
+      editor = mod.createEditor(editorHost, {
+        doc: activeFile(state.tabs).body,
+        theme: mod.currentThemeMode(),
+        ariaLabel: 'circ source',
+        onCursor: (index, line, col, lineText) => {
+          // Only the root file's declarations are drawn, so a cursor in a
+          // sibling tab resolves to nothing rather than to the wrong box.
+          const isRoot = index === rootIndex(state.tabs);
+          setCurrentDeclaration(isRoot ? declarationAt(link.decls, line, col, lineText) : null);
+        },
+        onChange: (doc, index) => {
+          state.tabs = setBody(state.tabs, index, doc);
+          renderTree();
+          persistSource();
+          schedule();
+        },
+      });
+      editor.setDocuments(state.tabs.files.map((f) => f.body), state.tabs.active);
+      editorHost.hidden = false;
+      source.remove();
+      // The strip only exists once the editor does: on the fallback path a tab
+      // would mean nothing, because one textarea holds every file at once.
+      renderTree();
+    }
+
+    const whenIdle = (fn: () => void) => {
+      const ric = (window as unknown as { requestIdleCallback?: (cb: () => void) => number })
+        .requestIdleCallback;
+      if (typeof ric === 'function') ric(fn);
+      else window.setTimeout(fn, 0);
+    };
+    void bootstrap();
 
     // ---- version handshake ----
     async function ensureReady(): Promise<boolean> {
       if (state.version) return true;
-      status.textContent = 'Loading the compiler…';
+      pipe.loading = true;
+      renderStatus();
       try {
         state.version = await client.init();
       } catch (err) {
-        status.textContent = `Could not load libcirc.wasm: ${(err as Error).message}`;
+        pipe.loading = false;
+        pipe.failure = `Could not load libcirc.wasm: ${(err as Error).message}`;
+        renderStatus();
         return false;
       }
+      pipe.loading = false;
+      pipe.ready = true;
+      pipe.failure = null;
+      const v = state.version;
+      statusIdentity.textContent = `circ ${v.version} · ${v.revision} · CIRF v${v.full_version}`;
+      renderStatus();
       if (!supported.includes(state.version.full_version)) {
         banner.textContent =
           `libcirc.wasm emits topology v${state.version.full_version} but the bundled circ-renderer reads v${supported.join('/')}; ` +
@@ -167,91 +2405,200 @@ const initial = picks[0];
     }
 
     // ---- pipeline ----
-    async function fire() {
-      const gen = ++state.gen;
-      if (!(await ensureReady())) return;
-      if (gen !== state.gen) return;
-      state.files = splitFiles(source.value);
-      status.textContent = 'Compiling…';
+    // Two stages, each guarded at EVERY await. Dropping a reply is not
+    // cancellation — the worker has no abort, so a stale call finishes and its
+    // result is discarded on arrival.
 
-      const an = await client.call('analyze', requestFor(state.files));
-      if (gen !== state.gen) return;
-      if (an.status !== 0) {
-        status.textContent = `analyze failed: ${an.error ?? an.status}`;
-        return;
-      }
-      state.analysis = JSON.parse(an.text!) as Analysis;
-      state.diagnostics = state.analysis.diagnostics;
-      renderDiagnostics();
-
-      const errors = state.diagnostics.filter((d) => d.severity === 'error').length;
-      const warnings = state.diagnostics.length - errors;
-      if (errors > 0) {
-        state.artifact = null;
-        hooks.onArtifact?.(null);
-        status.textContent = `${errors} error${errors === 1 ? '' : 's'}${warnings ? `, ${warnings} warning${warnings === 1 ? '' : 's'}` : ''}.`;
-      } else {
-        const c = await client.call('compile', requestFor(state.files));
-        if (gen !== state.gen) return;
-        if (c.status === 0 && c.bytes) {
-          const hash = fnv1a(c.bytes);
-          if (!state.artifact || state.artifact.hash !== hash) {
-            state.artifact = { bytes: c.bytes, hash };
-            hooks.onArtifact?.(c.bytes);
-          }
-          status.textContent = `Compiled: ${c.bytes.length} bytes${warnings ? `, ${warnings} warning${warnings === 1 ? '' : 's'}` : ''}.`;
-        } else if (c.status === 1 && c.text) {
-          state.diagnostics = (JSON.parse(c.text) as Analysis).diagnostics;
-          renderDiagnostics();
-          state.artifact = null;
-          hooks.onArtifact?.(null);
-          status.textContent = 'Compile reported diagnostics.';
-        } else {
-          state.artifact = null;
-          hooks.onArtifact?.(null);
-          status.textContent = `compile failed: ${c.error ?? c.status}`;
-        }
-      }
-      if (state.tab === 'preview') void runPreview(gen);
-      if (state.tab === 'truth') void runTruth(gen);
+    /** The bodies this run's offsets are computed against, per tab. */
+    function snapshotBodies(): string[] {
+      return state.tabs.files.map((f) => f.body);
     }
 
-    async function runPreview(gen: number) {
-      if (!state.files.length || !state.version) return;
-      const r = await client.call('preview', requestFor(state.files, { color: 'never' }));
-      if (gen !== state.gen) return;
-      previewEl.textContent = r.status === 0 ? r.text! : messageOf(r);
+    function setBusy(analyzing: boolean, building: boolean) {
+      pipe.analyzing = analyzing;
+      pipe.building = building;
+      renderStatus();
+    }
+
+    /** Dim the outputs, or clear them outright when the FILE SET changed —
+     *  the only case where the last good preview, table and canvas describe a
+     *  project that no longer exists. */
+    function markOutputs(nextFiles: string[]) {
+      if (outputsShouldClear(state.renderedFiles, nextFiles)) {
+        state.renderedFiles = nextFiles;
+        state.artifact = null;
+        state.stale = false;
+        pipe.artifactBytes = null;
+        previewEl.textContent = '';
+        tableEl.innerHTML = '';
+        outputPane.removeAttribute('data-stale');
+        hooks.onArtifact?.(null, 'files-changed');
+        hooks.refreshActions?.();
+        return;
+      }
+      state.renderedFiles = nextFiles;
+    }
+
+    function setStale(stale: boolean) {
+      state.stale = stale;
+      pipe.stale = stale;
+      if (stale) outputPane.setAttribute('data-stale', '');
+      else outputPane.removeAttribute('data-stale');
+      hooks.refreshActions?.();
+      renderStatus();
+    }
+
+    async function runAnalyze(seq: number) {
+      const doc = state.doc;
+      if (!(await ensureReady())) return;
+      if (!analyzeStage.isCurrent(seq)) return;
+      const snapshot = snapshotBodies();
+      setBusy(true, pipe.building);
+
+      const an = await client.call('analyze', requestFor(state.tabs.files));
+      if (!analyzeStage.isCurrent(seq)) return;
+      if (an.status !== 0) {
+        pipe.failure = `analyze failed: ${an.error ?? an.status}`;
+        setBusy(false, pipe.building);
+        return;
+      }
+      pipe.failure = null;
+      state.analysis = JSON.parse(an.text!) as Analysis;
+      state.diagnostics = state.analysis.diagnostics;
+      publishDiagnostics(snapshot, state.analysis);
+      // So the badge survives switching away from this project.
+      const openId = store.envelope.activeId;
+      if (openId) remembered.set(openId, sumCounts(countsByFile(state.tabs.files, state.analysis)));
+      renderTree();
+      link.decls = declsFor(state.analysis, rootPathFor(rootOf(state.tabs.files).name));
+      renderRoms();
+
+      const errors = state.diagnostics.filter((d) => d.severity === 'error').length;
+      state.analyzedDoc = doc;
+      pipe.errors = errors;
+      pipe.warnings = state.diagnostics.length - errors;
+      setBusy(false, pipe.building);
+    }
+
+    async function runBuild(seq: number) {
+      const doc = state.doc;
+      if (!(await ensureReady())) return;
+      if (!buildStage.isCurrent(seq)) return;
+
+      markOutputs(state.tabs.files.map((f) => f.name));
+      // Skip the compile only when a FRESH analysis already found errors; a
+      // stale or missing one builds anyway, so neither timer can wedge the
+      // other.
+      const fresh = state.analyzedDoc === doc ? { doc, errors: pipe.errors } : null;
+      if (!shouldCompile(fresh, doc)) {
+        setStale(state.artifact !== null);
+        setBusy(pipe.analyzing, false);
+        return;
+      }
+
+      const snapshot = snapshotBodies();
+      setBusy(pipe.analyzing, true);
+      const c = await client.call('compile', requestFor(state.tabs.files));
+      if (!buildStage.isCurrent(seq)) return;
+
+      if (c.status === 0 && c.bytes) {
+        // Captured now: the worker transfers the buffer, and a detached view
+        // reports 0.
+        const size = c.bytes.length;
+        const hash = fnv1a(c.bytes);
+        if (!state.artifact || state.artifact.hash !== hash) {
+          state.artifact = { bytes: c.bytes, hash, size };
+          hooks.onArtifact?.(c.bytes, 'built');
+          hooks.refreshActions?.();
+        }
+        pipe.artifactBytes = size;
+        pipe.failure = null;
+        setStale(false);
+      } else if (c.status === 1 && c.text) {
+        // A second, independent producer: the compile reply carries its own
+        // `files[]`, which the mapping needs, so map THAT analysis.
+        const compileAnalysis = JSON.parse(c.text) as Analysis;
+        state.diagnostics = compileAnalysis.diagnostics;
+        publishDiagnostics(snapshot, compileAnalysis);
+        renderTree();
+        pipe.errors = Math.max(1, state.diagnostics.filter((d) => d.severity === 'error').length);
+        // The artifact and the canvas are LEFT ALONE: the last good build stays
+        // on screen, dimmed, until the source builds again.
+        setStale(state.artifact !== null);
+      } else {
+        pipe.failure = `compile failed: ${c.error ?? c.status}`;
+        setStale(state.artifact !== null);
+      }
+      setBusy(pipe.analyzing, false);
+
+      if (state.tab === 'preview') await runPreview(seq);
+      if (state.tab === 'truth') await runTruth(seq);
+    }
+
+    async function runPreview(seq: number) {
+      if (!state.tabs.files.length || !state.version) return;
+      const r = await client.call('preview', requestFor(state.tabs.files, optionsFor('preview', settings())));
+      // The follow-on call re-checks the SAME stage: this is the guard the
+      // langlang playground omits on its second stage.
+      if (!buildStage.isCurrent(seq)) return;
+      if (r.status === 0) {
+        previewEl.textContent = r.text!;
+        return;
+      }
+      // Leave the last good schematic in place and say so in the status bar.
+      pipe.failure = messageOf(r);
+      setStale(previewEl.textContent !== '');
     }
 
     function rootInputBits(): number | null {
       const a = state.analysis;
       if (!a) return null;
-      const rootPath = `${PLAYGROUND_DIR}/${state.files[state.files.length - 1]?.name}`;
-      const rootId = a.files.find((f) => f.path === rootPath)?.file_id ?? 0;
+      const rootId = rootFileId(a.files, rootPathFor(rootOf(state.tabs.files).name));
+      // Null stays null: a 0 here would read as "no input bits" and silently
+      // switch off the only defence against an enumeration that cannot be
+      // stopped once it has started.
+      if (rootId === null) return null;
       return a.symbols.filter((s) => s.file_id === rootId && s.kind === 'input').reduce((n, s) => n + s.width, 0);
     }
 
-    async function runTruth(gen: number) {
-      if (!state.files.length || !state.version) return;
+    async function runTruth(seq: number) {
+      if (!state.tabs.files.length || !state.version) return;
       const bits = rootInputBits();
-      if (bits !== null && bits > UI_INPUT_BITS_CAP) {
+      // The same refusal the tab is painted with, so the panel and the tooltip
+      // can never disagree about why there is no table.
+      const refusal = truthBlock();
+      if (refusal) {
         tableEl.innerHTML = '';
-        tableEl.textContent = `This circuit has ${bits} input bits; the playground enumerates up to ${UI_INPUT_BITS_CAP} (${2 ** UI_INPUT_BITS_CAP} rows). Use circ-compile --truth-table for more.`;
+        tableEl.textContent = refusal;
         return;
       }
-      const r = await client.call('truth_table', requestFor(state.files, { format: 'json', truth_table_cap: UI_INPUT_BITS_CAP }));
-      if (gen !== state.gen) return;
-      tableEl.innerHTML = '';
+      const r = await client.call('truth_table', requestFor(state.tabs.files, optionsFor('truth_table', settings(), preloads())));
+      if (!buildStage.isCurrent(seq)) return;
       if (r.status !== 0) {
-        tableEl.textContent = messageOf(r);
+        // A refusal leaves the last good table on screen; the reason goes to
+        // the status bar rather than replacing what the reader was reading.
+        pipe.failure = messageOf(r);
+        setStale(tableEl.textContent !== '');
         return;
       }
+      tableEl.innerHTML = '';
       const table = JSON.parse(r.text!) as TruthTable;
       const t = document.createElement('table');
       const head = t.createTHead().insertRow();
       for (const name of [...table.inputs, ...table.outputs]) {
         const th = document.createElement('th');
         th.textContent = name;
+        // Headers are `name` or `name[W]`; the join key is the bare name.
+        const symbol = headerSymbolName(name);
+        th.dataset.symbolName = symbol;
+        // Focusable, so this is not a pointer-only affordance.
+        th.tabIndex = 0;
+        const show = () => highlightByName(symbol);
+        const clear = () => highlightByName(null);
+        th.addEventListener('pointerenter', show);
+        th.addEventListener('focus', show);
+        th.addEventListener('pointerleave', clear);
+        th.addEventListener('blur', clear);
         head.appendChild(th);
       }
       const body = t.createTBody();
@@ -278,80 +2625,156 @@ const initial = picks[0];
     }
 
     // ---- diagnostics ----
-    function locate(d: Diagnostic): { line0: number; col: number } | null {
-      const path = state.analysis?.files.find((f) => f.file_id === d.file_id)?.path;
-      const name = path?.startsWith(`${PLAYGROUND_DIR}/`) ? path.slice(PLAYGROUND_DIR.length + 1) : null;
-      const file = state.files.find((f) => f.name === name);
-      if (!file) return null;
-      const line0 = file.startLine + d.range.start_line - 1;
-      const line = source.value.split('\n')[line0] ?? '';
-      return { line0, col: byteColToUtf16(line, d.range.start_col) };
+    /** Map one analysis onto `snapshot`, render the list, and push the spans
+     *  into the editor — the last step only while the document has not moved
+     *  on, since a fresher run is already scheduled and will map correctly.
+     *  The list itself always renders: it carries file-local positions, which
+     *  do not go stale the same way. */
+    function publishDiagnostics(snapshot: readonly string[], analysis: Analysis) {
+      // Map ONCE PER TAB, each against a synthetic single-file array, so the
+      // offsets are file-local and can address that tab's own document. The
+      // mapper is total, so every call returns every diagnostic; a tab keeps
+      // only the rows it could place (`from !== null`), and the placeless rows
+      // — `<builtin>/…`, or a path naming no current tab — are emitted once,
+      // from a single extra pass, so nothing is listed N times on N tabs.
+      const { perTab, rows } = mapPerTab(state.tabs.files, analysis);
+      state.mapped = rows;
+      renderDiagnostics();
+
+      // Phase 1's staleness guard, re-based per tab: a reply computed against
+      // a body the reader has since edited must not be pushed, because the
+      // linter maps stored diagnostics forward and cannot know they were
+      // stale. An add, delete or move in flight desynchronises every index, so
+      // the whole push is skipped.
+      if (!editor || snapshot.length !== state.tabs.files.length) return;
+      state.tabs.files.forEach((f, i) => {
+        if (snapshot[i] !== f.body) return;
+        editor!.setDiagnosticsFor(i, toLintDiagnostics(perTab[i]));
+      });
     }
+
+    /** `<file>:<line>:<col> <code> <message>`, with the compiler's own
+     *  FILE-LOCAL position. A combined-document line number means nothing to a
+     *  reader who is looking at `half_adder.circ`; the jump target keeps using
+     *  the absolute span, so nothing about clicking changes. */
+    function diagnosticLabel(m: TabbedDiagnostic): string {
+      return `${m.fileName}:${m.line}:${m.column} ${m.code} ${m.message}`;
+    }
+
+    /** The count on the dock tab. It is the only diagnostics signal a reader
+     *  gets while the dock is collapsed, so it carries the severity in its
+     *  colour as well as the number. */
+    function renderDockBadge() {
+      const errors = state.mapped.filter((m) => m.severity === 'error').length;
+      const warnings = state.mapped.length - errors;
+      dockBadge.hidden = state.mapped.length === 0;
+      dockBadge.dataset.severity = errors > 0 ? 'error' : 'warning';
+      dockBadge.textContent = String(errors > 0 ? errors : warnings);
+      dockBadge.title =
+        `${errors} error${errors === 1 ? '' : 's'}, ${warnings} warning${warnings === 1 ? '' : 's'}`;
+    }
+
     function renderDiagnostics() {
       diagList.innerHTML = '';
-      if (state.diagnostics.length === 0) {
+      // Both derive from `state.mapped`, so they are refreshed together with
+      // the list rather than by whoever remembers to call them.
+      renderDockBadge();
+      applyTruthGate();
+      if (state.mapped.length === 0) {
         const li = document.createElement('li');
         li.className = 'pg-diag-ok';
         li.textContent = 'No diagnostics.';
         diagList.appendChild(li);
         return;
       }
-      for (const d of state.diagnostics) {
+
+      const errors = state.mapped.filter((m) => m.severity === 'error').length;
+      const warnings = state.mapped.length - errors;
+      const counts = document.createElement('li');
+      counts.className = 'pg-diag-counts';
+      counts.textContent =
+        `${errors} error${errors === 1 ? '' : 's'}, ${warnings} warning${warnings === 1 ? '' : 's'}`;
+      diagList.appendChild(counts);
+
+      for (const m of state.mapped) {
         const li = document.createElement('li');
-        li.className = `pg-diag-${d.severity}`;
-        const loc = locate(d);
-        const where = loc ? `${loc.line0 + 1}:${loc.col}` : `${d.range.start_line}:${d.range.start_col}`;
+        li.className = `pg-diag-${m.severity}`;
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.textContent = `${where} ${d.code} ${d.message}`;
-        if (loc) {
+        btn.textContent = diagnosticLabel(m);
+        // Hovering or focusing a row lights up whatever it points at, so the
+        // list is a third way into the picture.
+        if (m.tab !== null) {
+          const show = () => {
+            const line = m.line;
+            const file = state.tabs.files[m.tab!];
+            const decl = file
+              ? declarationAt(link.decls, line, m.column, file.body.split('\n')[line - 1] ?? '')
+              : null;
+            if (decl) highlightByName(decl.name);
+          };
+          btn.addEventListener('pointerenter', show);
+          btn.addEventListener('focus', show);
+          btn.addEventListener('pointerleave', () => highlightByName(null));
+          btn.addEventListener('blur', () => highlightByName(null));
+        }
+        // Any row with a span jumps, switching tabs first when the compiler
+        // blamed another file. `showDocument` is synchronous, so the select on
+        // the next statement lands in the file that just became visible.
+        if (m.from !== null && m.to !== null && m.tab !== null) {
+          const { from, to, tab } = m;
           btn.addEventListener('click', () => {
-            const off = caretOffset(source.value, loc.line0, loc.col);
-            source.focus();
-            source.setSelectionRange(off, off);
+            if (editor) {
+              if (tab !== state.tabs.active) {
+                state.tabs = selectTab(state.tabs, tab);
+                editor.showDocument(tab);
+                renderTree();
+              }
+              editor.select(from, to);
+            } else {
+              // The fallback surface holds every file in one buffer, so the
+              // file-local offsets do not address it; focus it and stop.
+              source.focus();
+            }
           });
+        } else {
+          // A file with no editor buffer (`<builtin>/…`): the row stays, so the
+          // count and the message are still visible, but there is nowhere to go.
+          btn.disabled = true;
         }
         li.appendChild(btn);
         diagList.appendChild(li);
       }
     }
 
-    function fnv1a(bytes: Uint8Array): number {
-      let h = 0x811c9dc5;
-      for (let i = 0; i < bytes.length; i++) {
-        h ^= bytes[i];
-        h = Math.imul(h, 0x01000193);
-      }
-      return h >>> 0;
-    }
 
     // ---- simulate ----
-    type Signal = 0 | 1;
-    type CircView = {
-      runtime: { topology: { components: { id: number; kind: number; name: string; origin: unknown[] }[] }; setPinSignal(id: number, s: Signal): void; run(): void };
-      view: { refreshState(): void; setInputSignal?(id: number, s: Signal): void };
-      canvas: HTMLCanvasElement;
-      destroy(): void;
-    };
+    /** What a root input pin holds: the renderer's own value shape. */
+    type PinValue = BitValue;
+    /** The renderer's view over the site's palette. Every method the island
+     *  calls is typed there; the pin test is what makes a missing one loud. */
+    type View = CircView<PaletteKey>;
     const simMount = el.querySelector<HTMLElement>('.pg-sim-mount')!;
+    const simNoteBase = 'Click input pins to toggle them; hover one to find it in the source.';
     const sim = {
-      view: null as CircView | null,
+      view: null as View | null,
       bytes: null as Uint8Array | null,
       renderedHash: -1,
-      /** Keyed by root input-pin NAME: ids shift as the source changes. */
-      pins: new Map<string, Signal>(),
+      /** Keyed by root input-pin NAME: ids shift as the source changes. Holds
+       *  the whole value, since a bus pin can be anything now, not just all-on
+       *  or all-off. */
+      pins: new Map<string, PinValue>(),
       rendererPromise: null as Promise<typeof import('circ-renderer')> | null,
       themesPromise: null as Promise<typeof import('../utils/circ-theme.mjs')> | null,
       assetsHooked: false,
     };
     const loadRenderer = () => (sim.rendererPromise ??= import('circ-renderer'));
     const loadThemes = () => (sim.themesPromise ??= import('../utils/circ-theme.mjs'));
-    const INPUT_PIN = 0; // ComponentKind.InputPin
 
-    function rootInputs(view: CircView): Map<string, number> {
+    function rootInputs(view: View): Map<string, number> {
       const m = new Map<string, number>();
       for (const c of view.runtime.topology.components) {
-        if (c.kind === INPUT_PIN && c.origin.length === 0) m.set(c.name, c.id);
+        if (c.kind === ComponentKind.InputPin && c.origin.length === 0) m.set(c.name, c.id);
       }
       return m;
     }
@@ -366,66 +2789,73 @@ const initial = picks[0];
       sim.view = null;
       simMount.innerHTML = '';
       try {
-        const view = (await renderCircuit({
+        const view = await renderCircuit({
           bytes,
           cell: 14,
           padding: 16,
           interactive: true,
-          theme: pickTheme() as any,
-          // Present once the renderer exposes it; the click handler below is
-          // the fallback that keeps the by-name pin map current either way.
-          onPinToggle: (id: number, sig: Signal) => {
-            for (const [name, pid] of rootInputs(view)) if (pid === id) sim.pins.set(name, sig);
+          theme: pickTheme(),
+          // onPinChange, not onPinToggle: the older callback collapses any
+          // mixed bus to High, so a reader who typed 0x2A and then flipped the
+          // theme would get 0xFF back on the rebuilt canvas.
+          onPinChange: (id: number, value: PinValue) => {
+            for (const [name, pid] of rootInputs(view)) if (pid === id) sim.pins.set(name, value);
+            // A changed pin can clock a ram, so whatever the panel is showing
+            // is now a picture of the past. Only redrawn while it is actually
+            // on screen: each visible word costs a call across the boundary.
+            if (memVisible()) renderMemory();
           },
-        } as any)) as unknown as CircView;
+          // The base the bus badges are written in and a bare typed value is
+          // read in. A change to the setting reaches the live canvas through
+          // `setValueFormat` (see the settings drawer's `set`).
+          valueFormat: settings().valueFormat,
+          // Fires only on a change, so this needs no debounce of its own.
+          onHover: (id: number | null) => {
+            markInEditor(id === null ? null : (link.table?.byComponentId.get(id) ?? null));
+          },
+        });
         sim.view = view;
+        // The layout is the only place a collapsed macro box exists, so the
+        // join is built from it rather than from the topology.
+        link.table = linkLayout(link.decls, view.view.getLayout());
+        // Images are session state, so a rebuilt canvas starts empty and has
+        // to be re-loaded before the reader sees it.
+        applyToView();
+        // The panel was drawn against no running circuit; there is one now.
+        renderMemory();
         simMount.appendChild(view.canvas);
         simMount.hidden = false;
-        simNote.textContent = 'Click input pins to toggle them.';
-        // Replay the reader's pins by name onto the fresh instance.
+        simNote.textContent = simNoteBase;
+        // Replay the reader's pins by name onto the fresh instance, value and
+        // all. A pin whose name is gone from the new circuit is forgotten.
         const ids = rootInputs(view);
         for (const name of Array.from(sim.pins.keys())) if (!ids.has(name)) sim.pins.delete(name);
-        let replayed = false;
-        for (const [name, sig] of sim.pins) {
-          const id = ids.get(name)!;
-          if (view.view.setInputSignal) view.view.setInputSignal(id, sig);
-          else view.runtime.setPinSignal(id, sig);
-          replayed = true;
-        }
-        if (replayed && !view.view.setInputSignal) {
-          view.runtime.run();
-          view.view.refreshState();
-        }
-        if (!view.view.setInputSignal) {
-          // Older renderer: keep the by-name map from the click itself.
-          view.canvas.addEventListener('click', () => {
-            for (const [name, id] of ids) {
-              const v = (view.runtime as any).readSignal?.(id);
-              if (v === 0 || v === 1) sim.pins.set(name, v);
-            }
-          });
+        for (const [name, v] of sim.pins) {
+          view.view.setInputValue(ids.get(name)!, v.value, v.defined);
         }
         if (!sim.assetsHooked) {
           sim.assetsHooked = true;
-          onAssetsReady(() => { void rebuildSim(); });
+          // The theme's sprite sheet finished decoding: the same theme now
+          // draws with sprites, so a repaint is all it takes.
+          onAssetsReady(() => { sim.view?.view.redraw(); });
         }
       } catch (err) {
         simNote.textContent = `Could not render the circuit: ${(err as Error).message}`;
         simMount.hidden = true;
       }
     }
-    async function rebuildSim() {
-      if (!sim.view) return;
-      await buildSim();
-    }
-    hooks.onArtifact = (bytes) => {
+    hooks.onArtifact = (bytes, reason) => {
       sim.bytes = bytes;
       if (!bytes) {
+        link.table = null;
+        link.current = null;
         sim.view?.destroy();
         sim.view = null;
         simMount.innerHTML = '';
         simMount.hidden = true;
-        simNote.textContent = state.simulateEnabled ? 'Fix the errors to simulate.' : simNote.textContent;
+        simNote.textContent = state.simulateEnabled
+          ? (reason === 'files-changed' ? 'Compile a circuit first.' : 'Fix the errors to simulate.')
+          : simNote.textContent;
         sim.renderedHash = -1;
         return;
       }
@@ -448,13 +2878,21 @@ const initial = picks[0];
       });
     }
     void showTabBase;
-    // Theme flips: circ-renderer captures the theme at construction.
-    new MutationObserver(() => { void rebuildSim(); }).observe(document.documentElement, {
+    // Theme flips: circ-renderer captures the theme at construction, so the
+    // canvas is rebuilt; the editor reconfigures its theme compartment in place.
+    new MutationObserver(() => {
+      if (editorMod) editor?.setTheme(editorMod.currentThemeMode());
+      // In place: the pins the reader set, the values they typed and the
+      // images they loaded are all runtime state of THIS canvas, and a
+      // rebuild used to throw every one of them away and replay what it could.
+      if (sim.view) void loadThemes().then(({ pickTheme }) => sim.view?.view.setTheme(pickTheme()));
+    }).observe(document.documentElement, {
       attributes: true,
       attributeFilter: ['data-theme'],
     });
 
-    // Nothing heavy loads until the reader interacts.
-    source.addEventListener('focus', () => { void ensureReady(); }, { once: true });
+    // libcirc.wasm still loads only on interaction. `focusin` bubbles, so this
+    // one listener covers the CodeMirror mount and the fallback textarea both.
+    editorWrap.addEventListener('focusin', () => { void ensureReady(); }, { once: true });
   }
 </script>

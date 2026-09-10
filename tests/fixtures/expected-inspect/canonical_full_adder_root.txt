@@ -1,9 +1,9 @@
 === Parse Tree ===
-File [f0:1:1-7:28]
+File [f0:1:1-8:1]
 Imports (1)
   Import alias=half_adder path=half_adder.circ [f0:1:1-1:36]
 Inputs (1)
-  Input a, b, cin [f0:2:7-2:16]
+  Input a, b, cin [f0:2:1-2:16]
 Outputs (2)
   Output sum [f0:6:1-6:23]
     NamedRef ha2.sum [f0:6:15-6:22]
