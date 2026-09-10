@@ -9,9 +9,9 @@ the reverse.
 
 Unlike the six file-path modes (`--inspect`, `--preview`, `--truth-table`,
 `--sim`, `--emit-zig`, default compile), `--analyze` takes its input as a JSON
-request on **stdin** rather than a file path, so it can be handed unsaved
-editor buffers. Implemented in `lib/analyze/analyze.zig`; mode dispatch is
-in `cmd/circ-compile/main.zig`.
+request on **stdin** rather than a file path, so a caller can hand it
+unsaved editor buffers. Implemented in `lib/analyze/analyze.zig`; mode
+dispatch is in `cmd/circ-compile/main.zig`.
 
 ## Invocation
 
@@ -35,7 +35,7 @@ message on stderr for a malformed request or an internal failure.
 ```
 
 - `root_path` (required): absolute path of the file to analyze as the project root.
-- `overlays` (optional): map of absolute path to unsaved buffer text. Keys must already be normalised the way the loader looks them up (POSIX-style, `.`/`..` folded): the library's `files` map normalises its keys, but `circ-compile --analyze` inserts request keys verbatim, so an un-normalised key silently misses. The overlay is consulted *before* disk: a path in the overlay is read from memory, and an import whose joined path is an overlay key resolves to that key without touching the filesystem, so a root plus overlay-only siblings analyzes with no disk access. Anything not in the overlay (including imported files not listed) is read from disk. `files[].path` for an overlay-keyed file is the key as given, not its realpath; a never-saved root resolves against its overlay entry even though it does not exist on disk.
+- `overlays` (optional): map of absolute path to unsaved buffer text. Keys must already be normalised the way the loader looks them up (POSIX-style, `.`/`..` folded): the library's `files` map normalises its keys, but `circ-compile --analyze` inserts request keys verbatim, so an un-normalised key silently misses. The loader consults the overlay *before* disk: it reads a path in the overlay from memory, and an import whose joined path is an overlay key resolves to that key without touching the filesystem. A root plus overlay-only siblings therefore analyzes with no disk access. Anything missing from the overlay, including imported files the request omits, comes from disk. `files[].path` for an overlay-keyed file is the key as given, not its realpath; a never-saved root resolves against its overlay entry even though it does not exist on disk.
 
 ## Response (stdout)
 
@@ -65,23 +65,23 @@ message on stderr for a malformed request or an internal failure.
 
 All positions are **1-based** line and **byte** column, the compiler's
 native span format. Consumers convert as needed (the LSP server maps to
-0-based, UTF-16 LSP positions). Spans are reported against
+0-based, UTF-16 LSP positions). `--analyze` reports spans against
 `Module.effectiveSourceFileId()`, so a definition never points at a
 synthetic parametric-specialization path.
 
 ## Behavior on invalid input
 
-The grammar recovers at the declaration level: a malformed declaration is
-skipped, the parser resynchronises at the next line, and every valid
+The grammar recovers at the declaration level: the parser skips a
+malformed declaration and resynchronises at the next line, and every valid
 declaration around it still resolves. `--analyze` emits one `"syntax"`
-diagnostic per recovered error mark — the message names what was expected
+diagnostic per recovered error mark: the message names what was expected
 (`expected ')' to close the connection list`, `unexpected input; expected a
-declaration`, …) and the range is the mark's span, widened to one column
+declaration`, …). The range is the mark's span, widened to one column
 when the parser stalled without consuming anything (so a bus truncated
 after `a=` at the end of a line reports the start of the *next* line). The
-exact marks for a set of malformed inputs are pinned by the
-`tests/fixtures/circuits/recovery_*.circ` goldens and by
-`tests/fixtures/expected-analyze/*.json`.
+`tests/fixtures/circuits/recovery_*.circ` goldens and
+`tests/fixtures/expected-analyze/*.json` pin the exact marks for a set of
+malformed inputs.
 
 Only a source the parser cannot start on at all (an empty or
 whitespace-only buffer, or a hard parse failure) yields no symbols: a blank

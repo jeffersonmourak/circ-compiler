@@ -4,7 +4,7 @@ Source: [lib/circuit.zig](../lib/circuit.zig)
 
 The engine is a pure Zig library: no WASM, no I/O, no JSON. It models a circuit as a directed graph and advances time with a min-heap event queue. The compiled `.wasm` runtime in `templates/main.zig` and the unit tests in `tests/` are both clients of this same `Circuit` API.
 
-All allocations route through `memory.allocator` from `lib/memory.zig`. There is no per-call allocator parameter on the engine itself. On every target it is an `ArenaAllocator` over `std.heap.page_allocator` (wrapped in a counting allocator when the bench's `collect_metrics` option is on), so nothing the engine allocates is ever freed individually — `deinit` calls exist for symmetry and for the counting allocator's bookkeeping.
+All allocations route through `memory.allocator` from `lib/memory.zig`. The engine itself takes no per-call allocator parameter. On every target it is an `ArenaAllocator` over `std.heap.page_allocator` (wrapped in a counting allocator when the bench's `collect_metrics` option is on), so nothing the engine allocates is ever freed individually; `deinit` calls exist for symmetry and for the counting allocator's bookkeeping.
 
 ## Why the storage and value layers are split
 
@@ -13,7 +13,7 @@ Wire state used to live inline on every `Component` as a single-bit `State` enum
 - A **value type**, `BitVecState`, that carries `(value, defined, width)` and is the currency of every event, dedup check, gate evaluation, and listener callback.
 - A **width-tiered Structure-of-Arrays pool** owned by `Circuit`, addressed by an opaque `PoolHandle`. Components carry a `state_handle` instead of an inline state field; reads and writes go through `Circuit.readState` / `Circuit.writeState`.
 
-Widths 1 through 64 are all wired today; the engine allocates a pool tier on demand the first time a component of that width is created. Lazy tier init keeps single-bit circuits at one allocated pool instead of 64. Most callers only need `readState` / `writeState` plus the `BitVecState` constructors and predicates; `Pool` is exposed but rarely used directly.
+Widths 1 through 64 are all wired today; the engine allocates a pool tier on demand the first time it creates a component of that width. Lazy tier init keeps single-bit circuits at one allocated pool instead of 64. Most callers need only `readState` / `writeState` plus the `BitVecState` constructors and predicates; `Pool` is exposed but rarely used directly.
 
 ## Types
 
@@ -57,7 +57,7 @@ pub const MAX_WIDTH: u8 = 64;
 
 That preserves the old `State.undefined == State.undefined` rule, which the Phase-1 dedup in `propagate()` relies on (see the [Simulation step](#simulation-step) section below).
 
-Note that `toInt` and `toTransportByte` use **different** encodings. Neither is on the host-facing WASM API path anymore: the boundary now crosses `BitVecState` halves directly via `setPin(id, value, defined)` and the paired `getOutputValue(id)` / `getOutputDefined(id)` getters. `toInt` (`low=0, high=1, undefined=2`) survives as a width-1 convenience mirror of the historical `State` enum, used only by tests. `toTransportByte` is byte-identical to the old `@intFromEnum(State)` mapping (`undefined=0, low=1, high=2`) and is used by `lib/transport.zig` so the topology snapshot format does not have to learn new bytes.
+`toInt` and `toTransportByte` use **different** encodings. Neither is on the host-facing WASM API path anymore: the boundary now crosses `BitVecState` halves directly via `setPin(id, value, defined)` and the paired `getOutputValue(id)` / `getOutputDefined(id)` getters. `toInt` (`low=0, high=1, undefined=2`) survives as a width-1 convenience mirror of the historical `State` enum, used only by tests. `toTransportByte` is byte-identical to the old `@intFromEnum(State)` mapping (`undefined=0, low=1, high=2`) and `lib/transport.zig` uses it so the topology snapshot format need not learn new bytes.
 
 ### `ComponentType` and `Component.Kind`
 
@@ -100,16 +100,16 @@ pub const MemoryState = struct {
 
 A memory kind is built through `memoryKind(mode, addr_width)`, which allocates the `MemoryState` box; `Circuit.createComponent` allocates the cell planes.
 
-Backward edges are flat `std.ArrayList(*Component)` lists for the six list-input kinds (`and_gate` uses `inputs_a` / `inputs_b`; `input_pin_gate`, `not_gate`, `led`, `wire` and `output_pin` use a single `inputs` list keyed by `"in"`); `slice` holds one `from` pointer, `concat` an ordered operand list, and `memory` one optional pointer per port. `output_pin` is the sub-circuit/root output primitive: it appears in the IR for every `output …` declaration and acts as a wire-with-a-name.
+Backward edges are flat `std.ArrayList(*Component)` lists for the six list-input kinds (`and_gate` uses `inputs_a` / `inputs_b`; `input_pin_gate`, `not_gate`, `led`, `wire`, and `output_pin` use a single `inputs` list keyed by `"in"`); `slice` holds one `from` pointer, `concat` an ordered operand list, and `memory` one optional pointer per port. `output_pin` is the sub-circuit/root output primitive: it appears in the IR for every `output …` declaration and acts as a wire-with-a-name.
 
 `slice` and `concat` are bit-shape kinds, not user-written primitives. The resolver lowers the language-level `a[lo..hi]`, `a[i]`, and `{a, b, ...}` signal sources into these kinds; users never write them directly.
 
 - A `slice` reads `from`'s current state, masks to bits `[lo, hi)`, and shifts right by `lo`. The output's width is `hi - lo`. Bit-index `a[i]` lowers to a slice with `hi = lo + 1`.
 - A `concat` ORs each operand into a running bit-position. Operands listed low-on-left: bits `[0, op0.width)` come from `op0`, bits `[op0.width, op0.width + op1.width)` from `op1`, and so on. The output's width is the sum of operand widths.
 
-`memory` is the native `rom`/`ram` primitive. The engine has one kind carrying a `mode`; the wire format keeps two kinds (`rom=8`, `ram=9`). Its cells are two `u64` planes on the payload (never pool slots), and the pool slot holds the word presented on `out`: `cells[addr]` when every address bit is defined, otherwise fully undefined (`memoryReadOut`). Reads are asynchronous — an `addr` change re-evaluates `out` at gate delay.
+`memory` is the native `rom`/`ram` primitive. The engine has one kind carrying a `mode`; the wire format keeps two kinds (`rom=8`, `ram=9`). Its cells are two `u64` planes on the payload (never pool slots), and the pool slot holds the word presented on `out`: `cells[addr]` when every address bit is defined, otherwise fully undefined (`memoryReadOut`). Reads are asynchronous: an `addr` change re-evaluates `out` at gate delay.
 
-The integer encoding used by the topology format is owned by `lib/topology/format.zig` (`ComponentKind`: `input_pin=0`, `not_gate=1`, `and_gate=2`, `wire=3`, `led=4`, `output_pin=5`, `slice=6`, `concat=7`, with `rom=8` and `ram=9` reserved for memories); the runtime interpreter maps those bytes onto `Component.Kind` when it materialises the topology.
+`lib/topology/format.zig` owns the integer encoding the topology format uses (`ComponentKind`: `input_pin=0`, `not_gate=1`, `and_gate=2`, `wire=3`, `led=4`, `output_pin=5`, `slice=6`, `concat=7`, with `rom=8` and `ram=9` reserved for memories); the runtime interpreter maps those bytes onto `Component.Kind` when it materialises the topology.
 
 Per-kind port names:
 
@@ -147,7 +147,7 @@ pub const Component = struct {
 
 The `state_handle` default (`slot = maxInt(u32)`) is a sentinel: reads against it trap on the null-tier unwrap in `Circuit.readState` (tier 0 is never allocated), before reaching `Pool.read`. This catches the "constructed a Component without going through `Circuit.createComponent`" mistake.
 
-There is no `output_state` field on `Component` anymore. To read a component's current wire value, use `circuit.readState(component.state_handle)`.
+`Component` no longer carries an `output_state` field. To read a component's current wire value, use `circuit.readState(component.state_handle)`.
 
 `ComponentPortReference` is a tuple (`pub const ComponentPortReference = struct { *Component, []const u8 }`) produced by `component.port("name")` and consumed by `Circuit.connect`.
 
@@ -189,7 +189,7 @@ pub const Pool = struct {
 
 The width-1 pool packs 64 slots per `u64` word across two parallel buffers (one for value bits, one for defined bits); the pools for widths 2–64 use one `u64` per slot in each buffer. The two buffers grow together; `allocateSlot` is the only growth site and always appends to both, so length-mismatch is structurally impossible.
 
-`PoolHandle.tier` selects which pool to dispatch to. The convention is `tier == width`; tier 0 is unused and tiers 1..64 each carry their own pool, lazily allocated the first time a component of that width is created. Width is recovered from the handle's tier, not stored on the handle's body, so handles stay 8 bytes.
+`PoolHandle.tier` selects which pool to dispatch to. The convention is `tier == width`; tier 0 is unused, and tiers 1..64 each carry their own pool, lazily allocated the first time a component of that width is created. Width is recovered from the handle's tier, not stored on the handle's body, so handles stay 8 bytes.
 
 You rarely construct `Pool` or `PoolHandle` directly; `Circuit.createComponent` allocates a slot and stamps the handle onto the new component.
 
@@ -216,7 +216,7 @@ pub const Circuit = struct {
 };
 ```
 
-`listener` is an optional callback fired by `notifyStateChange` once per Phase-2 visit of a downstream component during propagation, regardless of whether the visit actually flipped the component's stored state. The compiled WASM runtime does **not** install one; hosts poll `getOutputValue` / `getOutputDefined` after `run()` returns. The callback is intended for native test harnesses and tooling.
+`listener` is an optional callback fired by `notifyStateChange` once per Phase-2 visit of a downstream component during propagation, regardless of whether the visit flipped the component's stored state. The compiled WASM runtime does **not** install one; hosts poll `getOutputValue` / `getOutputDefined` after `run()` returns. The callback is intended for native test harnesses and tooling.
 
 ### `Metrics`
 
@@ -245,7 +245,7 @@ pub fn init() !Circuit;            // no allocator parameter; uses memory.alloca
 pub fn deinit(self: *Circuit) void;
 ```
 
-`deinit` walks `nodes` and calls `Component.deinit` on each (which frees its input lists), drops the event queue, releases the `changed_at_step` scratch buffer, and iterates the `tiers: [MAX_WIDTH + 1]?Pool` array tearing down every lazily-allocated tier in place.
+`deinit` walks `nodes` and calls `Component.deinit` on each (which frees its input lists), drops the event queue, releases the `changed_at_step` scratch buffer, and iterates the `tiers: [MAX_WIDTH + 1]?Pool` array, tearing down every lazily-allocated tier in place.
 
 ### State storage
 
@@ -257,7 +257,7 @@ pub fn writeState(self: *Circuit, handle: PoolHandle, state: BitVecState) void;
 
 Tier dispatch happens exactly once per read/write, so every layer above these three functions sees only the value type. Any width in `[1, 64]` is legal; out-of-range widths trap via the dispatcher.
 
-You normally do not call `allocateStateSlot` yourself: `Circuit.createComponent` does it as part of publishing a new component.
+You rarely call `allocateStateSlot` yourself: `Circuit.createComponent` does it as part of publishing a new component.
 
 ### Component creation
 
@@ -265,7 +265,7 @@ You normally do not call `allocateStateSlot` yourself: `Circuit.createComponent`
 pub fn createComponent(self: *Circuit, kind: Component.Kind, width: u8) !*Component;
 ```
 
-Allocates a `Component`, assigns a monotonically increasing `id`, allocates its state slot via `allocateStateSlot(width)` (tier `width`), stamps the handle onto the component, and appends it to `self.nodes`. The IDs are dense integers `0..nodes.len`, which is what the topology format and the compiled WASM runtime use.
+Allocates a `Component`, assigns a monotonically increasing `id`, allocates its state slot via `allocateStateSlot(width)` (tier `width`), stamps the handle onto the component, and appends it to `self.nodes`. The IDs are dense integers `0..nodes.len`, exactly what the topology format and the compiled WASM runtime use.
 
 ### Connections
 
@@ -283,7 +283,7 @@ Idiomatic call form:
 try circuit.connect(producer.port("out"), consumer.port("in"));
 ```
 
-`connect` updates **both** directions: `to` is appended to `from.outputs`, and the appropriate per-kind input list on `to` (selected by the destination port name: `"in"` for most kinds, `"a"` / `"b"` for `and_gate`) gains `from`. This lets propagation walk forward edges to find downstream components while gate evaluation walks backward edges to read driving signals.
+`connect` updates **both** directions: it appends `to` to `from.outputs`, and the appropriate per-kind input list on `to` (selected by the destination port name: `"in"` for most kinds, `"a"` / `"b"` for `and_gate`) gains `from`. This lets propagation walk forward edges to find downstream components, and gate evaluation walk backward edges to read driving signals.
 
 Invalid destination port names return `error.InvalidInputPort`.
 
@@ -299,7 +299,7 @@ pub fn propagateEvent(
 
 Enqueues an event for `component` at `current_time + PROPAGATION_DELAY`, then immediately calls `propagate()` itself (it does not just enqueue). Used by the runtime's `setPin` glue.
 
-**No-op short-circuit.** When `readState(component.state_handle).equals(new_state)`, the call skips both the enqueue and the propagate pass, only advancing `current_time` by `PROPAGATION_DELAY`. The timing model and `final_time` counter still match what a full enqueue-and-drain would have produced. This matters in practice because the truth-table corpus driver writes every input pin on every vector; without the short-circuit, fixtures like `and_6bit` spend the majority of pops on events that would not have changed state.
+**No-op short-circuit.** When `readState(component.state_handle).equals(new_state)`, the call skips both the enqueue and the propagate pass, only advancing `current_time` by `PROPAGATION_DELAY`. The timing model and `final_time` counter still match what a full enqueue-and-drain would have produced. This matters in practice because the truth-table corpus driver writes every input pin on every vector; without the short-circuit, fixtures like `and_6bit` spend most of their pops on events that would not have changed state.
 
 ### Simulation step
 
@@ -309,7 +309,7 @@ pub fn propagate(self: *Circuit) !void;
 
 Drains the event queue in **two-phase batches per timestamp**. For each distinct timestamp `T` in ascending order:
 
-1. **Phase 1 (commit):** advance `current_time = T`, pop every queued event at timestamp `T`, write `event.new_state` to the component's pool slot via `writeState` (skipping no-op events whose new state already matches under `BitVecState.equals`), and remember the components that actually changed in `changed_at_step`.
+1. **Phase 1 (commit):** advance `current_time = T`, pop every queued event at timestamp `T`, write `event.new_state` to the component's pool slot via `writeState` (skipping no-op events whose new state already matches under `BitVecState.equals`), and remember the components that changed in `changed_at_step`.
 2. **Phase 2 (notify):** walk every changed component's `outputs` list, call the internal `recalculateAndReschedule` on each downstream component, then fire `notifyStateChange` for the optional listener.
 
 The batching is load-bearing: a downstream gate with multiple upstream events at the same `T` would otherwise read partially-updated upstream state in step 2, compute a transient value, and let the next event's dedup check (`if readState(c.state_handle).equals(event.new_state) continue`) silently drop the corrective re-enqueue, leaving the gate stuck on the wrong final value. The bug manifests in deep-fanout circuits where one control bit drives many parallel gates whose outputs feed a serial carry chain (e.g. a 4-bit ALU with shared `nx`/`ny` normalization).

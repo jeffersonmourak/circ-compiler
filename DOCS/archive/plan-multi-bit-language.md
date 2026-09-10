@@ -4,7 +4,7 @@
 **Archived on:** 2026-05-25
 **Plan duration:** 2026-05-21 → 2026-05-25
 
-> This file is the plan document as it was written before implementation, kept verbatim. The work shipped across stages S1–S12; its seventeen decisions are recorded in `DOCS/decisions/language.md` ("Multi-bit wires", §1–§17) and the format in `DOCS/circuit-format.md`. It predates `DOCS/prompts/ARCHIVE.md`, so it has no phase-by-phase highlights section.
+> This file is the plan document as it was written before implementation, kept verbatim. The work shipped across stages S1–S12; `DOCS/decisions/language.md` records its seventeen decisions ("Multi-bit wires", §1–§17), and `DOCS/circuit-format.md` records the format. It predates `DOCS/prompts/ARCHIVE.md`, so it has no phase-by-phase highlights section.
 
 # Multi-bit Wires in the circ Language
 

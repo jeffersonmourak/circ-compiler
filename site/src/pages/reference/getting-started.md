@@ -54,7 +54,7 @@ This declares one input pin `a`, drives it through a `not` gate, mirrors the res
 zig-out/bin/circ-compile examples/inverter.circ -o examples/inverter.wasm
 ```
 
-The CLI runs the parser, validator, and topology serializer end-to-end, then appends the serialized circuit as `circ.topology.v0.min` and `circ.topology.v0.full` custom WASM sections to the pre-built runtime blob. No `zig` subprocess is spawned. On success it writes the combined `.wasm` to the path given to `-o`.
+The CLI runs the parser, validator, and topology serializer end-to-end, then appends the serialized circuit as `circ.topology.v0.min` and `circ.topology.v0.full` custom WASM sections to the pre-built runtime blob. It spawns no `zig` subprocess. On success it writes the combined `.wasm` to the path given to `-o`.
 
 Inspect the compiled circuit's interface:
 
@@ -80,7 +80,7 @@ Expected:
                     ╰─────╯
 ```
 
-The not-gate's output fans out to both the LED and the `out` pin — `●` marks the branch point, and the two `▶` arrowheads show where each branch terminates. See [`preview.md`](/reference/preview) for `--expand-macros`, `--color`, and the rendering conventions.
+The not-gate's output fans out to both the LED and the `out` pin: `●` marks the branch point, and the two `▶` arrowheads show where each branch terminates. See [`preview.md`](/reference/preview) for `--expand-macros`, `--color`, and the rendering conventions.
 
 Or enumerate the circuit's behaviour against every input combination as a Markdown truth table:
 
@@ -95,7 +95,7 @@ zig-out/bin/circ-compile examples/inverter.circ --truth-table
 | 1 | 0   |
 ```
 
-`--truth-table` runs the resolver and validator first; it rejects circuits with combinational loops (E008) before any simulation, and any circuit containing a `ram` (stateful; drive it with `--sim` instead). The mode caps at 16 total input *bits* (an `input[4]` counts four; 2^16 = 65,536 rows) to avoid accidental blow-up; `--truth-table-cap=N` raises the cap to 24 at most, and wider circuits belong on the `.wasm` runtime.
+`--truth-table` runs the resolver and validator first; it rejects circuits with combinational loops (E008) before any simulation, and any circuit containing a `ram` (stateful; drive it with `--sim` instead). The mode caps at 16 total input *bits* (an `input[4]` counts four; 2^16 = 65,536 rows) to avoid accidental blow-up. `--truth-table-cap=N` raises the cap to 24 at most, and wider circuits belong on the `.wasm` runtime.
 
 The relevant block tells you which component IDs to drive from JavaScript:
 
@@ -106,7 +106,7 @@ Outputs (1)
   id=0 name=out driver=1.out
 ```
 
-`setPin(id, value, defined)` takes the **input pin's component id** (`0` for `a`) along with a `(value, defined)` `BitVecState` pair. The paired output reads `getOutputValue(id)` and `getOutputDefined(id)` take the **driver component id** of the output (`1` here — the `not` gate that drives `out`), not the output_pin's own id.
+`setPin(id, value, defined)` takes the **input pin's component id** (`0` for `a`) along with a `(value, defined)` `BitVecState` pair. The paired output reads `getOutputValue(id)` and `getOutputDefined(id)` take the **driver component id** of the output (`1` here, the `not` gate that drives `out`), not the output_pin's own id.
 
 ## 4. Drive the compiled `.wasm` from Node
 
@@ -154,7 +154,7 @@ a=0 -> NOT a = high
 a=1 -> NOT a = low
 ```
 
-The two i64 parameters cross the boundary as JavaScript `BigInt` values; `value` and `defined` each pack one bit per signal bit. A scalar pin uses `(0n, 1n)` for low, `(1n, 1n)` for high, and `(_, 0n)` for undefined. The core export list emitted by `circ-compile … -o out.wasm` is `topology_alloc`, `init`, `run`, `setPin`, `getOutputValue`, `getOutputDefined` (plus `memory`); every artifact also exports the memory family `getMemInfo`, `memBuffer`, `memLoad`, `memStore`, `memClear`, `setMemWord`, `getMemValue`, `getMemDefined`, meaningful only for the ids of `rom`/`ram` components (step 7 below); see [`DOCS/wasm-api.md`](/reference/wasm-api) for the full contract. The two `env` callbacks (`debugEnabled` and `onDebugLog`) are required imports — supply the no-op stubs above unless you want debug logging.
+The two i64 parameters cross the boundary as JavaScript `BigInt` values; `value` and `defined` each pack one bit per signal bit. A scalar pin uses `(0n, 1n)` for low, `(1n, 1n)` for high, and `(_, 0n)` for undefined. The core export list emitted by `circ-compile … -o out.wasm` is `topology_alloc`, `init`, `run`, `setPin`, `getOutputValue`, `getOutputDefined` (plus `memory`). Every artifact also exports the memory family `getMemInfo`, `memBuffer`, `memLoad`, `memStore`, `memClear`, `setMemWord`, `getMemValue`, `getMemDefined`, meaningful only for the ids of `rom`/`ram` components (step 7 below). See [`DOCS/wasm-api.md`](/reference/wasm-api) for the full contract. The two `env` callbacks (`debugEnabled` and `onDebugLog`) are required imports; supply the no-op stubs above unless you want debug logging.
 
 ### Driving a multi-bit input
 
@@ -167,11 +167,11 @@ const v = w.getOutputValue(output_id);   // BigInt, e.g. 0b1010n for a passthrou
 const d = w.getOutputDefined(output_id); // BigInt, 0b1111n
 ```
 
-Bits set beyond the declared width are silently masked. See [`DOCS/wasm-api.md`](/reference/wasm-api) for the full `BitVecState` semantics.
+The runtime silently masks bits set beyond the declared width. See [`DOCS/wasm-api.md`](/reference/wasm-api) for the full `BitVecState` semantics.
 
 ## 5. Use a built-in macro (`xor`)
 
-Built-in gates `or`, `nand`, `nor`, `xor`, and `xnor` are auto-imported whenever a file uses one: the compiler takes the project pipeline for any root that declares an import *or* instantiates a built-in, so a standalone file can write `xor x(a=a, b=b)` with no `import` line. The explicit import from the virtual `<builtin>/` filesystem remains valid and is the form used below:
+The compiler auto-imports the built-in gates `or`, `nand`, `nor`, `xor`, and `xnor` whenever a file uses one: it takes the project pipeline for any root that declares an import *or* instantiates a built-in, so a standalone file can write `xor x(a=a, b=b)` with no `import` line. The explicit import from the virtual `<builtin>/` filesystem remains valid and is the form used below:
 
 ```text
 // examples/xor_demo.circ
@@ -188,9 +188,9 @@ zig-out/bin/circ-compile examples/xor_demo.circ -o examples/xor.wasm
 zig-out/bin/circ-compile examples/xor_demo.circ --inspect
 ```
 
-> **v0 papercut.** `--inspect` alone stays in single-module mode and does not auto-import built-ins, so a bare `xor` shows up there as `E001: undeclared name 'xor'`. Compile (`-o`), `--emit-zig`, `--preview`, `--truth-table` and `--sim` all resolve it; add the explicit `import xor "<builtin>/xor.circ"` only if you want `--inspect`'s view of the file to be clean.
+> **v0 papercut.** `--inspect` alone stays in single-module mode and does not auto-import built-ins, so a bare `xor` shows up there as `E001: undeclared name 'xor'`. Compile (`-o`), `--emit-zig`, `--preview`, `--truth-table`, and `--sim` all resolve it; add the explicit `import xor "<builtin>/xor.circ"` only if you want `--inspect`'s view of the file to be clean.
 
-Once a file participates in the project pipeline, root-pin component IDs are assigned in a flat layout that includes the built-in macro's expanded gates. The simplest way to discover them is to scan in JS:
+Once a file participates in the project pipeline, the compiler assigns root-pin component IDs in a flat layout that includes the built-in macro's expanded gates. The simplest way to discover them is to scan in JS:
 
 ```js
 for (let i = 0; i < 64; i++) {
@@ -200,11 +200,11 @@ for (let i = 0; i < 64; i++) {
 }
 ```
 
-For a structured map, parse the `circ.topology.v0.full` custom section in JS — it carries per-file IDs, component aliases, and macro provenance. (A future runtime release may surface this through a `getFileInfo()` export, but it is not present in today's compiled artifacts.)
+For a structured map, parse the `circ.topology.v0.full` custom section in JS; it carries per-file IDs, component aliases, and macro provenance. (A future runtime release may surface this through a `getFileInfo()` export, but today's compiled artifacts lack it.)
 
 ## 6. Compose with a sub-circuit import
 
-Sub-circuits live in their own `.circ` files and are imported by alias. The half-adder is a canonical two-file project:
+Sub-circuits live in their own `.circ` files, and a root file imports them by alias. The half-adder is a canonical two-file project:
 
 ```text
 // examples/half_adder/half_adder.circ
@@ -230,13 +230,13 @@ Compile from the root:
 zig-out/bin/circ-compile examples/half_adder/root.circ -o examples/half_adder.wasm
 ```
 
-Sub-circuits are fully flattened by the serializer into a single ordered sequence of primitive components — no function calls, no hierarchy in the runtime. Loading from JS uses the same `topology_alloc` + `init()` pattern as step 4; discovering global IDs in deeper hierarchies is currently easiest via `circ-compile --inspect`, which prints the resolved IR with each `Inputs (...)` / `Outputs (...)` block annotated with component IDs. (The `circ.topology.v0.full` custom section carries the same information for programmatic readers.)
+The serializer fully flattens sub-circuits into a single ordered sequence of primitive components — no function calls, no hierarchy in the runtime. Loading from JS uses the same `topology_alloc` + `init()` pattern as step 4. In deeper hierarchies, the easiest way to discover global IDs is `circ-compile --inspect`, which prints the resolved IR with each `Inputs (...)` / `Outputs (...)` block annotated with component IDs. (The `circ.topology.v0.full` custom section carries the same information for programmatic readers.)
 
 More worked project fixtures, including a full-adder built from two half-adders and a 4-bit AND/OR network, live under `tests/fixtures/projects/` and double as integration tests.
 
 ## 7. Loading a program into ROM and stepping a clocked circuit
 
-`rom` and `ram` are built-in memories. A declaration gives only the *shape* — `[W, A]` is `W` bits per word and `2^A` words — and the contents are loaded at run time, so the same compiled circuit can run any program you hand it. This step authors an image, loads it three ways, and pulses a RAM's clock by hand.
+`rom` and `ram` are built-in memories. A declaration gives only the *shape*: `[W, A]` is `W` bits per word and `2^A` words. You load the contents at run time, so the same compiled circuit can run any program you hand it. This step authors an image, loads it three ways, and pulses a RAM's clock by hand.
 
 ### 7.1 The circuit
 
@@ -248,11 +248,11 @@ rom code[8, 4](addr = pc)
 output[8] instr(in = code.out)
 ```
 
-There is no register primitive yet, so the program counter is an input pin the host drives — "stepping" is `set pc N`.
+No register primitive exists yet, so the program counter is an input pin the host drives; "stepping" is `set pc N`.
 
 ### 7.2 Author an image
 
-A memory image is a headerless raw file: `ceil(W/8)` bytes per word, little-endian, high padding bits zero, at most `2^A` words. For `W = 8` that is one byte per word, so four instructions are four bytes. `printf` with octal escapes writes them from any POSIX shell (`\xHH` escapes are a bash/zsh extension; the octal form is the portable one):
+A memory image is a headerless raw file: `ceil(W/8)` bytes per word, little-endian, high padding bits zero, at most `2^A` words. For `W = 8`, that is one byte per word, so four instructions are four bytes. `printf` with octal escapes writes them from any POSIX shell (`\xHH` escapes are a bash/zsh extension; the octal form is the portable one):
 
 ```sh
 printf '\020\041\062\103' > prog.bin
@@ -263,7 +263,7 @@ xxd prog.bin
 00000000: 1021 3243                                .!2C
 ```
 
-Word 0 is `0x10`, word 1 `0x21`, word 2 `0x32`, word 3 `0x43`; words 4–15 are not in the file and will read as undefined.
+Word 0 is `0x10`, word 1 `0x21`, word 2 `0x32`, word 3 `0x43`; the file omits words 4–15, and they read as undefined.
 
 ### 7.3 Preload it and walk the counter with `--sim`
 
@@ -351,7 +351,7 @@ quit
 ok bye
 ```
 
-`poke` writes a cell from the host side without a clock, and `q` follows at once because address 3 was being presented. `save` writes the whole memory as an image — undefined cells become `0x00`:
+`poke` writes a cell from the host side without a clock, and `q` follows at once because `a` was still presenting address 3. `save` writes the whole memory as an image, turning undefined cells into `0x00`:
 
 ```sh
 xxd ram.bin
@@ -365,7 +365,7 @@ xxd ram.bin
 
 ### 7.5 The same ROM from Node
 
-A compiled artifact exposes the memory through the `mem*` exports. Compile `prog_rom.circ` and note the ids `--inspect` prints — `pc` is component `0` and `code` is `1` here (for multi-file projects, read them from the `circ.topology.v0.full` section, as [`DOCS/wasm-api.md`](/reference/wasm-api) describes):
+A compiled artifact exposes the memory through the `mem*` exports. Compile `prog_rom.circ` and note the ids `--inspect` prints; `pc` is component `0` and `code` is `1` here (for multi-file projects, read them from the `circ.topology.v0.full` section, as [`DOCS/wasm-api.md`](/reference/wasm-api) describes):
 
 ```sh
 zig-out/bin/circ-compile prog_rom.circ -o prog_rom.wasm
@@ -426,7 +426,7 @@ stored 16 bytes
 00000000: 1021 3243 0000 0000 0000 0000 0000 0000  .!2C............
 ```
 
-`memStore` exports all `2^A` words, writing `value & defined` so the twelve undefined cells come out as zeros. Every mutator returns `0` on success or a negative status code (`-2` length not a whole number of words, `-3` a word with bits beyond `W`, …) — the table is in [`DOCS/wasm-api.md`](/reference/wasm-api). Read `getOutputValue(code)` directly on the memory's id, or on whatever it drives; the ROM's `out` is the same asynchronous read `instr` sees.
+`memStore` exports all `2^A` words, writing `value & defined` so the twelve undefined cells come out as zeros. Every mutator returns `0` on success or a negative status code (`-2` length not a whole number of words, `-3` a word with bits beyond `W`, …). The table is in [`DOCS/wasm-api.md`](/reference/wasm-api). Read `getOutputValue(code)` directly on the memory's id, or on whatever it drives; the ROM's `out` is the same asynchronous read `instr` sees.
 
 ## Where to go next
 

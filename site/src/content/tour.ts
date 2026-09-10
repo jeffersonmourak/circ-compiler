@@ -28,9 +28,9 @@ output out(in=n.out)
   {
     title: 'AND of two inputs',
     prose:
-      "Two inputs, named `a` and `b`, feed an AND gate. The gate has two input ports — " +
-      "`a` and `b` — that you bind by name in the parenthesised list. The output of the " +
-      "gate goes to a single output pin named `out`.",
+      "Two inputs, named `a` and `b`, feed an AND gate. The gate has two input ports, " +
+      "`a` and `b`, that you bind by name in the parenthesised list. The gate's output " +
+      "goes to a single output pin named `out`.",
     source: `input a, b
 and g(a=a, b=b)
 output out(in=g.out)
@@ -46,9 +46,9 @@ output out(in=g.out)
   {
     title: 'Naming an intermediate signal',
     prose:
-      "A `wire` is a one-port pass-through: the value on `in` is, after evaluation, " +
+      "A `wire` is a one-port pass-through: after evaluation, the value on `in` is " +
       "exactly the value on `out`. It exists so you can give a derived signal a name. " +
-      "Without `clock_buf` here, `gate.a` would be wired directly to `clk` — same logic, " +
+      "Without `clock_buf` here, you would wire `gate.a` straight to `clk` — same logic, " +
       "less self-documenting.",
     source: `input clk, data
 wire clock_buf(in=clk)
@@ -66,9 +66,9 @@ output out(in=gate.out)
   {
     title: 'Anonymous nested components',
     prose:
-      "A component can be instantiated inline as the value of a port. The inverter " +
-      "here has no instance name; its `.out` is wired immediately into `gate1`'s `b` " +
-      "port. The same wiring rules apply — anonymous nesting is just syntactic sugar " +
+      "You can instantiate a component inline as the value of a port. The inverter " +
+      "here has no instance name; its `.out` wires straight into `gate1`'s `b` " +
+      "port. The same wiring rules apply: anonymous nesting is syntactic sugar " +
       "for declaring an unnamed component.",
     source: `input a
 input b
@@ -88,7 +88,7 @@ output out(in=gate1.out)
     prose:
       "Two single-bit numbers `a` and `b` sum to `(carry, sum)` where `sum = a XOR b` " +
       "and `carry = a AND b`. The `xor` keyword is a built-in macro that expands to " +
-      "primitives at compile time. A single file may use a macro with no `import` line at all; " +
+      "primitives at compile time. A single file needs no `import` line to use a macro; " +
       "the explicit form shown here still works. This is the classic Nand2Tetris milestone.",
     source: `// half_adder.circ
 import xor "<builtin>/xor.circ"
@@ -151,8 +151,8 @@ output cout(in=cout_or.out)
   {
     title: 'Stable feedback through wires',
     prose:
-      "Combinational feedback is rejected at compile time — a chain of gates whose " +
-      "output drives its own input is a hard error (`E008`). But the validator looks at " +
+      "The validator rejects combinational feedback at compile time: a chain of gates " +
+      "whose output drives its own input is a hard error (`E008`). But it looks at " +
       "the signal graph, not the textual order, and a loop that passes through a gate is " +
       "sequential logic, not a combinational loop. Here two `not` gates connect end to end " +
       "through two `wire` pass-throughs: the ring closes, but the NOT gates break it, so it " +

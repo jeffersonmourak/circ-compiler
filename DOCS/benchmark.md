@@ -1,8 +1,8 @@
 # Engine Benchmark
 
-A regression gate for `lib/circuit.zig` driven by the truth-table fixture corpus. Runs via `zig build bench`; the result is compared against a golden file at `tests/fixtures/bench/engine.bench.golden`.
+A regression gate for `lib/circuit.zig` driven by the truth-table fixture corpus. Runs via `zig build bench`; the runner compares the result against a golden file at `tests/fixtures/bench/engine.bench.golden`.
 
-The benchmark exists to answer one question: *does the simulation engine still do the same amount of work it used to, on the same circuits?* It is not a wall-clock benchmark — wall-clock is reported but never asserted, because it varies with the host. The asserted numbers are deterministic counters that depend only on the algorithm.
+The benchmark exists to answer one question: *does the simulation engine still do the same amount of work it used to, on the same circuits?* It is not a wall-clock benchmark: the bench reports wall-clock but never asserts it, because it varies with the host. The asserted numbers are deterministic counters that depend only on the algorithm.
 
 ## What it runs
 
@@ -19,11 +19,11 @@ The bench walks 58 fixtures from the truth-table corpus. Coverage spans the full
 | ALU                      | `alu_4bit` (14 inputs)                                             | 16384               |
 | Memories                 | `rom_lookup` (16 × 8-bit), `rom_lookup_8bit` (256 × 8-bit)         | 16 – 256            |
 
-The two memory rows are a preloaded `rom` read by address — the native memory kind's asynchronous read path, with no gates between the address input and the output — loaded from `tests/fixtures/mem/rom_lookup*.bin` the way `--truth-table --mem` loads an image (the `Fixture.preload` field in `tools/bench/main.zig`). A `ram` cannot be benched through this harness: the truth-table builder refuses stateful circuits by design, so RAM throughput would need a `--sim`-style driver.
+The two memory rows are a preloaded `rom` read by address — the native memory kind's asynchronous read path, with no gates between the address input and the output. The bench loads it from `tests/fixtures/mem/rom_lookup*.bin` the way `--truth-table --mem` loads an image (the `Fixture.preload` field in `tools/bench/main.zig`). This harness cannot bench a `ram`: the truth-table builder refuses stateful circuits by design, so RAM throughput would need a `--sim`-style driver.
 
 Total: 98,932 input vectors driven through the engine in a single bench run; ~8.3M events popped, ~8.7k allocator calls totaling ~1.1 MB. Pop efficiency sits at ~100% corpus-wide after the `propagateEvent` no-op short-circuit (the harness's drive-all-inputs-per-vector pattern used to push it as low as 28% on the AND family). The wider adders (`five_bit_adder`, `six_bit_adder`, `eight_bit_adder`) characterize cascading-carry depth, and the 8-bit adder pushing 65k vectors and 3.9M events overtakes `alu_4bit` as the heaviest fixture by both vector count and event volume. The corpus totals above reflect the current engine state; the per-milestone evolution lives in `tests/fixtures/bench/engine.bench.golden.hist.md` (see [Historical evolution](#historical-evolution) below).
 
-The fixture-to-circuit mapping is hand-maintained in the `fixtures` array of `tools/bench/main.zig`. Most fixtures are 1:1 with their `.circ` source; a handful (`full_adder` → `full_adder_from_builtins.circ`, `primitive_and` → `and_gate.circ`, etc.) follow the same historical aliases used by the truth-table golden tests.
+The fixture-to-circuit mapping is hand-maintained in the `fixtures` array of `tools/bench/main.zig`. Most fixtures are 1:1 with their `.circ` source; a handful (`full_adder` → `full_adder_from_builtins.circ`, `primitive_and` → `and_gate.circ`, and others) follow the same historical aliases used by the truth-table golden tests.
 
 ## How it runs
 
@@ -55,15 +55,15 @@ truth_table_builder.build    ─→ constructs engine.Circuit, drives all 2^N ve
 read table.metrics, table.rows.len, topology.components.len
 ```
 
-The bench reads the *cumulative* `Circuit.metrics` once per fixture, after every input vector has been simulated. Metrics never reset between vectors — they accumulate over the circuit's whole lifetime — so a single read at the end gives the totals.
+The bench reads the *cumulative* `Circuit.metrics` once per fixture, after simulating every input vector. Metrics never reset between vectors — they accumulate over the circuit's whole lifetime — so a single read at the end gives the totals.
 
-Wall-clock is sampled in two nested windows. The outer one wraps `runFixture` (parse → resolve → validate → topology build → drive all vectors) and gives the total. The inner one, plumbed through `Table.drive_ns` from `lib/truth_table/builder.zig`, brackets only the `2^N` input-vector replay — so engine throughput can be separated from the one-shot pipeline overhead that dominates tiny fixtures. Neither timing is written to the golden:
+The bench samples wall-clock in two nested windows. The outer one wraps `runFixture` (parse → resolve → validate → topology build → drive all vectors) and gives the total. The inner one, plumbed through `Table.drive_ns` from `lib/truth_table/builder.zig`, brackets only the `2^N` input-vector replay, so it separates engine throughput from the one-shot pipeline overhead that dominates tiny fixtures. Neither timing reaches the golden:
 
 ```
 bench: alu_4bit                  16384 vecs    101.144 ms (drv   97.840)     5971.7 ns/vec    24.8 ns/event  100.0% pop   306.1 t/vec
 ```
 
-Reading left to right: total wall-clock, drive-only wall-clock in parens (the `drv` value), then engine-only throughput. The `ns/vec` and `ns/event` numbers are computed from drive time, not total — so a tiny fixture's per-vector cost reflects its actual engine pace rather than ~1 ms of unavoidable parser overhead. The last two columns are derived counters; see [Derived stderr columns](#derived-stderr-columns) below.
+Reading left to right: total wall-clock, drive-only wall-clock in parens (the `drv` value), then engine-only throughput. The bench computes the `ns/vec` and `ns/event` numbers from drive time, not total, so a tiny fixture's per-vector cost reflects its actual engine pace rather than ~1 ms of unavoidable parser overhead. The last two columns are derived counters; see [Derived stderr columns](#derived-stderr-columns) below.
 
 Pass `--human` (after a `--` separator, since Zig's build driver consumes its own args first) to switch the output to a humanized form: counts get k/M suffixes plus the raw value in parens, throughput flips to `items/<time>` (so the engine's pace reads as "vectors per unit of wall-clock" instead of "wall-clock per vector"), and every column uses **one fixed time unit** so values line up vertically and are easy to scan.
 
@@ -88,7 +88,7 @@ zig build bench -- --human ms
 [bench] ---  58 fixtures   98.93k vectors (98932)   8.26M events (8260872)   8.72k allocs (8719)   1.08M bytes (1083960)   187.933 ms total (167.502 ms drv, 89.1% engine)
 ```
 
-The per-fixture rows drop the `(raw)` parenthetical that the totals line carries — on aggregate counts the exact value is useful, on individual rows it just bloats every column. The totals keep it.
+The per-fixture rows drop the `(raw)` parenthetical that the totals line carries: on aggregate counts the exact value is useful; on individual rows it bloats every column. The totals keep it.
 
 Same data with `--human s`:
 
@@ -105,13 +105,13 @@ And `--human` (default, ns) keeps full precision at the cost of wide numbers and
 [bench] ---  58 fixtures   98.93k vectors (98932)   8.26M events (8260872)   8.72k allocs (8719)   1.08M bytes (1083960)   187569000 ns total (166682000 ns drv, 88.9% engine)
 ```
 
-Throughput k/M scaling kicks in inside the chosen unit — `1.81M events/s` and `1.31k events/ms` are the same engine; only the denomination is different. The flag only affects the stderr report; the golden comparison and the golden file itself are untouched.
+Throughput k/M scaling kicks in inside the chosen unit: `1.81M events/s` and `1.31k events/ms` are the same engine; only the denomination is different. The flag affects only the stderr report; the golden comparison and the golden file itself are untouched.
 
-Throughput in every mode is computed from `drive_ns` (the inner replay loop only), not from total wall-clock. This matters for small fixtures: `chain` reads as `333 vec/ms` because its 2 vectors take ~6 μs in the engine, even though the surrounding parser+validator+topology pipeline pushes total wall-clock to 1.4 ms. Reading total-based vec/ms would suggest the engine handles `1.4 vec/ms`, which is wrong; the engine is doing ~250× that and the rest is one-shot overhead.
+The bench computes throughput in every mode from `drive_ns` (the inner replay loop only), not from total wall-clock. This matters for small fixtures: `chain` reads as `333 vec/ms` because its 2 vectors take ~6 μs in the engine, even though the surrounding parser+validator+topology pipeline pushes total wall-clock to 1.4 ms. Reading total-based vec/ms would suggest the engine handles `1.4 vec/ms`, which is wrong; the engine is doing ~250× that and the rest is one-shot overhead.
 
 ### Sorting the report
 
-Add `--sort <column>` to reorder the stderr rows. Sort is **descending** so the heaviest fixtures land at the top, which is usually what you want when scanning for regressions or hotspots. The golden file is always written in alphabetical order regardless — sort only affects the on-screen report so diffs stay stable.
+Add `--sort <column>` to reorder the stderr rows. Sort is **descending**, so the heaviest fixtures land at the top, which is usually what you want when scanning for regressions or hotspots. The runner always writes the golden file in alphabetical order regardless; sort affects only the on-screen report, so diffs stay stable.
 
 | Column   | Sorts by                                                                |
 | -------- | ----------------------------------------------------------------------- |
@@ -138,11 +138,11 @@ Example output (`--human ms --sort time`, top 6):
 [bench] mux_5bit_2to1      2.05k vecs       0.990 ms (drv      0.459 ms)     4.46k vec/ms    40.16k events/ms      185 allocs    21.94k bytes  100.0% pop   81.0 t/vec
 ```
 
-The `allocs` and `bytes` columns are the same delta values that get written to the golden's two rightmost columns; only the formatting differs (k/M scaling, optional raw value in parens). `and_5bit`'s 56 allocs and `and_6bit`'s 66 allocs grow linearly with fan-out width (about 10 allocs per additional input bit, since each new connection appends to a single `ArrayList` that doubles its capacity at growth boundaries). The wider adders show events and time scaling steeply (`eight_bit_adder` hits 3.9M events), but `peak_queue` caps at 7 across every adder from 4-bit to 8-bit. That's not a sampling artifact; it's the truth-table builder calling `propagateEvent` once per input pin, so peak depth is bounded by per-input fanout rather than total bit width.
+The `allocs` and `bytes` columns are the same delta values the bench writes to the golden's two rightmost columns; only the formatting differs (k/M scaling, optional raw value in parens). `and_5bit`'s 56 allocs and `and_6bit`'s 66 allocs grow linearly with fan-out width (about 10 allocs per additional input bit, since each new connection appends to a single `ArrayList` that doubles its capacity at growth boundaries). The wider adders show events and time scaling steeply (`eight_bit_adder` hits 3.9M events), but `peak_queue` caps at 7 across every adder from 4-bit to 8-bit. That's not a sampling artifact; it's the truth-table builder calling `propagateEvent` once per input pin, so per-input fanout, not total bit width, bounds peak depth.
 
 ### Family rollup
 
-Pass `--rollup` to collapse the 58 per-fixture rows into ~18 per-family lines. Useful for a smell-check: scan whether one family's pop_eff or allocator pressure has shifted, instead of eyeballing every row. The family is inferred from the fixture name — suffix-match on `_adder` groups half/full/N-bit adders together, otherwise the prefix before the first underscore (so `and_4bit` → `and`, `primitive_led` → `primitive`).
+Pass `--rollup` to collapse the 58 per-fixture rows into ~18 per-family lines. Useful for a smell-check: scan whether one family's pop_eff or allocator pressure has shifted, instead of eyeballing every row. The bench infers the family from the fixture name: suffix-match on `_adder` groups half/full/N-bit adders together, otherwise the prefix before the first underscore (so `and_4bit` → `and`, `primitive_led` → `primitive`).
 
 ```sh
 zig build bench -- --rollup
@@ -170,7 +170,7 @@ bench rollup: xnor          3 fix      336 vecs     9.28k events    2 peak      
 bench rollup: xor           4 fix    1.36k vecs    29.79k events    2 peak      784 allocs    95.73k bytes  100.0% pop       0.73 ms drv
 ```
 
-Rollup columns are always sums except `peak` which is the family max (depth is per-iteration, not additive) and `pop` which is computed from total committed / total popped. Pop efficiency reads 100% across every family today because `propagateEvent` short-circuits no-op enqueues (events the caller asks for that already match the component's current state, the dominant waste pattern under the bench harness). The family rows still make some patterns obvious that get lost across 58 fixtures: `alu` reaches the only peak_queue above 7, `fan` is the only family with peak_queue = 3 (one upstream feeding three independent downstreams), and `adder` accounts for ~half the corpus's events and allocator pressure thanks to `eight_bit_adder`.
+Rollup columns are always sums except `peak`, which is the family max (depth is per-iteration, not additive), and `pop`, which the bench computes from total committed / total popped. Pop efficiency reads 100% across every family today because `propagateEvent` short-circuits no-op enqueues (events the caller asks for that already match the component's current state, the dominant waste pattern under the bench harness). The family rows still make obvious some patterns that get lost across 58 fixtures: `alu` reaches the only peak_queue above 7, `fan` is the only family with peak_queue = 3 (one upstream feeding three independent downstreams), and `adder` accounts for ~half the corpus's events and allocator pressure thanks to `eight_bit_adder`.
 
 Rollup ignores `--sort` because the family-grouped output is always alphabetical for stable diffs.
 
@@ -190,9 +190,9 @@ Seven deterministic counters split across two structures. Five live on `engine.C
 
 Three columns in the golden are not metrics but corpus shape: `vectors` (= `2^N` inputs = `table.rows.len`), `components` (= `topology.components.len`, total graph size including expanded sub-circuit primitives), and `topology` (a CRC32 hex digest over the topology's deterministic shape — component id/kind/name/origin and connection from/to/port).
 
-The two allocator counters come from a wrapping `Counter` in `lib/memory.zig` that intercepts the same global allocator the engine uses (`memory.allocator`). The wrapper is selected only when `build_options.collect_metrics=true`; production builds get the raw arena, byte-identical to before. `resize`, `remap`, and `free` pass through without counting because the arena treats `free` as a no-op anyway, and `std.ArrayList` growth ultimately calls `alloc()` for fresh buffers — so `alloc()` alone is a faithful proxy for engine heap pressure.
+The two allocator counters come from a wrapping `Counter` in `lib/memory.zig` that intercepts the same global allocator the engine uses (`memory.allocator`). The build selects the wrapper only when `build_options.collect_metrics=true`; production builds get the raw arena, byte-identical to before. `resize`, `remap`, and `free` pass through without counting because the arena treats `free` as a no-op anyway, and `std.ArrayList` growth ultimately calls `alloc()` for fresh buffers. `alloc()` alone is therefore a faithful proxy for engine heap pressure.
 
-The `topology` hash is the diff renderer's "what changed" signal. If the hash holds steady but counters move, the engine drifted. If the hash moves, the fixture or the topology builder drifted — and the diff block prefixes the fixture with `(topology changed)` so a reviewer doesn't have to puzzle out which class of change it is.
+The `topology` hash is the diff renderer's "what changed" signal. If the hash holds steady but counters move, the engine drifted. If the hash moves, the fixture or the topology builder drifted, and the diff block prefixes the fixture with `(topology changed)`, so a reviewer doesn't have to puzzle out which class of change it is.
 
 ### How to read a row
 
@@ -204,11 +204,11 @@ Take a row from `tests/fixtures/bench/engine.bench.golden`:
 
 That means: an XOR over 4-bit operands exhaustively driven across all 256 input combinations against a 76-component graph (XOR macro expansion: 4 XOR cells × ~19 primitives each, minus shared inputs). The engine popped 5,598 events from its heap, every one of which changed state (`events_popped == events_committed`, the post-short-circuit norm); it ran 5,602 downstream gate evaluations; the heap never held more than 2 events at once; the final propagation settled at logical time 24,830; the run made 223 allocator calls totaling 26,976 bytes (≈121 bytes per alloc, mostly `Component` structs plus a handful of `ArrayList` growth slabs); and the topology hash `9e220cbc` identifies this exact shape of components and wires.
 
-The split between `events_popped` and `events_committed` is the diagnostic-grade column. It's not exposed in any other test path, and it catches algorithmic regressions where the scheduler enqueues redundant events that are correctly dedup'd downstream — the circuit gives the right answer, function tests pass, but the heap work has silently doubled.
+The split between `events_popped` and `events_committed` is the diagnostic-grade column. No other test path exposes it, and it catches algorithmic regressions where the scheduler enqueues redundant events that are correctly dedup'd downstream — the circuit gives the right answer, function tests pass, but the heap work has silently doubled.
 
 ### Derived stderr columns
 
-These three columns appear in the stderr report only; they are deliberately *not* written to the golden because they are derivable from the seven columns above (or from `drive_ns`, which is itself wall-clock and host-dependent). The point of surfacing them is at-a-glance readability during a bench run — the underlying values are still the regression gate.
+These three columns appear only in the stderr report; they are deliberately *not* written to the golden because they are derivable from the seven columns above (or from `drive_ns`, which is itself wall-clock and host-dependent). The point of surfacing them is at-a-glance readability during a bench run; the underlying values are still the regression gate.
 
 | Column   | Formula                                | What it tells you                                                                    |
 | -------- | -------------------------------------- | ------------------------------------------------------------------------------------ |
@@ -216,16 +216,16 @@ These three columns appear in the stderr report only; they are deliberately *not
 | `% pop`  | `events_committed / events_popped`     | Pop efficiency. 100% = every event changed state; lower = scheduler is wasting heap work. |
 | `t/vec`  | `final_time / vectors`                 | Logical settling time per input vector. Drift = engine timing model changed.         |
 
-The `% pop` column reads ~100% across every fixture today: `propagateEvent` short-circuits when the requested state already matches the component's current state, so the only events that enter the queue from the outside are the ones that actually commit. Pre-short-circuit, the `and_*bit` family was the corpus's worst offender (61% → 48% → 39% → 33% → 28% from `and_2bit` through `and_6bit`, with 71.6% of pops being dedup'd no-ops by the 6-bit point); that signal turned out to track the bench harness's drive-all-inputs-per-vector pattern rather than anything structural about the AND topology. A future drop below 100% would mean a new event flow inside the engine is enqueueing redundant proposals, which is a worth-investigating signal.
+The `% pop` column reads ~100% across every fixture today: `propagateEvent` short-circuits when the requested state already matches the component's current state, so the only events that enter the queue from the outside are the ones that commit. Pre-short-circuit, the `and_*bit` family was the corpus's worst offender (61% → 48% → 39% → 33% → 28% from `and_2bit` through `and_6bit`, with 71.6% of pops being dedup'd no-ops by the 6-bit point); that signal turned out to track the bench harness's drive-all-inputs-per-vector pattern rather than anything structural about the AND topology. A future drop below 100% would mean a new event flow inside the engine is enqueueing redundant proposals, a signal worth investigating.
 
-The `drv` column reframes the small-fixture rates. `chain` (2 vectors) reports total wall-clock around 1.4 ms; its `drv` is ~6 μs. The 1.4 ms is dominated by the per-fixture parser+validator+topology pipeline that runs once and is the same regardless of how many vectors you replay. Reporting throughput against total wall-clock was systematically wrong by ~250× for fixtures like this; throughput against `drv` is honest.
+The `drv` column reframes the small-fixture rates. `chain` (2 vectors) reports total wall-clock around 1.4 ms; its `drv` is ~6 μs. The per-fixture parser+validator+topology pipeline dominates the 1.4 ms; it runs once and costs the same regardless of how many vectors you replay. Reporting throughput against total wall-clock was systematically wrong by ~250× for fixtures like this; throughput against `drv` is honest.
 
 ### What it does *not* measure
 
 By design, the bench skips several signals:
 
-- **`createComponent` / `connect` cost in isolation**. `drive_ns` covers only the `2^N` replay loop, so the inner stderr throughput excludes engine construction. But construction itself isn't separately itemized — it's lumped into `(total - drive)` along with parse, validate, and topology build. Splitting further would only matter if construction ever dominated, which it currently doesn't (look at `alu_4bit`: drive_ns is ~98% of total).
-- **WASM runtime cost**. Counters live on the native `Circuit` and the native `memory` module. The shipped `.wasm` runtime is built with `collect_metrics=false` and carries zero metrics overhead — both the engine counter bumps and the allocator wrapper are dead code stripped.
+- **`createComponent` / `connect` cost in isolation**. `drive_ns` covers only the `2^N` replay loop, so the inner stderr throughput excludes engine construction. But the bench does not itemize construction separately: it lumps that cost into `(total - drive)` along with parse, validate, and topology build. Splitting further would matter only if construction ever dominated, which it does not (look at `alu_4bit`: drive_ns is ~98% of total).
+- **WASM runtime cost**. Counters live on the native `Circuit` and the native `memory` module. The shipped `.wasm` runtime is built with `collect_metrics=false` and carries zero metrics overhead: dead-code stripping removes both the engine counter bumps and the allocator wrapper.
 - **Compile-time perf**. That has its own gate, the `perf smoke: 100-component grid compiles under budget` test in `tests/cli/integration_test.zig`, which holds the `stress_grid_10x10` compile to 30 seconds.
 
 ## Where the counters live
@@ -250,9 +250,9 @@ pub const Circuit = struct {
 };
 ```
 
-Counter bumps inside `propagate()` are wrapped in `if (COLLECT_METRICS) ...`. When the constant is false, the field is `void` (zero bytes) and every bump compiles away. The shipped `.wasm` runtime, `zig build test`, and `circ-compile` itself all use `collect_metrics=false`; the bench step is the only consumer that sets it to true.
+Counter bumps inside `propagate()` are wrapped in `if (COLLECT_METRICS) ...`. When the constant is false, the field is `void` (zero bytes), and every bump compiles away. The shipped `.wasm` runtime, `zig build test`, and `circ-compile` itself all use `collect_metrics=false`; the bench step is the only consumer that sets it to true.
 
-The same flag drives the counting allocator wrapper in `lib/memory.zig`. With `collect_metrics=true`, `memory.allocator` resolves to a `Counter` that intercepts `alloc()`, increments `allocs` and `bytes`, and forwards to the inner arena. With `collect_metrics=false`, `memory.allocator` is the raw arena directly — the wrapper sits unused (≈32 bytes of static storage, no per-allocation overhead). `memory.snapshotAllocMetrics()` returns the cumulative counters; the bench snapshots before and after each `runFixture` and stores the delta on the row.
+The same flag drives the counting allocator wrapper in `lib/memory.zig`. With `collect_metrics=true`, `memory.allocator` resolves to a `Counter` that intercepts `alloc()`, increments `allocs` and `bytes`, and forwards to the inner arena. With `collect_metrics=false`, `memory.allocator` is the raw arena directly; the wrapper sits unused (≈32 bytes of static storage, no per-allocation overhead). `memory.snapshotAllocMetrics()` returns the cumulative counters; the bench snapshots before and after each `runFixture` and stores the delta on the row.
 
 `build.zig` creates *two* circuit modules pointing at the same source file:
 
@@ -272,7 +272,7 @@ const bench_circuit_mod = b.createModule(.{ .root_source_file = b.path("lib/circ
 bench_circuit_mod.addOptions("build_options", circuit_options_bench);
 ```
 
-Only the truth-table builder, which actually instantiates a `Circuit`, gets a parallel bench-mode module. Everything else (parser, resolver, validator, full topology serializer) is reused unchanged — those modules don't transitively import the engine, so they don't care which circuit module is wired into the consumer.
+Only the truth-table builder, which instantiates a `Circuit`, gets a parallel bench-mode module. The bench reuses everything else (parser, resolver, validator, full topology serializer) unchanged: those modules don't transitively import the engine, so they don't care which circuit module is wired into the consumer.
 
 ## Running and updating
 
@@ -305,7 +305,7 @@ RECORD_MILESTONE="<label>" zig build bench
 zig build bench -Dbench-optimize=Debug
 ```
 
-The `bench` step is not wired into `zig build test`. It is opt-in and does not affect the default test suite. A typical workflow:
+The `bench` step stays out of `zig build test`. It is opt-in and leaves the default test suite untouched. A typical workflow:
 
 1. Make a change to `lib/circuit.zig` (or anything that affects simulation behaviour).
 2. Run `zig build test` to confirm correctness.
@@ -325,7 +325,7 @@ bench: 2 changed, 0 added, 0 removed
     events_popped             8000 →       7136   -864 (-10.80%)
 ```
 
-When the topology hash itself moved, the fixture block is tagged `(topology changed)` and the hash diff leads:
+When the topology hash itself moved, the bench tags the fixture block `(topology changed)`, and the hash diff leads:
 
 ```
 bench: golden mismatch
@@ -334,23 +334,23 @@ bench: 1 changed, 0 added, 0 removed
     topology_hash       deadbeef → 2028acf9
 ```
 
-That annotation tells the reviewer to expect counter drift downstream — the fixture or the topology builder moved, not the engine. Counter changes without an accompanying hash change are the inverse: the engine drifted while the test input stayed put. Walked in fixture-manifest (alphabetical) order regardless of `--sort`, so diffs are stable. If the parser itself fails on a malformed golden, the runner falls back to the original side-by-side dump (`--- expected --- / --- actual ---`) so a structurally broken golden is still debuggable.
+That annotation tells the reviewer to expect counter drift downstream — the fixture or the topology builder moved, not the engine. Counter changes without an accompanying hash change are the inverse: the engine drifted while the test input stayed put. The runner walks the blocks in fixture-manifest (alphabetical) order regardless of `--sort`, so diffs stay stable. If the parser itself fails on a malformed golden, the runner falls back to the original side-by-side dump (`--- expected --- / --- actual ---`), so a structurally broken golden is still debuggable.
 
 ## Historical evolution
 
-The bench can optionally append a corpus-level milestone to `tests/fixtures/bench/engine.bench.golden.hist.md`. Setting `RECORD_MILESTONE="<label>"` switches the feature on; the label becomes the human-readable description for the milestone row. The file is an append-only audit trail and complements (rather than replaces) the engine golden: the golden is the regression gate, the `.hist` is the story of how the corpus got to where it is.
+The bench optionally appends a corpus-level milestone to `tests/fixtures/bench/engine.bench.golden.hist.md`. Setting `RECORD_MILESTONE="<label>"` switches the feature on; the label becomes the human-readable description for the milestone row. The file is an append-only audit trail and complements (rather than replaces) the engine golden: the golden is the regression gate; the `.hist` is the story of how the corpus got to where it is.
 
 ```sh
 RECORD_MILESTONE="scheduler dedup" zig build bench
 ```
 
-On first invocation against a working tree without a `.hist` file, the bench bootstraps the BASE section by retrieving the golden at git HEAD (via `git show HEAD:tests/fixtures/bench/engine.bench.golden`). The BASE snapshot therefore reflects an honest pre-change state regardless of which run actually creates the file. After that, each run parses the existing `.hist`, derives "Δ vs base" and "Δ vs prev" for the current totals, and appends a new milestone summary row plus a per-fixture detail block.
+On first invocation against a working tree without a `.hist` file, the bench bootstraps the BASE section by retrieving the golden at git HEAD (via `git show HEAD:tests/fixtures/bench/engine.bench.golden`). The BASE snapshot therefore reflects an honest pre-change state regardless of which run creates the file. After that, each run parses the existing `.hist`, derives "Δ vs base" and "Δ vs prev" for the current totals, and appends a new milestone summary row plus a per-fixture detail block.
 
 The summary table holds these columns per milestone:
 
 | Column            | Aggregation        | What a non-zero delta means                                                |
 | ----------------- | ------------------ | -------------------------------------------------------------------------- |
-| `events_popped`   | sum across fixtures| Heap throughput shifted (a scheduler change either drained more or fewer events). |
+| `events_popped`   | sum across fixtures| Heap throughput shifted (a scheduler change drained either more or fewer events). |
 | `events_committed`| sum                | Pop-efficiency shifted, even if `events_popped` didn't.                    |
 | `recalcs`         | sum                | Downstream-walk count moved (graph traversal cost).                        |
 | `peak_queue`      | max                | Worst-case heap depth moved (not additive: depth is per-iteration).        |
@@ -363,7 +363,7 @@ Each cell renders as `<value> (Δ% vs base / Δ% vs prev)`. The first recorded m
 
 Below the summary, each milestone gets a `## Milestone N: <label>` block with per-fixture deltas vs BASE for the seven deterministic counters. Detail blocks are append-only decoration preserved verbatim on re-write; the summary table is the structured source of truth that the parser reads to compute the next "Δ vs prev".
 
-The `.hist` file is checked in alongside the golden so the history travels with the codebase. A typical workflow when shipping an engine perf change:
+The `.hist` file is checked in alongside the golden, so the history travels with the codebase. A typical workflow when shipping an engine perf change:
 
 1. Run `UPDATE_GOLDENS=1 zig build bench` to regenerate `engine.bench.golden` with the new asserted counters.
 2. Run `RECORD_MILESTONE="<description>" zig build bench` to append the milestone to `.hist`.

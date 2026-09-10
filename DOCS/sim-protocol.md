@@ -7,8 +7,8 @@ set inputs, settle, read outputs. It writes no artifact (only the `save`
 verb touches the filesystem, to write a memory image).
 
 The mode runs the same native simulation engine as `--truth-table`, built from
-the same resolved topology, so behavior matches the compiled `.wasm`. In fact
-each command maps 1:1 onto the artifact's WASM exports (see
+the same resolved topology, so behavior matches the compiled `.wasm`. Each
+command maps 1:1 onto the artifact's WASM exports (see
 [`wasm-api.md`](wasm-api.md)): `set` → `setPin`, `run` → `run`,
 `get` → `getOutputValue`/`getOutputDefined`, and for memories `load` → `memLoad`,
 `save` → `memStore`, `poke` → `setMemWord`, `peek` → `getMemValue`/`getMemDefined`,
@@ -21,8 +21,8 @@ each command maps 1:1 onto the artifact's WASM exports (see
 - A reply is either a **status line** (`ok ...` / `err <CODE> <message>`) or a
   **counted block**: a header line ending in a count, followed by exactly that
   many record lines.
-- Blank lines and lines starting with `#` are ignored and produce no reply
-  (so a session can be driven by hand or from a script).
+- The process ignores blank lines and lines starting with `#` and replies to
+  neither (so you can drive a session by hand or from a script).
 - EOF on stdin, or `quit`, shuts the process down.
 
 ## Handshake
@@ -37,8 +37,8 @@ pin b in 1
 pin out out 1
 ```
 
-`pin <name> <in|out> <width>`. On a circuit with hard errors there is no session
-to drive; the process emits the diagnostics and exits nonzero:
+`pin <name> <in|out> <width>`. A circuit with hard errors leaves no session to
+drive; the process emits the diagnostics and exits nonzero:
 
 ```
 error diags=1
@@ -69,10 +69,10 @@ validator codes (`E001`-`E018`, `W001`-`W003`).
 | `dump <in\|out\|all>` | `vals <N>` block + `<name> <value> <mask>` lines | Whole-vector read for snapshots. |
 | `run` | `ok` | Drains the event queue. Redundant after `set` (which already settles); kept for 1:1 parity with the artifact's `run()`. |
 | `eval <assign...> => <query...>` | `ok <name>=<value>/<mask> ...` / `err` | One-shot vector: `pin=value[/mask]` assignments, then the queried pins. Operates on current state (no implicit reset). |
-| `reset` | `ok` | Rebuilds the circuit to its post-`init` state (all pins undefined), then re-applies any `--mem` preloads. Contents from mid-session `load`/`poke` are dropped. Per-scenario isolation without respawning. |
+| `reset` | `ok` | Rebuilds the circuit to its post-`init` state (all pins undefined), then re-applies any `--mem` preloads. The rebuild drops contents from mid-session `load`/`poke`. Per-scenario isolation without respawning. |
 | `quit` | `ok bye` then exit | EOF on stdin does the same. |
 | `mems` | `mems <N>` block + `mem <name> <rom\|ram> <W> <A>` lines | The root-level memories, in declaration order (decimal widths). The `ready` block never lists them. |
-| `load <mem> <path>` | `ok words=<n>` / `err` | Replaces every cell from a raw image file; `n` is the words loaded, cells `n..2^A-1` become undefined (an empty file clears). `out` follows at once. |
+| `load <mem> <path>` | `ok words=<n>` / `err` | Replaces every cell from a raw image file; `n` is the words loaded; cells `n..2^A-1` become undefined (an empty file clears). `out` follows at once. |
 | `save <mem> <path>` | `ok words=<2^A>` / `err` | Writes the whole memory as a raw image (`value & defined` per word; undefined bits become 0). |
 | `peek <mem> <addr>` | `ok <value> <mask>` / `err` | Reads one cell. |
 | `poke <mem> <addr> <value> [<mask>]` | `ok` / `err` | Writes one cell and settles, like `set`. An omitted mask means fully defined. |
@@ -89,18 +89,18 @@ root-level memory of that name — including a pin name given to a memory verb),
 whole number of words, more words than the memory holds, a word with bits at
 or above the data width, or a file over the 16 MiB read cap), `E_ADDR <mem>
 <addr>` (address `>= 2^A`). `E_NOSETTLE` is declared for a settle cap that
-`run` does not enforce (`run` swallows propagate errors and replies `ok`); it is
-never emitted.
+`run` does not enforce (`run` swallows propagate errors and replies `ok`); the
+process never emits it.
 
 ## Settle model
 
 `set` drives an input and settles the circuit in one step, exactly as the
 shipped artifact's `setPin` does (the native engine's `propagateEvent` enqueues
-and then drains to quiescence). There is no clock to pump: a single `set`
-settles any combinational cascade. For sequential circuits, state persists
+and then drains to quiescence). The protocol has no clock to pump: a single
+`set` settles any combinational cascade. For sequential circuits, state persists
 across commands, so a scenario is just `set`/`get` repeated; only `reset`
-clears it. Because each `set` settles independently, an `eval`'s assignments are
-applied in order, each settling, before its queries are read.
+clears it. Because each `set` settles independently, `eval` applies its
+assignments in order, each settling, before reading its queries.
 
 ## Memories
 
@@ -110,10 +110,10 @@ addresses pins, and exposes contents two ways:
 
 - **`--mem=<name>=<path>` on the command line** (repeatable, up to 16, also
   accepted by `--truth-table`) loads a raw image before the handshake. Every
-  flag is checked first — the name must be a root-level memory, the file must
-  be readable, and the image must pass the format rules — and a failure prints
-  one line to **stderr** and exits 2 before any handshake byte, so stdout stays
-  a clean protocol channel:
+  flag is checked first: the name must be a root-level memory, the file must
+  be readable, and the image must pass the format rules. A failure prints one
+  line to **stderr** and exits 2 before any handshake byte, so stdout stays a
+  clean protocol channel:
 
   ```
   --mem code=prog.bin: no memory named 'code' (declared memories: rom boot[8, 4])
@@ -121,9 +121,9 @@ addresses pins, and exposes contents two ways:
   --mem code=prog.bin: 17 words exceed capacity 16
   ```
 
-  Because the pre-flight runs before the handshake, the warnings that would
-  have appeared as `diag` lines are not printed on a preload failure; fix the
-  flag and re-run.
+  Because the pre-flight runs before the handshake, a preload failure prints
+  none of the warnings that would have appeared as `diag` lines; fix the flag
+  and re-run.
 - **The verbs above** (`load`, `save`, `peek`, `poke`, `mem`, `clear`) during a
   session.
 
@@ -134,7 +134,7 @@ every loaded word fully defined; unloaded and unwritten cells read undefined;
 saving writes `value & defined`.
 
 Paths are single whitespace-free tokens (the protocol tokenizer splits on
-spaces and tabs; there is no quoting) and are resolved against the process
+spaces and tabs and offers no quoting) and resolve against the process
 working directory, like the input path. Files are read with a 16 MiB cap, far
 above the largest legal image (512 KiB). `load` and `save` are the only
 commands that touch the filesystem; a `save` that fails mid-write may leave a
@@ -169,8 +169,8 @@ ok bye
 ```
 
 A memory session on `input[4] addr` → `rom code[8, 4](addr = addr.out)` →
-`output[8] out(in = code.out)` (this transcript is replayed verbatim by a test
-in `lib/sim/loop.zig`, so it cannot drift from the code):
+`output[8] out(in = code.out)` (a test in `lib/sim/loop.zig` replays this
+transcript verbatim, so it cannot drift from the code):
 
 ```
 $ circ-compile rom.circ --sim

@@ -51,7 +51,7 @@ const downloads = platforms.map((p) => {
 ---
 <Base
   title="Download — circ"
-  description="Pre-built circ-compile binaries for Linux, macOS, and Windows. The compiler is in alpha; errors are expected."
+  description="Pre-built circ-compile binaries for Linux, macOS, and Windows. The compiler is in alpha; expect errors."
 >
   <h1>Download</h1>
 
@@ -63,7 +63,7 @@ const downloads = platforms.map((p) => {
       <code>circ-compile</code> is under active development. Expect rough edges,
       cryptic error messages, and breaking changes between builds. Don't use it
       for anything you care about preserving. Reports of what doesn't work are
-      welcome — but for now, please assume nothing here is stable.
+      welcome, but for now please assume nothing here is stable.
     </p>
   </aside>
 
@@ -137,8 +137,8 @@ cd ${GITHUB_REPO.split('/').pop()}
 zig build circ-compile -Doptimize=ReleaseFast
 ./zig-out/bin/circ-compile --help`} />
       <p>
-        The full walkthrough — including writing your first <code>.circ</code> file
-        and driving the compiled WASM from Node — lives in
+        The full walkthrough, including writing your first <code>.circ</code> file
+        and driving the compiled WASM from Node, lives in
         <a href={url('/reference/getting-started')}>Getting Started</a>.
       </p>
     </section>

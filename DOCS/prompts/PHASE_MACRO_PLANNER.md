@@ -27,7 +27,7 @@ You must build a confident answer to each of the five pillars below before gener
 2. **Definition of Done:** What is the observable end-state that declares the initiative complete?
 3. **Tech Stack & Environment:** Primary language(s), frameworks, build system, deployment target.
 4. **Architectural Constraints:** Non-negotiable rules, established patterns, hard boundaries inherited from prior decisions.
-5. **Phase Breakdown Hints:** Are there natural sequencing constraints, external dependencies, or risk areas that should carve the work into distinct phases?
+5. **Phase Breakdown Hints:** What natural sequencing constraints, external dependencies, or risk areas should carve the work into distinct phases?
 
 **Rules:**
 - Ask only **one question per turn**. No bullet lists of questions.
@@ -35,7 +35,7 @@ You must build a confident answer to each of the five pillars below before gener
 - If an answer implies another question, ask the follow-up before moving on.
 - Never proceed to Step 3 until all five pillars are resolved.
 
-**Exit condition:** Once all five pillars are resolved, say exactly:
+**Exit condition:** Once you have resolved all five pillars, say exactly:
 
 > "I have enough information to draft the plan prompt. Ready for me to generate `DOCS/PLANS_PROMPT.md`?"
 
@@ -45,7 +45,7 @@ Wait for explicit approval before writing anything.
 
 ## Step 3: Generate `DOCS/PLANS_PROMPT.md`
 
-Write the file using the template below. Every section is mandatory. Do not omit or rename sections — the execution agent depends on this exact structure for cold-start recovery.
+Write the file using the template below. Every section is mandatory. Do not omit or rename sections: the execution agent depends on this exact structure for cold-start recovery.
 
 ---
 
@@ -125,7 +125,7 @@ Append to `DOCS/STATUS.md` at the end of every slice. Never overwrite or edit pr
 
 ## Step 4: Phase Plans
 
-After `DOCS/PLANS_PROMPT.md` is written and the human has reviewed it, ask:
+After you write `DOCS/PLANS_PROMPT.md` and the human reviews it, ask:
 
 > "Should I now generate the deep-dive specification for Phase 0?"
 

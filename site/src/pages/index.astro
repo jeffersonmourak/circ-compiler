@@ -50,22 +50,25 @@ const heroPreview = `╭───╮     ╭───╮
         <code>circ</code> is a declarative language. Programs are flat lists of
         declarations: name an input pin, instantiate a gate, wire its ports to
         signals from other components. The primitives are <code>and</code>,
-        <code>not</code>, <code>led</code>, and <code>wire</code>; macros for
-        <code>or</code>, <code>nand</code>, <code>nor</code>, <code>xor</code>,
-        and <code>xnor</code> expand to those primitives at compile time.
-        Larger circuits live in their own <code>.circ</code> file and get
-        pulled in with <code>import</code>.
+        <code>not</code>, <code>led</code>, and <code>wire</code>, plus the
+        <code>rom</code>/<code>ram</code> memories; macros for <code>or</code>,
+        <code>nand</code>, <code>nor</code>, <code>xor</code>, and
+        <code>xnor</code> expand to those primitives at compile time.
+        Larger circuits live in their own <code>.circ</code> file, and an
+        <code>import</code> line pulls them in.
       </p>
     </section>
 
     <section>
       <h2>What it isn't</h2>
       <p>
-        <code>circ</code> is a v0. There are no multi-bit buses, no clocked
-        registers, no analog signals, no tri-state lines. A <code>wire</code>
-        is a single-bit pass-through, not a let-binding for a vector. The
-        language deliberately stops at the same boundary as the early
-        Nand2Tetris hardware chapters.
+        <code>circ</code> is a v0. Signals are up to 64 bits wide
+        (<code>input[4] a</code>, slices, concatenation); <code>ram</code> is
+        the only clocked element, and the language has no other registers, no
+        analog signals, and no tri-state lines. A <code>wire</code> is a
+        pass-through that names a signal, not a let-binding. The language
+        deliberately stops at the same boundary as the early Nand2Tetris
+        hardware chapters.
       </p>
     </section>
 
@@ -74,9 +77,9 @@ const heroPreview = `╭───╮     ╭───╮
       <p>
         <code>circ-compile</code> produces a self-contained WebAssembly
         module: drive its input pins from JavaScript, read its outputs back,
-        run it from Node or a browser. There's also a <code>--preview</code>
-        flag that prints an ASCII schematic to your terminal — handy for
-        sanity-checking the wiring before you simulate.
+        run it from Node or a browser. A <code>--preview</code> flag also
+        prints an ASCII schematic to your terminal — handy for sanity-checking
+        the wiring before you simulate.
       </p>
     </section>
   </div>

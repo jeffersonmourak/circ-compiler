@@ -35,18 +35,18 @@ You must resolve six pillars before writing. Ask **one question at a time**, wai
 **The six pillars:**
 
 1. **Scope & Boundaries** — What is strictly in scope for this phase, and what is explicitly deferred? What does "done" look like in observable terms (a passing test, a working CLI command, a rendered output)?
-2. **File & Module Topology** — What new files or packages are created, and what existing files are modified? Any new dependencies introduced?
-3. **Data & State Modeling** — What are the key types, schemas, interfaces, or data structures being introduced or changed? Include field names and types where they matter.
-4. **Execution & Concurrency Model** — Is this phase synchronous or does it introduce background work? Who owns shared state, and how is it guarded?
-5. **Persistence & I/O** — How is state saved, loaded, or recovered? What external systems, files, or APIs are touched?
+2. **File & Module Topology** — What new files or packages does this phase create, and which existing files does it modify? Does it introduce any new dependencies?
+3. **Data & State Modeling** — Which key types, schemas, interfaces, or data structures does this phase introduce or change? Include field names and types where they matter.
+4. **Execution & Concurrency Model** — Is this phase synchronous, or does it introduce background work? Who owns shared state, and how is it guarded?
+5. **Persistence & I/O** — How does this phase save, load, or recover state? Which external systems, files, or APIs does it touch?
 6. **Test Strategy** — What specific tests prove this phase is complete? Name them. Distinguish unit from integration tests. State the observable assertion for each.
 
 **Rules:**
 - One question per turn. No lists.
-- Follow up if an answer is ambiguous before moving on.
+- If an answer is ambiguous, follow up before moving on.
 - If a pillar is not applicable (e.g., the phase has no concurrency), confirm that explicitly rather than skipping silently.
 
-**Exit condition:** Once all six pillars are resolved, say exactly:
+**Exit condition:** Once you have resolved all six pillars, say exactly:
 
 > "I have enough context for Phase N — <name>. Ready for me to generate `DOCS/PLANS/PHASE_<N>_<name>.md`?"
 

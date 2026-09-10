@@ -45,7 +45,7 @@ export const examples: Example[] = [
     slug: 'inverter-chain',
     title: 'NOT chain',
     level: 'intro',
-    lede: 'Three inverters in series. The output is just `a` — but the chain still gets compiled and simulated faithfully.',
+    lede: 'Three inverters in series. The output is just `a`, but the chain still compiles and simulates faithfully.',
     source: `input a
 not n1(in=a)
 not n2(in=n1.out)
@@ -61,7 +61,7 @@ output out(in=n3.out)
     slug: 'fan-out',
     title: 'One input, three destinations',
     level: 'intro',
-    lede: 'A single input drives three independent NOT gates. The `●` glyphs in the ASCII preview mark fan-out taps where the same wire is reused.',
+    lede: 'A single input drives three independent NOT gates. The `●` glyphs in the ASCII preview mark fan-out taps, where the circuit reuses one wire.',
     source: `input a
 not n1(in=a)
 not n2(in=a)
@@ -87,7 +87,7 @@ output o3(in=n3.out)
     slug: 'builtin-xor',
     title: 'A built-in macro',
     level: 'intro',
-    lede: 'The five built-in macros — or, nand, nor, xor, xnor — expand to primitives at compile time, and a single file may use one with no import at all.',
+    lede: 'The five built-in macros — or, nand, nor, xor, xnor — expand to primitives at compile time, and a single file needs no import to use one.',
     source: `input a, b
 xor g(a=a, b=b)
 output out(in=g.out)
@@ -106,7 +106,7 @@ output out(in=g.out)
     slug: 'slice-and-concat',
     title: 'Slicing and joining a bus',
     level: 'intro',
-    lede: 'Takes a 4-bit input apart with a[0..2] and a[2..4] and puts it back together with a concat, which reconstructs the original.',
+    lede: 'Takes a 4-bit input apart with a[0..2] and a[2..4], then puts it back together with a concat that reconstructs the original.',
     source: `input[4] a
 output[4] o(in={a[0..2], a[2..4]})
 `,
@@ -135,7 +135,7 @@ output[8] o(in=inv.out)
     slug: 'half-adder',
     title: 'Half-adder',
     level: 'medium',
-    lede: '`sum = a XOR b`, `carry = a AND b`. The simplest circuit that does arithmetic. Click "Run" — the `xor` macro expands into the gates you can see in the live canvas.',
+    lede: '`sum = a XOR b`, `carry = a AND b`. The simplest circuit that does arithmetic. Click "Run": the `xor` macro expands into the gates you can see in the live canvas.',
     source: `import xor "<builtin>/xor.circ"
 input a, b
 xor s(a=a, b=b)
@@ -190,7 +190,7 @@ output out(in=out_or.out)
     slug: 'demux-1to2',
     title: '1-to-2 demultiplexer',
     level: 'medium',
-    lede: 'The mux read backwards: one input is routed to whichever output sel names, and the other is held at 0.',
+    lede: 'The mux read backwards: the circuit routes one input to whichever output sel names and holds the other at 0.',
     source: `// 1-to-2 demultiplexer: routes \`in\` to \`out_a\` when sel=0, to \`out_b\` when sel=1.
 // The unselected output is held at 0.
 input in, sel
@@ -256,7 +256,7 @@ output cout(in=c3.out)
     slug: 'rom-lookup',
     title: 'A ROM the host loads',
     level: 'medium',
-    lede: 'A rom is a compile-time shape and a run-time image: the circuit declares rom code[8, 4], and the sixteen bytes below are loaded into it before you touch anything. This one holds the squares, so driving pc to 12 reads 144 back out.',
+    lede: 'A rom is a compile-time shape and a run-time image: the circuit declares rom code[8, 4], and the sixteen bytes below fill it before you touch anything. This one holds the squares, so driving pc to 12 reads 144 back out.',
     source: `input[4] pc
 rom code[8, 4](addr = pc.out)
 output[8] out(in = code.out)
@@ -274,7 +274,7 @@ output[8] out(in = code.out)
     slug: 'two-bit-adder',
     title: '2-bit ripple-carry adder',
     level: 'advanced',
-    lede: 'The operands are buses, so the truth table reads as arithmetic rather than as four loose bits. A ripple-carry adder still takes them apart: the carry is the one part of an addition that cannot be done in parallel.',
+    lede: 'The operands are buses, so the truth table reads as arithmetic rather than as four loose bits. A ripple-carry adder still takes them apart: the carry is the one part of an addition that has to happen in sequence.',
     source: `import xor "<builtin>/xor.circ"
 import or  "<builtin>/or.circ"
 

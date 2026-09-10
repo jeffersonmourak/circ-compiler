@@ -7,9 +7,9 @@ produced by other components. The compiler (`circ-compile`) parses the source,
 resolves names, validates the resulting graph, and lowers it to a self-contained
 WebAssembly module.
 
-This document is the language reference. For an end-to-end tutorial see
+This document is the language reference. For an end-to-end tutorial, see
 [`getting-started.md`](getting-started.md); for the runtime API exposed by the
-compiled artifact see [`wasm-api.md`](wasm-api.md).
+compiled artifact, see [`wasm-api.md`](wasm-api.md).
 
 > **Status.** This reference covers the surface as of the native-memories
 > release: imports, input/output pins, primitive components (`and`, `not`,
@@ -80,8 +80,9 @@ string-literal
 A few intentional shapes, and a few accidents, to note in the grammar:
 
 * The order of items in a program is irrelevant for *semantics* (the validator
-  resolves names globally) but parsing is strictly left-to-right line-oriented.
-* There is no statement terminator. Items are separated by whitespace; a single
+  resolves names globally), but parsing is strictly left-to-right
+  line-oriented.
+* `circ` has no statement terminator. Whitespace separates items; a single
   declaration may span multiple lines as long as its parentheses balance.
 * `output` is an ordinary component-shaped declaration with one port. The
   translator **ignores the binding name**: `output r(zzz = g.out)` compiles,
@@ -90,13 +91,13 @@ A few intentional shapes, and a few accidents, to note in the grammar:
   identifier in type position that merely *begins* with one: `andx g(a=a, b=a)` parses
   as `and x(...)` plus a syntax error (`recovery_keyword_prefix.circ`). A
   sub-circuit alias must therefore not start with `and`, `or`, `not`, `xor`,
-  `nand`, `led`, `bus` or `output`.
+  `nand`, `led`, `bus`, or `output`.
 * `bus` is a keyword nothing implements: `bus x(in = y)` resolves to an
   undeclared name (`E001`).
 * The port-less form `type ident-list` (`led x`, `and g1, g2`) parses but has
   no use today: a gate or LED declared that way reports `E004` (unconnected
   input), and `output q` makes the pin its own driver (`E008`).
-* The parser accepts a `<>` connection line and the translator discards it
+* The parser accepts a `<>` connection line, and the translator discards it
   without a diagnostic (`recovery_connection_line.circ`).
 
 ---
@@ -105,8 +106,8 @@ A few intentional shapes, and a few accidents, to note in the grammar:
 
 ### 2.1 Whitespace
 
-Spaces, tabs, carriage returns, and newlines are insignificant outside of
-string literals and identifiers. They may appear between any two tokens.
+Spaces, tabs, carriage returns, and newlines are insignificant outside string
+literals and identifiers. They may appear between any two tokens.
 
 ### 2.2 Comments
 
@@ -116,16 +117,16 @@ string literals and identifiers. They may appear between any two tokens.
 // this is a comment, ignored to end of line
 ```
 
-`#` is **not** a comment introducer. Block comments (`/* … */`) are not
-supported.
+`#` is **not** a comment introducer. `circ` does not support block comments
+(`/* … */`).
 
 ### 2.3 Identifiers
 
-Identifiers match `[A-Za-z_][A-Za-z0-9_]*` and are case-sensitive. They are
-used for component instance names, port names, input/output pin names, and
-import aliases. There is no distinction between "user" and "system"
-identifiers — but type keywords (`input`, `output`, `and`, `not`, `wire`, etc.)
-are reserved when used in declaration position.
+Identifiers match `[A-Za-z_][A-Za-z0-9_]*` and are case-sensitive. They name
+component instances, ports, input/output pins, and import aliases. The
+language draws no distinction between "user" and "system" identifiers, but
+type keywords (`input`, `output`, `and`, `not`, `wire`, etc.) are reserved in
+declaration position.
 
 ### 2.4 String Literals
 
@@ -138,16 +139,17 @@ import xor "<builtin>/xor.circ"
 import half_adder "half_adder.circ"
 ```
 
-Paths are resolved relative to the directory of the file containing the import.
+The compiler resolves paths relative to the directory of the file containing
+the import.
 
 ---
 
 ## 3. Declarations
 
-A `circ` program is a sequence of declarations. The four kinds are described
-below. Every declaration that carries a signal may optionally name its width
-in bits with a `[N]` annotation; a missing `[N]` means width 1, which is what
-makes pre-multi-bit `.circ` files legal as-is.
+A `circ` program is a sequence of declarations. This section describes the
+four kinds. Every declaration that carries a signal may name its width in
+bits with a `[N]` annotation; a missing `[N]` means width 1, which keeps
+pre-multi-bit `.circ` files legal as-is.
 
 ### 3.1 Input Pins
 
@@ -158,10 +160,10 @@ input[4] addr, data            // 4-bit buses
 ```
 
 `input` declares one or more externally driven pins. An input pin has no input
-ports of its own; its single output is referenced as **`<name>`** or
-equivalently **`<name>.out`** elsewhere in the program. Input pins are driven
-from the host via `setPin(component_id, value, defined)` after compilation
-(see [`wasm-api.md`](wasm-api.md) for the BigInt-pair convention).
+ports of its own; elsewhere in the program you reference its single output as
+**`<name>`** or, equivalently, **`<name>.out`**. The host drives input pins
+via `setPin(component_id, value, defined)` after compilation (see
+[`wasm-api.md`](wasm-api.md) for the BigInt-pair convention).
 
 The `[N]` annotation between the keyword and the names sets the width for
 every name in that `input` line. To declare pins at different widths, write
@@ -182,15 +184,16 @@ output[4] result(in = alu.out)
 ```
 
 `output` declares a named externally observable pin and binds its single port
-`in` to a signal. Multi-bit outputs use the same `[N]` annotation. Output pins
-are read from the host via two paired exports: `getOutputValue(driver_id)`
-returns the `BitVecState.value` field as a BigInt, `getOutputDefined(driver_id)`
-returns `BitVecState.defined`. Both take the **driver** component id, not the
-output pin's own id; see [`wasm-api.md`](wasm-api.md).
+`in` to a signal. Multi-bit outputs use the same `[N]` annotation. The host
+reads output pins through two paired exports: `getOutputValue(driver_id)`
+returns the `BitVecState.value` field as a BigInt;
+`getOutputDefined(driver_id)` returns `BitVecState.defined`. Both take the
+**driver** component id, not the output pin's own id; see
+[`wasm-api.md`](wasm-api.md).
 
 ### 3.3 Component Instances
 
-A component is instantiated by writing its **type**, an optional `[N]` width,
+You instantiate a component by writing its **type**, an optional `[N]` width,
 an instance **name**, and a parenthesised list of **port bindings**:
 
 ```
@@ -219,7 +222,7 @@ rule keeps every existing scalar caller working unchanged.
 | `xor`  | `a`, `b`    | `out`  | `and(or a b, nand a b)`            |
 | `xnor` | `a`, `b`    | `out`  | `not(xor[W] a b)` — `xor` propagates width |
 
-A user-defined sub-circuit is referenced by the alias bound in its `import`
+You reference a user-defined sub-circuit by the alias bound in its `import`
 declaration. Its ports are exactly the names declared as `input`/`output` in
 the imported file. If the imported sub-circuit is parametric (declares one or
 more `<W>` parameters), the caller binds widths positionally with the
@@ -238,13 +241,13 @@ import half_adder "half_adder.circ"
 ```
 
 `import` makes a sibling `.circ` file available under an alias in the current
-file. The path is resolved relative to the importing file. Built-in macros
-live at the virtual path `<builtin>/<name>.circ` and are auto-imported
-whenever a file uses one — a single-file program may write `xor s(a=a, b=b)`
-with no `import` at all, and every mode (compile, preview, truth table, sim,
-analyze) resolves it through the project pipeline. Writing the import
-explicitly is still valid, and is the clearer form when a file mixes
-built-ins with its own siblings:
+file. The compiler resolves the path relative to the importing file. Built-in
+macros live at the virtual path `<builtin>/<name>.circ`, and the compiler
+auto-imports one whenever a file uses it. A single-file program may write
+`xor s(a=a, b=b)` with no `import` at all, and every mode (compile, preview,
+truth table, sim, analyze) resolves it through the project pipeline. Writing
+the import explicitly is still valid, and is the clearer form when a file
+mixes built-ins with its own siblings:
 
 ```
 import xor "<builtin>/xor.circ"
@@ -255,7 +258,7 @@ and reports an unimported built-in as `E001`.
 
 ### 3.5 Memories (declaration shape)
 
-`rom` and `ram` are built-in memory types. A memory is declared like a
+`rom` and `ram` are built-in memory types. You declare a memory like a
 parametric sub-circuit instance: the type keyword, an instance name, exactly
 two instance-position width arguments `[W, A]` (data width and address
 width), and a port list:
@@ -279,15 +282,15 @@ output[8] q(in = data.out)
 
 `W` must be in `1..64` and `A` in `1..16` (`E018`); a declaration with any
 other number of width arguments, or with a width written after the keyword
-(`rom[8] m[8, 4]`), is `E017`. Inside a parametric sub-circuit the arguments
+(`rom[8] m[8, 4]`), is `E017`. Inside a parametric sub-circuit, the arguments
 may name introduced parameters (`ram m[W, A](...)`). Every listed input port is
-required (`E004`), ports are checked at their own widths (`E014`), and a
-`ram` breaks combinational loops while a `rom` does not (`E008`). `rom` and
+required (`E004`), and ports are checked at their own widths (`E014`). A
+`ram` breaks combinational loops; a `rom` does not (`E008`). `rom` and
 `ram` are reserved: an instance or input named `rom` is `E006`, and
 `import rom "..."` is `E011`.
 
-Memory contents never appear in source — they are loaded at runtime by the
-host (or by `--sim`). This section is only the declaration shape; the read and
+Memory contents never appear in source; the host loads them at runtime (or
+`--sim` does). This section is only the declaration shape; the read and
 write semantics, the X rules, the edge rule, and how contents get in are in
 §6.5.
 
@@ -349,7 +352,7 @@ and[4] combine(a = {a, b, c, d}, b = mask)
 
 The output width is the sum of operand widths.
 
-**Anonymous nested components.** A component may be instantiated inline as the
+**Anonymous nested components.** You may instantiate a component inline as the
 value of a port. The nested instance has no name; its `.out` is wired
 immediately into the enclosing port:
 
@@ -360,13 +363,13 @@ and g(
 )
 ```
 
-Anonymous nesting may nest arbitrarily deep. It is purely a syntactic sugar:
+Anonymous nesting may nest arbitrarily deep. It is pure syntactic sugar:
 the resolver lowers it to an unnamed component instance with the same wiring
 rules as a named one. Any component's port binding (`and`, `not`, `wire`,
 `led`, a macro, a sub-circuit) accepts it; an `output` declaration does
 **not**: `output o(in = and(a = a, b = b).out)` loses the nested gate's
-bindings and fails with `E004`. Name the gate, or route it through a `wire`,
-when an output needs it.
+bindings and fails with `E004`. When an output needs one, name the gate or
+route it through a `wire`.
 
 ### 4.1 Validation Rules
 
@@ -398,7 +401,7 @@ Codes", the registry in `lib/validator/codes.zig`):
 
 ## 5. Wires
 
-A `wire` is a one-port pass-through component. Its single input port is `in`
+A `wire` is a one-port pass-through component. Its single input port is `in`,
 and its single output port is `out`; the value on `out` is, after evaluation,
 identical to the value on `in`. Wires are the closest thing the language has
 to a "let" binding for signals.
@@ -408,8 +411,8 @@ to a "let" binding for signals.
 Wires exist for two reasons.
 
 **(a) Naming an intermediate signal.** A bare `pin1.out` carries no
-documentation. Threading it through a `wire` lets you give the bit a meaningful
-name without changing the circuit's logical behaviour:
+documentation. Threading it through a `wire` lets you give the bit a
+descriptive name without changing the circuit's logical behaviour:
 
 ```
 input clk
@@ -421,10 +424,10 @@ This is purely a readability device. The compiler does not optimise wires
 away in the topology section, so the named signal survives into runtime
 introspection.
 
-**(b) Anchoring a signal that is referenced more than once.** Inline anonymous
-components have no name and therefore cannot be re-used; if the same derived
-signal feeds two ports, you need a named anchor for it. A `wire` is the
-lightest anchor available:
+**(b) Anchoring a signal used more than once.** Inline anonymous components
+have no name, so you cannot re-use them; if the same derived signal feeds two
+ports, you need a named anchor for it. A `wire` is the lightest anchor
+available:
 
 ```
 input a
@@ -436,7 +439,7 @@ and  g2(a = na.out, b = b2)
 ### 5.2 Wires and cycles
 
 Wires are *transparent* to cycle detection: a cycle that runs only through
-`wire`, `led`, `output`, `slice`, `concat`, `rom` and sub-circuit boundaries
+`wire`, `led`, `output`, `slice`, `concat`, `rom`, and sub-circuit boundaries
 has no delay element and is a hard error (`E008`), as is any component
 driving itself. A pair of wires that drive each other's `in` is the simplest
 case:
@@ -447,7 +450,7 @@ wire w1(in = w2.out)
 wire w2(in = w1.out)
 ```
 
-`and`, `not` and `ram` are *cycle-breaking*: a loop that passes through one
+`and`, `not`, and `ram` are *cycle-breaking*: a loop that passes through one
 of them is sequential logic (a latch), not a combinational loop, and the
 validator accepts it. The fixture `clean_gated_feedback.circ` is a ring of two NOT gates
 and two wires — a genuine cycle in the signal graph — and compiles cleanly
@@ -463,7 +466,7 @@ wire w2(in = n2.out)   // closes the ring; legal because it passes through gates
 The check says nothing about whether such a ring settles: a ring with an odd
 number of inverters compiles and oscillates at run time.
 
-(In this snippet `w2.out` is forward-referenced; the validator resolves names
+(This snippet forward-references `w2.out`; the validator resolves names
 globally, so order in source is irrelevant for binding.)
 
 ### 5.3 Multi-bit wires
@@ -482,8 +485,8 @@ width is the same `N`. Mismatches surface as `E014`.
 ### 5.4 What wires are *not*
 
 A `wire` is not a tri-state line and not a clocked register. It is a
-value-preserving pass-through over a fixed-width signal. If you find yourself
-wanting either of those things, the language does not yet model them.
+value-preserving pass-through over a fixed-width signal. If you need either
+one, the language does not yet model it.
 
 ---
 
@@ -493,8 +496,8 @@ wanting either of those things, the language does not yet model them.
 declaration accepts an optional `[N]` annotation; a missing `[N]` means width
 1. Sub-circuits may take their widths as parameters with the `<W>` form. The
 authoritative decision record lives in
-[`decisions/language.md`](decisions/language.md); this section is the user-
-facing reference.
+[`decisions/language.md`](decisions/language.md); this section is the
+user-facing reference.
 
 ### 6.1 Literal widths
 
@@ -511,15 +514,15 @@ validator checks that every connection's source width matches its destination
 width.
 
 `a[0]` is the LSB. Bit `i` has weight `2^i`. This matches the
-`BitVecState.value` bit layout the engine uses internally; there is no
-conversion between the user-visible numbering and the runtime numbering.
+`BitVecState.value` bit layout the engine uses internally; the user-visible
+numbering and the runtime numbering need no conversion.
 
 ### 6.2 Slice, bit-index, and concatenation
 
 See §4 for the signal-expression syntax. A slice or bit-index produces a
 narrower signal; a brace concat produces a wider one. The resolver lowers
 each to an engine-level component, so users never write `slice(...)` or
-`concat(...)` directly — the syntactic forms are the only way to invoke
+`concat(...)` directly; the syntactic forms are the only way to invoke
 them.
 
 ```
@@ -555,8 +558,8 @@ wide_not inst[4](a = x)
 output[4] r(in = inst.o)
 ```
 
-Multiple parameters are allowed and ordered by source-position of first
-introduction:
+A file may introduce several parameters, ordered by the source position of
+first introduction:
 
 ```
 // mux_lib.circ
@@ -570,9 +573,8 @@ maps `[W]` to 4 and `[S]` to 2.
 
 Two rules to remember:
 
-* **Missing `[N]` at the call site defaults all parameters to 1.** This is
-  what keeps every existing scalar caller of the built-in macros working
-  unchanged.
+* **Missing `[N]` at the call site defaults all parameters to 1.** This keeps
+  every existing scalar caller of the built-in macros working unchanged.
 * **Angle brackets only on the introducing line.** A parametric sub-circuit
   marks its parameter once, on `input<W>`. Internal references use `[W]`,
   not `<W>`.
@@ -583,7 +585,7 @@ Width-mismatch on connections involving a sub-circuit boundary, missing
 
 ### 6.4 The built-in macros are parametric
 
-`or`, `xor`, `nand`, `nor`, `xnor` ship with `<W>` declarations. Scalar
+`or`, `xor`, `nand`, `nor`, and `xnor` ship with `<W>` declarations. Scalar
 callers (no `[N]`) default `W` to 1, which produces byte-identical IR and
 topology to the pre-multibit form. Wider callers get the natural multi-bit
 gate. `nor` and `xnor` propagate width through their internal `or` / `xor`
@@ -638,19 +640,19 @@ table (`E014`); a port name outside the table is `E002`. `W` must be in
 at the presented `addr`, and it follows every address change without a clock,
 exactly like any other combinational output. A cell that has never been
 loaded or written reads fully undefined. If *any* bit of `addr` is undefined,
-`out` is fully undefined — there is no partial lookup.
+`out` is fully undefined; the memory never does a partial lookup.
 
 **Writing (`ram` only).** A `ram` writes `din` into the cell at `addr` on a
 *defined low → defined high* transition of `clk`, and only if `we` is
 defined-high and every bit of `addr` is defined at that moment. The clock's
 previous level must have been a defined `0`: the very first `set clk 1` (or
 `setPin(clk, 1n, 1n)`) after power-on is *not* an edge, because the previous
-level was undefined, so a circuit can never write on its way out of the
-all-undefined initial state. `din` is stored as presented, bit for bit,
-including its definedness — a partially undefined `din` writes a partially
-undefined cell. `clk` and `we` are ordinary width-1 inputs; there is no clock
-primitive. From a host you pulse the clock by driving it low and then high;
-from `--sim` that is `set clk 0` then `set clk 1`.
+level was undefined. A circuit can therefore never write on its way out of
+the all-undefined initial state. The `ram` stores `din` as presented, bit for
+bit, including its definedness; a partially undefined `din` writes a
+partially undefined cell. `clk` and `we` are ordinary width-1 inputs; the
+language has no clock primitive. From a host you pulse the clock by driving
+it low and then high; from `--sim` that is `set clk 0` then `set clk 1`.
 
 **Contents come from the host.** Source never carries an image. A memory is
 filled at run time through one of three doors, all taking the same headerless
@@ -665,16 +667,16 @@ padding bits clear (see `wasm-api.md` "Image format"):
   (`sim-protocol.md`).
 
 Loading is *replace-all*: a shorter image leaves the remaining cells
-undefined, an empty image clears the memory.
+undefined; an empty image clears the memory.
 
-**Loops.** For `E008` a `ram` behaves like a gate — a path through it does
-not form a combinational loop, so feeding `q` back into `d` or `a` is legal — 
-while a `rom` is transparent, so `rom` `out → addr` with nothing in between is
-an `E008` cycle (§5.2).
+**Loops.** For `E008`, a `ram` behaves like a gate: a path through it does
+not form a combinational loop, so feeding `q` back into `d` or `a` is legal.
+A `rom`, by contrast, is transparent, so `rom` `out → addr` with nothing in
+between is an `E008` cycle (§5.2).
 
-**Parametric memories.** Inside a `<W, A>` sub-circuit the width arguments may
-name the introduced parameters, and callers bind them positionally like any
-other parametric call:
+**Parametric memories.** Inside a `<W, A>` sub-circuit, the width arguments
+may name the introduced parameters, and callers bind them positionally like
+any other parametric call:
 
 ```
 input<A>[A] addr
@@ -686,8 +688,8 @@ output[W] q(in = m.out)
 
 **Tooling.** `--truth-table` tabulates a circuit whose memories are all `rom`
 (preload them with `--mem`; unloaded cells print `?`) and refuses one that
-contains a `ram`, whose clock would otherwise be enumerated as an input;
-drive those with `--sim`. `--preview` draws a `rom` as a one-input box and a
+contains a `ram`, whose clock it would otherwise enumerate as an input.
+Drive those with `--sim`. `--preview` draws a `rom` as a one-input box and a
 `ram` as a four-input box. `--emit-zig` does not support memories.
 
 ---

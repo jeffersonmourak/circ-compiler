@@ -35,7 +35,7 @@ The name has no fixed default: derive it from the plan prompt's title, or use th
 
 Run `git rev-parse HEAD` and `git log -1 --pretty='%h %s'`. Use the **full** SHA as the canonical reference. Embed both the full SHA and the short hash + subject in the archive header so a human can grep for either.
 
-If `git status --porcelain` shows uncommitted changes that affect the plan files (`DOCS/PLANS_PROMPT.md`, `DOCS/PLANS/`, `DOCS/STATUS.md`), stop and ask the user to commit them first — the hash must point at a tree that contains the plan in its final state.
+If `git status --porcelain` shows uncommitted changes that affect the plan files (`DOCS/PLANS_PROMPT.md`, `DOCS/PLANS/`, `DOCS/STATUS.md`), stop and ask the user to commit them first: the hash must point at a tree that contains the plan in its final state.
 
 ### 3. Read the bundle
 
@@ -66,7 +66,7 @@ Mandatory body sections, in this order:
 1. **Goal & scope** — one paragraph distilled from `PLANS_PROMPT.md`'s "What is being built" section. Keep the architectural anchors that constrained the work (e.g., "compiled artifacts are fixed at compile time", "no runtime topology mutation"). Drop process language ("read in this order on a cold start", "STATUS entry template") — that is gone with the working loop.
 2. **Phase-by-phase highlights** — one subsection per phase. For each phase write:
    - One sentence from the phase plan's "Goal" / "What ships" section.
-   - The bullet list of *what actually shipped*, distilled from the STATUS entries for that phase (one bullet per slice, ≤ 200 chars each). Quote diagnostic codes, file paths, and test names verbatim — those are durable references; rewording them strips usefulness. Do NOT repeat per-slice "Files touched" lists; mention only files whose name is itself the load-bearing decision (e.g., a fixture filename that captures the regression).
+   - The bullet list of *what actually shipped*, distilled from the STATUS entries for that phase (one bullet per slice, ≤ 200 chars each). Quote diagnostic codes, file paths, and test names verbatim: those are durable references; rewording them strips usefulness. Do NOT repeat per-slice "Files touched" lists; mention only files whose name is itself the load-bearing decision (e.g., a fixture filename that captures the regression).
    - Any "definition of done" deviations or open questions that landed differently than the phase plan predicted.
 3. **API surface frozen by the plan** — a single table or bullet list pulled from STATUS or `DOCS/decisions/`: every stable diagnostic code (`E001`–`E0NN`, `W0NN`), every emitted runtime export, every CLI flag. This is the reference future readers will grep for first.
 4. **Known papercuts carried forward** — reproduce the "Notes" callouts from STATUS that flag deferred work or v1 candidates (e.g., "single-file CLI mode skips `scan_imports`", "no programmatic root-pin id helper"). Each papercut gets one bullet with enough context to act on without re-reading STATUS.
@@ -74,20 +74,20 @@ Mandatory body sections, in this order:
 
 Style rules:
 
-- "Highlight view" means: dense, durable, greppable. Every sentence should pay rent in a year. Cut session-by-session narration ("then we fixed the LED fan-out bug"); keep the durable artefact ("`regression_led_out_drives_gate.circ` exercises `led.out → and → output`").
-- Preserve verbatim: diagnostic codes, file paths, test names, fixture names, CLI flag names, exported function names. These are how future you will search.
-- Strip: dates of individual slices (already pinned by the canonical commit), STATUS-template scaffolding, "Next slice" lines, intermediate test counts.
+- "Highlight view" means dense, durable, greppable. Every sentence should pay rent in a year. Cut session-by-session narration ("then we fixed the LED fan-out bug"); keep the durable artefact ("`regression_led_out_drives_gate.circ` exercises `led.out → and → output`").
+- Preserve these verbatim: diagnostic codes, file paths, test names, fixture names, CLI flag names, exported function names. These are how future you will search.
+- Strip these: dates of individual slices (already pinned by the canonical commit), STATUS-template scaffolding, "Next slice" lines, intermediate test counts.
 - Aim for one screenful per phase. If a phase wrote 30 slices, the archive does not need 30 bullets — group by deliverable kind ("fixtures", "validator passes", "emitter modules") and bullet that.
 
 ### 5. Clean up the consolidated sources
 
-After the archive file is written and the user has reviewed it (you stop for review at this point — see Working loop below), the sources that fed the archive are deleted in the same review:
+After you write the archive file and the user reviews it (you stop for review at this point — see Working loop below), delete the sources that fed the archive in the same review:
 
 - `DOCS/PLANS_PROMPT.md`
 - Every file under `DOCS/PLANS/`
 - `DOCS/STATUS.md`
 
-`DOCS/index.md` and any other doc that points at these files gets its pointer removed (or repointed at `DOCS/archive/index.md`). Add a row for the new archive file to `DOCS/archive/index.md`. Do **not** delete anything else under `DOCS/` — `DOCS/decisions/`, `DOCS/archive/`, `DOCS/prompts/` and every reference document (`architecture.md`, `language.md`, `wasm-api.md`, …) are living specs, not plan artefacts.
+Remove the pointer from `DOCS/index.md` and from any other doc that points at these files, or repoint it at `DOCS/archive/index.md`. Add a row for the new archive file to `DOCS/archive/index.md`. Do **not** delete anything else under `DOCS/` — `DOCS/decisions/`, `DOCS/archive/`, `DOCS/prompts/`, and every reference document (`architecture.md`, `language.md`, `wasm-api.md`, …) are living specs, not plan artefacts.
 
 If the repository contains a `DOCS/prompts/ARCHIVE.md` (this file), keep it. The archive prompt is a process artefact for *future* plans and survives across plan cycles.
 
@@ -105,7 +105,7 @@ For each archive session:
 2. Run `git status` and `git log --oneline -10`. Plan files must be clean. Latest commit should be the slice that signed off the plan.
 3. Run `git rev-parse HEAD` and capture the SHA.
 4. Read the bundle (PLANS_PROMPT, every PHASE plan, STATUS). Distil into `DOCS/archive/plan-<name>.md` per Step 4.
-5. **Stop for human review of the archive file before deleting anything.** Do not bundle the archive write and the source deletions in one un-reviewed shot — the archive's quality is what determines whether the deletions are safe.
+5. **Stop for human review of the archive file before deleting anything.** Do not bundle the archive write and the source deletions in one un-reviewed shot: the archive's quality determines whether the deletions are safe.
 6. After the human approves, perform the cleanup (Step 5) and run `zig build test` (Step 6). The human commits the archive write + deletions + any pointer fix in `DOCS/index.md` as one reviewable change.
 
 ## What this file is not

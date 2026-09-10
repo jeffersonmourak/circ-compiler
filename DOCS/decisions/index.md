@@ -1,6 +1,6 @@
 # Compiler Architecture Decisions
 
-This directory captures the architectural decisions guiding the development of the `.circ` compiler — a CLI that consumes a `.circ` source file and produces a self-contained `.wasm` artifact simulating that specific circuit.
+This directory captures the architectural decisions guiding the `.circ` compiler — a CLI that consumes a `.circ` source file and produces a self-contained `.wasm` artifact simulating that specific circuit.
 
 Each decision follows the format: **decision**, **rationale**, **alternatives**.
 

@@ -2,9 +2,9 @@
 
 Circuits drawn in Logisim (or Logisim-evolution) that use the `ROM` and `RAM`
 components can now be expressed in `.circ` with the native `rom`/`ram`
-memories — until topology v03 there was no primitive to map them to. This note
-records the mapping so a hand translation is mechanical. There is no automatic
-importer; the `.circ` file is written by hand, and the memory *contents* come
+memories; until topology v03, no primitive existed to map them to. This note
+records the mapping so a hand translation is mechanical. No automatic importer
+exists; you write the `.circ` file by hand, and the memory *contents* come
 through the runtime-loading doors described in [`language.md`](language.md)
 §6.5.
 
@@ -40,10 +40,10 @@ header line followed by whitespace-separated hex words with optional
 little-endian binary image — `ceil(W/8)` bytes per word, at most `2^A` words,
 padding bits zero ([`wasm-api.md`](wasm-api.md) "Image format"). A converter
 from `v2.0 raw` to that format is a small stand-alone script (parse the words,
-expand the runs, emit each as `ceil(W/8)` little-endian bytes) and is
-deliberately not part of this repository; once converted, the image is loaded
-with `--mem=<name>=<path>`, with `--sim`'s `load`, or through the artifact's
-`memLoad` export, exactly as any other image.
+expand the runs, emit each as `ceil(W/8)` little-endian bytes), and this
+repository deliberately omits it. After conversion, you load the image with
+`--mem=<name>=<path>`, `--sim`'s `load`, or the artifact's `memLoad` export,
+exactly as you would any other image.
 
 Logisim images carry no definedness either, so a converted image marks every
 loaded word fully defined; words past the end of the image read undefined,
