@@ -1958,12 +1958,16 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     mountSettingsDrawer(el, {
       get: settings,
       set: (mutate) => {
+        const before = settings().valueFormat;
         store.update((draft) => mutate(draft.settings));
         // The cap is a setting, so changing one can unblock or block the tab.
         applyTruthGate();
         // Both output panes read a setting, so both are re-run.
         void runPreview(buildStage.seq);
         void runTruth(buildStage.seq);
+        // The canvas captures its value format at construction; a rebuild
+        // replays the pins, so nothing the reader typed is lost by it.
+        if (settings().valueFormat !== before) void rebuildSim();
         schedule();
       },
     });
@@ -2640,6 +2644,8 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
 
     // ---- simulate ----
     type Signal = 0 | 1;
+    /** What a root input pin holds: the renderer's own BitValue shape. */
+    type PinValue = { value: bigint; defined: bigint; width: number };
     type CircView = {
       runtime: {
         topology: { components: { id: number; kind: number; name: string; origin: unknown[] }[] };
@@ -2650,7 +2656,11 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       };
       view: {
         refreshState(): void;
-        setInputSignal?(id: number, s: Signal): void;
+        setInputSignal(id: number, s: Signal): void;
+        /** Phase 1 of the renderer sync: a pin driven to an exact value. The
+         *  pin test asserts it exists, so it is not optional here. */
+        setInputValue(id: number, value: bigint, defined: bigint): void;
+        getInputValue(id: number): PinValue | null;
         /** Host hooks added in circ-renderer 2.1.0-alpha.2. Optional here so a
          *  stale pin degrades to no highlighting rather than a crash — the pin
          *  test is what makes their absence loud. */
@@ -2666,8 +2676,10 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       view: null as CircView | null,
       bytes: null as Uint8Array | null,
       renderedHash: -1,
-      /** Keyed by root input-pin NAME: ids shift as the source changes. */
-      pins: new Map<string, Signal>(),
+      /** Keyed by root input-pin NAME: ids shift as the source changes. Holds
+       *  the whole value, since a bus pin can be anything now, not just all-on
+       *  or all-off. */
+      pins: new Map<string, PinValue>(),
       rendererPromise: null as Promise<typeof import('circ-renderer')> | null,
       themesPromise: null as Promise<typeof import('../utils/circ-theme.mjs')> | null,
       assetsHooked: false,
@@ -2702,13 +2714,20 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           theme: pickTheme() as any,
           // Present once the renderer exposes it; the click handler below is
           // the fallback that keeps the by-name pin map current either way.
-          onPinToggle: (id: number, sig: Signal) => {
-            for (const [name, pid] of rootInputs(view)) if (pid === id) sim.pins.set(name, sig);
-            // A toggled pin can clock a ram, so whatever the panel is showing
+          // onPinChange, not onPinToggle: the older callback collapses any
+          // mixed bus to High, so a reader who typed 0x2A and then flipped the
+          // theme would get 0xFF back on the rebuilt canvas.
+          onPinChange: (id: number, value: PinValue) => {
+            for (const [name, pid] of rootInputs(view)) if (pid === id) sim.pins.set(name, value);
+            // A changed pin can clock a ram, so whatever the panel is showing
             // is now a picture of the past. Only redrawn while it is actually
             // on screen: each visible word costs a call across the boundary.
             if (memVisible()) renderMemory();
           },
+          // The base the bus badges are written in and a bare typed value is
+          // read in. Captured at construction, so a change to the setting
+          // rebuilds the canvas (see the settings drawer's `set`).
+          valueFormat: settings().valueFormat,
           // Fires only on a change, so this needs no debounce of its own.
           onHover: (id: number | null) => {
             markInEditor(id === null ? null : (link.table?.byComponentId.get(id) ?? null));
@@ -2728,28 +2747,12 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         simMount.appendChild(view.canvas);
         simMount.hidden = false;
         simNote.textContent = simNoteBase;
-        // Replay the reader's pins by name onto the fresh instance.
+        // Replay the reader's pins by name onto the fresh instance, value and
+        // all. A pin whose name is gone from the new circuit is forgotten.
         const ids = rootInputs(view);
         for (const name of Array.from(sim.pins.keys())) if (!ids.has(name)) sim.pins.delete(name);
-        let replayed = false;
-        for (const [name, sig] of sim.pins) {
-          const id = ids.get(name)!;
-          if (view.view.setInputSignal) view.view.setInputSignal(id, sig);
-          else view.runtime.setPinSignal(id, sig);
-          replayed = true;
-        }
-        if (replayed && !view.view.setInputSignal) {
-          view.runtime.run();
-          view.view.refreshState();
-        }
-        if (!view.view.setInputSignal) {
-          // Older renderer: keep the by-name map from the click itself.
-          view.canvas.addEventListener('click', () => {
-            for (const [name, id] of ids) {
-              const v = (view.runtime as any).readSignal?.(id);
-              if (v === 0 || v === 1) sim.pins.set(name, v);
-            }
-          });
+        for (const [name, v] of sim.pins) {
+          view.view.setInputValue(ids.get(name)!, v.value, v.defined);
         }
         if (!sim.assetsHooked) {
           sim.assetsHooked = true;

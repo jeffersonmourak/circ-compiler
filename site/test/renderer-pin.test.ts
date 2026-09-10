@@ -37,11 +37,17 @@ describe('renderer pin', () => {
   });
 
   test('the host hooks this site depends on are present', () => {
-    // The three additions the source-linking phase consumes. Without them the
-    // island silently loses every highlight rather than failing.
+    // Each phase of the renderer sync adds to this list, and this is the
+    // guard: a renderer pinned one phase behind would leave the island
+    // silently calling nothing rather than failing here.
     expect(typeof CircCanvas.prototype.setHighlight).toBe('function');
     expect(typeof CircCanvas.prototype.getLayout).toBe('function');
     expect(typeof CircCanvas.prototype.setInputSignal).toBe('function');
+    // Phase 1: a bus pin takes a value. The replay goes through setInputValue,
+    // and the whole point of the phase is lost if it is not there.
+    expect(typeof CircCanvas.prototype.setInputValue).toBe('function');
+    expect(typeof CircCanvas.prototype.getInputValue).toBe('function');
+    expect(typeof CircCanvas.prototype.boxOf).toBe('function');
   });
 
   test.skipIf(skip)('the pinned renderer decodes what libcirc.wasm emits', async () => {

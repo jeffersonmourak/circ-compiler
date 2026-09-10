@@ -891,3 +891,25 @@ Also carries the human's `autoRun` on the landing-page hero.
 2. **A rewrite of arithmetic needed a behavioural gate, so it has one.** `site/test/adders.test.ts` drives the committed artifacts over their whole input space — 16 pairs and 256 pairs — and checks `a + b == s + cout·2^N`, with an undefined output reported as its own failure rather than as a wrong number. That is the only thing that would have caught the version above: it draws, it runs, and it is wrong. Negative proof: dropping the propagated carry out of bit 2 fails 50 pairs.
 3. **`four-bit-adder` no longer claims a `repoPath`.** It was `tests/fixtures/circuits/four_bit_adder.circ` verbatim, and the fixture is still the scalar version with its own golden outputs. The gate that pins a `repoPath` to its fixture byte for byte would have failed, correctly, so the claim is dropped rather than the fixture edited.
 4. **A test asserted an intent that has since changed.** The last entry recorded the landing page deliberately opting out of auto-run, and a smoke assertion encoded it. The human has opted the hero in, so the assertion was the thing that was wrong. It now checks the invariant that survives either choice: every canvas that asks to auto-run is watched, and no canvas that did not ask is.
+
+## 2026-09-10 — Renderer sync, Phase 1 — a bus pin takes a value
+
+**What shipped:** The site pins circ-renderer `9694198` (`2.2.0-alpha.1`), the first release of the sync plan at `circ-renderer/DOCS/plan-playground-sync.md`. On every canvas on the site, clicking a pin wider than one bit now opens a small field over it seeded with its current value; Enter drives what was typed, and Escape, blur, scroll or resize close it without driving anything. A single-bit pin toggles on click exactly as before. The field accepts what the memory grid accepts — `2a`, `0x2A`, `0b101010`, `42`, `?` — because the parser is the grid's own, ported with its tests.
+
+Before this, a click drove every bit of a pin to one or to zero, and there was no way to reach `0x2A` at all.
+
+**The playground's half.** `sim.pins` holds a whole `BitValue` per pin name rather than a `0 | 1`, is fed by `onPinChange` rather than `onPinToggle`, and is replayed through `setInputValue` on every rebuild. The canvas is built with `valueFormat` from the settings drawer, so the bus badges and a bare typed value follow the reader's chosen base, and a change to that setting rebuilds the canvas, since it is captured at construction. The gallery changed nothing and got the feature by the pin bump alone, which was the design's deciding fact.
+
+**Files touched:** `site/package.json`, `site/bun.lock`, `site/src/utils/renderer-versions.ts`, `site/test/renderer-pin.test.ts`, `site/src/components/Playground.astro`.
+
+**Tests:** `bun test` 408 pass across 32 files, unchanged in count. `bun --bun run typecheck` 0 errors. Build and `bun run bundle` green; `/playground` eager is 29.0 KB gzip, and the renderer's lazy chunk grew from 6.4 to 7.9 KB for the field and parser, paid only on a Run. On the renderer: 57 tests pass, from 27, with three negative proofs.
+
+**Next slice:** Phase 2 of the plan, the typed memory API.
+
+**Notes:**
+
+1. **Shipped without `onPinEdit`, which the plan had the playground use.** The plan's reason for a host-owned field was to keep the playground's own parser and format setting. `valueFormat` on the canvas covers the format, and the parser is the same code with the same tests, so a second field would have been a second thing to keep in step for no gain. The hook exists in the renderer for a host that wants a different UI; the playground is not one. The plan is corrected to say so.
+2. **`onPinToggle` would have replayed the wrong value.** It collapses any mixed bus to High by construction, so a reader who typed `0x2A` and then flipped the theme would have got `0xFF` back on the rebuilt canvas. That is why the playground listens to `onPinChange`, and why the renderer's README says the older callback is lossy.
+3. **The unreachable "older renderer" branch is gone (G11).** The replay it guarded now requires `setInputValue`, which the pin test asserts, and its fallback called a `readSignal` that has never existed in any renderer version. Deleted in the same edit rather than left for Phase 5.
+4. **A design correction made on the renderer side, recorded here because the site depends on it.** The plan seeded the field from the canvas's own memory of what it had driven. The runtime drives every input to Low at load, so a fresh pin would have opened a field showing `?` over a badge reading `0x0`. The toggle, the seed and an edit request all read the runtime's value now.
+5. **The site's guard is the version pin, and it works.** Setting `RENDERER_PIN_VERSION` one phase back fails `renderer-pin.test.ts` immediately, and the same test now probes `setInputValue`, `getInputValue` and `boxOf` on the prototype.
