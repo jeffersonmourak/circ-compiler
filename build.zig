@@ -1065,6 +1065,53 @@ pub fn build(b: *std.Build) void {
     const run_preview_dump_tests = b.addRunArtifact(preview_dump_tests);
     test_step.dependOn(&run_preview_dump_tests.step);
 
+    // Layout-parity contract: JSON LayoutGrid dump shared with circ-renderer's
+    // bun test (see DOCS/decisions/preview-layout.md).
+    const preview_dump_json_mod = b.createModule(.{
+        .root_source_file = b.path("lib/preview/dump_json.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    preview_dump_json_mod.addImport("full_format", topology_full_format_mod);
+    preview_dump_json_mod.addImport("layout", preview_layout_mod);
+    const preview_dump_json_tests = b.addTest(.{
+        .name = "preview_dump_json_tests",
+        .root_module = preview_dump_json_mod,
+    });
+    const run_preview_dump_json_tests = b.addRunArtifact(preview_dump_json_tests);
+    test_step.dependOn(&run_preview_dump_json_tests.step);
+
+    // Layout invariants (I0–I3 and the extra measurements) — unit tests on
+    // hand-built grids; the corpus table lives in tests/preview.
+    const preview_layout_invariants_tests = b.addTest(.{
+        .name = "preview_layout_invariants_tests",
+        .root_module = fe.preview_layout_invariants,
+    });
+    const run_preview_layout_invariants_tests = b.addRunArtifact(preview_layout_invariants_tests);
+    test_step.dependOn(&run_preview_layout_invariants_tests.step);
+
+    // Port tables — the agreement test against place.zig's private copy.
+    const preview_layout_ports_tests = b.addTest(.{
+        .name = "preview_layout_ports_tests",
+        .root_module = fe.preview_layout_ports,
+    });
+    const run_preview_layout_ports_tests = b.addRunArtifact(preview_layout_ports_tests);
+    test_step.dependOn(&run_preview_layout_ports_tests.step);
+
+    const preview_layout_boxes_tests = b.addTest(.{
+        .name = "preview_layout_boxes_tests",
+        .root_module = fe.preview_layout_boxes,
+    });
+    const run_preview_layout_boxes_tests = b.addRunArtifact(preview_layout_boxes_tests);
+    test_step.dependOn(&run_preview_layout_boxes_tests.step);
+
+    const preview_layout_ordering_tests = b.addTest(.{
+        .name = "preview_layout_ordering_tests",
+        .root_module = fe.preview_layout_ordering,
+    });
+    const run_preview_layout_ordering_tests = b.addRunArtifact(preview_layout_ordering_tests);
+    test_step.dependOn(&run_preview_layout_ordering_tests.step);
+
     // Shared engine session: builds a live engine.Circuit from a full topology
     // and resolves root pins by name. Consumed by the truth-table builder and
     // the --sim drive loop.
@@ -1159,36 +1206,32 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_preview_layout_collapse_tests.step);
 
     // Phase 2 slice 3: Stage 2 — columns
-    const preview_layout_columns_mod = fe.preview_layout_columns;
-    const preview_layout_columns_tests = b.addTest(.{
-        .root_module = preview_layout_columns_mod,
+    const preview_layout_layering_mod = fe.preview_layout_layering;
+    const preview_layout_layering_tests = b.addTest(.{
+        .name = "preview_layout_layering_tests",
+        .root_module = preview_layout_layering_mod,
     });
-    const run_preview_layout_columns_tests = b.addRunArtifact(preview_layout_columns_tests);
-    test_step.dependOn(&run_preview_layout_columns_tests.step);
+    const run_preview_layout_layering_tests = b.addRunArtifact(preview_layout_layering_tests);
+    test_step.dependOn(&run_preview_layout_layering_tests.step);
 
     // Phase 2 slice 4: Stage 3 — rows
-    const preview_layout_rows_mod = fe.preview_layout_rows;
-    const preview_layout_rows_tests = b.addTest(.{
-        .root_module = preview_layout_rows_mod,
-    });
-    const run_preview_layout_rows_tests = b.addRunArtifact(preview_layout_rows_tests);
-    test_step.dependOn(&run_preview_layout_rows_tests.step);
 
     // Phase 2 slice 5: Stage 4 — place
-    const preview_layout_place_mod = fe.preview_layout_place;
-    const preview_layout_place_tests = b.addTest(.{
-        .root_module = preview_layout_place_mod,
+    const preview_layout_coords_tests = b.addTest(.{
+        .name = "preview_layout_coords_tests",
+        .root_module = fe.preview_layout_coords,
     });
-    const run_preview_layout_place_tests = b.addRunArtifact(preview_layout_place_tests);
-    test_step.dependOn(&run_preview_layout_place_tests.step);
+    const run_preview_layout_coords_tests = b.addRunArtifact(preview_layout_coords_tests);
+    test_step.dependOn(&run_preview_layout_coords_tests.step);
+
+    const preview_layout_channels_tests = b.addTest(.{
+        .name = "preview_layout_channels_tests",
+        .root_module = fe.preview_layout_channels,
+    });
+    const run_preview_layout_channels_tests = b.addRunArtifact(preview_layout_channels_tests);
+    test_step.dependOn(&run_preview_layout_channels_tests.step);
 
     // Phase 2 slice 6a: Stage 5 — route
-    const preview_layout_route_mod = fe.preview_layout_route;
-    const preview_layout_route_tests = b.addTest(.{
-        .root_module = preview_layout_route_mod,
-    });
-    const run_preview_layout_route_tests = b.addRunArtifact(preview_layout_route_tests);
-    test_step.dependOn(&run_preview_layout_route_tests.step);
 
     // Phase 3 slice 3: glyphs — depends on layout types.
     const preview_render_glyphs_mod = fe.preview_render_glyphs;
@@ -1234,6 +1277,46 @@ pub fn build(b: *std.Build) void {
     });
     const run_preview_layout_integration_tests = b.addRunArtifact(preview_layout_integration_tests);
     test_step.dependOn(&run_preview_layout_integration_tests.step);
+
+    // The previewable fixture corpus, built through the library front end
+    // (the CLI's and the site's exact path), and the layout-parity goldens
+    // over it: one JSON LayoutGrid per fixture-mode that
+    // circ-renderer/test/layout-parity.test.ts compares buildLayout() against.
+    const preview_corpus_mod = b.createModule(.{
+        .root_source_file = b.path("tests/preview/corpus.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    preview_corpus_mod.addImport("libcirc", fe.libcirc);
+    preview_corpus_mod.addImport("layout", preview_layout_mod);
+    preview_corpus_mod.addImport("orchestrator", fe.preview_layout_orchestrator);
+    const preview_layout_conformance_mod = b.createModule(.{
+        .root_source_file = b.path("tests/preview/layout_conformance_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    preview_layout_conformance_mod.addImport("corpus", preview_corpus_mod);
+    preview_layout_conformance_mod.addImport("layout", preview_layout_mod);
+    preview_layout_conformance_mod.addImport("preview_dump_json", preview_dump_json_mod);
+    preview_layout_conformance_mod.addImport("invariants", fe.preview_layout_invariants);
+    preview_layout_conformance_mod.addImport("ordering", fe.preview_layout_ordering);
+    preview_layout_conformance_mod.addImport("channels", fe.preview_layout_channels);
+    preview_layout_conformance_mod.addImport("layout_types", fe.preview_layout_types);
+    preview_layout_conformance_mod.addImport("golden", b.createModule(.{
+        .root_source_file = b.path("tests/helpers/golden.zig"),
+        .target = target,
+        .optimize = optimize,
+    }));
+    const preview_layout_conformance_tests = b.addTest(.{
+        .name = "preview_layout_conformance_tests",
+        .root_module = preview_layout_conformance_mod,
+    });
+    const run_preview_layout_conformance_tests = b.addRunArtifact(preview_layout_conformance_tests);
+    run_preview_layout_conformance_tests.step.dependOn(&install_runtime.step);
+    // Reads every fixture and (under UPDATE_GOLDENS) rewrites goldens: never
+    // serve it from the run-step cache, or a regeneration silently no-ops.
+    run_preview_layout_conformance_tests.has_side_effects = true;
+    test_step.dependOn(&run_preview_layout_conformance_tests.step);
 
     const topology_full_emit_integration_mod = b.createModule(.{
         .root_source_file = b.path("tests/topology/full_emit_integration_test.zig"),

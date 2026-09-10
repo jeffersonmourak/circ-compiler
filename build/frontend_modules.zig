@@ -66,11 +66,14 @@ pub const Modules = struct {
     preview_layout_types: *Module,
     preview_layout_sizing: *Module,
     preview_layout_collapse: *Module,
-    preview_layout_columns: *Module,
-    preview_layout_rows: *Module,
-    preview_layout_place: *Module,
-    preview_layout_route: *Module,
+    preview_layout_layering: *Module,
+    preview_layout_ordering: *Module,
+    preview_layout_boxes: *Module,
+    preview_layout_coords: *Module,
+    preview_layout_channels: *Module,
     preview_layout_orchestrator: *Module,
+    preview_layout_invariants: *Module,
+    preview_layout_ports: *Module,
     preview_render_color: *Module,
     preview_render_canvas: *Module,
     preview_render_glyphs: *Module,
@@ -250,29 +253,53 @@ pub fn create(b: *std.Build, opts: Options) Modules {
     preview_layout_collapse.addImport("full_format", full_format);
     preview_layout_collapse.addImport("layout", preview_layout);
     preview_layout_collapse.addImport("layout_types", preview_layout_types);
-    const preview_layout_columns = mk.module("lib/preview/layout/columns.zig");
-    preview_layout_columns.addImport("full_format", full_format);
-    preview_layout_columns.addImport("layout_types", preview_layout_types);
-    const preview_layout_rows = mk.module("lib/preview/layout/rows.zig");
-    preview_layout_rows.addImport("full_format", full_format);
-    preview_layout_rows.addImport("layout_types", preview_layout_types);
-    const preview_layout_place = mk.module("lib/preview/layout/place.zig");
-    preview_layout_place.addImport("full_format", full_format);
-    preview_layout_place.addImport("layout", preview_layout);
-    preview_layout_place.addImport("layout_types", preview_layout_types);
-    preview_layout_place.addImport("sizing", preview_layout_sizing);
-    const preview_layout_route = mk.module("lib/preview/layout/route.zig");
-    preview_layout_route.addImport("full_format", full_format);
-    preview_layout_route.addImport("layout", preview_layout);
-    preview_layout_route.addImport("layout_types", preview_layout_types);
+    const preview_layout_layering = mk.module("lib/preview/layout/layering.zig");
+    preview_layout_layering.addImport("full_format", full_format);
+    preview_layout_layering.addImport("layout_types", preview_layout_types);
+    const preview_layout_ports = mk.module("lib/preview/layout/ports.zig");
+    preview_layout_ports.addImport("full_format", full_format);
+    preview_layout_ports.addImport("layout", preview_layout);
+    preview_layout_ports.addImport("layout_types", preview_layout_types);
+    const preview_layout_boxes = mk.module("lib/preview/layout/boxes.zig");
+    preview_layout_boxes.addImport("full_format", full_format);
+    preview_layout_boxes.addImport("layout", preview_layout);
+    preview_layout_boxes.addImport("layout_types", preview_layout_types);
+    preview_layout_boxes.addImport("sizing", preview_layout_sizing);
+    preview_layout_boxes.addImport("ports", preview_layout_ports);
     const preview_layout_orchestrator = mk.module("lib/preview/layout/orchestrator.zig");
     preview_layout_orchestrator.addImport("full_format", full_format);
     preview_layout_orchestrator.addImport("layout", preview_layout);
+    preview_layout_orchestrator.addImport("layout_types", preview_layout_types);
     preview_layout_orchestrator.addImport("collapse", preview_layout_collapse);
-    preview_layout_orchestrator.addImport("columns", preview_layout_columns);
-    preview_layout_orchestrator.addImport("rows", preview_layout_rows);
-    preview_layout_orchestrator.addImport("place", preview_layout_place);
-    preview_layout_orchestrator.addImport("route", preview_layout_route);
+    preview_layout_orchestrator.addImport("layering", preview_layout_layering);
+    // Render-free invariant counters over a LayoutGrid (the layout rewrite's
+    // measurement of record; see DOCS/decisions/preview-layout.md).
+    const preview_layout_invariants = mk.module("lib/preview/layout/invariants.zig");
+    preview_layout_invariants.addImport("layout", preview_layout);
+    const preview_layout_ordering = mk.module("lib/preview/layout/ordering.zig");
+    preview_layout_ordering.addImport("full_format", full_format);
+    preview_layout_ordering.addImport("layout_types", preview_layout_types);
+    preview_layout_ordering.addImport("ports", preview_layout_ports);
+    preview_layout_ordering.addImport("layering", preview_layout_layering);
+    preview_layout_orchestrator.addImport("ordering", preview_layout_ordering);
+    const preview_layout_coords = mk.module("lib/preview/layout/coords.zig");
+    preview_layout_coords.addImport("full_format", full_format);
+    preview_layout_coords.addImport("layout", preview_layout);
+    preview_layout_coords.addImport("layout_types", preview_layout_types);
+    preview_layout_coords.addImport("boxes", preview_layout_boxes);
+    preview_layout_coords.addImport("ports", preview_layout_ports);
+    preview_layout_coords.addImport("layering", preview_layout_layering);
+    preview_layout_coords.addImport("ordering", preview_layout_ordering);
+    preview_layout_orchestrator.addImport("coords", preview_layout_coords);
+    const preview_layout_channels = mk.module("lib/preview/layout/channels.zig");
+    preview_layout_channels.addImport("full_format", full_format);
+    preview_layout_channels.addImport("layout", preview_layout);
+    preview_layout_channels.addImport("layout_types", preview_layout_types);
+    preview_layout_channels.addImport("ports", preview_layout_ports);
+    preview_layout_channels.addImport("coords", preview_layout_coords);
+    preview_layout_channels.addImport("layering", preview_layout_layering);
+    preview_layout_channels.addImport("ordering", preview_layout_ordering);
+    preview_layout_orchestrator.addImport("channels", preview_layout_channels);
 
     // ---- preview: render ----
     const preview_render_color = mk.module("lib/preview/render/color.zig");
@@ -366,11 +393,14 @@ pub fn create(b: *std.Build, opts: Options) Modules {
         .preview_layout_types = preview_layout_types,
         .preview_layout_sizing = preview_layout_sizing,
         .preview_layout_collapse = preview_layout_collapse,
-        .preview_layout_columns = preview_layout_columns,
-        .preview_layout_rows = preview_layout_rows,
-        .preview_layout_place = preview_layout_place,
-        .preview_layout_route = preview_layout_route,
+        .preview_layout_layering = preview_layout_layering,
+        .preview_layout_boxes = preview_layout_boxes,
+        .preview_layout_coords = preview_layout_coords,
+        .preview_layout_channels = preview_layout_channels,
         .preview_layout_orchestrator = preview_layout_orchestrator,
+        .preview_layout_invariants = preview_layout_invariants,
+        .preview_layout_ports = preview_layout_ports,
+        .preview_layout_ordering = preview_layout_ordering,
         .preview_render_color = preview_render_color,
         .preview_render_canvas = preview_render_canvas,
         .preview_render_glyphs = preview_render_glyphs,

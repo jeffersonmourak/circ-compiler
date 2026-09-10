@@ -1,12 +1,12 @@
-LayoutGrid 31x9
+LayoutGrid 31x7
 
 Components:
   [0] input_pin "a" @(0,0) 5x3
-  [1] input_pin "b" @(0,6) 5x3
-  [2] output_pin "out" @(24,0) 7x3
+  [1] input_pin "b" @(0,4) 5x3
+  [2] output_pin "out" @(24,1) 7x3
   [19] subcircuit:xor "g" @(10,0) 9x5
 
 Wires:
-  0.out -> 19.a: (5,1) -> (6,1) -> (9,1)
-  1.out -> 19.b: (5,7) -> (7,7) -> (7,3) -> (9,3)
-  19.out -> 2.in: (19,2) -> (20,2) -> (20,1) -> (23,1)
+  0.out -> 19.a: (5,1) -> (9,1)
+  1.out -> 19.b: (5,5) -> (6,5) -> (6,3) -> (9,3)
+  19.out -> 2.in: (19,2) -> (23,2)

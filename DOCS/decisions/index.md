@@ -91,6 +91,15 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - A live editor ships inert and shares one worker (touch-activated, one client per page, the editor chunk stays lazy)
 - An expand link carries a reference when it can, and a source when it must (id while unedited; a told-about degrade over the cap)
 
+### [preview-layout.md](preview-layout.md)
+- The parity contract is a JSON projection, not either side's native type (`dump_json.zig`, camelCase common subset, one golden per fixture-mode)
+- The corpus invariants are the measurement of record (`invariants.zig`: I0–I3 per net over segments only, every fixture-mode listed, zero from Phase 3)
+- Long edges get dummy nodes, and a leftward edge is a back edge (`layering.zig`: the old columns as layers, `k − 1` dummies per long edge, cycle and sink-leftward edges flagged `back`)
+- Ordering is port-aware barycenter sweeps with integer arithmetic (`ordering.zig`: `(sum, count)` keys with the sink's port slot, rounds kept while `C` falls, transpose to a fixed point)
+- Every node gets its own row, aligned to the port that feeds it (`coords.zig`: highest input port wins, pack with one gutter, dummies are wire rows, a lone out-wire pulls its source down, `insertSpacerRow`)
+- Wires are routed per gap, on tracks, under a constraint graph (`channels.zig`: nets, left-edge tracks, doglegs and spacer rows, return lanes, demand-sized gaps, a counted fallback search)
+- A macro port the topology cannot name is one port (collapse maps unnamed macro inputs onto `in`; I1/I2 exempt only where a port is multi-driven, I0/I3 asserted everywhere)
+
 ## Conventions
 
 - Decisions use `###` headings inside topic files.

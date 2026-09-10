@@ -47,11 +47,160 @@ pub const RowAssignment = struct {
     num_rows: u32,
 };
 
+// ---------- Layered graph (Phase 1 of the layout rewrite) ----------
+
+/// A node of the layered graph: a real `VirtualGraph` node or a dummy that
+/// carries a long edge through an intermediate layer.
+pub const LayerNode = struct {
+    /// Index into `VirtualGraph.nodes` for a real node; null for a dummy.
+    real: ?usize,
+    layer: u32,
+    /// For a dummy: index into `LayeredGraph.originals` of the edge it carries.
+    carries: ?u32,
+};
+
+/// One wire as collapse produced it, in `VirtualGraph` node order and each
+/// node's `outputs` order.
+pub const OriginalEdge = struct {
+    src: usize, // VirtualGraph node index
+    src_port: u8,
+    dst: usize,
+    dst_port: u8,
+    /// Closes a cycle: excluded from layering and ordering, routed as a
+    /// return lane.
+    back: bool,
+};
+
+/// A layer-adjacent segment: `src` sits in layer `L`, `dst` in `L + 1`.
+/// Back edges are not segmented and never appear here.
+pub const LayerEdge = struct {
+    src: u32, // LayerNode index
+    dst: u32,
+    src_port: u8, // 0 on a dummy source
+    dst_port: u8, // 0 on a dummy sink
+    original: u32, // index into `LayeredGraph.originals`
+};
+
+pub const LayeredGraph = struct {
+    /// Real nodes first, in `VirtualGraph` order, then dummies in
+    /// `originals` order and, within one edge, by layer.
+    nodes: []const LayerNode,
+    /// In `originals` order, then by segment.
+    edges: []const LayerEdge,
+    originals: []const OriginalEdge,
+    num_layers: u32,
+};
+
+pub const Ordering = struct {
+    /// Per layer, `LayerNode` indices top to bottom.
+    order: []const []const u32,
+    /// Position of every `LayerNode` inside its layer (the inverse of `order`).
+    pos: []const u32,
+    /// Sweep rounds the ordering ran (observable for tests).
+    rounds: u8 = 0,
+};
+
+// ---------- Coordinates (Phase 2 of the layout rewrite) ----------
+
+pub const ChannelWidths = struct {
+    /// Width in cells of the gap after layer `k` (source marker, sink marker
+    /// and every track). Indexed `0 .. num_layers`; the last entry is unused.
+    after: []const u32,
+};
+
+pub const Coords = struct {
+    /// Per LayerNode: the top-left cell of a real node's box; a dummy's cell.
+    x: []u32,
+    y: []u32,
+    /// Per LayerNode: box size (a dummy is 0 wide, 1 tall).
+    w: []u32,
+    h: []u32,
+    /// Per layer: left edge and width of its widest box.
+    layer_x: []u32,
+    layer_w: []u32,
+    /// Per layer: the first cell of the channel after it.
+    channel_x: []u32,
+    width: u32,
+    height: u32,
+};
+
+// ---------- Channels (Phase 3 of the layout rewrite) ----------
+
+/// A net's end in one gap. `rail` says which horizontal the terminal owns
+/// inside the gap: a source's rail runs from its port cell to the track, a
+/// sink's from the track to its port cell; a return-lane end on the return
+/// row owns none.
+pub const Terminal = struct {
+    node: u32, // LayerNode index
+    port: u8,
+    row: u32,
+    rail: enum(u8) { left, right, none },
+};
+
+/// One vertical run of a net on one track.
+pub const Piece = struct {
+    track: u32,
+    lo: u32,
+    hi: u32,
+};
+
+/// The horizontal jog between two pieces of a dogleg.
+pub const Jog = struct {
+    row: u32,
+    from_track: u32,
+    to_track: u32,
+};
+
+pub const Net = struct {
+    /// Identity: the source node's index in `VirtualGraph` and its port,
+    /// which is what render and the invariants call a net.
+    src_real: usize,
+    src_port: u8,
+    src: Terminal,
+    sinks: []Terminal, // ascending row
+    lo: u32,
+    hi: u32,
+    /// All terminals on one row: no track, one horizontal.
+    straight: bool,
+    /// Ascending `lo`; one piece unless a dogleg split the net.
+    pieces: []Piece,
+    jogs: []Jog,
+    /// Half of a back edge's return lane (see `channels.zig`).
+    back: bool,
+    /// Routed by the fallback search rather than by a track.
+    fallback: bool,
+};
+
+pub const Gap = struct {
+    after_layer: u32,
+    nets: []Net,
+    tracks: u32,
+    width: u32,
+};
+
+pub const RoutePlan = struct {
+    gaps: []Gap,
+    /// One row per back edge, appended below the diagram.
+    return_rows: u32,
+    /// Rows `insertSpacerRow` inserted, in order.
+    spacer_rows: []u32,
+    fallbacks: u32,
+};
+
 test "types: pipeline structs compile" {
     comptime {
         std.debug.assert(@typeInfo(VirtualNode).@"struct".fields.len == 8);
         std.debug.assert(@typeInfo(VirtualGraph).@"struct".fields.len == 2);
         std.debug.assert(@typeInfo(ColumnAssignment).@"struct".fields.len == 2);
         std.debug.assert(@typeInfo(RowAssignment).@"struct".fields.len == 2);
+        std.debug.assert(@typeInfo(LayerNode).@"struct".fields.len == 3);
+        std.debug.assert(@typeInfo(OriginalEdge).@"struct".fields.len == 5);
+        std.debug.assert(@typeInfo(LayerEdge).@"struct".fields.len == 5);
+        std.debug.assert(@typeInfo(LayeredGraph).@"struct".fields.len == 4);
+        std.debug.assert(@typeInfo(Ordering).@"struct".fields.len == 3);
+        std.debug.assert(@typeInfo(ChannelWidths).@"struct".fields.len == 1);
+        std.debug.assert(@typeInfo(Coords).@"struct".fields.len == 9);
+        std.debug.assert(@typeInfo(Net).@"struct".fields.len == 11);
+        std.debug.assert(@typeInfo(RoutePlan).@"struct".fields.len == 4);
     }
 }

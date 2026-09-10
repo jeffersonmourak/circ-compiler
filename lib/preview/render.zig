@@ -291,39 +291,64 @@ fn sinkArrowFor(last: Segment) []const u8 {
     return "▲";
 }
 
-/// True when `pt` is a crossing between two wires that both terminate at the
-/// same destination port — i.e., a fan-in merge.
+/// True when `pt` is a fan-in merge: a wire into the same destination port
+/// corners here while another passes straight through (or the other way
+/// round). Two wires of one net merely crossing each other's path are not
+/// a merge.
 fn isMergePoint(all_wires: []const RoutedWire, my_index: usize, pt: PortCoord) bool {
     const me = all_wires[my_index];
     for (all_wires, 0..) |other, oi| {
         if (oi == my_index) continue;
         if (other.dst_id != me.dst_id) continue;
         if (other.dst_port != me.dst_port) continue;
-        if (wirePassesThrough(other, pt)) return true;
+        if (divergeAt(me, other, pt)) return true;
     }
     return false;
 }
 
-/// True when `pt` is a crossing between two wires that share the same source
-/// port — i.e., a fan-out branch where one wire diverges from the other.
+/// True when `pt` is a fan-out branch: a wire from the same source port
+/// corners here while another passes straight through (or the other way
+/// round). A different net crossing a fan-out's trunk is not a branch —
+/// every wire of the trunk passes straight through that cell.
 fn isSplitPoint(all_wires: []const RoutedWire, my_index: usize, pt: PortCoord) bool {
     const me = all_wires[my_index];
     for (all_wires, 0..) |other, oi| {
         if (oi == my_index) continue;
         if (other.src_id != me.src_id) continue;
         if (other.src_port != me.src_port) continue;
-        if (wirePassesThrough(other, pt)) return true;
+        if (divergeAt(me, other, pt)) return true;
     }
     return false;
 }
 
-fn wirePassesThrough(wire: RoutedWire, pt: PortCoord) bool {
+/// One of the two wires corners at `pt` while the other passes through it.
+fn divergeAt(a: RoutedWire, b: RoutedWire, pt: PortCoord) bool {
+    return (wireCornersAt(a, pt) and wirePassesThroughInterior(b, pt)) or
+        (wireCornersAt(b, pt) and wirePassesThroughInterior(a, pt));
+}
+
+/// `pt` is an internal joint of the wire: the end of one segment and the
+/// start of the next (never the wire's first or last cell).
+fn wireCornersAt(wire: RoutedWire, pt: PortCoord) bool {
+    var i: usize = 0;
+    while (i + 1 < wire.segments.len) : (i += 1) {
+        const joint = wire.segments[i].to;
+        if (joint.x == pt.x and joint.y == pt.y) return true;
+    }
+    return false;
+}
+
+/// `pt` lies strictly inside one of the wire's segments.
+fn wirePassesThroughInterior(wire: RoutedWire, pt: PortCoord) bool {
     for (wire.segments) |seg| {
         const min_x = @min(seg.from.x, seg.to.x);
         const max_x = @max(seg.from.x, seg.to.x);
         const min_y = @min(seg.from.y, seg.to.y);
         const max_y = @max(seg.from.y, seg.to.y);
-        if (pt.x >= min_x and pt.x <= max_x and pt.y >= min_y and pt.y <= max_y) return true;
+        if (pt.x < min_x or pt.x > max_x or pt.y < min_y or pt.y > max_y) continue;
+        const at_from = pt.x == seg.from.x and pt.y == seg.from.y;
+        const at_to = pt.x == seg.to.x and pt.y == seg.to.y;
+        if (!at_from and !at_to) return true;
     }
     return false;
 }
@@ -628,4 +653,24 @@ test "render_split_dot: shared-src crossings become ● not ┼" {
 
     try std.testing.expect(std.mem.indexOf(u8, out, "●") != null);
     try std.testing.expect(std.mem.indexOf(u8, out, "┼") == null);
+}
+
+test "render: a net crossing a fan-out trunk is not a split, a branch is" {
+    // Net 9 fans out along row 5 from x=0: wire A straight to x=10, wire B
+    // corners down at x=6. Net 3's wire C runs down x=3, crossing the trunk.
+    const a_segs = [_]Segment{.{ .from = .{ .x = 0, .y = 5 }, .to = .{ .x = 10, .y = 5 } }};
+    const b_segs = [_]Segment{ .{ .from = .{ .x = 0, .y = 5 }, .to = .{ .x = 6, .y = 5 } }, .{ .from = .{ .x = 6, .y = 5 }, .to = .{ .x = 6, .y = 9 } } };
+    const c_segs = [_]Segment{.{ .from = .{ .x = 3, .y = 0 }, .to = .{ .x = 3, .y = 9 } }};
+    const wires = [_]RoutedWire{
+        .{ .src_id = 9, .src_port = 3, .dst_id = 1, .dst_port = 0, .segments = &a_segs, .crossings = &.{} },
+        .{ .src_id = 9, .src_port = 3, .dst_id = 2, .dst_port = 0, .segments = &b_segs, .crossings = &.{} },
+        .{ .src_id = 3, .src_port = 3, .dst_id = 4, .dst_port = 0, .segments = &c_segs, .crossings = &.{} },
+    };
+    const crossing = PortCoord{ .x = 3, .y = 5 };
+    const tap = PortCoord{ .x = 6, .y = 5 };
+    try std.testing.expect(!isSplitPoint(&wires, 0, crossing));
+    try std.testing.expect(!isSplitPoint(&wires, 1, crossing));
+    try std.testing.expect(isSplitPoint(&wires, 0, tap));
+    try std.testing.expect(isSplitPoint(&wires, 1, tap));
+    try std.testing.expect(!isMergePoint(&wires, 0, tap));
 }
