@@ -71,6 +71,7 @@ pub const Modules = struct {
     preview_layout_place: *Module,
     preview_layout_route: *Module,
     preview_layout_orchestrator: *Module,
+    preview_layout_invariants: *Module,
     preview_render_color: *Module,
     preview_render_canvas: *Module,
     preview_render_glyphs: *Module,
@@ -273,6 +274,10 @@ pub fn create(b: *std.Build, opts: Options) Modules {
     preview_layout_orchestrator.addImport("rows", preview_layout_rows);
     preview_layout_orchestrator.addImport("place", preview_layout_place);
     preview_layout_orchestrator.addImport("route", preview_layout_route);
+    // Render-free invariant counters over a LayoutGrid (the layout rewrite's
+    // measurement of record; see DOCS/decisions/preview-layout.md).
+    const preview_layout_invariants = mk.module("lib/preview/layout/invariants.zig");
+    preview_layout_invariants.addImport("layout", preview_layout);
 
     // ---- preview: render ----
     const preview_render_color = mk.module("lib/preview/render/color.zig");
@@ -371,6 +376,7 @@ pub fn create(b: *std.Build, opts: Options) Modules {
         .preview_layout_place = preview_layout_place,
         .preview_layout_route = preview_layout_route,
         .preview_layout_orchestrator = preview_layout_orchestrator,
+        .preview_layout_invariants = preview_layout_invariants,
         .preview_render_color = preview_render_color,
         .preview_render_canvas = preview_render_canvas,
         .preview_render_glyphs = preview_render_glyphs,

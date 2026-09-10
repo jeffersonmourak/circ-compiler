@@ -1081,6 +1081,15 @@ pub fn build(b: *std.Build) void {
     const run_preview_dump_json_tests = b.addRunArtifact(preview_dump_json_tests);
     test_step.dependOn(&run_preview_dump_json_tests.step);
 
+    // Layout invariants (I0–I3 and the extra measurements) — unit tests on
+    // hand-built grids; the corpus table lives in tests/preview.
+    const preview_layout_invariants_tests = b.addTest(.{
+        .name = "preview_layout_invariants_tests",
+        .root_module = fe.preview_layout_invariants,
+    });
+    const run_preview_layout_invariants_tests = b.addRunArtifact(preview_layout_invariants_tests);
+    test_step.dependOn(&run_preview_layout_invariants_tests.step);
+
     // Shared engine session: builds a live engine.Circuit from a full topology
     // and resolves root pins by name. Consumed by the truth-table builder and
     // the --sim drive loop.
