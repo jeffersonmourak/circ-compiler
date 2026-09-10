@@ -51,7 +51,7 @@ describe('the site calls each page one thing', () => {
     // A regex that silently matches nothing is the way a test like this rots.
     expect(navLinks().length).toBeGreaterThanOrEqual(4);
     expect(footerLinks().length).toBeGreaterThanOrEqual(3);
-    expect(navLinks().map(([route]) => route)).toContain('/examples');
+    expect(navLinks().map(([route]) => route)).toContain('/gallery');
   });
 
   test('every page heading names the thing the nav calls it', () => {
@@ -94,11 +94,27 @@ describe('the site calls each page one thing', () => {
     expect(checked).toBeGreaterThanOrEqual(3);
   });
 
+  test('the route the gallery moved away from still redirects to it', () => {
+    // The page lived at /examples until it was renamed. The repository is
+    // public, so that path may already be linked or indexed, and dropping the
+    // redirect turns every one of those links into a 404 without failing a
+    // build. The target is read from the nav rather than written down here, so
+    // a second rename cannot leave the redirect pointing at nothing.
+    const config = read('astro.config.mjs');
+    const target = new Map(navLinks()).get('/gallery') ? '/gallery' : null;
+    expect(target).toBe('/gallery');
+    expect(config).toContain("'/examples': '/gallery'");
+    // …and nothing still links to the old path.
+    for (const [route] of [...navLinks(), ...footerLinks()]) {
+      expect(route).not.toBe('/examples');
+    }
+  });
+
   test('the markdown twin of the gallery is headed the same way', () => {
     // The `.md` mirror is the site's other face, and it has its own copy of
     // every page name. It was the last place the rename reached.
     const mirror = read('scripts', 'build-llm-mirror.ts');
-    const gallery = pageFor('/examples')!;
+    const gallery = pageFor('/gallery')!;
     const h1 = h1Of(gallery)!;
     // The twin's own header, its entry in llms.txt, and its section label in
     // the bundled llms-full.txt all name it.

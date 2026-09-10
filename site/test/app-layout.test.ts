@@ -1,7 +1,7 @@
 // Build-free guards on the app layout. Two things can go wrong silently here
 // and neither shows up in a build: another page opting into `layout="app"` and
 // losing its article column, or an app-layout rule reaching `.lc-mount`, which
-// is shared with LiveCanvas.astro on / and /examples.
+// is shared with LiveCanvas.astro on / and /gallery.
 import { describe, expect, test } from 'bun:test';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -59,7 +59,7 @@ describe('app layout', () => {
 
   test('nothing restyles .lc-mount', () => {
     // The frozen set. `.lc-mount` is LiveCanvas.astro's mount too, so a rule
-    // added for the workbench would silently restyle / and /examples.
+    // added for the workbench would silently restyle / and /gallery.
     const frozen = [
       '.lc-mount',
       '.lc-mount canvas',
@@ -74,7 +74,7 @@ describe('app layout', () => {
   test('the app layout is always scoped to the attribute', () => {
     const appRules = selectorsOf(css).filter((s) => s.includes("data-layout='app'"));
     expect(appRules.length).toBeGreaterThan(5);
-    // Scoping is what keeps /tour and /examples — and Phase 7's LiveEditor —
+    // Scoping is what keeps /tour and /gallery — and Phase 7's LiveEditor —
     // out of every rule in the block.
     for (const selector of appRules) {
       expect(selector.startsWith("[data-layout='app']")).toBe(true);

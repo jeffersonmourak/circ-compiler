@@ -90,7 +90,7 @@ function emitTourTwin(): void {
     "A progressive walkthrough of `circ`. Each step adds one new idea on top of the previous one. By the end you'll have read enough to feel at home in the language reference.",
   ).trimEnd();
   const steps = tour.map(renderTourStep).join('\n\n');
-  const footer = `Done. The [language reference](${SITE_URL}/reference.md) covers the full surface — every keyword, every diagnostic code, the rules the validator enforces. The [gallery](${SITE_URL}/examples.md) has more circuits to read through.`;
+  const footer = `Done. The [language reference](${SITE_URL}/reference.md) covers the full surface — every keyword, every diagnostic code, the rules the validator enforces. The [gallery](${SITE_URL}/gallery.md) has more circuits to read through.`;
 
   writeTwin('tour.md', `${intro}\n\n\n${steps}\n\n${footer}\n`, 'src/content/tour.ts');
 }
@@ -117,7 +117,7 @@ function emitExamplesTwin(): void {
   ).trimEnd();
   const body = examples.map(renderExample).join('\n\n');
 
-  writeTwin('examples.md', `${intro}\n\n\n${body}\n`, 'src/content/examples.ts');
+  writeTwin('gallery.md', `${intro}\n\n\n${body}\n`, 'src/content/examples.ts');
 }
 
 // Source of truth for the hero snippet on the landing page lives in
@@ -298,7 +298,7 @@ function emitLlmsTxt(): void {
     '',
     '## Gallery',
     '',
-    `- [Gallery](${SITE_URL}/examples.md): Curated \`.circ\` programs with their \`--preview\` output.`,
+    `- [Gallery](${SITE_URL}/gallery.md): Curated \`.circ\` programs with their \`--preview\` output.`,
     '',
     '## Optional',
     '',
@@ -328,7 +328,7 @@ function emitLlmsFullTxt(): void {
     { path: 'reference/circuit-format.md', label: 'Circuit file format' },
     { path: 'reference/wasm-api.md', label: 'WASM runtime API' },
     { path: 'reference/preview.md', label: 'ASCII preview' },
-    { path: 'examples.md', label: 'Gallery' },
+    { path: 'gallery.md', label: 'Gallery' },
     { path: 'download.md', label: 'Download' },
   ];
 

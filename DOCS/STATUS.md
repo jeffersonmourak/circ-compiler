@@ -783,3 +783,25 @@ The hex textarea is now behind an "Edit as hex" checkbox, alongside a file picke
 2. **The heading check is containment, not equality.** `/tour` is labelled "Tour" and headed "A short tour", which is a longer form of the same name and not a disagreement. The first draft asserted equality and failed on it — the rule was wrong, not the page.
 3. **An unused import the rename left behind.** The new opening paragraph dropped the sentence about the interactive canvas, which was the only use of `RENDERER_REPO` on that page. Removed.
 4. **A fragility in the human's own layout tweak, flagged and not touched.** `[data-layout='app']` now reads `grid-template-rows: 4.0625rem calc(100dvh - 4.0625rem) auto` with `overflow: hidden` commented out. `dvh` has no fallback there, and an engine that does not know the unit drops the whole declaration rather than one track — which lands the workbench in an implicit auto row, the exact failure mode of the last two layout fixes. The `height` declaration two lines above already carries a `100vh` fallback for this reason. Not changed here: it is a deliberate tweak and not part of the rename.
+
+## 2026-09-09 — Content — the gallery moves to /gallery
+
+**What shipped:** The route follows the name. `src/pages/examples.astro` is `gallery.astro`, the page is served at `/gallery`, and its markdown twin is `gallery.md`. The nav, the footer, the tour's closing line, the LLM mirror's three references, the bundle baseline and the `.gitignore` entry for the generated twin all moved with it.
+
+**The old path still resolves.** `astro.config.mjs` declares `'/examples': '/gallery'`. The static build emits a page at `/examples` carrying a canonical link, a `noindex`, and a zero-delay meta refresh; the dev server answers 301. The repository is public, so a path that may already be linked or indexed does not get to become a 404 because a name changed.
+
+Also carries the human's edit commenting out the per-example "Source: …" links, and the `dvh` fallback flagged in the last entry.
+
+**Files touched:** `site/src/pages/gallery.astro` (renamed from `examples.astro`), `site/astro.config.mjs`, `site/src/components/Nav.astro`, `site/src/components/Footer.astro`, `site/src/pages/tour.astro`, `site/scripts/build-llm-mirror.ts`, `site/src/styles/global.css`, `site/bundle-budget.json`, `site/.gitignore`, `site/test/site-labels.test.ts`, `site/test/app-layout.test.ts`.
+
+**Tests:** `bun test` 399 pass across 31 files, from 398. `bun --bun run typecheck` 0 errors. Build, `bun run bundle` and `zig build test-all` green. `/gallery` is 1.6 KB gzip, the figure `/examples` carried; the redirect route is 0 bytes.
+
+**Next slice:** none.
+
+**Notes:**
+
+1. **The `dvh` fallback is in.** `grid-template-rows` is now the same fallback-first pair the `height` two lines above already used, and for a worse reason: an engine that does not know the unit drops the WHOLE declaration rather than one track, which leaves the rows implicit and lands the workbench in an auto row — the exact failure that made the editor size to its own content twice.
+2. **The redirect has a test, because losing it fails nothing.** `site-labels.test.ts` asserts the config still declares it and that nothing in the nav or footer still points at the old path. The target is read from the nav rather than written down in the test, so a second rename cannot leave the redirect aimed at a route that no longer exists. Negative proof: deleting the redirect line fails it.
+3. **A stale generated twin was being shipped.** `public/examples.md` survived the rename because the mirror writes twins but never removes one it has stopped writing, and `public/` is copied into `dist/` wholesale — so the build carried both `examples.md` and `gallery.md`, with only the second reachable from `llms.txt`. Removed by hand. The mirror still has no sweep step; a future rename will leave the same litter.
+4. **The `.md` twin has no redirect and cannot have one.** `/examples.md` is now a 404. `llms.txt` is the documented entry point and names `gallery.md`, so a crawler that starts where it is told is unaffected; one that had bookmarked the old twin is not.
+5. **Two imports are left unused on purpose.** The human's edit comments out the "Source: …" block with an HTML comment, which Astro strips entirely, so `GITHUB_REPO` and `GITHUB_PUBLIC` are now dead on that page. The import stays: the block reads as staged for return, and removing it would break the restore. `astro check` counts this as a hint, not a warning, so the gate is unaffected.

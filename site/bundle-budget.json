@@ -22,6 +22,11 @@
       "gzip": 0
     },
     "/examples": {
+      "files": 0,
+      "raw": 0,
+      "gzip": 0
+    },
+    "/gallery": {
       "files": 2,
       "raw": 3056,
       "gzip": 1613

@@ -54,14 +54,6 @@ const tiers = TIERS.map((t) => ({ ...t, items: examples.filter((e) => e.level ==
         <CodePreview source={ex.source} preview={ex.preview} />
         <OpenInPlayground id={`example:${ex.slug}`} />
         {ex.wasm && <LiveCanvas wasm={ex.wasm} />}
-        <!-- {ex.repoPath && GITHUB_PUBLIC && (
-          <p class="source-link muted">
-            Source: <a
-              href={`${GITHUB_REPO}/blob/main/${ex.repoPath}`}
-              rel="noreferrer noopener"
-            >{ex.repoPath}</a>
-          </p>
-        )} -->
       </article>
     ))}
     </div>

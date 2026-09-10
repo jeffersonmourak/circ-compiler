@@ -1381,14 +1381,20 @@ a.install-line:hover {
 /* ---------- The playground as an app layout ----------
    Opted into by `layout="app"` on Base.astro, which stamps data-layout on
    <body>. Every rule here is scoped to that attribute, so no other page — and
-   no <LiveEditor> on /tour or /examples — is ever matched. Nothing here
+   no <LiveEditor> on /tour or /gallery — is ever matched. Nothing here
    touches a .lc-mount selector: that block is shared with LiveCanvas.astro,
-   which / and /examples render. */
+   which / and /gallery render. */
 [data-layout='app'] {
   height: 100vh; /* fallback first */
   height: 100dvh;
   /*overflow: hidden;*/
   display: grid;
+  /* Same fallback-first pair as the height above, and for a worse reason: an
+     engine that does not know `dvh` drops the WHOLE declaration rather than
+     one track, which leaves the rows implicit and lands the workbench in an
+     auto row — the exact failure that made the editor size to its own content
+     twice before. */
+  grid-template-rows: 4.0625rem calc(100vh - 4.0625rem) auto;
   grid-template-rows: 4.0625rem calc(100dvh - 4.0625rem) auto;
 }
 [data-layout='app'] main {
