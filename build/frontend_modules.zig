@@ -66,7 +66,7 @@ pub const Modules = struct {
     preview_layout_types: *Module,
     preview_layout_sizing: *Module,
     preview_layout_collapse: *Module,
-    preview_layout_columns: *Module,
+    preview_layout_layering: *Module,
     preview_layout_rows: *Module,
     preview_layout_place: *Module,
     preview_layout_route: *Module,
@@ -252,9 +252,9 @@ pub fn create(b: *std.Build, opts: Options) Modules {
     preview_layout_collapse.addImport("full_format", full_format);
     preview_layout_collapse.addImport("layout", preview_layout);
     preview_layout_collapse.addImport("layout_types", preview_layout_types);
-    const preview_layout_columns = mk.module("lib/preview/layout/columns.zig");
-    preview_layout_columns.addImport("full_format", full_format);
-    preview_layout_columns.addImport("layout_types", preview_layout_types);
+    const preview_layout_layering = mk.module("lib/preview/layout/layering.zig");
+    preview_layout_layering.addImport("full_format", full_format);
+    preview_layout_layering.addImport("layout_types", preview_layout_types);
     const preview_layout_rows = mk.module("lib/preview/layout/rows.zig");
     preview_layout_rows.addImport("full_format", full_format);
     preview_layout_rows.addImport("layout_types", preview_layout_types);
@@ -271,7 +271,7 @@ pub fn create(b: *std.Build, opts: Options) Modules {
     preview_layout_orchestrator.addImport("full_format", full_format);
     preview_layout_orchestrator.addImport("layout", preview_layout);
     preview_layout_orchestrator.addImport("collapse", preview_layout_collapse);
-    preview_layout_orchestrator.addImport("columns", preview_layout_columns);
+    preview_layout_orchestrator.addImport("layering", preview_layout_layering);
     preview_layout_orchestrator.addImport("rows", preview_layout_rows);
     preview_layout_orchestrator.addImport("place", preview_layout_place);
     preview_layout_orchestrator.addImport("route", preview_layout_route);
@@ -380,7 +380,7 @@ pub fn create(b: *std.Build, opts: Options) Modules {
         .preview_layout_types = preview_layout_types,
         .preview_layout_sizing = preview_layout_sizing,
         .preview_layout_collapse = preview_layout_collapse,
-        .preview_layout_columns = preview_layout_columns,
+        .preview_layout_layering = preview_layout_layering,
         .preview_layout_rows = preview_layout_rows,
         .preview_layout_place = preview_layout_place,
         .preview_layout_route = preview_layout_route,

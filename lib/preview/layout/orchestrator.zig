@@ -2,7 +2,7 @@ const std = @import("std");
 const full_format = @import("full_format");
 const layout = @import("layout");
 const collapse_stage = @import("collapse");
-const columns_stage = @import("columns");
+const layering_stage = @import("layering");
 const rows_stage = @import("rows");
 const place_stage = @import("place");
 const route_stage = @import("route");
@@ -17,7 +17,11 @@ pub fn build(
     opts: layout.LayoutOptions,
 ) !layout.LayoutGrid {
     const graph = try collapse_stage.collapse(arena, topology, opts);
-    const cols = try columns_stage.assignColumns(arena, graph);
+    // Phase 1 of the layout rewrite: layers (with dummies for long edges)
+    // replace columns; the old row, place and route stages still consume
+    // the ColumnAssignment view over the real nodes.
+    const layered = try layering_stage.layer(arena, graph);
+    const cols = try layering_stage.toColumns(arena, layered, graph.nodes.len);
     const rows = try rows_stage.assignRows(arena, graph, cols);
     const placed = try place_stage.place(arena, graph, cols, rows, opts);
     const route_result = try route_stage.route(arena, graph, placed);

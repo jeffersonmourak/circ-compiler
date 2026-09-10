@@ -1192,12 +1192,13 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_preview_layout_collapse_tests.step);
 
     // Phase 2 slice 3: Stage 2 — columns
-    const preview_layout_columns_mod = fe.preview_layout_columns;
-    const preview_layout_columns_tests = b.addTest(.{
-        .root_module = preview_layout_columns_mod,
+    const preview_layout_layering_mod = fe.preview_layout_layering;
+    const preview_layout_layering_tests = b.addTest(.{
+        .name = "preview_layout_layering_tests",
+        .root_module = preview_layout_layering_mod,
     });
-    const run_preview_layout_columns_tests = b.addRunArtifact(preview_layout_columns_tests);
-    test_step.dependOn(&run_preview_layout_columns_tests.step);
+    const run_preview_layout_layering_tests = b.addRunArtifact(preview_layout_layering_tests);
+    test_step.dependOn(&run_preview_layout_layering_tests.step);
 
     // Phase 2 slice 4: Stage 3 — rows
     const preview_layout_rows_mod = fe.preview_layout_rows;
