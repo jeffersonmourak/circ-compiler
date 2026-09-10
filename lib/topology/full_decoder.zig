@@ -95,14 +95,15 @@ pub fn decode(allocator: std.mem.Allocator, bytes: []const u8) !FullTopology {
             origin_built += 1;
         }
 
-        // Kind-dispatched aux: slice carries (lo, hi); other kinds emit
-        // no trailing bytes for backward compatibility.
+        // Kind-dispatched aux: slice carries (lo, hi), memories their
+        // address width; other kinds emit no trailing bytes.
         const aux: full_format.Aux = switch (kind) {
             .slice => blk: {
                 const lo = try cursor.readU8();
                 const hi = try cursor.readU8();
                 break :blk .{ .slice = .{ .lo = lo, .hi = hi } };
             },
+            .rom, .ram => .{ .memory = .{ .addr_width = try cursor.readU8() } },
             else => .none,
         };
 
@@ -140,7 +141,7 @@ test "full_decode: empty payload round-trips" {
     const allocator = std.testing.allocator;
     const bytes = [_]u8{
         'C', 'I', 'R', 'F',
-        0x02,
+        0x03,
         0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00,
     };
@@ -157,8 +158,37 @@ test "full_decode_rejects_v01" {
     try std.testing.expectError(error.UnsupportedVersion, decode(allocator, &bytes));
 }
 
+test "full_decode_rejects_v02" {
+    const allocator = std.testing.allocator;
+    const bytes = [_]u8{ 'C', 'I', 'R', 'F', 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+    try std.testing.expectError(error.UnsupportedVersion, decode(allocator, &bytes));
+}
+
+test "full_decode: memory aux round-trips" {
+    const allocator = std.testing.allocator;
+    const bytes = [_]u8{
+        'C', 'I', 'R', 'F',
+        0x03,
+        0x01, 0x00, 0x00, 0x00, // one component
+        0x05, 0x00, 0x00, 0x00, // id = 5
+        0x08, // kind = rom
+        0x08, // width = 8
+        0x04, 0x00, 0x00, 0x00, 'c', 'o', 'd', 'e', // name
+        0x00, 0x00, 0x00, 0x00, // no origin frames
+        0x04, // addr_width = 4
+        0x00, 0x00, 0x00, 0x00, // no connections
+    };
+    var topo = try decode(allocator, &bytes);
+    defer topo.deinit(allocator);
+
+    try std.testing.expectEqual(@as(usize, 1), topo.components.len);
+    try std.testing.expectEqual(ComponentKind.rom, topo.components[0].kind);
+    try std.testing.expectEqualStrings("code", topo.components[0].name);
+    try std.testing.expectEqual(@as(u8, 4), topo.components[0].aux.memory.addr_width);
+}
+
 test "full_decode_rejects_truncated_input" {
     const allocator = std.testing.allocator;
-    const truncated = [_]u8{ 'C', 'I', 'R', 'F', 0x02 };
+    const truncated = [_]u8{ 'C', 'I', 'R', 'F', 0x03 };
     try std.testing.expectError(error.Truncated, decode(allocator, &truncated));
 }

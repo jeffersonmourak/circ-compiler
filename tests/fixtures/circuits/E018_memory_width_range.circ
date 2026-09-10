@@ -1,0 +1,5 @@
+input[4] pc
+rom big[8, 20](addr = pc.out)
+rom zero[0, 4](addr = pc.out)
+rom wide[65, 4](addr = pc.out)
+output[8] out(in = big.out)

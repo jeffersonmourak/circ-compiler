@@ -20,6 +20,7 @@ pub fn drawComponent(canvas: *Canvas, placed: PlacedComponent) void {
             .not_gate => drawNotGate(canvas, placed),
             .and_gate => drawAndGate(canvas, placed),
             .led => drawLed(canvas, placed),
+            .rom, .ram => drawMemoryBox(canvas, placed, p),
             .wire, .slice, .concat => unreachable, // collapsed before placement
         },
         .subcircuit => |sub| drawMacroBox(canvas, placed, sub),
@@ -52,6 +53,7 @@ fn hasOutPort(placed: PlacedComponent) bool {
     return switch (placed.kind) {
         .primitive => |p| switch (p) {
             .output_pin, .led, .wire, .slice, .concat => false,
+            .rom, .ram => true,
             else => true,
         },
         .subcircuit => true,
@@ -65,10 +67,19 @@ fn colorTagFor(kind: layout.NodeKind) ColorTag {
             .not_gate => .not_gate,
             .and_gate => .and_gate,
             .led => .led,
+            .rom, .ram => .macro,
             .wire, .slice, .concat => .none,
         },
         .subcircuit => .macro,
     };
+}
+
+/// Memory box: labeled `rom name[W,A]` / `ram name[W,A]` box in the macro
+/// colour; placement composes the label and sizes the box (rom 3 rows,
+/// ram 9 rows for its four input ports).
+pub fn drawMemoryBox(canvas: *Canvas, placed: PlacedComponent, kind: anytype) void {
+    const label = if (placed.display_label.len > 0) placed.display_label else @tagName(kind);
+    drawLabeledBox(canvas, placed.x, placed.y, placed.width, placed.height, label, .macro);
 }
 
 /// Display label for a pin: placement composes `name[N]` for multi-bit

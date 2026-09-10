@@ -13,6 +13,10 @@ fn portName(port: u8) []const u8 {
         @intFromEnum(full_format.PortName.a) => "a",
         @intFromEnum(full_format.PortName.b) => "b",
         @intFromEnum(full_format.PortName.out) => "out",
+        @intFromEnum(full_format.PortName.addr) => "addr",
+        @intFromEnum(full_format.PortName.din) => "din",
+        @intFromEnum(full_format.PortName.we) => "we",
+        @intFromEnum(full_format.PortName.clk) => "clk",
         else => "?",
     };
 }

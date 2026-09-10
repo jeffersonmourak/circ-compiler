@@ -1,0 +1,4 @@
+tests/fixtures/circuits/E018_memory_width_range.circ:2:1: error: E018: memory 'big': address width 20 exceeds 16 (65536 words)
+tests/fixtures/circuits/E018_memory_width_range.circ:2:16: error: E014: width mismatch: source width 4, destination expects 20
+tests/fixtures/circuits/E018_memory_width_range.circ:3:1: error: E018: memory 'zero': data width 0 must be 1..64
+tests/fixtures/circuits/E018_memory_width_range.circ:4:1: error: E018: memory 'wide': data width 65 exceeds 64

@@ -27,6 +27,9 @@ pub const VirtualNode = struct {
     /// per-component width byte. Default 1 so test fixtures that build
     /// `VirtualNode` literals without setting this stay scalar.
     signal_width: u8 = 1,
+    /// Address width of a memory node (from the topology's `Aux.memory`);
+    /// 0 for every other kind.
+    addr_width: u8 = 0,
 };
 
 pub const VirtualGraph = struct {
@@ -46,7 +49,7 @@ pub const RowAssignment = struct {
 
 test "types: pipeline structs compile" {
     comptime {
-        std.debug.assert(@typeInfo(VirtualNode).@"struct".fields.len == 7);
+        std.debug.assert(@typeInfo(VirtualNode).@"struct".fields.len == 8);
         std.debug.assert(@typeInfo(VirtualGraph).@"struct".fields.len == 2);
         std.debug.assert(@typeInfo(ColumnAssignment).@"struct".fields.len == 2);
         std.debug.assert(@typeInfo(RowAssignment).@"struct".fields.len == 2);

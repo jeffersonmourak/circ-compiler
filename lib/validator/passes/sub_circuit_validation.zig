@@ -1,6 +1,7 @@
 const std = @import("std");
 const diagnostics = @import("diagnostics");
 const ir = @import("ir_types");
+const memory_validation = @import("memory_validation");
 
 fn toDiagnosticSpan(span: ir.Span) diagnostics.Span {
     return .{
@@ -82,6 +83,10 @@ fn endpointWidth(
             .from => component.width,
             .to => null,
         },
+        .memory => |m| memory_validation.memoryPortWidth(m, port, switch (side) {
+            .from => .from,
+            .to => .to,
+        }),
         .unresolved_name => null,
     };
 }

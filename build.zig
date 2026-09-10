@@ -197,6 +197,13 @@ pub fn build(b: *std.Build) void {
     });
     name_collision_mod.addImport("diagnostics", validator_diagnostics_mod);
     name_collision_mod.addImport("ir_types", ir_types_mod);
+    const memory_validation_mod = b.createModule(.{
+        .root_source_file = b.path("lib/validator/passes/memory_validation.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    memory_validation_mod.addImport("diagnostics", validator_diagnostics_mod);
+    memory_validation_mod.addImport("ir_types", ir_types_mod);
     const port_validation_mod = b.createModule(.{
         .root_source_file = b.path("lib/validator/passes/port_validation.zig"),
         .target = target,
@@ -204,6 +211,7 @@ pub fn build(b: *std.Build) void {
     });
     port_validation_mod.addImport("diagnostics", validator_diagnostics_mod);
     port_validation_mod.addImport("ir_types", ir_types_mod);
+    port_validation_mod.addImport("memory_validation", memory_validation_mod);
     const multi_driver_mod = b.createModule(.{
         .root_source_file = b.path("lib/validator/passes/multi_driver.zig"),
         .target = target,
@@ -262,6 +270,7 @@ pub fn build(b: *std.Build) void {
     validator_run_mod.addImport("combinational_loop", combinational_loop_mod);
     validator_run_mod.addImport("dead_code", dead_code_mod);
     validator_run_mod.addImport("unused_import", unused_import_mod);
+    validator_run_mod.addImport("memory_validation", memory_validation_mod);
     const sub_circuit_validation_mod = b.createModule(.{
         .root_source_file = b.path("lib/validator/passes/sub_circuit_validation.zig"),
         .target = target,
@@ -269,6 +278,7 @@ pub fn build(b: *std.Build) void {
     });
     sub_circuit_validation_mod.addImport("diagnostics", validator_diagnostics_mod);
     sub_circuit_validation_mod.addImport("ir_types", ir_types_mod);
+    sub_circuit_validation_mod.addImport("memory_validation", memory_validation_mod);
     const validator_run_project_mod = b.createModule(.{
         .root_source_file = b.path("lib/validator/run_project.zig"),
         .target = target,
@@ -301,6 +311,10 @@ pub fn build(b: *std.Build) void {
     linkParserArchive(b, validator_name_passes_tests, build_archive_cmd);
     validator_name_passes_tests.linkLibC();
     const run_validator_name_passes_tests = b.addRunArtifact(validator_name_passes_tests);
+    // Zig collects tests only from a test root's own module, so a pass with
+    // inline tests must be its own root.
+    const memory_validation_tests = b.addTest(.{ .root_module = memory_validation_mod });
+    const run_memory_validation_tests = b.addRunArtifact(memory_validation_tests);
     const validator_structural_tests_mod = b.createModule(.{
         .root_source_file = b.path("tests/validator/structural_passes_test.zig"),
         .target = target,
@@ -971,6 +985,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_resolver_tests.step);
     test_step.dependOn(&run_validator_tests.step);
     test_step.dependOn(&run_validator_name_passes_tests.step);
+    test_step.dependOn(&run_memory_validation_tests.step);
     test_step.dependOn(&run_validator_structural_tests.step);
     test_step.dependOn(&run_validator_loop_tests.step);
     test_step.dependOn(&run_validator_run_tests.step);
@@ -1526,6 +1541,33 @@ pub fn build(b: *std.Build) void {
     run_serializer_fixtures_tests.step.dependOn(&install_runtime.step);
     test_step.dependOn(&run_serializer_fixtures_tests.step);
 
+    const sim_golden_tests_mod = b.createModule(.{
+        .root_source_file = b.path("tests/sim/golden_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    sim_golden_tests_mod.addImport("scan_imports", resolver_scan_imports_mod);
+    sim_golden_tests_mod.addImport("import_cycle", resolver_import_cycle_mod);
+    sim_golden_tests_mod.addImport("resolve_bodies", resolver_resolve_bodies_mod);
+    sim_golden_tests_mod.addImport("validator_run_project", validator_run_project_mod);
+    sim_golden_tests_mod.addImport("diagnostics", validator_diagnostics_mod);
+    sim_golden_tests_mod.addImport("full_serializer", topology_full_serializer_mod);
+    sim_golden_tests_mod.addImport("sim_loop", sim_loop_mod);
+    sim_golden_tests_mod.addImport("golden", b.createModule(.{
+        .root_source_file = b.path("tests/helpers/golden.zig"),
+        .target = target,
+        .optimize = optimize,
+    }));
+    const sim_golden_tests = b.addTest(.{
+        .root_module = sim_golden_tests_mod,
+    });
+    sim_golden_tests.addIncludePath(b.path("."));
+    sim_golden_tests.addIncludePath(b.path("./lib"));
+    linkParserArchive(b, sim_golden_tests, build_archive_cmd);
+    sim_golden_tests.linkLibC();
+    const run_sim_golden_tests = b.addRunArtifact(sim_golden_tests);
+    test_step.dependOn(&run_sim_golden_tests.step);
+
     const cli_e2e_options = b.addOptions();
     cli_e2e_options.addOption([]const u8, "circ_compile_path", b.getInstallPath(.bin, "circ-compile"));
     const cli_e2e_tests_mod = b.createModule(.{
@@ -1557,6 +1599,13 @@ pub fn build(b: *std.Build) void {
     });
     const run_topology_interpreter_tests = b.addRunArtifact(topology_interpreter_tests);
     test_step.dependOn(&run_topology_interpreter_tests.step);
+
+    // lib/circuit.zig is otherwise only ever a dependency module, and Zig
+    // collects tests only from a root module, so the engine's inline tests
+    // (and, via its relative imports, transport.zig's) need their own root.
+    const engine_tests = b.addTest(.{ .root_module = circuit_mod });
+    const run_engine_tests = b.addRunArtifact(engine_tests);
+    test_step.dependOn(&run_engine_tests.step);
 
     // The emit-zig backend behavioral smoke tests each spawn a nested
     // `zig build wasm` per fixture, which is dramatically slower than the rest

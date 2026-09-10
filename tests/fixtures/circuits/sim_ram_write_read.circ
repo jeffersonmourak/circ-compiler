@@ -1,0 +1,5 @@
+input[4] a
+input[8] d
+input w, clk
+ram data[8, 4](addr = a, din = d, we = w, clk = clk)
+output[8] q(in = data.out)

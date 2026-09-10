@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this project is
 
-`circ-compiler` is a one-shot compiler. It takes a `.circ` digital-logic source (plus any siblings it imports) and emits a self-contained `.wasm` artifact whose exports simulate that exact circuit. The compiler is pure Zig (the parser is a langlang-generated Go CGo c-archive linked in); there is no runtime SDK, no rendering layer, and no JavaScript in the build. Every compiled `.wasm` carries a vendored prebuilt runtime plus two custom sections (`circ.topology.v0.min`, `circ.topology.v0.full`) and exposes a fixed pull-based API: `topology_alloc`, `init`, `run`, `setPin(id, value, defined)`, `getOutputValue(id)`, `getOutputDefined(id)`. The two getters return paired `BitVecState` halves crossed as `i64`/`BigInt`.
+`circ-compiler` is a one-shot compiler. It takes a `.circ` digital-logic source (plus any siblings it imports) and emits a self-contained `.wasm` artifact whose exports simulate that exact circuit. The compiler is pure Zig (the parser is a langlang-generated Go CGo c-archive linked in); there is no runtime SDK, no rendering layer, and no JavaScript in the build. Every compiled `.wasm` carries a vendored prebuilt runtime plus two custom sections (`circ.topology.v0.min`, `circ.topology.v0.full`) and exposes a fixed pull-based API: `topology_alloc`, `init`, `run`, `setPin(id, value, defined)`, `getOutputValue(id)`, `getOutputDefined(id)`, plus the memory family (`getMemInfo`, `memBuffer`, `memLoad`, `memStore`, `memClear`, `setMemWord`, `getMemValue`, `getMemDefined`) for circuits that declare `rom`/`ram` — memory contents are runtime state loaded by the host, never part of the artifact. The two getters return paired `BitVecState` halves crossed as `i64`/`BigInt`.
 
 ## Analysis philosophy
 
@@ -58,7 +58,7 @@ There is no `-Dtest-filter` flag wired into `build.zig`. To run a single test mo
 | `circ-compile in.circ --inspect` | Pretty-printed parse tree, resolved IR, diagnostics. |
 | `circ-compile in.circ --preview` | ASCII schematic of the resolved circuit. |
 | `circ-compile in.circ --truth-table` | Enumerated truth table. Pair with `--format=markdown\|csv\|json`. |
-| `circ-compile in.circ --sim` | Interactive stdio drive protocol (proto=1): drive the circuit by pin name for testing/tooling; see `DOCS/sim-protocol.md`. |
+| `circ-compile in.circ --sim` | Interactive stdio drive protocol (proto=1): drive the circuit by pin name for testing/tooling, load/inspect `rom`/`ram` contents by declared name (`--mem=<name>=<path>` preloads, `load`/`save`/`peek`/`poke`/`mem`/`clear` verbs); see `DOCS/sim-protocol.md`. |
 | `echo '<json>' \| circ-compile --analyze` | JSON analysis (files, diagnostics, symbols, references) on stdout for editor tooling; see `DOCS/analyze-api.md`. |
 
 Hard errors block emission; partial or "best-effort" artifacts are never produced. `--warnings-as-errors` (alias `-Werror`) promotes warnings.
@@ -81,7 +81,7 @@ Hard errors block emission; partial or "best-effort" artifacts are never produce
 [lib/ir]                    Resolved IR (Module, Project, Component, Pin).
      │
      ▼
-[lib/validator]             Stable diagnostic codes E001-E016, W001-W003.
+[lib/validator]             Stable diagnostic codes E001-E018, W001-W003.
                             Single-module: run.zig. Whole-project: run_project.zig.
      │
      ▼
@@ -106,7 +106,7 @@ Two invariants the rest of the codebase leans on:
 
 The engine is pure Zig, oblivious to WebAssembly, JSON, or the topology format. It models a circuit as a directed graph of `Component`s and advances time with a min-heap event queue. The compiled `.wasm` runtime and the unit tests are both clients of the same `Circuit` API.
 
-Eight component kinds (`ComponentType`): `input_pin_gate`, `not_gate`, `and_gate`, `wire`, `output_pin`, `led`, `slice`, `concat`. Their integer encoding in the topology format is fixed: `input_pin_gate=0`, `not_gate=1`, `led=2`, `and_gate=3`, `wire=4`, `output_pin=5`, `slice=6`, `concat=7`. Do not renumber. `slice` and `concat` are bit-shape kinds — the resolver lowers `a[lo..hi]`, `a[i]`, and `{a, b, ...}` into them; users never write them directly.
+Nine component kinds (`ComponentType`): `input_pin_gate`, `not_gate`, `and_gate`, `wire`, `output_pin`, `led`, `slice`, `concat`, `memory`. Their integer encoding in the topology format is fixed by `lib/topology/format.zig` (the wire truth): `input_pin=0`, `not_gate=1`, `and_gate=2`, `wire=3`, `led=4`, `output_pin=5`, `slice=6`, `concat=7`; the engine's single `memory` kind carries a `mode` and maps to two wire kinds, `rom=8` and `ram=9`. Do not renumber. `slice` and `concat` are bit-shape kinds — the resolver lowers `a[lo..hi]`, `a[i]`, and `{a, b, ...}` into them; users never write them directly. `memory` keeps its cell planes on the component payload, not in the state pool.
 
 Facts that materially shape edits:
 
@@ -115,7 +115,7 @@ Facts that materially shape edits:
 3. **The WASM boundary uses `BitVecState` directly, not the scalar `toInt` encoding.** `setPin(id, value, defined)` and the paired `getOutputValue`/`getOutputDefined` exports cross `(value, defined)` as `i64`/`BigInt`. The legacy width-1 helpers (`toInt`: `low=0, high=1, undefined=2`; `toTransportByte`: enum order `undefined=0, low=1, high=2`) still exist as convenience mirrors for tests and `lib/transport.zig`, but neither is on the host-facing API path anymore.
 4. **Propagation is per-timestamp batched.** `propagate()` drains every event at the current timestamp `T` in Phase 1 (commit state, collect changed), then in Phase 2 walks the outputs of changed components, recalculating and rescheduling. Without that batching, a downstream gate with multiple upstream events at the same `T` can read partial state, dedup the corrective re-enqueue, and stick on the wrong final value. See `DOCS/simulation-engine.md` for the full rationale.
 5. **Delays are compile-time constants:** `PROPAGATION_DELAY = 5`, `WIRE_PROPAGATION_DELAY = 1`. `wire`, `output_pin`, `led`, `slice`, and `concat` use the wire delay; everything else uses the gate delay.
-6. **The allocator is global, not parameterised.** Allocations route through `memory.allocator` from `lib/memory.zig`. On WASM that is `std.heap.wasm_allocator`; on native (test builds) it is a `GeneralPurposeAllocator`. Do not add an allocator parameter to engine functions.
+6. **The allocator is global, not parameterised.** Allocations route through `memory.allocator` from `lib/memory.zig`: an `ArenaAllocator` over `page_allocator` on every target, so `free` only rewinds the most recent allocation and repeated allocation grows linear memory monotonically (allocate once and reuse, as the runtime's per-memory staging buffers do). Do not add an allocator parameter to engine functions.
 7. **Widths 1 through 64 are wired; pool tiers are lazily allocated per width.** Each tier indexes a separate SoA pool (`tier == width`; tier 0 is unused). `PoolHandle.tier`/`.slot` make every read/write a single dispatch followed by a direct bitmap op against the tier's `(values, defined)` u64 buffers. The width=1 tier packs 64 slots per word; wider tiers store one u64 per slot. Widths > 64 trap at allocation time. The historical roll-out lives in `DOCS/archive/plan-multi-bit-language.md`.
 
 `COLLECT_METRICS` is a compile-time switch wired by `build.zig` per consumer: `false` for native and WASM, `true` only for `zig build bench`. When false, `Circuit.metrics` is `void` and every counter bump is dead-code stripped, so production and test builds are byte-identical to a metrics-free engine.
@@ -142,6 +142,8 @@ Facts that materially shape edits:
 | E014 | width mismatch between driver and the port it feeds |
 | E015 | sub-circuit is not parametric (caller passed `[N]` to a scalar callee) |
 | E016 | parametric arity mismatch at the call site |
+| E017 | memory parameter list malformed (`rom`/`ram` takes exactly two instance-position width arguments `[W, A]`) |
+| E018 | memory width out of range (`W` in 1..64, `A` in 1..16) |
 | W001 | unused input declaration |
 | W002 | dangling output declaration |
 | W003 | unused import declaration |

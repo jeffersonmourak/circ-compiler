@@ -11,10 +11,61 @@ pub const PinRef = struct {
     width: u8,
 };
 
+/// A root-level memory addressable by its declared name. `kind` is the wire
+/// kind (`.rom` or `.ram`); the widths come from the `.full` record
+/// (`width` = W, `aux.memory.addr_width` = A).
+pub const MemRef = struct {
+    name: []const u8,
+    component_id: u32,
+    kind: full_format.ComponentKind,
+    data_width: u8,
+    addr_width: u8,
+};
+
+/// A validated image bound to a memory name, applied after `Session.build`.
+/// The bytes are owned by the caller and outlive the session so `reset`
+/// can re-apply them.
+pub const Preload = struct {
+    name: []const u8,
+    bytes: []const u8,
+};
+
 pub const SessionError = error{
     OutOfMemory,
     InvalidTopology,
 };
+
+/// The root-level memories of a topology, in record order. A pure walk
+/// (no `Circuit`), shared by `Session.build` and the CLI's preload
+/// pre-flight, which must resolve names before any circuit or handshake
+/// exists. Memories inside imported/macro sub-circuits (non-empty origin)
+/// are not name-addressable, mirroring pins.
+pub fn collectMemories(alloc: std.mem.Allocator, topology: full_format.FullTopology) SessionError![]const MemRef {
+    var list: std.ArrayList(MemRef) = .{};
+    errdefer list.deinit(alloc);
+    for (topology.components) |comp| {
+        if (comp.origin.len != 0) continue;
+        if (comp.kind != .rom and comp.kind != .ram) continue;
+        const addr_width = switch (comp.aux) {
+            .memory => |m| m.addr_width,
+            else => return error.InvalidTopology,
+        };
+        try list.append(alloc, .{
+            .name = comp.name,
+            .component_id = comp.id,
+            .kind = comp.kind,
+            .data_width = comp.width,
+            .addr_width = addr_width,
+        });
+    }
+    return list.toOwnedSlice(alloc);
+}
+
+/// Check-only codec entry: the word count a load of `bytes` would produce,
+/// or the error `applyImage` would raise. No `Circuit` involved.
+pub fn validateImage(mem: MemRef, bytes: []const u8) engine.memimage.MemoryImageError!usize {
+    return engine.memimage.validate(bytes, mem.data_width, mem.addr_width);
+}
 
 /// A live `engine.Circuit` built from a `FullTopology`, with its root-level
 /// input and output pins resolved by name. The truth-table builder enumerates
@@ -29,6 +80,8 @@ pub const Session = struct {
     circuit: *engine.Circuit,
     inputs: []const PinRef,
     outputs: []const PinRef,
+    /// Root-level memories by declared name; see `collectMemories`.
+    memories: []const MemRef,
     id_to_node: std.AutoHashMap(u32, *engine.Component),
 
     pub fn build(
@@ -87,6 +140,15 @@ pub const Session = struct {
                     );
                 },
                 .concat => circuit.createComponent(.{ .concat = .{} }, comp.width),
+                .rom, .ram => blk: {
+                    const aux = switch (comp.aux) {
+                        .memory => |m| m,
+                        else => return error.InvalidTopology,
+                    };
+                    if (aux.addr_width == 0 or aux.addr_width > engine.MAX_ADDR_WIDTH) return error.InvalidTopology;
+                    const mode: engine.MemoryMode = if (comp.kind == .rom) .rom else .ram;
+                    break :blk circuit.createComponent(try engine.memoryKind(mode, aux.addr_width), comp.width);
+                },
             } catch return error.InvalidTopology;
             node.id = comp.id;
             id_to_node.putAssumeCapacity(comp.id, node);
@@ -112,12 +174,32 @@ pub const Session = struct {
             .circuit = circuit,
             .inputs = inputs,
             .outputs = outputs,
+            .memories = try collectMemories(alloc, topology),
             .id_to_node = id_to_node,
         };
     }
 
     pub fn nodeById(self: *const Session, id: u32) ?*engine.Component {
         return self.id_to_node.get(id);
+    }
+
+    pub fn findMemory(self: *const Session, name: []const u8) ?MemRef {
+        for (self.memories) |mem| {
+            if (std.mem.eql(u8, mem.name, name)) return mem;
+        }
+        return null;
+    }
+
+    /// Replace-all load of a raw image into `mem` through the engine hook;
+    /// `out` resyncs and the circuit settles. Returns the words loaded. The
+    /// engine's own memory errors cannot occur: a `MemRef` names a memory
+    /// by construction, and the codec validates before any plane changes.
+    pub fn applyImage(self: *const Session, mem: MemRef, bytes: []const u8) !usize {
+        const node = self.nodeById(mem.component_id) orelse return error.InvalidTopology;
+        return self.circuit.memoryLoadImage(node, bytes) catch |err| switch (err) {
+            error.NotAMemory, error.AddressOutOfRange, error.BufferTooSmall, error.InvalidAddrWidth => unreachable,
+            else => |e| return e,
+        };
     }
 
     pub fn findInput(self: *const Session, name: []const u8) ?PinRef {
@@ -142,6 +224,10 @@ fn portByteToName(port: u8) ![]const u8 {
         .a => "a",
         .b => "b",
         .out => "out",
+        .addr => "addr",
+        .din => "din",
+        .we => "we",
+        .clk => "clk",
     };
 }
 
@@ -178,6 +264,131 @@ test "session resolves root pins by name" {
     try std.testing.expect(session.findInput("missing") == null);
     const out = session.findOutput("out").?;
     try std.testing.expect(session.nodeById(out.component_id) != null);
+}
+
+test "session builds rom and ram nodes from memory records" {
+    var arena = std.heap.ArenaAllocator.init(test_alloc);
+    defer arena.deinit();
+    var circuit = try engine.Circuit.init();
+    defer circuit.deinit();
+
+    const components = [_]FullComponentRecord{
+        .{ .id = 0, .kind = .input_pin, .width = 4, .name = "pc", .origin = &.{} },
+        .{ .id = 1, .kind = .rom, .width = 8, .name = "code", .origin = &.{}, .aux = .{ .memory = .{ .addr_width = 4 } } },
+        .{ .id = 2, .kind = .ram, .width = 8, .name = "data", .origin = &.{}, .aux = .{ .memory = .{ .addr_width = 2 } } },
+    };
+    const connections = [_]FullConnectionRecord{
+        .{ .from_id = 0, .to_id = 1, .port = @intFromEnum(full_format.PortName.addr) },
+        .{ .from_id = 0, .to_id = 2, .port = @intFromEnum(full_format.PortName.addr) },
+        .{ .from_id = 1, .to_id = 2, .port = @intFromEnum(full_format.PortName.din) },
+        .{ .from_id = 0, .to_id = 2, .port = @intFromEnum(full_format.PortName.we) },
+        .{ .from_id = 0, .to_id = 2, .port = @intFromEnum(full_format.PortName.clk) },
+    };
+    var session = try Session.build(arena.allocator(), &circuit, .{ .components = &components, .connections = &connections });
+
+    const rom = session.nodeById(1).?;
+    const ram = session.nodeById(2).?;
+    try std.testing.expect(rom.kind == .memory and rom.kind.memory.mode == .rom);
+    try std.testing.expectEqual(@as(u8, 4), rom.kind.memory.cells.addr_width);
+    try std.testing.expect(ram.kind.memory.mode == .ram and ram.kind.memory.din == rom);
+    try std.testing.expect(ram.kind.memory.clk == session.nodeById(0).?);
+}
+
+// addr (id=0, input_pin[4]) → rom code[8,4] (id=1) → out (id=2); a ram data[8,4] (id=3)
+// fed by the same pins; a nested rom (id=4) one origin frame deep.
+const nested_origin = [_]full_format.OriginFrame{.{ .alias = "inner", .subcircuit = "mem_wrap", .target_file = 1 }};
+const memory_components = [_]FullComponentRecord{
+    .{ .id = 0, .kind = .input_pin, .width = 4, .name = "addr", .origin = &.{} },
+    .{ .id = 1, .kind = .rom, .width = 8, .name = "code", .origin = &.{}, .aux = .{ .memory = .{ .addr_width = 4 } } },
+    .{ .id = 2, .kind = .output_pin, .width = 8, .name = "out", .origin = &.{} },
+    .{ .id = 3, .kind = .ram, .width = 8, .name = "data", .origin = &.{}, .aux = .{ .memory = .{ .addr_width = 4 } } },
+    .{ .id = 4, .kind = .rom, .width = 8, .name = "hidden", .origin = &nested_origin, .aux = .{ .memory = .{ .addr_width = 2 } } },
+    .{ .id = 5, .kind = .input_pin, .width = 1, .name = "we", .origin = &.{} },
+};
+const memory_connections = [_]FullConnectionRecord{
+    .{ .from_id = 0, .to_id = 1, .port = @intFromEnum(full_format.PortName.addr) },
+    .{ .from_id = 1, .to_id = 2, .port = @intFromEnum(full_format.PortName.in) },
+    .{ .from_id = 0, .to_id = 3, .port = @intFromEnum(full_format.PortName.addr) },
+    .{ .from_id = 1, .to_id = 3, .port = @intFromEnum(full_format.PortName.din) },
+    .{ .from_id = 5, .to_id = 3, .port = @intFromEnum(full_format.PortName.we) },
+    .{ .from_id = 5, .to_id = 3, .port = @intFromEnum(full_format.PortName.clk) },
+    .{ .from_id = 0, .to_id = 4, .port = @intFromEnum(full_format.PortName.addr) },
+};
+
+test "session collects root memories" {
+    var arena = std.heap.ArenaAllocator.init(test_alloc);
+    defer arena.deinit();
+    var circuit = try engine.Circuit.init();
+    defer circuit.deinit();
+    var session = try Session.build(arena.allocator(), &circuit, .{ .components = &memory_components, .connections = &memory_connections });
+
+    try std.testing.expectEqual(@as(usize, 2), session.memories.len);
+    try std.testing.expectEqualStrings("code", session.memories[0].name);
+    const data = session.findMemory("data").?;
+    try std.testing.expectEqual(full_format.ComponentKind.ram, data.kind);
+    try std.testing.expectEqual(@as(u8, 8), data.data_width);
+    try std.testing.expectEqual(@as(u8, 4), data.addr_width);
+    try std.testing.expectEqual(@as(u32, 3), data.component_id);
+    // A pin name is not a memory name, and a nested memory is not addressable.
+    try std.testing.expect(session.findMemory("addr") == null);
+    try std.testing.expect(session.findMemory("hidden") == null);
+    try std.testing.expect(session.nodeById(4) != null);
+}
+
+test "session validateImage matches applyImage" {
+    var arena = std.heap.ArenaAllocator.init(test_alloc);
+    defer arena.deinit();
+    var circuit = try engine.Circuit.init();
+    defer circuit.deinit();
+    var session = try Session.build(arena.allocator(), &circuit, .{ .components = &memory_components, .connections = &memory_connections });
+    const code = session.findMemory("code").?;
+
+    const four = [_]u8{ 0x10, 0x20, 0x30, 0x40 };
+    try std.testing.expectEqual(@as(usize, 4), try validateImage(code, &four));
+    try std.testing.expectEqual(@as(usize, 4), try session.applyImage(code, &four));
+
+    const seventeen = [_]u8{0} ** 17;
+    try std.testing.expectError(error.TooManyWords, validateImage(code, &seventeen));
+    try std.testing.expectError(error.TooManyWords, session.applyImage(code, &seventeen));
+
+    const wide = MemRef{ .name = "w", .component_id = 0, .kind = .rom, .data_width = 12, .addr_width = 2 };
+    try std.testing.expectError(error.LengthNotWordMultiple, validateImage(wide, &.{ 1, 2, 3 }));
+}
+
+test "session applyImage short image leaves the tail undefined and resyncs out" {
+    var arena = std.heap.ArenaAllocator.init(test_alloc);
+    defer arena.deinit();
+    var circuit = try engine.Circuit.init();
+    defer circuit.deinit();
+    var session = try Session.build(arena.allocator(), &circuit, .{ .components = &memory_components, .connections = &memory_connections });
+    const code = session.findMemory("code").?;
+    const addr = session.findInput("addr").?;
+    const out = session.findOutput("out").?;
+
+    // Present address 1 first, then load: out follows without another drive.
+    try circuit.propagateEvent(session.nodeById(addr.component_id).?, .{ .value = 1, .defined = 0xF, .width = 4 });
+    try std.testing.expectEqual(@as(usize, 4), try session.applyImage(code, &.{ 0x10, 0x20, 0x30, 0x40 }));
+    const cells = engine.memoryCells(session.nodeById(code.component_id).?).?;
+    try std.testing.expectEqual(@as(u64, 0xFF), cells.defined[3]);
+    try std.testing.expectEqual(@as(u64, 0), cells.defined[4]);
+    const s = circuit.readState(session.nodeById(out.component_id).?.state_handle);
+    try std.testing.expectEqual(@as(u64, 0x20), s.value);
+    try std.testing.expectEqual(@as(u64, 0xFF), s.defined);
+}
+
+test "session rejects a memory record without its aux" {
+    var arena = std.heap.ArenaAllocator.init(test_alloc);
+    defer arena.deinit();
+    var circuit = try engine.Circuit.init();
+    defer circuit.deinit();
+
+    const components = [_]FullComponentRecord{
+        .{ .id = 0, .kind = .rom, .width = 8, .name = "code", .origin = &.{} },
+    };
+    try std.testing.expectError(
+        error.InvalidTopology,
+        Session.build(arena.allocator(), &circuit, .{ .components = &components, .connections = &.{} }),
+    );
 }
 
 test "session drives and reads through the engine" {

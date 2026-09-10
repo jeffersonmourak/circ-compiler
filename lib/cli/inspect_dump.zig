@@ -64,6 +64,17 @@ fn dumpComponent(writer: anytype, comp: anytype, depth: usize) anyerror!void {
     } else {
         try writer.writeAll("<anonymous> ");
     }
+    if (comp.width_args.len > 0) {
+        try writer.writeAll("width_args=[");
+        for (comp.width_args, 0..) |arg, idx| {
+            if (idx > 0) try writer.writeAll(", ");
+            switch (arg) {
+                .literal => |n| try writer.print("{d}", .{n}),
+                .parameter => |name| try writer.writeAll(name),
+            }
+        }
+        try writer.writeAll("] ");
+    }
     try writeSpan(writer, comp.span);
     try writer.writeByte('\n');
     for (comp.ports) |port| {
@@ -122,6 +133,7 @@ fn dumpComponentKind(writer: anytype, kind: anytype) !void {
         .unresolved_name => |name| try writer.print("unresolved_name:{s}", .{name}),
         .slice => |s| try writer.print("slice:[{d}..{d})", .{ s.lo, s.hi }),
         .concat => try writer.writeAll("concat"),
+        .memory => |m| try writer.print("{s}[W={d},A={d}]", .{ @tagName(m.mode), m.data_width, m.addr_width }),
     }
 }
 

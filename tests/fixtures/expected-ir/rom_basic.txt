@@ -1,0 +1,13 @@
+Module file_id=0
+Imports (0)
+Inputs (1)
+  id=0 name=pc component=0 width=4
+Outputs (1)
+  id=0 name=out driver=1.out width=8
+Components (3)
+  id=0 name=pc kind=primitive:input_pin width=4
+  id=1 name=code kind=rom[W=8,A=4] width=8
+  id=2 name=out kind=primitive:output_pin width=8
+Connections (2)
+  0.out -> 1.addr
+  1.out -> 2.in

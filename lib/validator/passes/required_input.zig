@@ -27,15 +27,17 @@ pub fn run(
     diagnostic_list: *diagnostics.DiagnosticList,
 ) !void {
     for (module.components) |component| {
-        const primitive = switch (component.kind) {
-            .primitive => |value| value,
+        const required_ports: []const []const u8 = switch (component.kind) {
+            .primitive => |primitive| switch (primitive) {
+                .and_gate => &.{ "a", "b" },
+                .not_gate, .wire, .led, .output_pin => &.{"in"},
+                .input_pin => &.{},
+            },
+            .memory => |m| switch (m.mode) {
+                .rom => &.{"addr"},
+                .ram => &.{ "addr", "din", "we", "clk" },
+            },
             else => continue,
-        };
-
-        const required_ports: []const []const u8 = switch (primitive) {
-            .and_gate => &.{ "a", "b" },
-            .not_gate, .wire, .led, .output_pin => &.{"in"},
-            .input_pin => &.{},
         };
 
         for (required_ports) |port| {

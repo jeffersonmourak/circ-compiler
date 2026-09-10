@@ -52,7 +52,7 @@ The compiled `.wasm` artifact exposes a fixed runtime API for hosts (browsers, N
 
 ### Topology section copied into linear memory at startup
 
-**Decision.** The compiled `.wasm` carries the circuit topology as a `circ.topology.v0.min` custom section, not in linear memory. The host reads the section via `WebAssembly.Module.customSections`, calls `topology_alloc(byteLength)` to reserve a buffer in linear memory, copies the bytes, then calls `init()`. `init()` parses the buffer and constructs the circuit. The section name still starts with `v0` for backwards-compatible host code; the version byte inside (`0x02`) is the format axis that evolves.
+**Decision.** The compiled `.wasm` carries the circuit topology as a `circ.topology.v0.min` custom section, not in linear memory. The host reads the section via `WebAssembly.Module.customSections`, calls `topology_alloc(byteLength)` to reserve a buffer in linear memory, copies the bytes, then calls `init()`. `init()` parses the buffer and constructs the circuit. The section name still starts with `v0` for backwards-compatible host code; the version byte inside (`0x03`) is the format axis that evolves.
 
 **Rationale.** WASM custom sections are opaque to the module itself — there is no in-module API to read them. The three-call protocol (`topology_alloc` → `memcpy` → `init`) is the smallest portable bridge any JS host can implement without an SDK. Hosts that don't need rendering metadata can ignore the parallel `circ.topology.v0.full` section, which carries the same structural data plus per-component names and macro provenance.
 
@@ -68,3 +68,83 @@ The artifact intentionally omits several exports that earlier drafts considered:
 - `freeBuffer()` — companion to the introspection exports above; not needed because no export currently returns an owned buffer.
 
 A richer surface (`getStateSnapshot`, `getFileInfo`, `freeBuffer`, …) still exists in `lib/emit/runtime.zig`, the experimental `--emit-zig` pipeline. That path is not on the default compile and its export contract is not stable.
+
+The list above is a list of *omissions*, not a promise that the six original exports are the whole surface: topology v03 added the memory export family (`getMemInfo`, `memBuffer`, `memLoad`, `memStore`, `memClear`, `setMemWord`, `getMemValue`, `getMemDefined`) as the first additive extension — see `## Native memories` below.
+
+---
+
+## Native memories
+
+The entries below record the engine, format, runtime and tooling half of the native-memory initiative; the numbered decisions they cite are the eleven locked in `DOCS/PLANS_PROMPT.md`. The language half is in [language.md](language.md) `## Native memories`. The host-facing reference is `DOCS/wasm-api.md` "Memory exports"; the `--sim` reference is `DOCS/sim-protocol.md`.
+
+### One engine kind with a mode; two wire kinds; one IR variant
+
+**Decision.** The engine has a single `ComponentType.memory` whose payload carries `mode: enum { rom, ram }`. The wire format keeps two kinds (`rom = 8`, `ram = 9`), and the IR one variant, `ComponentKind.memory { mode, data_width, addr_width }`. Every *policy* site — cycle-breaking, required ports, truth-table rejection, preview glyph — dispatches on the IR or wire kind; inside the engine the two modes differ only in which ports `connect` accepts and one `if (mode == .ram)` block in the recalc arm.
+
+**Rationale.** Decision 1. Read-side behaviour (cells, async `out`, host hooks, image codec) is identical for both, so two engine kinds would have duplicated everything but the edge rule. Keeping two *wire* kinds preserves the format's one-byte-kind-per-record convention and lets readers that never touch the engine (`--preview`, `full_decoder`, `circ-renderer`) tell them apart without an aux byte.
+
+**Alternatives.** Two engine kinds (`rom`, `ram`) — clean in isolation but every hook and test doubles. One wire kind plus a mode flag in aux — saves nothing (the record needs an aux byte for `addr_width` anyway) and makes the kind byte lie to tooling.
+
+### Cells are two `[]u64` planes on the payload
+
+**Decision.** A memory's cells live in two heap-allocated planes on the component payload, `values: []u64` and `defined: []u64`, one entry per address (`2^A` entries, `A ≤ 16`), allocated in `createComponent`. Cells are not stored in the width-tiered state pools.
+
+**Rationale.** The pools are sized for one `BitVecState` per component and are capped at 64 bits; a memory is `2^A` such states. Separate planes keep the pool layout, the `PoolHandle` scheme, and every existing state-slot invariant untouched, and they make the image codec a straight loop over one array. This was a choice, not a necessity: the plan review showed the pools *could* host cells behind a range handle, at the price of teaching every pool consumer about ranges.
+
+**Alternatives.** Pool-hosted cells (rejected as above). A single interleaved `[]BitVecState` — half the allocations but twice the stride for the codec's hot loop and the `defined` scan `memStore` does. Lazy allocation on first write — saves memory for unused address space but makes `getMemValue` on an untouched memory a branch on every read.
+
+### Headerless raw image, `ceil(W/8)` bytes per word, strict padding
+
+**Decision.** Contents cross every boundary (WASM `memLoad`/`memStore`, `--mem`, `load`/`save`) as a headerless raw image: word `i` occupies bytes `[i·bpw, (i+1)·bpw)` with `bpw = ceil(W/8)`, little-endian; the length must be a whole number of words and at most `2^A` words; every bit at or above `W` must be zero (`WordExceedsWidth`). Definedness is not representable on disk: loading marks every loaded word fully defined, storing writes `value & defined`. The codec is `lib/memimage.zig`. There is no magic-number sniffing, ever.
+
+**Rationale.** Decision 2. A raw image is what `printf`, `xxd`, `dd` and every assembler already produce, so a student can author one without a tool from this repo. Strict padding is the only wrong-width symptom detectable without a header, so it is an error rather than silently masked. Sniffing was ruled out because a legal raw image may begin with any bytes — any magic would collide with real data.
+
+**Alternatives.** Intel HEX / Logisim `v2.0 raw` text — human-readable, but needs a parser in the runtime and a converter is a small external tool anyway (see the Logisim note). A header carrying `W`/`A` — self-describing, but the artifact already knows both and the header would just be a second place for them to disagree.
+
+### Load is replace-all
+
+**Decision.** `memLoad`, `--mem`, and `load` replace the whole memory: cells `0..n-1` take the image, cells `n..2^A-1` become undefined. An empty image is `clear`. `setMemWord`/`poke` are the only partial writes.
+
+**Rationale.** Decision 3. "After a load the memory contains exactly this image" is the only rule a reader can verify by looking at the file; a merge would make the result depend on what was there before, which `--sim`'s `reset` semantics (back to the configured initial state) could not honour.
+
+**Alternatives.** Merge-load with an offset (`load code prog.bin 0x100`) — useful for overlays, deferred until a use case appears; it can be added as a new verb/export without changing this one.
+
+### Eight memory exports with status codes
+
+**Decision.** The artifact adds `getMemInfo(id) → (kind << 16) | (W << 8) | A` (or `-1`), `memBuffer(id) → ptr` to a per-memory staging buffer of `bpw << A` bytes allocated once lazily (hosts re-view `memory.buffer` after the call), `memLoad(id, len)`, `memStore(id) → bytes written`, `memClear(id)`, `setMemWord(id, addr, value, defined)`, and the paired `getMemValue(id, addr)` / `getMemDefined(id, addr)` returning `i64` (0 on error, like the pin getters). Mutators return `0` on success or `-1` bad id / not a memory, `-2` length not a word multiple, `-3` word exceeds width, `-4` too many words (unreachable through `memLoad`, whose staging buffer is exactly `2^A` words), `-5` `len` exceeds the staging size, `-6` `memBuffer` never called, `-7` address out of range.
+
+**Rationale.** Decision 4. The pin API is pull-based with silent-zero getters, and the memory getters follow it; but `init()` swallows errors and a host has no other signal, so every *mutator* reports a status. Staging through a host-visible buffer is the same "copy bytes into linear memory, then call" protocol the topology already uses (`topology_alloc` → memcpy → `init`), so a host that can load a circuit can load a memory with no new idiom. Ids are the same positional component ids `setPin` uses; a host finds a memory's id from its `.full` record.
+
+**Alternatives.** Returning `(ptr, len)` owned buffers from `memStore` — would need the `freeBuffer` this API deliberately omits. Per-word getters only (no bulk load/store) — 65 536 calls to fill a `[8, 16]` memory. A `memLoadFrom(ptr, len)` taking an arbitrary pointer — lets the host skip the staging copy but makes the runtime trust host pointers.
+
+### Topology v03 memory records
+
+**Decision.** `format.VERSION`/`FULL_VERSION` are `0x03`. A `.min` memory record is `id u32 | kind u8 | width u8 (= W) | addr_width u8` — 7 bytes, dispatched by kind exactly as slice's 2-byte suffix is, with `ComponentRecord.aux_lo` carrying `addr_width`; the `.full` record adds `Aux.memory { addr_width }`. `PortName` gains `addr = 4`, `din = 5`, `we = 6`, `clk = 7`; connection records are unchanged (the port byte is a `PortName`, never an operand index). Contents never travel in the topology. v02 payloads are rejected.
+
+**Rationale.** Decision 10. The record needs exactly one more byte than a gate (`A`; `W` already rides in `width`), so extending the existing per-kind suffix rule costs less than a variable-length record. Pre-1.0 the version byte is freely revvable and the section name keeps its `v0` prefix, so hosts' `customSections()` lookups are stable while readers fail loudly on the wrong format.
+
+**Alternatives.** Carrying `A` only in the `.full` section — would force the runtime to read the tooling section. A generic key/value aux block — flexible but the format's whole point is a fixed-stride byte parser in the runtime.
+
+### `--sim` preloads by declared name; verbs are additive at proto=1
+
+**Decision.** `--sim` and `--truth-table` accept `--mem=<name>=<path>` (repeatable, up to 16; split at the first `=` after the prefix so paths may contain `=`). Preloads are resolved after the topology is built and **before any handshake byte**: an unknown name, an unreadable file or a malformed image prints one line to stderr (`--mem <name>=<path>: no memory named '<name>' (declared memories: …)`, `file not found`, or the codec reason) and exits 2 with nothing on stdout. The protocol stays `proto=1` and the `ready` block is byte-identical for every circuit; memories are discovered with `mems` and driven with `load`, `save`, `peek`, `poke`, `mem`, `clear`, with new codes `E_NOMEM`, `E_IO`, `E_MEMFMT`, `E_ADDR` (and `E_WIDTH`/`E_BADVAL`/`E_PROTO` reused). Paths are whitespace-free tokens resolved against the cwd. `reset` re-applies the CLI preloads and drops mid-session `load`/`poke`. Only root-level memories (empty origin, mirroring pins) are addressable by name; nested ones stay id-addressable from a WASM host.
+
+**Rationale.** Decision 7. A test runner already speaking proto=1 must keep working unchanged, which is why nothing new appears in the handshake and the version is not bumped: every addition is a new verb or a new reply to a new verb. Failing preloads before the handshake keeps stdout a clean protocol channel — a driver never has to parse an error out of a half-started session. Mirroring the pin rule for names keeps "what `--sim` can address" one sentence long.
+
+**Alternatives.** Listing memories in the `ready` block (`mem code rom 8 4` lines) — informative, but changes the handshake's line count and breaks the byte-identity guarantee. Reporting preload failures as `diag` lines inside `ready` — but then a bad `--mem` produces a live session the driver might not notice is empty. Quoted paths — would need a tokenizer change for a case (spaces in fixture paths) the repo does not have.
+
+### Tooling policy: truth-table ROM-only, preview boxes, emit-zig rejects
+
+**Decision.** `--truth-table` tabulates a circuit with `rom`s (with `--mem` preloads; unloaded cells render `?` and `--strict` fails them) and refuses any circuit containing a `ram` — root-level or nested — at `builder.build` pre-flight with `error.StatefulComponent` and a one-line explanation naming the ram. `--preview` draws a `rom` as a one-input box and a `ram` as a four-input box on the existing gate/macro port pattern, labelled `rom code[8,4]`. `--inspect` prints `kind=rom[W=8,A=4]` and `widths=[8, 4]`. `--analyze` reports `rom`/`ram` symbol kinds with hover and an `addr_width` field. `--emit-zig` rejects memories at pre-flight (`--emit-zig does not support rom/ram; compile to .wasm instead`), permanently.
+
+**Rationale.** Decision 8 (and 9 for `--inspect`). A truth table enumerates inputs and reads outputs; a `ram`'s `clk`/`we` would be enumerated as inputs and every row would depend on the visiting order — the table would be wrong, not just large — so the refusal names the ram and points at `--sim`. A `rom` under a preload is a lookup table and tabulates honestly. `--emit-zig` is the experimental standalone-Zig pipeline with its own runtime that has no memory support and is not on the default path; rejecting is cheaper and more honest than a half port.
+
+**Alternatives.** Tabulating a `ram` "as if combinational" (treat `clk` as an input, hope) — produces a plausible-looking wrong table. Porting memories to `lib/emit/runtime.zig` — doubles the engine work for a pipeline whose export contract is declared unstable.
+
+### `--inspect` prints widths, not global ids
+
+**Decision.** `--inspect` shows a memory as the IR line `kind=rom[W=8,A=4]` and the AST line `widths=[8, 4]`, nothing more. It does not print a name → global-component-id table for memories.
+
+**Rationale.** Decision 9. `--inspect`'s ids are resolver-local and are not the positional ids a WASM host passes to `getMemInfo`; printing them under a "global id" heading would be a lie for any project with imports. Hosts learn memory ids from the `.full` section (a kind 8/9 record with the declared `name` and an empty origin), which is already the documented way to map pins.
+
+**Alternatives.** A dedicated name → global id listing for hosts (memories *and* pins) is a worthwhile follow-up, but it belongs to a mode that runs the serializer, not to `--inspect`.

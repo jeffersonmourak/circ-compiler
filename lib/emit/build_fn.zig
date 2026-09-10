@@ -87,6 +87,9 @@ pub fn emitBuildFunction(allocator: std.mem.Allocator, module: *const ir.Module)
             ),
             .sub_circuit_ref => return error.UnsupportedSubCircuitInPhase4,
             .unresolved_name => return error.UnresolvedComponentName,
+            // The emit-zig artifact has no host surface for loading memory
+            // contents, so memories are rejected here permanently.
+            .memory => return error.MemoryUnsupportedInEmitZig,
         }
     }
 

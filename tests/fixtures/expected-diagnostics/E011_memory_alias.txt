@@ -1,0 +1,1 @@
+tests/fixtures/projects/E011_memory_alias/root.circ:1:1: error: E011: import alias collision 'rom'

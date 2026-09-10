@@ -1,0 +1,1 @@
+tests/fixtures/circuits/E006_shadows_memory.circ:2:1: error: E006: instance name 'rom' shadows built-in

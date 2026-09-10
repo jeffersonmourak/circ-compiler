@@ -1,0 +1,6 @@
+import mem_wrap "mem_wrap.circ"
+input[8] d
+input[4] a
+input we, clk
+mem_wrap inst[8, 4](din = d.out, addr = a.out, we = we.out, clk = clk.out)
+output[8] q(in = inst.q)
