@@ -827,3 +827,24 @@ Also adds `site/.node-version` pinning 22.19.0, the one arm64 Node on this machi
 3. **Two dev servers racing a build is what made the build hang.** A stray `astro dev` from earlier in the session plus a restarted one both watch and rewrite `public/`, which the build's mirror step also writes; `bun --bun run build` sat for ten minutes with no output. Killing both and rebuilding took two seconds. Do not run a build with a dev server up.
 4. **`compact` on the editor module now has no consumer.** It was built for `<LiveEditor>` and documented as shipping ahead of need. Left in place rather than removed: taking it out means editing the module the playground depends on, to delete something whose comment already says it exists without a caller.
 5. **The Tour group keeps its name in the workspace.** The circuits are still a progressive walkthrough, so the label still describes them, even with no page of that name to open.
+
+## 2026-09-09 — Feature — the gallery's memories start with something in them
+
+**What shipped:** `Example` gains a `memory` field — declared name to hex image — and the two cards that declare a memory now carry one. `rom-lookup` holds the squares, so driving `pc` to 12 reads 144 back. `ram-write-read` holds `a0` through `af`, so every cell says its own address and a read is self-checking until the reader overwrites one.
+
+Before this, both cards opened on sixteen unknowns. A memory is the one thing a `.wasm` does not carry: the artifact holds the shape and nothing else, so a card that loads nothing demonstrates nothing.
+
+**How a card loads one without a compiler.** The playground validates an image against `--analyze`, which names every declared memory and its shape. A gallery card has no analysis. So the shape is read back out of the artifact through `getMemInfo` on the id the topology gives, which is the runtime's own answer about what it will accept — an image validated against it cannot then be refused for a shape reason.
+
+**Files touched:** `site/src/scripts/canvas-memory.ts` (new), `site/test/canvas-memory.test.ts` (new), `site/src/content/examples.ts`, `site/src/components/LiveCanvas.astro`, `site/src/pages/gallery.astro`.
+
+**Tests:** `bun test` 403 pass across 31 files, from 387. `bun --bun run typecheck` 0 errors. Build, `bun run bundle` and `zig build test-all` green. `/gallery` and `/` are 1.8 KB gzip against a 10 KB ceiling, up 0.2 KB.
+
+**Next slice:** none.
+
+**Notes:**
+
+1. **A ram is loadable, and the runtime settled that before any of this was written.** `romPlan` skips a ram, which reads like a rule about memories but is a rule about TRUTH TABLES: preloading one there states an initial condition the table does not otherwise have. Driving the committed artifacts shows `memLoad` accepting a ram id exactly as it does a rom, with the same prefix behaviour. A canvas is a live circuit to poke at, so it loads both.
+2. **The first wiring put 2.1 KB gzip on the landing page for a feature behind a click.** Importing the module eagerly took `/` and `/gallery` from 1.6 KB to 3.7 KB, because it pulls `parseRomImage` and its error machinery. It is behind a dynamic import now, in the same lazy chunk the renderer already loads: 0.7 KB gzip fetched on the first Run, and the eager pages went back to 1.8 KB. The remaining 0.2 KB is the import glue.
+3. **The images go in on every mount, including the rebuilds.** A theme toggle or the sprite-ready hook destroys the view and builds a new one, and contents are runtime state of a single instance — so a rebuilt canvas starts empty. Anything the reader had clocked into the ram is lost with the old instance regardless; reloading the declared image is the closest thing to where they were.
+4. **Two gates, in both directions.** The unit tests drive the real artifacts and assert the squares and the address tags word by word, so the ledes' claims are checked rather than asserted. A separate check reads the BUILT gallery and asserts one `data-circ-memory` per card that declares images and none anywhere else — forgetting the prop on the page is otherwise invisible, since the card still renders and the circuit still runs, just on an empty memory. Negative proof: excluding rams fails two cases, dropping the prop fails the built-page one.

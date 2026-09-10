@@ -53,7 +53,7 @@ const tiers = TIERS.map((t) => ({ ...t, items: examples.filter((e) => e.level ==
         <p class="lede">{ex.lede}</p>
         <CodePreview source={ex.source} preview={ex.preview} />
         <OpenInPlayground id={`example:${ex.slug}`} />
-        {ex.wasm && <LiveCanvas wasm={ex.wasm} />}
+        {ex.wasm && <LiveCanvas wasm={ex.wasm} memory={ex.memory} />}
       </article>
     ))}
     </div>

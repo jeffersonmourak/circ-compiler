@@ -29,6 +29,15 @@ export interface Example {
   repoPath?: string;
   /** Pre-compiled WASM filename under public/wasm/, enabling live simulation. */
   wasm?: string;
+  /**
+   * Starting contents for each memory this circuit declares, by declared name.
+   *
+   * Hex bytes, little-endian, `ceil(W/8)` per word — the same image format the
+   * playground's memory panel writes. A memory holds nothing until something
+   * loads it, so without this a card with a `rom` or a `ram` opens showing
+   * sixteen unknowns and demonstrates nothing.
+   */
+  memory?: Record<string, string>;
 }
 
 export const examples: Example[] = [
@@ -246,7 +255,7 @@ output cout(in=c3.out)
     slug: 'rom-lookup',
     title: 'A ROM the host loads',
     level: 'medium',
-    lede: 'A rom is a compile-time shape and a run-time image: the circuit declares rom code[8, 4] and the page loads its bytes from the settings drawer.',
+    lede: 'A rom is a compile-time shape and a run-time image: the circuit declares rom code[8, 4], and the sixteen bytes below are loaded into it before you touch anything. This one holds the squares, so driving pc to 12 reads 144 back out.',
     source: `input[4] pc
 rom code[8, 4](addr = pc.out)
 output[8] out(in = code.out)
@@ -256,6 +265,9 @@ output[8] out(in = code.out)
 ╰───────╯     ╰───────────────╯     ╰────────╯`,
     repoPath: 'tests/fixtures/circuits/rom_lookup.circ',
     wasm: 'rom-lookup.wasm',
+    // code[n] = n². Sixteen words, the last of which is 225, so the whole
+    // table fits the declared eight bits with nothing to explain away.
+    memory: { code: '00010409101924314051647990a9c4e1' },
   },
   {
     slug: 'two-bit-adder',
@@ -444,7 +456,7 @@ output qbar(in=qbcell.out)
     slug: 'ram-write-read',
     title: 'A RAM with a clock',
     level: 'advanced',
-    lede: 'Single-port RAM: the write commits on a rising clock edge when we is high, so this one needs the simulator rather than a truth table.',
+    lede: 'Single-port RAM: the write commits on a rising clock edge when we is high, so this one needs the simulator rather than a truth table. It starts loaded with a0 through af, so every cell says its own address until you overwrite one.',
     source: `input[4] a
 input[8] d
 input we, clk
@@ -474,5 +486,10 @@ output[8] q(in = data.out)
 ╰─────╯                                    `,
     repoPath: 'tests/fixtures/circuits/ram_write_read.circ',
     wasm: 'ram-write-read.wasm',
+    // Each cell holds 0xa0 + its address, so a read is self-checking: drive a
+    // to 5 and q shows a5. A ram is normally written by the circuit, but a
+    // canvas is a live circuit to poke at, and starting it empty means the
+    // first thing a reader sees is sixteen question marks.
+    memory: { data: 'a0a1a2a3a4a5a6a7a8a9aaabacadaeaf' },
   },
 ];

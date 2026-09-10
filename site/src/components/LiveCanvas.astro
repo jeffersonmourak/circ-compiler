@@ -7,16 +7,27 @@ interface Props {
   /** Pixels per layout cell. Default keeps small circuits readable on mobile. */
   cell?: number;
   padding?: number;
+  /**
+   * Starting contents for the circuit's memories, by declared name: hex bytes,
+   * little-endian. A rom or ram holds nothing until something loads it, so a
+   * card without this opens on a memory full of unknowns.
+   */
+  memory?: Record<string, string>;
 }
 
-const { wasm, cell = 14, padding = 16 } = Astro.props;
+const { wasm, cell = 14, padding = 16, memory } = Astro.props;
 const wasmHref = url(`/wasm/${wasm}`);
+// Serialised into the markup rather than passed to the script: the script is
+// hoisted and shared by every canvas on the page, so per-canvas data has to
+// travel on the element.
+const memoryAttr = memory && Object.keys(memory).length > 0 ? JSON.stringify(memory) : undefined;
 ---
 <div
   class="lc"
   data-circ-wasm={wasmHref}
   data-circ-cell={cell.toString()}
   data-circ-padding={padding.toString()}
+  data-circ-memory={memoryAttr}
 >
   <div class="lc-header">
     <span class="lc-label">live simulation</span>
@@ -32,8 +43,20 @@ const wasmHref = url(`/wasm/${wasm}`);
   // renderer + WASM are dynamically imported on first click so a reader who
   // never opens any simulation pays zero bytes for them on initial load.
 
+  // TYPE only: the value side is imported dynamically below, so a reader who
+  // never opens a simulation pays nothing for it — the same rule the renderer
+  // and the theme module already follow on this page.
+  import type { TopologyLike } from '../scripts/canvas-memory.ts';
+
   type CircView = {
-    runtime: { destroy(): void };
+    runtime: {
+      destroy(): void;
+      /** The flattened component list, which is where a memory's id lives. */
+      topology: TopologyLike;
+      /** The artifact's own exports; the memory family lives here. */
+      raw?: Record<string, unknown>;
+    };
+    view: { refreshState(): void };
     canvas: HTMLCanvasElement;
     destroy(): void;
   };
@@ -47,6 +70,30 @@ const wasmHref = url(`/wasm/${wasm}`);
 
   // Track active views per container so theme toggles can rebuild them.
   const active = new WeakMap<HTMLElement, { view: CircView; opts: { url: string; cell: number; padding: number } }>();
+
+  /**
+   * Put the card's images into a freshly built circuit.
+   *
+   * Called on every mount, including the theme and sprite rebuilds: contents
+   * are runtime state of one instance, so a rebuilt canvas starts empty and
+   * would silently lose them. A failure is logged and nothing else — a card
+   * with one bad image should still show its circuit.
+   */
+  async function applyMemory(container: HTMLElement, view: CircView) {
+    // Checked before the import, so a card with no memory never fetches the
+    // chunk at all.
+    if (!container.dataset.circMemory) return;
+    const { loadMemoryImages, readMemoryAttr } = await import('../scripts/canvas-memory.ts');
+    const images = readMemoryAttr(container.dataset.circMemory);
+    if (Object.keys(images).length === 0) return;
+    const result = loadMemoryImages(view.runtime.raw ?? {}, view.runtime.topology, images);
+    for (const [name, message] of result.errors) {
+      console.error('LiveCanvas: could not load memory', name, message);
+    }
+    // Every memory mutator re-presents its own output, so the circuit is
+    // already correct; the canvas just has to be told to repaint.
+    if (result.applied.length > 0) view.view.refreshState();
+  }
 
   async function mount(container: HTMLElement) {
     const wasmUrl = container.dataset.circWasm!;
@@ -75,6 +122,7 @@ const wasmHref = url(`/wasm/${wasm}`);
         interactive: true,
         theme: pickTheme() as any,
       })) as unknown as CircView;
+      await applyMemory(container, view);
       mountEl.innerHTML = '';
       mountEl.appendChild(view.canvas);
       mountEl.hidden = false;
@@ -123,6 +171,11 @@ const wasmHref = url(`/wasm/${wasm}`);
         interactive: true,
         theme: pickTheme() as any,
       })) as unknown as CircView;
+      // A rebuilt canvas is a NEW instance with empty memories, so the images
+      // go back in. Anything the reader had clocked into a ram is lost with
+      // the old instance either way; starting from the declared image is the
+      // closest thing to where they were.
+      await applyMemory(container, view);
       mountEl.innerHTML = '';
       mountEl.appendChild(view.canvas);
       active.set(container, { view, opts: cur.opts });
