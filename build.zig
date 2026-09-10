@@ -1065,6 +1065,22 @@ pub fn build(b: *std.Build) void {
     const run_preview_dump_tests = b.addRunArtifact(preview_dump_tests);
     test_step.dependOn(&run_preview_dump_tests.step);
 
+    // Layout-parity contract: JSON LayoutGrid dump shared with circ-renderer's
+    // bun test (see DOCS/decisions/preview-layout.md).
+    const preview_dump_json_mod = b.createModule(.{
+        .root_source_file = b.path("lib/preview/dump_json.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    preview_dump_json_mod.addImport("full_format", topology_full_format_mod);
+    preview_dump_json_mod.addImport("layout", preview_layout_mod);
+    const preview_dump_json_tests = b.addTest(.{
+        .name = "preview_dump_json_tests",
+        .root_module = preview_dump_json_mod,
+    });
+    const run_preview_dump_json_tests = b.addRunArtifact(preview_dump_json_tests);
+    test_step.dependOn(&run_preview_dump_json_tests.step);
+
     // Shared engine session: builds a live engine.Circuit from a full topology
     // and resolves root pins by name. Consumed by the truth-table builder and
     // the --sim drive loop.

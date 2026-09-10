@@ -91,6 +91,9 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - A live editor ships inert and shares one worker (touch-activated, one client per page, the editor chunk stays lazy)
 - An expand link carries a reference when it can, and a source when it must (id while unedited; a told-about degrade over the cap)
 
+### [preview-layout.md](preview-layout.md)
+- The parity contract is a JSON projection, not either side's native type (`dump_json.zig`, camelCase common subset, one golden per fixture-mode)
+
 ## Conventions
 
 - Decisions use `###` headings inside topic files.
