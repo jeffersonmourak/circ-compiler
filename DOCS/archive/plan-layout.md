@@ -1,0 +1,105 @@
+# Archived plan: layout
+
+**Canonical commit:** `06d115ec5378e07100fd80afa075d5e72cc076d1` (`06d115e chore(site): pin circ-renderer at the layout-parity release`)
+**Archived on:** 2026-09-10
+**Plan duration:** 2026-09-10 → 2026-09-10
+
+> This file is a highlight view. The full plan prompt, every phase plan, and every STATUS entry are preserved in the commit referenced above. Check that commit out (`git show 06d115ec5378e07100fd80afa075d5e72cc076d1:DOCS/PLANS_PROMPT.md`, `…:DOCS/PLANS/PHASE_3_channel_routing.md`, `…:DOCS/STATUS.md`, etc.) when you need the unabridged source.
+
+## Goal & scope
+
+The ASCII `--preview` layout drew unrelated wires on top of each other — `tests/fixtures/preview/renders/and_of_not.render.golden` pinned the reported case, `a`'s output and `b`'s vertical sharing the row into `AND.b` — because boxes sat on a fixed grid (`COL_GUTTER = 5`, `ROW_GUTTER = 1`, per-grid-row heights) and every wire was routed greedily as an L through a gutter of the same width whatever the demand. An incremental fix (branch `layout-v1-attempt`, four phases of occupancy-aware detours and track bookkeeping) got the reported fixtures clean and the corpus from 6,192 to 5,493 shared cells, and was rejected: every rule was a patch on a router with no global view. The plan replaced the four stages after `collapse` with a layered-graph layout in the Sugiyama tradition (ELK Layered, Sander) — `layering.zig` (longest path, dummy nodes for long edges, back-edge flags), `ordering.zig` (port-aware barycenter sweeps and a transpose pass, integer arithmetic only), `coords.zig` (one row per node, aligned to the port that feeds it, Brandes–Köpf restricted to one direction), `channels.zig` (per-gap left-edge track assignment under a constraint graph, doglegs, spacer rows, return lanes for back edges, demand-sized gaps, a bounded and counted fallback search) — and then transliterated the same pipeline into `circ-renderer/src/layout/` so the canvas and the ASCII preview agree byte for byte on a `LayoutGrid`, checked by a JSON conformance harness over the whole fixture corpus. Anchors that held throughout: the `LayoutGrid` contract (`lib/preview/layout.zig`: `PlacedComponent`, `RoutedWire { segments, crossings }`) is frozen; `collapse.zig`, `sizing.zig`, box sizes and port tables are inputs; render does not change except by an argued slice (one landed); determinism is byte-level and cross-language (no floating point, no hash-map iteration order in an output, ties by ascending `(id, port)`); the harness builds through `libcirc.frontend.run(.project)` so it sees what the CLI and the site see; the invariants I0–I3 are hard gates from Phase 3 on, never a ratchet. Sources read at plan time and cited by name: Wybrow–Marriott–Stuckey GD'09 (`libavoid`), ELK Layered (arXiv 2311.00533), Sander GD'95, Brandes–Köpf GD'01, Lengauer's channel routing, PathFinder (FPGA'95).
+
+## Phase-by-phase highlights
+
+### Phase 0 — Measure before moving
+
+The JSON `LayoutGrid` dump and conformance test revived from `layout-v1-attempt` and widened to the whole previewable corpus, a render-free invariant checker with the old algorithm's numbers pinned, and the renderer's parity harness re-landed on a branch reset to the sha the site pins.
+
+- `lib/preview/dump_json.zig` (`dumpLayoutJson(writer, grid)`, the camelCase common-subset projection) restored byte for byte from `git show layout-v1-attempt:…` (`4fb480e`); module `preview_dump_json`.
+- `lib/preview/layout/invariants.zig`: `Report { body, shared, junction, tree, crossings, bends, straight, wires }`, `check(arena, grid)`. A net is `(src_id, src_port)`; a cell two nets cover is `shared` (I1) when every claim has one orientation, a `crossing` when exactly two nets pass straight through it perpendicularly, a `junction` (I2) otherwise; `tree` (I3) counts nets whose wires are not one 4-connected set from one source cell. `bends` is orientation changes and `straight` a wire with none, so collinear pieces do not count — the first table showed `S=0/3759` because the old router split every aligned wire at its track column.
+- `tests/preview/corpus.zig`: `walk(arena)` over `tests/fixtures/circuits/*.circ` and `tests/fixtures/projects/<dir>/root.circ` through `libcirc.frontend.run(.project)` → `modes.buildTopology` → `modes.buildLayout`, sorted by path, opaque always and expanded only when the opaque grid holds a subcircuit box; project entries are named `project-<dir>` (`half_adder` and `W003_unused_import` are both a circuit and a project). 218 candidates, 223 fixture-modes (152 opaque, 71 expanded), 66 skipped (the `E0xx_*` / `recovery_*` negatives and roots with absent imports).
+- `tests/preview/layout_conformance_test.zig`: `layout_conformance_corpus` (one golden per fixture-mode under `tests/fixtures/preview/layouts-json/<name>.<mode>.layout.json`, 2.2 MB, the largest `alu_4bit.expanded.layout.json` at 129 KB) and `corpus_layout_invariants` (`tests/fixtures/preview/layout-invariants.golden`, one row per fixture-mode plus totals). Both run steps `has_side_effects = true`; regenerate with `UPDATE_GOLDENS=1 zig build test`.
+- Numbers of record for the old algorithm: I0=290 I1=3143 I2=2557 I3=0 X=1352 B=5986 S=1008/3759; `and_of_not opaque I1=2 I2=4`; worst rows `alu_4bit expanded` (I0=125 I1=519 I2=472), `eight_bit_adder expanded`, `stress_grid_10x10 opaque` (I1=392 I2=240).
+- circ-renderer `host-pin-api` reset by the human to `62d0def` (its four attempt commits on its own `layout-v1-attempt`), then `fe40266`: `test/layout-helpers.ts`, `test/layout-parity.test.ts`, `test/layout-invariants.test.ts`, `test/fixtures/layouts/*.layout.json` + `invariants.txt` + `MANIFEST.md` (28 vendored fixture-modes; ten matched at the time).
+- Spike answers: the attempt's "cached no-op" story about `has_side_effects` did **not** reproduce (the flag stays as a guard); six circuits are not vendored because their names collide with the renderer's frozen v02 fixtures (`and_4bit`, `bit_index_a2`, `concat_four_bits`, `half_adder`, `inverter`, `slice_then_concat`); `led_4bit_expand`, `led_7bit_expand`, `led_8bit_expand_warns` compile to no artifact and are absent on both sides.
+
+### Phase 1 — Layering and ordering
+
+`layering.zig` and `ordering.zig` replace `columns.zig` and `rows.zig` behind an adapter over the old placement and routing, so the only observable is the ordering crossing count.
+
+- `lib/preview/layout/ports.zig`: `Slot { name, port, row }`, `inputSlots(node)` (border order: `in` at 1; `a`/`b` at 1/3; `addr` at 1; `ram` `addr`/`din`/`we`/`clk` at 1/3/5/7; a subcircuit's active inputs in `a`, `in`, `b` order at 1/3/5), `slotIndex`, `outputRow` (`and` 2; pins, `not`, `rom` 1; the rest `height / 2`), `MAX_INPUTS = 4`, `SLOT_KEY_BASE = 16`.
+- `types.zig`: `LayerNode { real, layer, carries }`, `OriginalEdge { src, src_port, dst, dst_port, back }`, `LayerEdge`, `LayeredGraph { nodes, edges, originals, num_layers }`, `Ordering { order, pos, rounds }`.
+- `layering.zig` `layer(arena, graph)`: DFS back edges, longest path, input pins at 0, orphan back-edge destinations bumped to 1, sinks forced to the last layer, then dummies and `LayerEdge` chains for every forward edge spanning more than one layer. Rule added on the first corpus run: an edge that sink forcing turns leftward (`regression_led_out_drives_gate`'s `led.out → and`) is flagged `back` and routed as a return lane like a cycle edge.
+- `ordering.zig`: `countCrossings` over end keys `pos * SLOT_KEY_BASE + slot`; `order` runs down/up rounds kept only while the count falls (`MAX_ROUNDS = 4`), then adjacent transposes to a fixed point (`MAX_TRANSPOSE_PASSES = 16`); barycenters are `(sum, count)` compared by cross-multiplication. `C=` column added: 10927 (old order, most favourable dummy placement) → 6166, up on no row.
+- `layout_determinism`: every fixture-mode built twice in fresh arenas, JSON byte-identical.
+- Deviation, recorded not fixed: I0 290 → 315, I1 3143 → 3219, X 1352 → 1443 with the old router on the reordered rows (not gated until Phase 3); only `full_adder_from_builtins.render.expanded.golden` changed.
+
+### Phase 2 — Coordinate assignment
+
+`coords.zig` replaces `place.zig`: every node gets its own row, chosen so the wire feeding its highest input port arrives straight whenever the packing allows.
+
+- `lib/preview/layout/boxes.zig`: `sizeOf`, `composeDisplayLabel`, `composeLedLabel`, `resolvePortCoords` moved out of `place.zig`, the port switch replaced by `ports.zig`'s tables.
+- `lib/preview/layout/coords.zig` `assign(arena, graph, layered, ordering, opts, widths)`: preferred top from the source of the in-edge whose input port sits highest (a dummy: its source's port row exactly); packing top to bottom in the Phase 1 order at `max(cursor, preferred)` with two cursors (`ROW_GUTTER = 1` between boxes; a dummy is a wire row and pays no gutter); a reverse pass moves a lone-out-edge node *down only* to straighten its wire unless its own input is already straight; `insertSpacerRow`, `toPlaced`, `stubWidths` (`STUB_CHANNEL_WIDTH = 5`). `types.zig` gains `ChannelWidths { after }`, `Coords { x, y, w, h, layer_x, layer_w, channel_x, width, height }`.
+- `S` 1013 → 1963 of 3759, up on 161 rows and down on none; `chain`, `single_gate`, `fan_out` renders byte-identical; `and_of_not` renders clean here already — the fused rail was a placement problem first.
+- Height spike (`TODO(phase2)`): `sum(height)` 4941 → 4945; largest growth `alu_4bit expanded` 111 → 176; accepted by the human.
+- Deviation, recorded for Phase 3: the old router on per-node rows drew `regression_led_out_drives_gate`'s leftward wire through the `AND` box (I0 0 → 5); I0 310 corpus-wide at the phase's end.
+
+### Phase 3 — Channel routing
+
+`channels.zig` replaces `route.zig`: every wire routed per inter-layer gap, globally, and the four invariants flipped to hard zeros.
+
+- `lib/preview/layout/channels.zig`: `extractNets` (one net per `(source node, port)` in the gap, a dummy's out-edge on the net it carries, `straight` when every terminal shares the source's row, sorted by `(lo, src_real, src_port)`); `tryAssignTracks` / `assignTracks` (constraint arc `A → B` when A owns a source rail on a row where B owns a sink rail, plus a return lane's down half left of its up half; Kahn's order, then left-edge assignment where touching intervals are sharing); `gapWidth(tracks) = max(5, tracks + 2)`; `plan(arena, graph, layered, coords)` with a gap after **every** layer (a trailing gap for back edges out of the last layer, 0 wide otherwise); doglegs at `freeJogRow` (nearest the interval's middle) via `splitNet`, a spacer row through `coords.insertSpacerRow` when no free row exists (bounded, restarts every gap); `appendReturnLaneNets` + `reserveReturnRows` (one return row per back edge below the diagram); `widths` → `coords.relayoutColumns`; `emit` (one `RoutedWire` per original edge, collinear pieces merged, back edges as five legs, `crossings` computed from the emitted cells: every cell two nets share and every same-net tap); `searchPath` (best-first over free cells, `TURN_COST = 3`) as the deferred fallback, counted in `F=`. Types `Terminal`, `Piece`, `Jog`, `Net`, `Gap`, `RoutePlan`. `route.zig` and `COL_GUTTER` gone.
+- Orchestrator two-pass pipeline: `coords.assign(stub)` → `channels.plan` → `coords.relayoutColumns(channels.widths)` → `toPlaced` → `channels.emit`; `Stages { graph, layered, ordering, coords, plan, grid }` via `buildStages`.
+- `invariants.zig` folds a net's claims per cell before classifying (the first read had I2=2922 from fan-out trunks; a net that corners under another net's pass-through is still a junction).
+- `corpus_layout_invariants` asserts `I0 == 0` and `I3 == 0` on every row, `I1 == 0` and `I2 == 0` unless `multiDrivenPorts` finds a sink port driven by more than one net (computed, never a name list); `channels_corpus_plan` reports spacers, doglegs, return lanes, fallbacks and multi-driven ports.
+- Final corpus: **I0=0 I1=22 I2=10 I3=0** X=5449 B=4500 S=1963/3759 C=6166 F=0; plan 0 spacer rows, 15 doglegs, 5 return lanes, 0 fallbacks, only 2 of 1158 gaps ever cyclic, widest gap 22 tracks (`alu_4bit`); `stress_grid_10x10` 28 → 47 wide with its 20 input trunks on 20 tracks, previewing in 0.13 s (`alu_4bit --expand-macros` 0.15 s; the CLI perf smoke allows 30 s).
+- The one render change, argued per decision 3 (slice 8): `render.zig`'s `isSplitPoint` / `isMergePoint` now require a divergence — one same-source wire corners at the cell while another passes strictly through (`divergeAt`, `wireCornersAt`, `wirePassesThroughInterior`) — so a different net crossing a fan-out trunk is `┼`, not `●`; `full_adder_from_builtins.render.expanded.golden` changed by two cells; test `render: a net crossing a fan-out trunk is not a split, a branch is`.
+- `DOCS/preview.md`: "Where the data comes from" trimmed, "How the layout is computed" added, "Known limitations" rewritten.
+- Spikes: return lanes stay *below* the diagram; no blank column between adjacent tracks (`││` reads as two wires; a blank would widen `stress_grid_10x10` to 67); multi-bit fan-in (`and_4bit`, `concat_four_bits`) is zero under per-net tracks with no exception written.
+
+### Phase 4 — Renderer parity and delivery
+
+The same pipeline transliterated into `circ-renderer`, byte-identical on every vendored fixture-mode, and the site rebuilt on it.
+
+- circ-renderer `host-pin-api` (pushed at `0889785`, then fast-forwarded into `main`; package `2.2.0-alpha.7`): `src/layout/{ports,layering,ordering,boxes,coords,channels}.ts` transliterated, `columns.ts` / `rows.ts` / `place.ts` / `route.ts` deleted, `src/layout/index.ts` the compiler's two-pass orchestrator, `src/index.ts` exporting `buildLayout, collapse, layer, order, plan, emit`; `sizing.ts` gains `widthAnnotationLen`, `ledSize`, `pinSize(nameLen, bitWidth)` so multi-bit pins and LEDs are sized as the compiler sizes them (the one divergence Phase 0 had called permanent).
+- `test/layout-parity.test.ts` is plain equality over 28 of 28 fixture-modes re-vendored from compiler `d843474`; `test/layout-invariants.test.ts` folds claims per net like the Zig checker and requires this port's rows to equal the compiler's; `test/layering.test.ts`, `test/coords-channels.test.ts` carry the stages' unit tests; 639 expects green, `bun run typecheck` clean. The first run after wiring `channels.ts` matched 19 of 28; the nine that differed were the multi-bit ones, all fixed by the sizing rule.
+- Deliberate differences, recorded in file headers: the renderer's `RoutedWire.crossings` lists only inter-net crossings (the canvas draws jump arcs and has no tap notion) where the compiler's also lists tap cells — outside the parity contract; `collapse.ts` keeps `slice` / `concat` as drawable boxes where `collapse.zig` folds them, and the vendored corpus has no such fixture.
+- Site delivery: `site/public/wasm/libcirc.wasm` 405,855 → 437,566 B raw (153,663 → 167,036 gzip; manifest revision `937a1c9`), the fourteen example artifacts byte-identical, nine `preview` strings in `site/src/content/examples.ts` rewritten from `scripts/compile-content.ts`'s dump, the tracked mirror `site/src/pages/reference/preview.md` refreshed (gitignored; `git add -f`), pin `github:jeffersonmourak/circ-renderer#0889785`, `RENDERER_PIN_VERSION = '2.2.0-alpha.7'`; `bun test` 414, `bun --bun run typecheck`, `bun --bun run build`, `bun run bundle` green (`/playground` 31.1 KB gzip against 120 KB; the renderer's lazy chunk 9.6 KB gzip).
+- Deviations: the tap filter lives in `channels.ts` where the wire list is made, not in the wire tracer the spec named; the manual side-by-side check of the Preview tab and the Simulate canvas in a browser was not run (`island-smoke.test.ts` and `libcirc.test.ts`'s `preview text equals the examples' preview fields` are the automated proof).
+
+## API surface frozen by the plan
+
+No diagnostic code, CLI flag or runtime export was added or changed. What the plan froze is the module map and the goldens:
+
+| Surface | Names |
+| ------- | ----- |
+| Pipeline | `collapse → layering → ordering → coords → channels`, composed by `lib/preview/layout/orchestrator.zig` (`build`, `buildStages` → `Stages`) |
+| Modules / test steps (`build/frontend_modules.zig`, `build.zig`) | `preview_dump_json`, `preview_layout_invariants`, `preview_layout_ports`, `preview_layout_boxes`, `preview_layout_layering`, `preview_layout_ordering`, `preview_layout_coords`, `preview_layout_channels`, `preview_corpus_mod`, `preview_layout_conformance_tests` (`has_side_effects = true`) |
+| Constants | `ROW_GUTTER = 1`, `SLOT_KEY_BASE = 16`, `MAX_INPUTS = 4`, `MAX_ROUNDS = 4`, `MAX_TRANSPOSE_PASSES = 16`, `STUB_CHANNEL_WIDTH = 5`, `gapWidth = max(5, tracks + 2)`, `TURN_COST = 3` |
+| Goldens | `tests/fixtures/preview/layouts-json/<name>.<mode>.layout.json` (223), `tests/fixtures/preview/layout-invariants.golden` (rows `<name> <mode> I0= I1= I2= I3= X= B= S=n/m C= F= size=WxH`, then totals); `UPDATE_GOLDENS=1 zig build test` |
+| Corpus tests | `layout_conformance_corpus`, `corpus_layout_invariants`, `layout_determinism`, `channels_corpus_plan`, `corpus: the walk is sorted, unique and non-empty` |
+| Renderer | `buildLayout(topology, { expandMacros })`, `collapse`, `layer`, `order`, `plan`, `emit`; `test/fixtures/layouts/MANIFEST.md` names the compiler commit; gate `bun test` + `bun run typecheck` in `circ-renderer/` |
+| Site | `RENDERER_PIN_VERSION` (`site/src/utils/renderer-versions.ts`, guarded by `site/test/renderer-pin.test.ts`); `cd site && bun run libcirc`, `bun run scripts/compile-content.ts` |
+
+## Known papercuts carried forward
+
+- **Unnamed macro ports are the one remaining source of shared cells.** `collapse.zig` maps every macro input not named `a`, `in` or `b` onto `in`, so a macro with `data` and `select` receives two nets on one port cell; the six parametric projects (`project-memory_parametric`, `project-multi_param_distinct`, `project-multi_param_shared`, `project-parametric_multi`, `project-parametric_multi_default`, `project-parametric_ordering`) carry I1=22 I2=10, exempted by `multiDrivenPorts`. The fix is named macro ports — a `collapse` / `sizing` / `ports` feature, not a routing one.
+- **Network-simplex layering** is deferred (decision 3): fewer dummies and shorter edges, at the cost of moving every golden again.
+- **No height or width cap.** Dense circuits grow with demand: `alu_4bit expanded` is 176 rows, `stress_grid_10x10` 47 columns. Wrapping was explicitly out of scope.
+- **Crossings are reported, not gated** (`X=5449` after the rewrite, up from 615 because every wire now runs on its own cells); a crossing-minimisation gate was deferred.
+- **The renderer's `crossings` and `collapse.ts` differ by design** (see Phase 4); the parity contract is the JSON projection, and any future slice/concat fixture in the vendored corpus will fail parity until `collapse.ts` folds them.
+- **Six circuits are not vendored into the renderer** (name collisions with its frozen v02 fixtures); vendoring them under another name was proposed and not done.
+- **Render's step 7 stamps `●` on a source with three or more wires**, and a fan-out's first tap can sit in the next cell, so `○●` / `●●` appears at busy sources (`fan_out`, `stress_grid_10x10`). Existing convention, not a routing artefact.
+- **`tests/preview/layout_integration_test.zig` assembles its own pipeline** and its five text goldens are a unit harness, never the parity contract.
+- **`bun add` in `site/` can leave vite's nested esbuild dead** (`The service was stopped` from `astro check` / `astro build` while `bun test` stays green); `rm -rf node_modules && bun install` fixes it. A pin bump must be followed by the build gate.
+- **`build.zig` is not `zig fmt`-clean** (17 trailing-whitespace lines) and has no test filter; Zig refuses a parameter that shadows a file-scope name, so test helpers cannot be called `node`, `seg`, `grid` or `order` in the layout files.
+- **The browser side-by-side check** (`/playground`, `and-not`, Preview tab against the Simulate canvas) is still unrun.
+
+## Decisions & specs that survived the plan
+
+- `DOCS/decisions/preview-layout.md` — the seven entries this plan exercised: the JSON parity contract; the corpus invariants as the measurement of record; dummy nodes and the leftward back edge; port-aware integer ordering; one row per node aligned to its feeding port; per-gap track routing under a constraint graph; an unnamed macro port is one port. The fifteen plan-time decisions are in the plan prompt at the canonical commit.
+- `DOCS/preview.md` — the user-facing description of the algorithm ("How the layout is computed") and its known limitations; mirrored by the site build into `site/src/pages/reference/preview.md`.
+- `lib/preview/layout.zig` — the frozen `LayoutGrid` contract; `DOCS/libcirc-api.md` for `circ_preview`.
+- `circ-renderer/README.md` and `test/fixtures/layouts/MANIFEST.md` — the renderer's side of the contract.
+- `DOCS/archive/plan-playground.md` — the predecessor plan whose renderer-pin and site-delivery conventions this plan reused.

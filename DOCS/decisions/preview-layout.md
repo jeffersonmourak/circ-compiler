@@ -1,6 +1,6 @@
 # preview-layout
 
-The entries below record the decisions of the layout-rewrite initiative: the ASCII `--preview` layout in `lib/preview/layout/` and its TypeScript port in `circ-renderer/src/layout/` are rebuilt as a layered-graph layout with channel routing, and must produce the same `LayoutGrid`. The fifteen decisions locked at plan time are in `DOCS/PLANS_PROMPT.md`; each phase appends the ones it exercises here as it ships them. The render conventions the layout feeds are in `DOCS/preview.md`.
+The entries below record the decisions of the layout-rewrite initiative: the ASCII `--preview` layout in `lib/preview/layout/` and its TypeScript port in `circ-renderer/src/layout/` are rebuilt as a layered-graph layout with channel routing, and must produce the same `LayoutGrid`. The fifteen decisions locked at plan time are in the layout plan prompt, archived at `DOCS/archive/plan-layout.md` and readable in full at `git show 06d115ec5378e07100fd80afa075d5e72cc076d1:DOCS/PLANS_PROMPT.md`; each phase appended the ones it exercised here as it shipped them. The render conventions the layout feeds are in `DOCS/preview.md`.
 
 ### The parity contract is a JSON projection, not either side's native type
 
