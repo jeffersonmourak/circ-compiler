@@ -75,7 +75,7 @@ The list above is a list of *omissions*, not a promise that the six original exp
 
 ## Native memories
 
-The entries below record the engine, format, runtime and tooling half of the native-memory initiative; the numbered decisions they cite are the eleven locked in `DOCS/PLANS_PROMPT.md`. The language half is in [language.md](language.md) `## Native memories`. The host-facing reference is `DOCS/wasm-api.md` "Memory exports"; the `--sim` reference is `DOCS/sim-protocol.md`.
+The entries below record the engine, format, runtime and tooling half of the native-memory initiative; the numbered decisions they cite are the eleven locked in the memories plan prompt, archived at `DOCS/archive/plan-memories.md` and readable in full at `git show 2e15e97b973d822373d2b078dd0261fc3974b989:DOCS/PLANS_PROMPT.md`. The language half is in [language.md](language.md) `## Native memories`. The host-facing reference is `DOCS/wasm-api.md` "Memory exports"; the `--sim` reference is `DOCS/sim-protocol.md`.
 
 ### One engine kind with a mode; two wire kinds; one IR variant
 
