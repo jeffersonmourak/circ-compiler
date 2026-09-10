@@ -985,3 +985,19 @@ Those four kinds have site skins now — `drawSlice`, `drawConcat`, and `drawMem
 2. **A bus is a bus now.** The old painter coloured a wire by `signalOf`, so an 8-bit wire carrying `0x00` was grey and `0x01` was as green as `0xFF`. `wireStyleOf` gives a defined bus its own style, and the value is the badge's to say.
 3. **`source-link.ts` imports a value for the first time**, and its header comment says from where and why that is still not the renderer. The test that asserted the hand-copied table against the enum now checks that every analyze kind has a row, since equality with the enum is by construction.
 4. **A source-level guard again**, since the harness cannot run the renderer: `renderer-pin.test.ts` asserts no local `CircView`, no cast around `renderCircuit`, no `INPUT_PIN = 0`, no `ROM_KIND`, the two `wireBus` entries, `traceWire(` in the theme and no `wire.crossings` there. Negative proof, run and checked for its failure: a copied byte in the playground and a cast in the gallery put back together fail it.
+
+## 2026-09-10 — Renderer sync — the bus-pin editor is a dialog
+
+**What shipped:** The site pins circ-renderer `62d0def` (`2.2.0-alpha.6`). A click on a bus pin used to open a bare text field; it opens a small dialog under the pin now, with the field, a slider over the pin's whole range (up to 53 bits; wider pins get the field alone) and three buttons — Apply drives what the field says, Clear drives zero, Close drives nothing. The field and the slider say the same number in the chosen format, nothing is driven until Apply, and Enter and Escape still mean Apply and Close. The site adds a stylesheet block that puts the dialog in its palette through the renderer's documented class names; nothing in the island changed, since the dialog is the renderer's.
+
+**Files touched:** `site/package.json`, `site/bun.lock`, `site/src/utils/renderer-versions.ts`, `site/src/styles/global.css`, `site/test/renderer-pin.test.ts`.
+
+**Tests:** `bun test` 406 pass across 32 files, from 405. `bun --bun run typecheck` 0 errors. On the renderer: 95 tests, from 91, with one negative proof (a pointer-down handler that ignores the dialog fails one). Build and `bun run bundle` not run: the dev server was up. The change is CSS and a pin, so the eager bundle is unaffected in principle, but the gate has now been skipped for two slices and should run before the branch is pushed.
+
+**Next slice:** none pending.
+
+**Notes:**
+
+1. **Closing on blur had to go.** With one `<input>`, blur meant "the reader left". With a slider and three buttons it means "the reader moved to the next part", and in Safari a button takes no focus on click, so the field's blur would have closed the dialog before Apply's click landed. The renderer closes on a pointer-down outside the dialog and on a focusout whose destination is outside it; a focusout with no destination is left alone. The stub grew a document event bus and `contains` to prove both ways.
+2. **Clear drives zero and closes**, rather than setting the field to zero and waiting for Apply. A reset that takes two clicks is not a reset; a reader who wants to look before driving can slide to zero instead.
+3. **The site's CSS is a probe's subject.** The dialog is styled by class name, which the renderer's README names as a stable surface, and the pin test reads the installed renderer's source to check every class the stylesheet targets is one the dialog emits — the three button classes through the template they are built from.

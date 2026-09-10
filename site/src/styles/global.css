@@ -839,6 +839,40 @@ hr {
 .pg-rom-meta { color: var(--muted); font-size: 0.7rem; }
 .pg-rom-error { color: var(--danger); font-size: 0.72rem; }
 
+/* ---------- the renderer's value dialog ----------
+   A click on a bus pin opens circ-renderer's own dialog on <body>: a field, a
+   slider and Apply / Clear / Close. Its inline styles are the renderer's
+   legible default; these put it in the site's palette. The class names are
+   part of the renderer's documented surface (README, "Driving a bus pin"),
+   and the pin test asserts they are still what the installed version emits. */
+.circ-pin-editor {
+  background: var(--pane-bg) !important;
+  color: var(--fg) !important;
+  border-color: var(--border) !important;
+  font-family: var(--font-mono-strict) !important;
+  font-size: 0.8rem !important;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.28) !important;
+}
+.circ-pin-editor__name { color: var(--muted); opacity: 1 !important; }
+.circ-pin-editor__field {
+  background: var(--bg) !important;
+  color: var(--fg) !important;
+  border-color: var(--accent) !important;
+}
+.circ-pin-editor__field[aria-invalid='true'] {
+  border-color: var(--danger) !important;
+  background: color-mix(in srgb, var(--danger) 12%, var(--bg)) !important;
+}
+.circ-pin-editor__slider { accent-color: var(--accent); }
+.circ-pin-editor__actions button {
+  font-size: 0.7rem !important;
+  color: var(--muted) !important;
+  border-color: var(--border) !important;
+  border-radius: 4px;
+}
+.circ-pin-editor__actions button:hover { color: var(--fg) !important; border-color: var(--accent) !important; }
+.circ-pin-editor__apply { color: var(--fg) !important; border-color: var(--accent) !important; }
+
 /* ---------- the memory panel ----------
    A rom or ram keeps its contents as runtime state, so this panel is a live
    window onto a running circuit rather than a view of the artifact. */

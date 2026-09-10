@@ -83,6 +83,31 @@ describe('renderer pin', () => {
     expect(pkg.exports['./topology']).toBe('./src/wasm/topology.ts');
   });
 
+  test('the value dialog the site styles is the one the installed renderer builds', () => {
+    // The site's stylesheet targets the dialog by class name, which is the
+    // renderer's documented surface. A rename there would leave the site's
+    // rules matching nothing, and the dialog wearing the renderer's defaults.
+    const canvas = readFileSync(
+      resolve(import.meta.dir, '..', 'node_modules', 'circ-renderer', 'src', 'render', 'canvas.ts'),
+      'utf8',
+    );
+    const css = readFileSync(resolve(import.meta.dir, '..', 'src', 'styles', 'global.css'), 'utf8');
+    const styled = new Set([...css.matchAll(/\.circ-pin-editor(?:__[a-z]+)?/g)].map((m) => m[0].slice(1)));
+    expect(styled.size).toBeGreaterThan(0);
+    // The three buttons are named through one template, `circ-pin-editor__${kind}`.
+    const buttons = /circ-pin-editor__\$\{kind\}/.test(canvas)
+      ? ['circ-pin-editor__apply', 'circ-pin-editor__clear', 'circ-pin-editor__close']
+      : [];
+    const emitted = new Set([
+      ...[...canvas.matchAll(/"(circ-pin-editor(?:__[a-z]+)?)"/g)].map((m) => m[1]),
+      ...buttons,
+    ]);
+    for (const name of styled) expect(`${name}: ${emitted.has(name)}`).toBe(`${name}: true`);
+    // …and the three controls the dialog promises are the ones it builds.
+    for (const text of ['"Apply"', '"Clear"', '"Close"']) expect(canvas).toContain(text);
+    expect(canvas).toContain('slider.type = "range"');
+  });
+
   test('no kind byte is hand-copied and no view type is restated on the site', () => {
     // Phase 5 deleted the site's copies of the renderer's shapes. A copy that
     // comes back is a number that can drift from the enum, or a type that

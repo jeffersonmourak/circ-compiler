@@ -10,5 +10,5 @@ export { SUPPORTED_TOPOLOGY_VERSIONS } from 'circ-renderer';
  * inside the installed package are two facts that can disagree, and only one
  * of them is visible in a diff.
  */
-export const RENDERER_PIN_VERSION = '2.2.0-alpha.5';
+export const RENDERER_PIN_VERSION = '2.2.0-alpha.6';
 
