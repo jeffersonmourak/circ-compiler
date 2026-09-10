@@ -663,88 +663,138 @@ fn mergeSegments(arena: std.mem.Allocator, segs: []const Segment) ![]Segment {
 }
 
 pub fn emit(arena: std.mem.Allocator, graph: VirtualGraph, layered: LayeredGraph, coords: Coords, p: RoutePlan) !RouteResult {
-    var wires: std.ArrayList(layout.RoutedWire) = .{};
-    var back_index: u32 = 0;
+    const wire_slots = try arena.alloc(?layout.RoutedWire, layered.originals.len);
+    @memset(wire_slots, null);
 
+    // Wires whose chain crosses a fallback net are emitted last, by search,
+    // over the cells every other wire took.
+    var deferred: std.ArrayList(u32) = .{};
+    var back_index: u32 = 0;
     for (layered.originals, 0..) |o, oi| {
-        var segs: std.ArrayList(Segment) = .{};
-        const src_node: u32 = @intCast(o.src);
-        const dst_node: u32 = @intCast(o.dst);
         if (o.back) {
-            const j = layered.nodes[src_node].layer;
-            const i = layered.nodes[dst_node].layer;
-            const return_row = coords.height - p.return_rows + back_index;
             back_index += 1;
-            const down = findNet(p.gaps[j], src_node, o.src, o.src_port, true, true) orelse return error.MissingNet;
-            const up = findNet(p.gaps[i - 1], src_node, o.src, o.src_port, true, false) orelse return error.MissingNet;
-            // Several back edges from one source share the down halves'
-            // identity; pick the halves whose return row is this edge's.
-            const d = pickHalf(p.gaps[j], o, true, return_row) orelse down;
-            const u = pickHalf(p.gaps[i - 1], o, false, return_row) orelse up;
-            const src_row = d.src.row;
-            const dst_row = u.sinks[0].row;
-            const x_s = sourceX(layered, coords, src_node, j);
-            const t1 = trackX(coords, j, d.pieces[0].track);
-            const t2 = trackX(coords, i - 1, u.pieces[0].track);
-            try segs.append(arena, seg(x_s, src_row, t1, src_row));
-            try segs.append(arena, seg(t1, src_row, t1, return_row));
-            try segs.append(arena, seg(t1, return_row, t2, return_row));
-            try segs.append(arena, seg(t2, return_row, t2, dst_row));
-            try segs.append(arena, seg(t2, dst_row, sinkX(coords, i - 1), dst_row));
-        } else {
-            // Walk the chain of layer-adjacent edges of this original.
-            var cur: u32 = src_node;
-            var k = layered.nodes[src_node].layer;
-            while (true) {
-                var edge: ?types.LayerEdge = null;
-                for (layered.edges) |e| {
-                    if (e.original == oi and e.src == cur) {
-                        edge = e;
-                        break;
-                    }
-                }
-                const e = edge orelse break;
-                const net = findNet(p.gaps[k], cur, o.src, o.src_port, false, true) orelse return error.MissingNet;
-                const src_row = net.src.row;
-                var dst_row: u32 = 0;
-                for (net.sinks) |t| {
-                    if (t.node == e.dst and t.port == e.dst_port) dst_row = t.row;
-                }
-                const x_s = sourceX(layered, coords, cur, k);
-                const x_d = sinkX(coords, k);
-                if (net.straight or net.fallback) {
-                    if (src_row == dst_row) {
-                        try segs.append(arena, seg(x_s, src_row, x_d, dst_row));
-                    } else {
-                        // Fallback L on the first track column.
-                        const tx = trackX(coords, k, 0);
-                        try segs.append(arena, seg(x_s, src_row, tx, src_row));
-                        try segs.append(arena, seg(tx, src_row, tx, dst_row));
-                        try segs.append(arena, seg(tx, dst_row, x_d, dst_row));
-                    }
-                } else {
-                    const x_end = try appendVertical(arena, &segs, net, coords, k, src_row, dst_row, x_s);
-                    try segs.append(arena, seg(x_end, dst_row, x_d, dst_row));
-                }
-                cur = e.dst;
-                k += 1;
-                if (layered.nodes[cur].real != null) break;
-                // Across the dummy's layer column to the next gap's first cell.
-                try segs.append(arena, seg(x_d, dst_row, coords.channel_x[k], dst_row));
-            }
+            continue;
         }
-        const merged = try mergeSegments(arena, segs.items);
-        try wires.append(arena, .{
-            .src_id = graph.nodes[o.src].id,
-            .src_port = o.src_port,
-            .dst_id = graph.nodes[o.dst].id,
-            .dst_port = o.dst_port,
-            .segments = merged,
-            .crossings = &.{},
-        });
+        var cur: u32 = @intCast(o.src);
+        var k = layered.nodes[cur].layer;
+        var uses_fallback = false;
+        while (true) {
+            var edge: ?types.LayerEdge = null;
+            for (layered.edges) |e| {
+                if (e.original == oi and e.src == cur) {
+                    edge = e;
+                    break;
+                }
+            }
+            const e = edge orelse break;
+            if (findNet(p.gaps[k], cur, o.src, o.src_port, false, true)) |net| {
+                if (net.fallback) uses_fallback = true;
+            }
+            cur = e.dst;
+            k += 1;
+            if (layered.nodes[cur].real != null) break;
+        }
+        if (uses_fallback) try deferred.append(arena, @intCast(oi));
+    }
+    back_index = 0;
+
+    var pass: u8 = 0;
+    while (pass < 2) : (pass += 1) {
+        var occupied = if (pass == 1) try occupancyOf(arena, try collectWires(arena, wire_slots)) else std.AutoHashMap(PortCoord, void).init(arena);
+        for (layered.originals, 0..) |o, oi| {
+            var is_deferred = false;
+            for (deferred.items) |d| if (d == oi) {
+                is_deferred = true;
+            };
+            if ((pass == 0) == is_deferred) continue;
+            var segs: std.ArrayList(Segment) = .{};
+            const src_node: u32 = @intCast(o.src);
+            const dst_node: u32 = @intCast(o.dst);
+            if (o.back) {
+                const j = layered.nodes[src_node].layer;
+                const i = layered.nodes[dst_node].layer;
+                const return_row = coords.height - p.return_rows + back_index;
+                back_index += 1;
+                const down = findNet(p.gaps[j], src_node, o.src, o.src_port, true, true) orelse return error.MissingNet;
+                const up = findNet(p.gaps[i - 1], src_node, o.src, o.src_port, true, false) orelse return error.MissingNet;
+                // Several back edges from one source share the down halves'
+                // identity; pick the halves whose return row is this edge's.
+                const d = pickHalf(p.gaps[j], o, true, return_row) orelse down;
+                const u = pickHalf(p.gaps[i - 1], o, false, return_row) orelse up;
+                const src_row = d.src.row;
+                const dst_row = u.sinks[0].row;
+                const x_s = sourceX(layered, coords, src_node, j);
+                const t1 = trackX(coords, j, d.pieces[0].track);
+                const t2 = trackX(coords, i - 1, u.pieces[0].track);
+                try segs.append(arena, seg(x_s, src_row, t1, src_row));
+                try segs.append(arena, seg(t1, src_row, t1, return_row));
+                try segs.append(arena, seg(t1, return_row, t2, return_row));
+                try segs.append(arena, seg(t2, return_row, t2, dst_row));
+                try segs.append(arena, seg(t2, dst_row, sinkX(coords, i - 1), dst_row));
+            } else {
+                // Walk the chain of layer-adjacent edges of this original.
+                var cur: u32 = src_node;
+                var k = layered.nodes[src_node].layer;
+                while (true) {
+                    var edge: ?types.LayerEdge = null;
+                    for (layered.edges) |e| {
+                        if (e.original == oi and e.src == cur) {
+                            edge = e;
+                            break;
+                        }
+                    }
+                    const e = edge orelse break;
+                    const net = findNet(p.gaps[k], cur, o.src, o.src_port, false, true) orelse return error.MissingNet;
+                    const src_row = net.src.row;
+                    var dst_row: u32 = 0;
+                    for (net.sinks) |t| {
+                        if (t.node == e.dst and t.port == e.dst_port) dst_row = t.row;
+                    }
+                    const x_s = sourceX(layered, coords, cur, k);
+                    const x_d = sinkX(coords, k);
+                    if (net.straight) {
+                        try segs.append(arena, seg(x_s, src_row, x_d, dst_row));
+                    } else if (net.fallback) {
+                        // Bounded search over the gap's free cells; a plain L
+                        // (which the invariants will show) only when there is
+                        // no free path at all.
+                        const start = PortCoord{ .x = x_s, .y = src_row };
+                        const goal = PortCoord{ .x = x_d, .y = dst_row };
+                        const path = try searchPath(arena, &occupied, @min(x_s, coords.channel_x[k]), x_d, 0, coords.height - 1, start, goal);
+                        if (path) |cells| {
+                            const found = try cellsToSegments(arena, cells);
+                            try segs.appendSlice(arena, found);
+                            for (cells) |c| try occupied.put(c, {});
+                        } else {
+                            const tx = trackX(coords, k, 0);
+                            try segs.append(arena, seg(x_s, src_row, tx, src_row));
+                            try segs.append(arena, seg(tx, src_row, tx, dst_row));
+                            try segs.append(arena, seg(tx, dst_row, x_d, dst_row));
+                        }
+                    } else {
+                        const x_end = try appendVertical(arena, &segs, net, coords, k, src_row, dst_row, x_s);
+                        try segs.append(arena, seg(x_end, dst_row, x_d, dst_row));
+                    }
+                    cur = e.dst;
+                    k += 1;
+                    if (layered.nodes[cur].real != null) break;
+                    // Across the dummy's layer column to the next gap's first cell.
+                    try segs.append(arena, seg(x_d, dst_row, coords.channel_x[k], dst_row));
+                }
+            }
+            const merged = try mergeSegments(arena, segs.items);
+            wire_slots[oi] = .{
+                .src_id = graph.nodes[o.src].id,
+                .src_port = o.src_port,
+                .dst_id = graph.nodes[o.dst].id,
+                .dst_port = o.dst_port,
+                .segments = merged,
+                .crossings = &.{},
+            };
+        }
     }
 
-    const wire_slice = try wires.toOwnedSlice(arena);
+    const wire_slice = try collectWires(arena, wire_slots);
     try computeCrossings(arena, wire_slice);
 
     var width = coords.width;
@@ -758,6 +808,14 @@ pub fn emit(arena: std.mem.Allocator, graph: VirtualGraph, layered: LayeredGraph
         }
     }
     return .{ .wires = wire_slice, .width = width, .height = height };
+}
+
+fn collectWires(arena: std.mem.Allocator, slots: []const ?layout.RoutedWire) ![]layout.RoutedWire {
+    var out: std.ArrayList(layout.RoutedWire) = .{};
+    for (slots) |maybe| {
+        if (maybe) |w| try out.append(arena, w);
+    }
+    return out.toOwnedSlice(arena);
 }
 
 /// The return-lane half of `o` whose return row is `row` (several back
@@ -832,6 +890,128 @@ fn computeCrossings(arena: std.mem.Allocator, wires: []layout.RoutedWire) !void 
         }
     }
     for (wires, 0..) |*w, i| w.crossings = lists[i].items;
+}
+
+// ---------- The fallback search ----------
+
+/// A bounded best-first search over free cells for a net no track could
+/// hold: cost 1 per step and `TURN_COST` per change of direction, over the
+/// rectangle `[x0, x1] × [y0, y1]`, never entering an occupied cell except
+/// the start and the goal. Returns the path's cells, start to goal, or null.
+pub const TURN_COST: u32 = 3;
+
+const Dir = enum(u2) { e, s, w, n };
+
+pub fn searchPath(
+    arena: std.mem.Allocator,
+    occupied: *const std.AutoHashMap(PortCoord, void),
+    x0: u32,
+    x1: u32,
+    y0: u32,
+    y1: u32,
+    start: PortCoord,
+    goal: PortCoord,
+) !?[]PortCoord {
+    const State = struct { x: u32, y: u32, dir: Dir };
+    const Entry = struct {
+        cost: u32,
+        state: State,
+        fn lessThan(_: void, a: @This(), b: @This()) std.math.Order {
+            if (a.cost != b.cost) return std.math.order(a.cost, b.cost);
+            if (a.state.y != b.state.y) return std.math.order(a.state.y, b.state.y);
+            if (a.state.x != b.state.x) return std.math.order(a.state.x, b.state.x);
+            return std.math.order(@intFromEnum(a.state.dir), @intFromEnum(b.state.dir));
+        }
+    };
+    var best = std.AutoHashMap(State, u32).init(arena);
+    var parent = std.AutoHashMap(State, State).init(arena);
+    var queue = std.PriorityQueue(Entry, void, Entry.lessThan).init(arena, {});
+    inline for (.{ Dir.e, Dir.s, Dir.w, Dir.n }) |d| {
+        const st = State{ .x = start.x, .y = start.y, .dir = d };
+        try best.put(st, 0);
+        try queue.add(.{ .cost = 0, .state = st });
+    }
+    var found: ?State = null;
+    while (queue.removeOrNull()) |e| {
+        const st = e.state;
+        if ((best.get(st) orelse std.math.maxInt(u32)) < e.cost) continue;
+        if (st.x == goal.x and st.y == goal.y) {
+            found = st;
+            break;
+        }
+        inline for (.{ Dir.e, Dir.s, Dir.w, Dir.n }) |d| {
+            const nx: i64 = @as(i64, st.x) + @as(i64, switch (d) {
+                .e => 1,
+                .w => -1,
+                else => 0,
+            });
+            const ny: i64 = @as(i64, st.y) + @as(i64, switch (d) {
+                .s => 1,
+                .n => -1,
+                else => 0,
+            });
+            if (nx >= x0 and nx <= x1 and ny >= y0 and ny <= y1) {
+                const cell = PortCoord{ .x = @intCast(nx), .y = @intCast(ny) };
+                const is_goal = cell.x == goal.x and cell.y == goal.y;
+                if (is_goal or !occupied.contains(cell)) {
+                    const cost = e.cost + 1 + (if (d != st.dir) TURN_COST else 0);
+                    const ns = State{ .x = cell.x, .y = cell.y, .dir = d };
+                    const prev = best.get(ns) orelse std.math.maxInt(u32);
+                    if (cost < prev) {
+                        try best.put(ns, cost);
+                        try parent.put(ns, st);
+                        try queue.add(.{ .cost = cost, .state = ns });
+                    }
+                }
+            }
+        }
+    }
+    const end = found orelse return null;
+    var cells: std.ArrayList(PortCoord) = .{};
+    var cur = end;
+    while (true) {
+        try cells.append(arena, .{ .x = cur.x, .y = cur.y });
+        if (cur.x == start.x and cur.y == start.y) break;
+        cur = parent.get(cur) orelse return null;
+    }
+    std.mem.reverse(PortCoord, cells.items);
+    return cells.items;
+}
+
+/// Cells to segments: one segment per straight run.
+fn cellsToSegments(arena: std.mem.Allocator, cells: []const PortCoord) ![]Segment {
+    var segs: std.ArrayList(Segment) = .{};
+    if (cells.len < 2) return segs.toOwnedSlice(arena);
+    var run_start = cells[0];
+    var i: usize = 1;
+    while (i < cells.len) : (i += 1) {
+        const horizontal = cells[i].y == cells[i - 1].y;
+        const run_h = cells[i].y == run_start.y and cells[i - 1].y == run_start.y;
+        if (i + 1 < cells.len) {
+            const next_h = cells[i + 1].y == cells[i].y;
+            if (next_h == horizontal and (horizontal == run_h or i == 1)) continue;
+        }
+        try segs.append(arena, .{ .from = run_start, .to = cells[i] });
+        run_start = cells[i];
+    }
+    return mergeSegments(arena, segs.items);
+}
+
+/// Every cell the given wires cover.
+fn occupancyOf(arena: std.mem.Allocator, wires: []const layout.RoutedWire) !std.AutoHashMap(PortCoord, void) {
+    var occ = std.AutoHashMap(PortCoord, void).init(arena);
+    for (wires) |w| {
+        for (w.segments) |s| {
+            const horizontal = s.from.y == s.to.y;
+            const lo = if (horizontal) @min(s.from.x, s.to.x) else @min(s.from.y, s.to.y);
+            const hi = if (horizontal) @max(s.from.x, s.to.x) else @max(s.from.y, s.to.y);
+            var i = lo;
+            while (i <= hi) : (i += 1) {
+                try occ.put(if (horizontal) .{ .x = i, .y = s.from.y } else .{ .x = s.from.x, .y = i }, {});
+            }
+        }
+    }
+    return occ;
 }
 
 // ---------- Tests ----------
@@ -1063,4 +1243,30 @@ fn mkTestNet(al: std.mem.Allocator, id: usize, src_row: u32, sink_rows: []const 
         if (r > hi) hi = r;
     }
     return .{ .src_real = id, .src_port = 3, .src = .{ .node = @intCast(id), .port = 3, .row = src_row, .rail = .left }, .sinks = sinks, .lo = lo, .hi = hi, .straight = false, .pieces = &.{}, .jogs = &.{}, .back = false, .fallback = false };
+}
+
+test "channels: the fallback search detours around occupied cells and prefers fewer turns" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var occ = std.AutoHashMap(PortCoord, void).init(a);
+    // A wall on column 5 from row 0 to row 3; the gap is rows 0..5.
+    for (0..4) |y| try occ.put(.{ .x = 5, .y = @intCast(y) }, {});
+    const path = (try searchPath(a, &occ, 0, 10, 0, 5, .{ .x = 0, .y = 1 }, .{ .x = 10, .y = 1 })).?;
+    try std.testing.expectEqual(@as(u32, 0), path[0].x);
+    try std.testing.expectEqual(@as(u32, 10), path[path.len - 1].x);
+    for (path) |c| try std.testing.expect(!(c.x == 5 and c.y <= 3));
+    const segs = try cellsToSegments(a, path);
+    // Down, across under the wall, up: four turns at most (two if it drops
+    // straight to row 4 and back), never more.
+    try std.testing.expect(segs.len <= 5);
+    try std.testing.expect(segs.len >= 3);
+    // No wall: one straight segment.
+    var none = std.AutoHashMap(PortCoord, void).init(a);
+    const straight = (try searchPath(a, &none, 0, 10, 0, 5, .{ .x = 0, .y = 1 }, .{ .x = 10, .y = 1 })).?;
+    try std.testing.expectEqual(@as(usize, 1), (try cellsToSegments(a, straight)).len);
+    // Fully walled: null.
+    var wall = std.AutoHashMap(PortCoord, void).init(a);
+    for (0..6) |y| try wall.put(.{ .x = 5, .y = @intCast(y) }, {});
+    try std.testing.expectEqual(@as(?[]PortCoord, null), try searchPath(a, &wall, 0, 10, 0, 5, .{ .x = 0, .y = 1 }, .{ .x = 10, .y = 1 }));
 }

@@ -72,10 +72,11 @@ fn corpusInvariantsTable(out: std.mem.Allocator) ![]const u8 {
     var buf: std.ArrayList(u8) = .{};
     const writer = buf.writer(out);
     try writer.writeAll("# corpus layout invariants — every previewable fixture-mode; regenerate with UPDATE_GOLDENS=1 zig build test\n");
-    try writer.writeAll("# I0 body cells, I1 shared cells, I2 junctions, I3 non-tree nets, X crossings, B bends, S straight wires of W wires, C ordering crossings, size WxH\n");
+    try writer.writeAll("# I0 body cells, I1 shared cells, I2 junctions, I3 non-tree nets, X crossings, B bends, S straight wires of W wires, C ordering crossings, F fallback nets, size WxH\n");
 
     var total = invariants.Report{};
     var total_c: u64 = 0;
+    var total_f: u64 = 0;
     for (w.entries) |entry| {
         var scratch = std.heap.ArenaAllocator.init(std.heap.page_allocator);
         defer scratch.deinit();
@@ -86,8 +87,9 @@ fn corpusInvariantsTable(out: std.mem.Allocator) ![]const u8 {
         const r = try invariants.check(s, grid);
         const c = try ordering.countCrossings(s, st.graph, st.layered, st.ordering);
         total_c += c;
-        try writer.print("{s} {s} I0={d} I1={d} I2={d} I3={d} X={d} B={d} S={d}/{d} C={d} size={d}x{d}\n", .{
-            entry.name, entry.mode.name(), r.body, r.shared, r.junction, r.tree, r.crossings, r.bends, r.straight, r.wires, c, grid.width, grid.height,
+        total_f += st.plan.fallbacks;
+        try writer.print("{s} {s} I0={d} I1={d} I2={d} I3={d} X={d} B={d} S={d}/{d} C={d} F={d} size={d}x{d}\n", .{
+            entry.name, entry.mode.name(), r.body, r.shared, r.junction, r.tree, r.crossings, r.bends, r.straight, r.wires, c, st.plan.fallbacks, grid.width, grid.height,
         });
         total.body += r.body;
         total.shared += r.shared;
@@ -98,8 +100,8 @@ fn corpusInvariantsTable(out: std.mem.Allocator) ![]const u8 {
         total.straight += r.straight;
         total.wires += r.wires;
     }
-    try writer.print("# totals: fixture-modes={d} skipped={d} I0={d} I1={d} I2={d} I3={d} X={d} B={d} S={d}/{d} C={d}\n", .{
-        w.entries.len, w.skipped, total.body, total.shared, total.junction, total.tree, total.crossings, total.bends, total.straight, total.wires, total_c,
+    try writer.print("# totals: fixture-modes={d} skipped={d} I0={d} I1={d} I2={d} I3={d} X={d} B={d} S={d}/{d} C={d} F={d}\n", .{
+        w.entries.len, w.skipped, total.body, total.shared, total.junction, total.tree, total.crossings, total.bends, total.straight, total.wires, total_c, total_f,
     });
     return buf.toOwnedSlice(out);
 }
