@@ -90,7 +90,7 @@ function emitTourTwin(): void {
     "A progressive walkthrough of `circ`. Each step adds one new idea on top of the previous one. By the end you'll have read enough to feel at home in the language reference.",
   ).trimEnd();
   const steps = tour.map(renderTourStep).join('\n\n');
-  const footer = `Done. The [language reference](${SITE_URL}/reference.md) covers the full surface — every keyword, every diagnostic code, the rules the validator enforces. The [examples gallery](${SITE_URL}/examples.md) has more circuits to read through.`;
+  const footer = `Done. The [language reference](${SITE_URL}/reference.md) covers the full surface — every keyword, every diagnostic code, the rules the validator enforces. The [gallery](${SITE_URL}/examples.md) has more circuits to read through.`;
 
   writeTwin('tour.md', `${intro}\n\n\n${steps}\n\n${footer}\n`, 'src/content/tour.ts');
 }
@@ -112,8 +112,8 @@ ${fence('', ex.preview)}${repoNote}`;
 
 function emitExamplesTwin(): void {
   const intro = header(
-    'Examples',
-    'A gallery of `circ` circuits — primitives, multi-bit arithmetic, and stateful latches. Each entry shows the source and its `--preview` output.',
+    'Gallery',
+    'A collection of `circ` circuits — primitives, multi-bit arithmetic, and stateful latches. Each entry shows the source and its `--preview` output.',
   ).trimEnd();
   const body = examples.map(renderExample).join('\n\n');
 
@@ -296,9 +296,9 @@ function emitLlmsTxt(): void {
       .map((d) => `- [${d.title}](${SITE_URL}/${d.dst}): ${d.description}`),
     `- [Download](${SITE_URL}/download.md): Pre-built \`circ-compile\` binaries for Linux, macOS, and Windows.`,
     '',
-    '## Examples',
+    '## Gallery',
     '',
-    `- [Examples gallery](${SITE_URL}/examples.md): Curated \`.circ\` programs with their \`--preview\` output.`,
+    `- [Gallery](${SITE_URL}/examples.md): Curated \`.circ\` programs with their \`--preview\` output.`,
     '',
     '## Optional',
     '',
@@ -328,7 +328,7 @@ function emitLlmsFullTxt(): void {
     { path: 'reference/circuit-format.md', label: 'Circuit file format' },
     { path: 'reference/wasm-api.md', label: 'WASM runtime API' },
     { path: 'reference/preview.md', label: 'ASCII preview' },
-    { path: 'examples.md', label: 'Examples gallery' },
+    { path: 'examples.md', label: 'Gallery' },
     { path: 'download.md', label: 'Download' },
   ];
 

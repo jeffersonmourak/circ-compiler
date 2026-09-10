@@ -764,3 +764,22 @@ The hex textarea is now behind an "Edit as hex" checkbox, alongside a file picke
 1. **The memory panel now has a test seam, because nothing else could reach it.** The panel exists only once an analysis reports a memory, and no headless harness can run the worker that produces one. `__playground` already exposed `state` and `hooks`; it exposes `renderMemory` alongside them, and the smoke test hands the island a hand-built analysis declaring `rom code[8, 4]` and drives the real grid.
 2. **My first draft of the test was wrong, not the code.** It typed `100` expecting an overflow, but the shipped default value format is **binary**, where `100` is a perfectly good three-bit word that committed exactly as it should. The overflow case for an eight-bit word in binary is nine digits. Worth remembering: the value format is a setting, so a test that hard-codes a literal has to say which base it is in.
 3. **The checkbox proof only worked once the test focused before clicking.** Setting `checked` from outside and firing `change` leaves the document focused elsewhere, and the defect cannot reproduce — the bug is entirely about the checkbox holding focus at the moment of the redraw. Restoring the broad guard now fails the test; before the focus call it passed with the bug in place, which would have been a green light on a broken build.
+
+## 2026-09-09 — Content — the examples page becomes the Gallery
+
+**What shipped:** The human renamed the page itself — its heading, its title, its description and its opening paragraph. This carries that name into every other place the site writes it: the nav, the footer, the tour's closing line, and the markdown mirror, where it appears four separate times (the twin's own header, its description, its `llms.txt` entry, and its section label inside the bundled `llms-full.txt`).
+
+**The URL is unchanged.** The page file is still `examples.astro`, so the route is still `/examples` and the twin is still `examples.md`. The repository is public and those paths may already be linked or indexed, so renaming them is a decision with a blast radius rather than a rename, and it was not part of the ask. A display name differing from a slug is ordinary; if the route should move, it wants a redirect alongside it.
+
+**Files touched:** `site/src/components/Nav.astro`, `site/src/components/Footer.astro`, `site/src/pages/tour.astro`, `site/src/pages/examples.astro`, `site/scripts/build-llm-mirror.ts`, `site/test/site-labels.test.ts` (new).
+
+**Tests:** `bun test` 398 pass across 31 files, from 393. `bun --bun run typecheck` 0 errors. Build and `bun run bundle` green; `/examples` is byte-unchanged at 1.6 KB gzip.
+
+**Next slice:** none.
+
+**Notes:**
+
+1. **A new gate, because a half-rename fails nothing.** `site/test/site-labels.test.ts` checks the four places a page's name is written against each other rather than against a list it keeps, which would only be a fifth place to forget: the nav label must equal the footer label, the nav label must be what the `<title>` leads with, the `<h1>` must at least name it, and the mirror must carry the same word. Nothing about a half-rename breaks a build or a link — the reader is the one who finds a "Gallery" tab opening a page headed "Examples". Negative proof: leaving the old name in the nav fails three cases, in the footer one, and in the mirror one.
+2. **The heading check is containment, not equality.** `/tour` is labelled "Tour" and headed "A short tour", which is a longer form of the same name and not a disagreement. The first draft asserted equality and failed on it — the rule was wrong, not the page.
+3. **An unused import the rename left behind.** The new opening paragraph dropped the sentence about the interactive canvas, which was the only use of `RENDERER_REPO` on that page. Removed.
+4. **A fragility in the human's own layout tweak, flagged and not touched.** `[data-layout='app']` now reads `grid-template-rows: 4.0625rem calc(100dvh - 4.0625rem) auto` with `overflow: hidden` commented out. `dvh` has no fallback there, and an engine that does not know the unit drops the whole declaration rather than one track — which lands the workbench in an implicit auto row, the exact failure mode of the last two layout fixes. The `height` declaration two lines above already carries a `100vh` fallback for this reason. Not changed here: it is a deliberate tweak and not part of the rename.

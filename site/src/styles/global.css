@@ -1387,9 +1387,9 @@ a.install-line:hover {
 [data-layout='app'] {
   height: 100vh; /* fallback first */
   height: 100dvh;
-  overflow: hidden;
+  /*overflow: hidden;*/
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: 4.0625rem calc(100dvh - 4.0625rem) auto;
 }
 [data-layout='app'] main {
   padding: 0 1rem 0.5rem;
