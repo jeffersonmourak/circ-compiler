@@ -1,6 +1,6 @@
 # libcirc
 
-The entries below record the library half of the libcirc initiative (`lib/libcirc.zig`, `libcirc.a`, `libcirc.wasm`, the site's `/playground`). The numbered decisions they cite are the ten locked in `DOCS/PLANS_PROMPT.md`; the parser half is in [tooling.md](tooling.md). The host-facing reference is `DOCS/libcirc-api.md`; the JSON the status-1 result shares with `--analyze` is `DOCS/analyze-api.md`.
+The entries below record the library half of the libcirc initiative (`lib/libcirc.zig`, `libcirc.a`, `libcirc.wasm`, the site's `/playground`). The numbered decisions they cite are the ten locked in the libcirc plan prompt, archived at `DOCS/archive/plan-libcirc.md` and readable in full at `git show 3a81c361ad3b2f240c602e06f0e968faa56efe26:DOCS/PLANS_PROMPT.md`; the parser half is in [tooling.md](tooling.md). The host-facing reference is `DOCS/libcirc-api.md`; the JSON the status-1 result shares with `--analyze` is `DOCS/analyze-api.md`.
 
 ### One wasm module, ten exports, JSON in / bytes-or-JSON out
 
