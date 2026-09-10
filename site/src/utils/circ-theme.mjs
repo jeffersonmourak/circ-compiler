@@ -18,7 +18,7 @@
 // data-theme attribute on <html>. Toggling the site theme later requires
 // destroying and re-creating the canvas (handled in LiveCanvas.astro).
 
-import { ComponentKind } from 'circ-renderer';
+import { ComponentKind, memoryLabel } from 'circ-renderer';
 import { loadAssets } from './circ-assets.mjs';
 
 /* ───── async sprite loading ───────────────────────────────────────── */
@@ -330,7 +330,6 @@ const drawOutputPin = ({ ctx, cell, component, inputSignals, theme, hovered }) =
 
   if (slot) drawTailDot(ctx, cell, tailEdge, dotY, sig, theme);
 
-  if (hovered) drawHoverRing(ctx, cell, component, theme);
 };
 
 const drawLed = ({ ctx, cell, component, inputSignals, theme, hovered }) => {
@@ -374,7 +373,6 @@ const drawLed = ({ ctx, cell, component, inputSignals, theme, hovered }) => {
 
   if (slot) drawTailDot(ctx, cell, tailEdge, dotY, sig, theme);
 
-  if (hovered) drawHoverRing(ctx, cell, component, theme);
 };
 
 const drawNot = ({ ctx, cell, component, inputSignals, outputSignal, theme, hovered }) => {
@@ -429,7 +427,6 @@ const drawNot = ({ ctx, cell, component, inputSignals, outputSignal, theme, hove
 
   drawNameBelow(ctx, cell, component.name, x0, y0, w, h, theme.colors.labelMuted, -cell * 15);
 
-  if (hovered) drawHoverRing(ctx, cell, component, theme);
 };
 
 const drawAnd = ({ ctx, cell, component, inputSignals, outputSignal, theme, hovered }) => {
@@ -493,7 +490,6 @@ const drawAnd = ({ ctx, cell, component, inputSignals, outputSignal, theme, hove
     ctx.fillText(component.name, x0 + w / 2, y0 + h / 2);
   }
 
-  if (hovered) drawHoverRing(ctx, cell, component, theme);
 };
 
 const drawSubcircuit = ({ ctx, cell, component, inputSignals, outputSignal, theme, hovered }) => {
@@ -554,7 +550,73 @@ const drawSubcircuit = ({ ctx, cell, component, inputSignals, outputSignal, them
 
   drawNameBelow(ctx, cell, component.name, x0, y0, w, h, theme.colors.labelMuted);
 
-  if (hovered) drawHoverRing(ctx, cell, component, theme);
+};
+
+/**
+ * A bit-shape or memory box: the same rounded box the collapsed macro draws,
+ * with the site's tails and a name below. These four kinds used to fall
+ * through to the package's default skins and render in a foreign visual
+ * language beside the sprite-drawn gates.
+ */
+const drawBox = ({ ctx, cell, component, inputSignals, outputSignal, theme }, label, borderColor) => {
+  const x0 = component.x * cell;
+  const y0 = component.y * cell;
+  const w = component.width * cell;
+  const h = component.height * cell;
+  const gap = cell * 0.45;
+  const leftEdge = x0 + w * 0.08 - gap;
+  const rightEdge = x0 + w * 0.92 + gap;
+
+  const inDotYs = [];
+  for (let i = 0; i < component.inPorts.length; i++) {
+    const slot = component.inPorts[i];
+    const sig = inputSignals[i] ?? 2;
+    const portY = slot.coord.y * cell + cell / 2;
+    inDotYs.push(portY);
+    drawTailLine(ctx, leftEdge, slot.coord.x * cell + cell / 2, portY, sig, theme);
+  }
+  const outDotY = component.outPort.y * cell + cell / 2;
+  drawTailLine(ctx, rightEdge, component.outPort.x * cell + cell / 2, outDotY, outputSignal, theme);
+
+  ctx.strokeStyle = borderColor;
+  ctx.fillStyle = theme.colors.fillIdle;
+  ctx.lineWidth = Math.max(2, cell * 0.12);
+  const r = cell * 0.25;
+  ctx.beginPath();
+  ctx.roundRect(x0 + cell * 0.08, y0 + cell * 0.08, w - cell * 0.16, h - cell * 0.16, r);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = theme.colors.label;
+  ctx.font = `600 ${Math.round(cell * 0.75)}px ui-monospace, "JetBrains Mono", monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, x0 + w / 2, y0 + h / 2);
+
+  for (let i = 0; i < component.inPorts.length; i++) {
+    drawTailDot(ctx, cell, leftEdge, inDotYs[i], inputSignals[i] ?? 2, theme);
+  }
+  drawTailDot(ctx, cell, rightEdge, outDotY, outputSignal, theme);
+};
+
+/** `[i]` or `[lo:hi]`, the way the compiler's own preview writes a slice. */
+const drawSlice = (args) => {
+  const { lo, hi } = args.component.slice ?? { lo: 0, hi: 1 };
+  drawBox(args, hi - lo <= 1 ? `[${lo}]` : `[${lo}:${hi}]`, args.theme.colors.stroke);
+};
+
+const drawConcat = (args) => {
+  drawBox(args, '{·}', args.theme.colors.stroke);
+};
+
+/** `rom code[8,4]` — the label text comes from the renderer, so the canvas
+ *  and the preview cannot spell a memory two ways. Named below like a macro. */
+const drawMemory = (args) => {
+  const { component, ctx, cell, theme } = args;
+  const kind = component.kind.tag === 'primitive' ? component.kind.kind : ComponentKind.Rom;
+  const label = memoryLabel(kind, component.name, component.bitWidth, component.memory?.addrWidth ?? 0);
+  drawBox(args, label, theme.colors.macro);
+  const x0 = component.x * cell, y0 = component.y * cell;
+  drawNameBelow(ctx, cell, component.name, x0, y0, component.width * cell, component.height * cell, theme.colors.labelMuted);
 };
 
 /* ───── theme objects ──────────────────────────────────────────────── */
@@ -617,6 +679,10 @@ const skins = {
   [ComponentKind.Led]: drawLed,
   [ComponentKind.NotGate]: drawNot,
   [ComponentKind.AndGate]: drawAnd,
+  [ComponentKind.Slice]: drawSlice,
+  [ComponentKind.Concat]: drawConcat,
+  [ComponentKind.Rom]: drawMemory,
+  [ComponentKind.Ram]: drawMemory,
   subcircuit: drawSubcircuit,
 };
 
@@ -634,6 +700,10 @@ const sharedRenderers = {
   wire: wireRenderer,
   // No port markers — each skin draws its own tail.
   portMarker: () => {},
+  // The ring around a hovered or host-highlighted component, drawn by the
+  // canvas after every skin. One hook, every kind — including the four above
+  // that used to fall through to defaults that never read `hovered`.
+  highlight: ({ ctx, cell, component, theme }) => drawHoverRing(ctx, cell, component, theme),
 };
 
 export const blogTheme = {

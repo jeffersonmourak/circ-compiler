@@ -932,3 +932,21 @@ Two components and two modules moved: `rom-image.ts`'s `applyRomImages` takes th
 2. **The one memory rule the site used to own now has a test that can fail.** The compiler's docs say `memBuffer` may grow linear memory, so a byte view must be taken after it. No shipped artifact provokes that — their staging buffers fit in pages already allocated — so the site's old "views are re-taken" counter test was asserting a discipline nothing could break. The renderer now has a test with a fake instance whose `memBuffer` swaps the buffer, and a hoisted view fails it.
 3. **The integration tests run the artifact the way the site does.** `memory-panel.test.ts` and `canvas-memory.test.ts` used to instantiate the `.wasm` by hand and scan ids for a memory. They boot through `CircRuntime.loadFromBytes` and ask `memories()` now, which is both shorter and the truth.
 4. **The site's guard is the version pin, again.** Setting it one phase back fails `renderer-pin.test.ts` at once, and the probe now names the seven memory methods and the `hasMemory` getter.
+
+## 2026-09-10 — Renderer sync, Phase 3 — highlight on every kind, skins the site can match
+
+**What shipped:** The site pins circ-renderer `dc7e48b` (`2.2.0-alpha.3`). Pointing at a `rom`, `ram`, slice or concat in the editor now lights it on the canvas, which has been an open item since the playground's Phase 5. The renderer draws the ring itself, once per marked component, after every skin, for every kind; the site hands it its existing `drawHoverRing` through the new `highlight` theme hook and stops drawing rings inside its skins. Five skins each drew their own before and four kinds drew none.
+
+Those four kinds have site skins now — `drawSlice`, `drawConcat`, and `drawMemory` for both `rom` and `ram` — built on the same rounded box the collapsed macro draws, with the site's tails and a name below, so a memory no longer renders in the package's default visual language beside the sprite-drawn gates. The memory label text comes from the renderer's own `memoryLabel`, so the canvas and the `--preview` cannot spell a memory two ways.
+
+**Files touched:** `site/package.json`, `site/bun.lock`, `site/src/utils/renderer-versions.ts`, `site/src/utils/circ-theme.mjs`, `site/test/circ-theme-hover.test.ts`, `site/test/renderer-pin.test.ts`.
+
+**Tests:** `bun test` 404 pass across 32 files, from 403. `bun --bun run typecheck` 0 errors. Build and `bun run bundle` green; eager pages unchanged, the renderer's lazy chunk 8.8 KB gzip from 7.9 for the exported skin pieces. On the renderer: 76 tests, from 71, with one negative proof.
+
+**Next slice:** Phase 4 of the plan, a theme flip that keeps pins and memory contents.
+
+**Notes:**
+
+1. **The guard flipped, and the old one had been asserting the wrong thing.** `circ-theme-hover.test.ts` used to require that every registered skin branch on `hovered` and draw a ring — which is exactly the design that left four kinds with no ring at all, since a kind without a site skin has no branch to check. It now asserts the opposite: the theme sets `highlight`, no skin body calls `drawHoverRing`, and the helper has exactly one caller. Negative proof: putting a ring back into `drawSubcircuit` fails it.
+2. **A skin may still react to `hovered`, and the input pin does.** The ring is uniform; the pin changing its own fill is an extra the canvas leaves open. Both paths stay, which is what kept that skin unchanged.
+3. **The renderer's own default ring exists for hosts that skin nothing.** The gallery's theme is the site's, so it gets the site's ring; a host using `baseTheme` gets a ring in a new `highlight` colour with no work. That is the whole reason the ring moved out of the skins.

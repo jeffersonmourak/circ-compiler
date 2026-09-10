@@ -2,8 +2,9 @@
 // module scope and that needs `new Image()`, which `bun test` does not have.
 //
 // The property being guarded is easy to lose and invisible until someone
-// points at a gate: every skin the site registers must react to `hovered`, or
-// a host highlight draws nothing for that component kind.
+// points at a gate: the ring around a hovered or highlighted component is
+// drawn by the canvas through one theme hook, for every kind, and no skin
+// draws its own — or a kind gets two rings, or none.
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -28,22 +29,37 @@ function registeredSkins(): string[] {
 }
 
 describe('circ-theme hover', () => {
-  test('the site registers the six skins this guard covers', () => {
-    expect(registeredSkins().sort()).toEqual(
-      ['drawAnd', 'drawInputPin', 'drawLed', 'drawNot', 'drawOutputPin', 'drawSubcircuit'].sort(),
+  test('the site registers a skin for every kind the canvas can draw', () => {
+    // Slice, concat, rom and ram used to fall through to the package's
+    // defaults and render in a foreign visual language beside the sprites.
+    expect([...new Set(registeredSkins())].sort()).toEqual(
+      [
+        'drawAnd', 'drawConcat', 'drawInputPin', 'drawLed', 'drawMemory',
+        'drawNot', 'drawOutputPin', 'drawSlice', 'drawSubcircuit',
+      ].sort(),
     );
+    expect(source).toContain('[ComponentKind.Rom]: drawMemory');
+    expect(source).toContain('[ComponentKind.Ram]: drawMemory');
   });
 
-  test('every registered skin reacts to hovered', () => {
+  test('the ring is drawn once, by the canvas, through the highlight hook', () => {
+    // The theme hands the canvas its ring; no skin draws its own. Before
+    // this, five skins each drew a ring and four kinds drew none, and a
+    // reader pointing at a rom in the editor saw nothing light up.
+    expect(source).toMatch(/highlight:\s*\(\{[^}]*\}\)\s*=>\s*drawHoverRing\(/);
     for (const name of registeredSkins()) {
-      const body = skinBody(name);
-      // Destructured from the skin context…
-      expect(body).toMatch(/\(\{[^}]*\bhovered\b[^}]*\}\)/);
-      // …and actually branched on.
-      expect(body).toMatch(/if \(hovered\)/);
-      // …using the theme's own hover colour, not a literal.
-      expect(body + source).toContain('theme.colors.inputHover');
+      expect(`${name}: ${skinBody(name).includes('drawHoverRing(')}`).toBe(`${name}: false`);
     }
+    // Exactly one caller of the helper in the whole file: the hook.
+    expect([...source.matchAll(/drawHoverRing\(ctx/g)]).toHaveLength(1);
+  });
+
+  test('a skin may still react to hovered on its own, and the input pin does', () => {
+    // The ring is uniform; a pin changing its own fill is an extra the canvas
+    // leaves open. Both paths stay, which is what kept this skin unchanged.
+    const body = skinBody('drawInputPin');
+    expect(body).toMatch(/if \(hovered\)/);
+    expect(body).toContain('theme.colors.inputHover');
   });
 
   test('the ring helper uses the hover colour and restores the context', () => {
@@ -59,12 +75,9 @@ describe('circ-theme hover', () => {
     expect([...source.matchAll(/inputHover:/g)]).toHaveLength(2);
   });
 
-  test('rom and ram are the known gap', () => {
-    // TOPOLOGY_KIND_OF maps them and a cursor on one reaches setHighlight, but
-    // the site registers no Rom/Ram skin, so the package's own drawMemory runs
-    // and it never reads `hovered`. Pinned so it is a decision, not a surprise.
-    expect(registeredSkins()).not.toContain('drawRom');
-    expect(registeredSkins()).not.toContain('drawMemory');
-    expect(source).not.toContain('ComponentKind.Rom');
+  test('a memory is labelled by the renderer, so the canvas and the preview agree', () => {
+    // `rom code[8,4]` comes from one function in one place.
+    expect(source).toContain("import { ComponentKind, memoryLabel } from 'circ-renderer';");
+    expect(skinBody('drawMemory')).toContain('memoryLabel(');
   });
 });

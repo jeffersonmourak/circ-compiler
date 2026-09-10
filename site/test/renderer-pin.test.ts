@@ -7,7 +7,7 @@ import { resolve } from 'node:path';
 import { decodeFullTopology, ComponentKind } from 'circ-renderer';
 import { callOp, instantiateLibcirc } from '../src/scripts/libcirc-abi.ts';
 import { RENDERER_PIN_VERSION, SUPPORTED_TOPOLOGY_VERSIONS } from '../src/utils/renderer-versions.ts';
-import { CircCanvas, CircRuntime } from 'circ-renderer';
+import { CircCanvas, CircRuntime, boxOutline, defaultColors, drawLabel, memoryLabel } from 'circ-renderer';
 import { examples } from '../src/content/examples.ts';
 
 const skip = process.env.SKIP_LIBCIRC_TEST === '1';
@@ -54,6 +54,10 @@ describe('renderer pin', () => {
       expect(`${method}: ${typeof (CircRuntime.prototype as unknown as Record<string, unknown>)[method]}`).toBe(`${method}: function`);
     }
     expect(Object.getOwnPropertyDescriptor(CircRuntime.prototype, 'hasMemory')?.get).toBeDefined();
+    // Phase 3: the ring is the canvas's, and the default skins' pieces are
+    // exported so the site's own rom/ram/slice/concat skins can be built.
+    expect(typeof defaultColors.highlight).toBe('string');
+    for (const fn of [boxOutline, drawLabel, memoryLabel]) expect(typeof fn).toBe('function');
   });
 
   test.skipIf(skip)('the pinned renderer decodes what libcirc.wasm emits', async () => {
