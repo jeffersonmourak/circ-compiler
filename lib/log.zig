@@ -9,7 +9,9 @@ extern fn debugEnabled() bool;
 
 const is_wasm = builtin.target.cpu.arch == .wasm32 or builtin.target.cpu.arch == .wasm64;
 
-var wasmLogArena = std.heap.ArenaAllocator.init(memory.allocator);
+// Backed by the page allocator, not `memory.allocator`: `memory.reset()` must
+// be free to drop the engine arena without dangling this one.
+var wasmLogArena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
 
 const PrintType = enum {
     Debug,
@@ -43,12 +45,11 @@ const PrintType = enum {
 };
 
 fn printOnBrowser(comptime printType: PrintType, comptime format: []const u8, args: anytype) void {
+    // Ask first: formatting allocates from the engine arena, and a host with
+    // logging off must not pay for lines it will never see.
+    if (!debugEnabled()) return;
     const msg = printType.format(format, args);
-    const msgPtr = &msg[0];
-
-    if (debugEnabled()) {
-        onDebugLog(msgPtr, msg.len, printType.toInt());
-    }
+    onDebugLog(&msg[0], msg.len, printType.toInt());
 }
 
 fn wasmLog(comptime _: @Type(.enum_literal)) type {

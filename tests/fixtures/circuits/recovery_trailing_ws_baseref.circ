@@ -1,0 +1,4 @@
+input a
+output o1(in=a )
+output o2(in=a [2])
+and g(a=a , b=a )

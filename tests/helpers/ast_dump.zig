@@ -154,5 +154,14 @@ pub fn dumpFile(allocator: std.mem.Allocator, file: anytype) ![]u8 {
         try dumpComponent(writer, component, 1);
     }
 
+    // Recovered syntax errors, in tree order, with the raw span (zero-width
+    // marks print as [f0:2:9-2:9]; --analyze widens them, this dump does not).
+    try writer.print("Errors ({d})\n", .{file.errors.len});
+    for (file.errors) |mark| {
+        try writer.print("  Error \"{s}\" ", .{mark.message});
+        try writeSpan(writer, mark.span);
+        try writer.writeByte('\n');
+    }
+
     return out.toOwnedSlice(allocator);
 }

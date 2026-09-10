@@ -324,7 +324,7 @@ fn specializeCallSites(
                 bindings.items,
             ) catch |err| {
                 allocator.free(cache_key);
-                std.debug.print("specialization failed for '{s}': {s}\n", .{ ast_inst.type_name.text, @errorName(err) });
+                std.log.scoped(.resolver).warn("specialization failed for '{s}': {s}", .{ ast_inst.type_name.text, @errorName(err) });
                 continue;
             };
             // Record the original AST source so downstream lookups

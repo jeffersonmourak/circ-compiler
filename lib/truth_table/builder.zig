@@ -1,4 +1,8 @@
 const std = @import("std");
+const builtin = @import("builtin");
+
+/// `std.time.nanoTimestamp` needs a clock syscall the freestanding target lacks.
+const has_clock = builtin.os.tag != .freestanding;
 const engine = @import("circuit");
 const full_format = @import("full_format");
 const engine_session = @import("engine_session");
@@ -64,8 +68,9 @@ pub const Table = struct {
     metrics: engine.Metrics = .{},
     /// Wall-clock nanoseconds spent in the `2^N` vector drive loop only,
     /// excluding circuit construction and connection wiring. Lets the bench
-    /// separate engine throughput from one-shot setup cost. Always populated
-    /// (the timestamp call is cheap); consumers can ignore.
+    /// separate engine throughput from one-shot setup cost. Populated on
+    /// hosted targets (the timestamp call is cheap); 0 on freestanding,
+    /// which has no clock. Consumers can ignore.
     drive_ns: u64 = 0,
 
     pub fn deinit(self: *Table) void {
@@ -169,7 +174,7 @@ pub fn build(
     const row_count: u64 = if (total_input_bits == 0) 1 else (@as(u64, 1) << @intCast(total_input_bits));
     var rows = try arena_alloc.alloc(Row, @intCast(row_count));
 
-    const drive_start = std.time.nanoTimestamp();
+    const drive_start: i128 = if (has_clock) std.time.nanoTimestamp() else 0;
     var mask: u64 = 0;
     while (mask < row_count) : (mask += 1) {
         var bit_offset: u8 = 0;
@@ -194,7 +199,7 @@ pub fn build(
         }
         rows[@intCast(mask)] = .{ .input_bits = mask, .outputs = row_outputs };
     }
-    const drive_ns: u64 = @intCast(std.time.nanoTimestamp() - drive_start);
+    const drive_ns: u64 = if (has_clock) @intCast(std.time.nanoTimestamp() - drive_start) else 0;
 
     const metrics_snapshot: engine.Metrics = if (engine.COLLECT_METRICS) circuit.metrics else .{};
 
@@ -385,6 +390,23 @@ test "truth_table_build_countInputBits_sums_widths" {
         .{ .id = 3, .kind = .output_pin, .width = 4, .name = "r", .origin = &.{} },
     };
     try std.testing.expectEqual(@as(u32, 7), countInputBits(topo(&components, &.{})));
+}
+
+test "truth_table_build_records_drive_ns_on_native" {
+    const components = [_]FullComponentRecord{
+        .{ .id = 0, .kind = .input_pin, .width = 4, .name = "a", .origin = &.{} },
+        .{ .id = 1, .kind = .input_pin, .width = 4, .name = "b", .origin = &.{} },
+        .{ .id = 2, .kind = .and_gate, .width = 4, .name = "g", .origin = &.{} },
+        .{ .id = 3, .kind = .output_pin, .width = 4, .name = "r", .origin = &.{} },
+    };
+    const connections = [_]FullConnectionRecord{
+        .{ .from_id = 0, .to_id = 2, .port = @intFromEnum(full_format.PortName.a) },
+        .{ .from_id = 1, .to_id = 2, .port = @intFromEnum(full_format.PortName.b) },
+        .{ .from_id = 2, .to_id = 3, .port = @intFromEnum(full_format.PortName.in) },
+    };
+    var table = try build(test_alloc, topo(&components, &connections), .{});
+    defer table.deinit();
+    try std.testing.expect(table.drive_ns > 0);
 }
 
 const ram_components = [_]FullComponentRecord{

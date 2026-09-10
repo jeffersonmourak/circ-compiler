@@ -35,7 +35,7 @@ message on stderr for a malformed request or an internal failure.
 ```
 
 - `root_path` (required): absolute path of the file to analyze as the project root.
-- `overlays` (optional): map of absolute path to unsaved buffer text. Any path in the overlay is read from memory instead of disk; everything else (including imported files not listed) is read from disk. A never-saved root resolves against its overlay entry even though it does not exist on disk.
+- `overlays` (optional): map of absolute path to unsaved buffer text. Keys are normalised the way the loader looks them up (POSIX-style, `.`/`..` folded), and the overlay is consulted *before* disk: a path in the overlay is read from memory, and an import whose joined path is an overlay key resolves to that key without touching the filesystem, so a root plus overlay-only siblings analyzes with no disk access. Anything not in the overlay (including imported files not listed) is read from disk. `files[].path` for an overlay-keyed file is the key as given, not its realpath; a never-saved root resolves against its overlay entry even though it does not exist on disk.
 
 ## Response (stdout)
 
@@ -71,11 +71,19 @@ synthetic parametric-specialization path.
 
 ## Behavior on invalid input
 
-The parser succeeds-with-truncation on malformed source (it stops at the
-first unparseable construct rather than failing). `--analyze` detects this
-by comparing the parse extent against the file's content length and emits
-one `"syntax"` diagnostic at the stall point. Semantic diagnostics derived
-from the truncated prefix are still returned but may be misleading;
-consumers should prefer their last clean analysis for navigation while a
-document is mid-edit. Robust grammar-level recovery is future work (see
-the LSP repo's `docs/plan.md`, Stage 7).
+The grammar recovers at the declaration level: a malformed declaration is
+skipped, the parser resynchronises at the next line, and every valid
+declaration around it still resolves. `--analyze` emits one `"syntax"`
+diagnostic per recovered error mark — the message names what was expected
+(`expected ')' to close the connection list`, `unexpected input; expected a
+declaration`, …) and the range is the mark's span, widened to one column
+when the parser stalled without consuming anything (so a bus truncated
+after `a=` at the end of a line reports the start of the *next* line). The
+exact marks for a set of malformed inputs are pinned by the
+`tests/fixtures/circuits/recovery_*.circ` goldens and by
+`tests/fixtures/expected-analyze/*.json`.
+
+Only a source the parser cannot start on at all (an empty or
+whitespace-only buffer, or a hard parse failure) yields no symbols: a blank
+source returns an empty analysis with no diagnostics, and a hard failure
+returns one located `"syntax"` diagnostic and no builtin files.

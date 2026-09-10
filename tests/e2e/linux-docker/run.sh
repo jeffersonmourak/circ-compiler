@@ -19,8 +19,13 @@ if ! command -v zig >/dev/null 2>&1; then
 fi
 
 # 1. Compile the binary for Linux BEFORE starting Docker.
-echo "==> Host: zig build Linux circ-compile release"
-zig build -Doptimize=ReleaseFast "-Dtarget=x86_64-linux-gnu" circ-compile
+# WASM_OPTIMIZE / NODE_IMAGE are the two knobs of the wasm init bisect
+# (DOCS/STATUS.md, Phase 3 slice 5): both wasm artifacts follow the former,
+# the runtime image the latter.
+WASM_OPTIMIZE="${WASM_OPTIMIZE:-ReleaseSmall}"
+NODE_IMAGE="${NODE_IMAGE:-node:22-bookworm-slim}"
+echo "==> Host: zig build Linux circ-compile release + libcirc.wasm (wasm-optimize=${WASM_OPTIMIZE})"
+zig build -Doptimize=ReleaseFast "-Dwasm-optimize=${WASM_OPTIMIZE}" "-Dtarget=x86_64-linux-gnu" circ-compile libcirc-wasm
 
 if [[ ! -x zig-out/bin/circ-compile ]]; then
   echo "e2e: expected executable zig-out/bin/circ-compile" >&2
@@ -34,6 +39,8 @@ trap 'rm -rf "${STAGE}"' EXIT
 cp zig-out/bin/circ-compile                       "${STAGE}/circ-compile"
 cp tests/fixtures/circuits/inverter.circ          "${STAGE}/inverter.circ"
 cp "${SCRIPT_DIR}/drive-inverter.mjs"             "${STAGE}/drive-inverter.mjs"
+cp zig-out/lib/libcirc.wasm                       "${STAGE}/libcirc.wasm"
+cp "${SCRIPT_DIR}/drive-libcirc.mjs"              "${STAGE}/drive-libcirc.mjs"
 cp "${SCRIPT_DIR}/container-e2e.sh"               "${STAGE}/container-e2e.sh"
 cp "${SCRIPT_DIR}/Dockerfile"                     "${STAGE}/Dockerfile"
 
@@ -42,8 +49,9 @@ if [[ "$(uname -s)-$(uname -m)" != "Linux-x86_64" ]]; then
   DOCKER_PLATFORM_ARGS=(--platform linux/amd64)
 fi
 
-echo "==> Docker: build Zig-free runtime image"
+echo "==> Docker: build Zig-free runtime image (${NODE_IMAGE})"
 docker build "${DOCKER_PLATFORM_ARGS[@]}" \
+  --build-arg "NODE_IMAGE=${NODE_IMAGE}" \
   -t circ-compiler:e2e-linux \
   "${STAGE}"
 

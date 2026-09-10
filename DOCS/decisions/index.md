@@ -11,6 +11,7 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - Compilation pipeline (`.circ → topology binary → custom-section splice → .wasm`)
 - IR shape: paired `circ.topology.v0.{min,full}` binary payloads
 - Prebuilt runtime WASM embedded in the CLI via `@embedFile`
+- `-Dwasm-optimize` (ReleaseSmall, stripped) for both wasm builds
 - Host protocol: `topology_alloc` + memcpy + `init()`
 
 ### [runtime-api.md](runtime-api.md)
@@ -46,9 +47,20 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - `--mem=<name>=<path>` is scoped to `--sim` and `--truth-table`
 
 ### [tooling.md](tooling.md)
-- langlang version pinning (`go/v0.0.12`)
-- Generated parser sources vendored in the repo
-- CGo c-archive as the Zig↔Go bridge
+- Parser generated straight to Zig by the maintainer's langlang fork (supersedes the Go c-archive bridge)
+- Pin = the fork's tag `go/v0.0.13-zig.2`; skew signal = the generated header's runtime sha256
+- Generated parser vendored in the repo
+- Contract pinned before the switch (`Errors (n)` dump, recovery goldens, `expected-analyze`)
+- Go retired in one cut-over
+
+### [libcirc.md](libcirc.md)
+- One wasm module, ten `circ_*` exports, JSON in / bytes-or-JSON out, status codes 0–5
+- Overlay-first virtual file loading (no disk on freestanding)
+- Library memory model (per-call arena, library-owned result, `memory.reset()`)
+- `-Dwasm-optimize` governs both wasm builds
+- The renderer follows the compiler, once, per topology version
+- Playground artifacts are committed; the module runs in a Web Worker
+- Not exported through libcirc (`--sim`, `--emit-zig`, `--inspect`)
 
 ## Conventions
 

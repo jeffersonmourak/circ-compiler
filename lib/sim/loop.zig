@@ -19,27 +19,13 @@ pub const MemRef = engine_session.MemRef;
 pub const collectMemories = engine_session.collectMemories;
 pub const validateImage = engine_session.validateImage;
 pub const MemoryImageError = engine.memimage.MemoryImageError;
-/// The codec's errors plus the read cap from `readFileAlloc`.
-pub const ImageError = MemoryImageError || error{FileTooBig};
-/// Same cap as the CLI's input-file read. The largest legal image is
-/// 8 << 16 = 512 KiB, so every over-capacity-but-under-cap file reaches
-/// the codec and is reported as TooManyWords.
-pub const IMAGE_READ_CAP: usize = 16 * 1024 * 1024;
+// The reason formatter lives with the session so the library's truth-table
+// refusal and this protocol's E_MEMFMT share one wording.
+pub const ImageError = engine_session.ImageError;
+pub const IMAGE_READ_CAP = engine_session.IMAGE_READ_CAP;
+pub const writeImageError = engine_session.writeImageError;
 
 const MAX_LINE = 8192;
-
-/// One human-readable reason (no code, no newline) for an image `err` on
-/// `mem`, given the image length. Shared by `--mem` (stderr) and `load`
-/// (E_MEMFMT) so the two surfaces never drift.
-pub fn writeImageError(writer: anytype, err: ImageError, mem: MemRef, len: usize) !void {
-    const bpw = engine.memimage.bytesPerWord(mem.data_width);
-    switch (err) {
-        error.LengthNotWordMultiple => try writer.print("length {d} is not a multiple of {d} byte(s)", .{ len, bpw }),
-        error.TooManyWords => try writer.print("{d} words exceed capacity {d}", .{ len / bpw, @as(usize, 1) << @intCast(mem.addr_width) }),
-        error.WordExceedsWidth => try writer.print("a word has bits set beyond data width {d}", .{mem.data_width}),
-        error.FileTooBig => try writer.writeAll("image exceeds 16 MiB"),
-    }
-}
 
 /// Load every preload into its memory. Names and images were validated by
 /// the caller, so a failure here is an internal error, not a user one.
@@ -71,7 +57,7 @@ fn writeDiag(writer: anytype, file_path: []const u8, d: Diagnostic) !void {
         .warning => "warning",
     };
     try writer.print("diag {s} {s} {s}:{d}:{d} {s}\n", .{
-        sev,           @tagName(d.code), file_path,
+        sev,               @tagName(d.code), file_path,
         d.span.start_line, d.span.start_col, d.message,
     });
 }
@@ -740,23 +726,6 @@ test "serve: doc example session" {
     }
     try t.expectEqual(commands.len, next_command);
     try t.expectEqualStrings("", replies.next() orelse "<end of output>");
-}
-
-test "writeImageError reasons" {
-    var buf: std.ArrayList(u8) = .{};
-    defer buf.deinit(t.allocator);
-    const mem = MemRef{ .name = "code", .component_id = 1, .kind = .rom, .data_width = 12, .addr_width = 2 };
-    try writeImageError(buf.writer(t.allocator), error.LengthNotWordMultiple, mem, 3);
-    try buf.append(t.allocator, '|');
-    try writeImageError(buf.writer(t.allocator), error.TooManyWords, mem, 10);
-    try buf.append(t.allocator, '|');
-    try writeImageError(buf.writer(t.allocator), error.WordExceedsWidth, mem, 8);
-    try buf.append(t.allocator, '|');
-    try writeImageError(buf.writer(t.allocator), error.FileTooBig, mem, 0);
-    try t.expectEqualStrings(
-        "length 3 is not a multiple of 2 byte(s)|5 words exceed capacity 4|a word has bits set beyond data width 12|image exceeds 16 MiB",
-        buf.items,
-    );
 }
 
 test "serve: handshake, set/run/get on the AND gate" {

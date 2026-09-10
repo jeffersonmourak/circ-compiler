@@ -155,6 +155,66 @@ const fixtures = [_]Fixture{
         .source_path = "tests/fixtures/circuits/portref_concat_whitespace.circ",
         .expected_ast_path = "tests/fixtures/expected-ast/portref_concat_whitespace.txt",
     },
+    .{
+        .name = "recovery-busvalue-eof",
+        .source_path = "tests/fixtures/circuits/recovery_busvalue_eof.circ",
+        .expected_ast_path = "tests/fixtures/expected-ast/recovery_busvalue_eof.txt",
+    },
+    .{
+        .name = "recovery-busvalue-newline",
+        .source_path = "tests/fixtures/circuits/recovery_busvalue_newline.circ",
+        .expected_ast_path = "tests/fixtures/expected-ast/recovery_busvalue_newline.txt",
+    },
+    .{
+        .name = "recovery-busclose-midline",
+        .source_path = "tests/fixtures/circuits/recovery_busclose_midline.circ",
+        .expected_ast_path = "tests/fixtures/expected-ast/recovery_busclose_midline.txt",
+    },
+    .{
+        .name = "recovery-busclose-newline",
+        .source_path = "tests/fixtures/circuits/recovery_busclose_newline.circ",
+        .expected_ast_path = "tests/fixtures/expected-ast/recovery_busclose_newline.txt",
+    },
+    .{
+        .name = "recovery-empty-ports",
+        .source_path = "tests/fixtures/circuits/recovery_empty_ports.circ",
+        .expected_ast_path = "tests/fixtures/expected-ast/recovery_empty_ports.txt",
+    },
+    .{
+        .name = "recovery-junk-line",
+        .source_path = "tests/fixtures/circuits/recovery_junk_line.circ",
+        .expected_ast_path = "tests/fixtures/expected-ast/recovery_junk_line.txt",
+    },
+    .{
+        .name = "recovery-keyword-prefix",
+        .source_path = "tests/fixtures/circuits/recovery_keyword_prefix.circ",
+        .expected_ast_path = "tests/fixtures/expected-ast/recovery_keyword_prefix.txt",
+    },
+    .{
+        .name = "recovery-connection-line",
+        .source_path = "tests/fixtures/circuits/recovery_connection_line.circ",
+        .expected_ast_path = "tests/fixtures/expected-ast/recovery_connection_line.txt",
+    },
+    .{
+        .name = "recovery-import-empty-path",
+        .source_path = "tests/fixtures/circuits/recovery_import_empty_path.circ",
+        .expected_ast_path = "tests/fixtures/expected-ast/recovery_import_empty_path.txt",
+    },
+    .{
+        .name = "recovery-width-overflow",
+        .source_path = "tests/fixtures/circuits/recovery_width_overflow.circ",
+        .expected_ast_path = "tests/fixtures/expected-ast/recovery_width_overflow.txt",
+    },
+    .{
+        .name = "recovery-multibyte-columns",
+        .source_path = "tests/fixtures/circuits/recovery_multibyte_columns.circ",
+        .expected_ast_path = "tests/fixtures/expected-ast/recovery_multibyte_columns.txt",
+    },
+    .{
+        .name = "recovery-trailing-ws-baseref",
+        .source_path = "tests/fixtures/circuits/recovery_trailing_ws_baseref.circ",
+        .expected_ast_path = "tests/fixtures/expected-ast/recovery_trailing_ws_baseref.txt",
+    },
 };
 
 test "translate parse tree to typed ast fixtures" {
@@ -172,6 +232,52 @@ test "translate parse tree to typed ast fixtures" {
             return err;
         };
     }
+}
+
+test "errors: clean source has no marks" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const parsed = try translate.parseSource(allocator, 0, "input a\noutput o(in=a)\n");
+    try std.testing.expectEqual(@as(usize, 0), parsed.errors.len);
+}
+
+test "errors: truncated bus carries busvalue then busclose marks" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    // No trailing newline: the marks sit at the stall point on line 2. With a
+    // newline the Spacing before PortRef eats it and both marks move to 3:1.
+    const parsed = try translate.parseSource(allocator, 0, "input a\nand g(a=");
+    try std.testing.expectEqual(@as(usize, 0), parsed.components.len);
+    try std.testing.expectEqual(@as(usize, 2), parsed.errors.len);
+    try std.testing.expectEqualStrings("expected a signal reference after '='", parsed.errors[0].message);
+    try std.testing.expectEqualStrings("expected ')' to close the connection list", parsed.errors[1].message);
+    for (parsed.errors) |mark| {
+        try std.testing.expectEqual(@as(u32, 2), mark.span.start_line);
+        try std.testing.expectEqual(@as(u32, 9), mark.span.start_col);
+        try std.testing.expectEqual(@as(u32, 2), mark.span.end_line);
+        try std.testing.expectEqual(@as(u32, 9), mark.span.end_col);
+    }
+}
+
+test "edge: whitespace-only .circ is InvalidProgram" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    // The root payload is a bare String when nothing but Spacing matched.
+    const parsed = translate.parseSource(allocator, 0, "\n  \n");
+    try std.testing.expectError(error.InvalidProgram, parsed);
+}
+
+test "recovery: busvalue_eof fixture has no trailing newline" {
+    // Editors add a final newline silently; with one, both marks in the
+    // golden move from 2:9 to 3:1 (see recovery_busvalue_newline).
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const source = try std.fs.cwd().readFileAlloc(allocator, "tests/fixtures/circuits/recovery_busvalue_eof.circ", 1024);
+    try std.testing.expectEqual(@as(u8, '='), source[source.len - 1]);
 }
 
 test "edge: completely empty .circ fails parse" {
@@ -293,13 +399,15 @@ test "subscript: name[i] parses as indexed" {
     try std.testing.expectEqual(@as(u8, 2), parsed.outputs[0].value.indexed.bit);
 }
 
-test "subscript: name [i] with space parses as indexed (langlang lexification limitation)" {
-    // The S3.3 issue pinned `IndexedRef <- BaseRef #Subscript?` with the
-    // intent that whitespace would defeat the subscript binding. langlang
-    // v0.0.12's grammar compiler silently ignores the `#` lexification
-    // operator and injects automatic Spacing between every sequence element,
-    // so `a [2]` parses identically to `a[2]`. The expectation is captured
-    // here so the gap is explicit if/when langlang gains real lexification.
+test "subscript: name [i] with space parses as indexed (Spacing before BaseRef's failed optional)" {
+    // `IndexedRef <- BaseRef #Subscript?` was written expecting `#` to forbid
+    // whitespace before the subscript. langlang v0.0.12 inserts Spacing between
+    // every sequence element; `BaseRef`'s `('.' Identifier)?` consumes that
+    // Spacing, fails on `[`, and the failed optional does not rewind it — the
+    // BaseRef span absorbs the trailing whitespace (expected-ast
+    // recovery_trailing_ws_baseref.txt: `NamedRef a.out [f0:3:14-3:16]`) and
+    // `Subscript?` then matches `[2]` directly. `#` is not what is ignored;
+    // pinned as a parser quirk, fixable only by a grammar change + parser:gen.
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();

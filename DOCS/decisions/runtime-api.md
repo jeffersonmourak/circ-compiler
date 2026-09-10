@@ -71,6 +71,8 @@ A richer surface (`getStateSnapshot`, `getFileInfo`, `freeBuffer`, …) still ex
 
 The list above is a list of *omissions*, not a promise that the six original exports are the whole surface: topology v03 added the memory export family (`getMemInfo`, `memBuffer`, `memLoad`, `memStore`, `memClear`, `setMemWord`, `getMemValue`, `getMemDefined`) as the first additive extension — see `## Native memories` below.
 
+The `circ_alloc`/`circ_free`/`circ_version`/`circ_analyze`/`circ_compile`/`circ_preview`/`circ_truth_table`/`circ_result_ptr`/`circ_result_len`/`circ_reset` exports belong to the *library* module `libcirc.wasm` ([libcirc.md](libcirc.md)), never to a compiled artifact; an artifact's import set stays `env.debugEnabled`/`env.onDebugLog`.
+
 ---
 
 ## Native memories

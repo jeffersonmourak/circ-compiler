@@ -2286,6 +2286,32 @@ test "engine: concat of mixed-width operands sums widths into output position" {
     try std.testing.expectEqual(@as(u8, 3), result.width);
 }
 
+test "memory.reset frees the arena and the allocator stays usable" {
+    {
+        var circuit = try Circuit.init();
+        const a = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+        const b = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+        const g = try circuit.createComponent(.{ .and_gate = .{} }, 1);
+        try circuit.connect(a.port(OUT_PORT_NAME), g.port(A_PORT_NAME));
+        try circuit.connect(b.port(OUT_PORT_NAME), g.port(B_PORT_NAME));
+        circuit.deinit();
+    }
+    try std.testing.expect(memory.arenaCapacityForTest() > 0);
+    memory.reset();
+    try std.testing.expectEqual(@as(usize, 0), memory.arenaCapacityForTest());
+
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+    const a = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const b = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const g = try circuit.createComponent(.{ .and_gate = .{} }, 1);
+    try circuit.connect(a.port(OUT_PORT_NAME), g.port(A_PORT_NAME));
+    try circuit.connect(b.port(OUT_PORT_NAME), g.port(B_PORT_NAME));
+    try circuit.propagateEvent(a, BitVecState.high(1));
+    try circuit.propagateEvent(b, BitVecState.high(1));
+    try std.testing.expect(circuit.readState(g.state_handle).equals(BitVecState.high(1)));
+}
+
 // ============================================================================
 // Memory tests. The kind, plane allocation, connect policy, and the
 // asynchronous read; the RAM write path and the host hooks have their own

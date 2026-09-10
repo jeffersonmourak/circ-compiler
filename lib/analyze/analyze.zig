@@ -96,7 +96,8 @@ fn anyError(items: []const diagnostics.Diagnostic) bool {
     return false;
 }
 
-fn appendDiag(allocator: std.mem.Allocator, list: *std.ArrayList(Diagnostic), d: diagnostics.Diagnostic) !void {
+/// Convert one validator diagnostic into the JSON-facing shape.
+pub fn convertDiagnostic(allocator: std.mem.Allocator, d: diagnostics.Diagnostic) !Diagnostic {
     var related: std.ArrayList(Related) = .{};
     for (d.notes) |note| {
         try related.append(allocator, .{
@@ -105,14 +106,26 @@ fn appendDiag(allocator: std.mem.Allocator, list: *std.ArrayList(Diagnostic), d:
             .message = note.message,
         });
     }
-    try list.append(allocator, .{
+    return .{
         .file_id = d.span.file_id,
         .severity = severityString(d.level),
         .code = @tagName(d.code),
         .range = rangeFromSpan(d.span),
         .message = d.message,
         .related = try related.toOwnedSlice(allocator),
-    });
+    };
+}
+
+/// Convert a whole diagnostic list, preserving order. Used by libcirc to
+/// render a front-end failure in the analyze-api shape.
+pub fn convertDiagnostics(allocator: std.mem.Allocator, items: []const diagnostics.Diagnostic) ![]Diagnostic {
+    const out = try allocator.alloc(Diagnostic, items.len);
+    for (items, 0..) |d, i| out[i] = try convertDiagnostic(allocator, d);
+    return out;
+}
+
+fn appendDiag(allocator: std.mem.Allocator, list: *std.ArrayList(Diagnostic), d: diagnostics.Diagnostic) !void {
+    try list.append(allocator, try convertDiagnostic(allocator, d));
 }
 
 /// Invert offsetToLineCol: walk the source to the byte offset of a
@@ -367,7 +380,7 @@ fn collectSymbolsAndReferences(
 
 // ---------- JSON rendering ----------
 
-fn writeJsonString(writer: anytype, s: []const u8) !void {
+pub fn writeJsonString(writer: anytype, s: []const u8) !void {
     try writer.writeByte('"');
     for (s) |c| {
         switch (c) {
@@ -683,4 +696,30 @@ test "analyze: recovers valid declarations around a junk line" {
         if (std.mem.eql(u8, d.code, "syntax")) found_syntax = true;
     }
     try std.testing.expect(found_syntax);
+}
+
+test "analyze: overlay-only sibling import resolves without E009" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    var overlay = Overlay{};
+    try overlay.put(a, "/virtual/dep.circ", "input x\noutput y(in=x)\n");
+    try overlay.put(a, "/virtual/root.circ", "import dep \"dep.circ\"\ninput a\ndep d(x=a)\noutput o(in=d.y)\n");
+
+    const result = try analyze(a, "/virtual/root.circ", overlay);
+
+    for (result.diagnostics) |d| {
+        try std.testing.expect(!std.mem.eql(u8, d.code, "E009"));
+    }
+    var has_dep = false;
+    for (result.files) |f| {
+        if (std.mem.eql(u8, f.path, "/virtual/dep.circ")) has_dep = true;
+    }
+    try std.testing.expect(has_dep);
+    var has_dep_ref = false;
+    for (result.references) |r| {
+        if (std.mem.eql(u8, r.hover, "dep d")) has_dep_ref = true;
+    }
+    try std.testing.expect(has_dep_ref);
 }

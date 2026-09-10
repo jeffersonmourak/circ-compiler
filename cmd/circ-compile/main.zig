@@ -26,29 +26,12 @@ fn filteredLog(
     const stderr = std.fs.File.stderr().deprecatedWriter();
     nosuspend stderr.print(level_txt ++ prefix2 ++ format ++ "\n", args) catch return;
 }
-const translate = @import("translate");
-const resolver = @import("resolver");
+const libcirc = @import("libcirc");
 const diagnostics = @import("diagnostics");
-const validator_run = @import("validator_run");
-const validator_run_project = @import("validator_run_project");
 const emit_main = @import("emit_main");
 const inspect_dump = @import("inspect_dump");
-const scan_imports = @import("scan_imports");
-const import_cycle = @import("import_cycle");
-const resolve_bodies = @import("resolve_bodies");
-const serializer = @import("serializer");
-const full_serializer = @import("full_serializer");
-const section_writer = @import("section_writer");
-const runtime_embed = @import("runtime_embed");
-const preview_dump = @import("preview_dump");
-const layout_orchestrator = @import("layout_orchestrator");
-const preview_render = @import("preview_render");
-const truth_table_builder = @import("truth_table_builder");
-const truth_table_markdown = @import("truth_table_markdown");
-const truth_table_csv = @import("truth_table_csv");
-const truth_table_json = @import("truth_table_json");
-const analyzer = @import("analyze");
 const sim_loop = @import("sim_loop");
+const truth_table_builder = libcirc.truth_table_builder;
 const build_info = @import("build_info");
 
 fn makePathAny(path: []const u8) !void {
@@ -263,86 +246,47 @@ pub fn run(
         return 2;
     };
 
-    const ast_file = translate.parseSource(allocator, 0, source) catch |err| {
-        try stderr_writer.print("parse failed: {s}\n", .{@errorName(err)});
+    // The pre-read above owns the exit-2 messages; the front end re-reads
+    // the root through the loader (as the import scan always did).
+    _ = source;
+
+    const route: libcirc.frontend.Route = switch (args.mode) {
+        .inspect => .single_module,
+        // Compile/emit_zig keep the cheaper has_imports gate to avoid the extra
+        // disk I/O on macro-free fixtures (locked by perf-budget tests); preview,
+        // truth_table and sim always go through the project pipeline so implicit
+        // builtin-macro usages (e.g. `xor` without an explicit import) resolve.
+        .compile, .emit_zig => .project_if_imports,
+        .preview, .truth_table, .sim => .project,
+    };
+    var failure: libcirc.frontend.Failure = undefined;
+    var front = libcirc.frontend.run(allocator, args.input_path, &.{}, route, &failure) catch |err| {
+        if (err == error.OutOfMemory) return error.OutOfMemory;
+        try stderr_writer.print("{s}: {s}\n", .{ failure.stage.cliLabel(), @errorName(failure.cause) });
         return 1;
     };
+    defer front.deinit(allocator);
 
-    const ir_module = resolver.resolve(allocator, ast_file, 0) catch |err| {
-        try stderr_writer.print("resolve failed: {s}\n", .{@errorName(err)});
+    // The import scan or the cycle check reported errors: they are printed
+    // as they were found and nothing further runs.
+    if (front.early_stop != null) {
+        _ = try printDiagnosticSet(allocator, stderr_writer, args.input_path, front.diagnostics.items);
         return 1;
-    };
-
-    const has_imports = ast_file.imports.len > 0;
-
-    var diagnostic_list: diagnostics.DiagnosticList = undefined;
-    var maybe_project: ?@import("ir_types").Project = null;
-
-    // Preview and truth_table always go through the project pipeline so implicit
-    // builtin-macro usages (e.g. `xor` without an explicit import) get resolved via
-    // scan_imports' implicit_builtin path. Compile/emit_zig keep the cheaper
-    // has_imports gate to avoid the extra disk I/O on macro-free fixtures (locked
-    // by perf-budget tests).
-    const needs_project_resolution = args.mode != .inspect and (has_imports or args.mode == .preview or args.mode == .truth_table or args.mode == .sim);
-
-    if (needs_project_resolution) {
-        const scan_result = scan_imports.scanProjectImports(allocator, args.input_path) catch |err| {
-            try stderr_writer.print("import scan failed: {s}\n", .{@errorName(err)});
-            return 1;
-        };
-        if (scan_result.diagnostics.items.len > 0) {
-            const counts_scan = try printDiagnosticSet(allocator, stderr_writer, args.input_path, scan_result.diagnostics.items);
-            if (counts_scan.errors > 0) return 1;
-        }
-
-        const cycle_result = import_cycle.analyzeImports(allocator, scan_result.file_paths, scan_result.import_table) catch |err| {
-            try stderr_writer.print("import cycle analysis failed: {s}\n", .{@errorName(err)});
-            return 1;
-        };
-        if (cycle_result.diagnostics.items.len > 0) {
-            const counts_cycle = try printDiagnosticSet(allocator, stderr_writer, args.input_path, cycle_result.diagnostics.items);
-            if (counts_cycle.errors > 0) return 1;
-        }
-
-        diagnostic_list = diagnostics.initDiagnosticList();
-        const project = resolve_bodies.resolveBodies(
-            allocator,
-            scan_result.file_paths,
-            scan_result.import_table,
-            cycle_result.topo_order,
-            &diagnostic_list,
-        ) catch |err| {
-            try stderr_writer.print("body resolution failed: {s}\n", .{@errorName(err)});
-            return 1;
-        };
-        maybe_project = project;
-        var validator_diagnostics_list = validator_run_project.run(allocator, &project) catch |err| {
-            try stderr_writer.print("project validation failed: {s}\n", .{@errorName(err)});
-            return 1;
-        };
-        defer validator_diagnostics_list.deinit(allocator);
-        try diagnostic_list.appendSlice(allocator, validator_diagnostics_list.items);
-    } else {
-        diagnostic_list = validator_run.run(allocator, &ir_module) catch |err| {
-            try stderr_writer.print("validation failed: {s}\n", .{@errorName(err)});
-            return 1;
-        };
     }
-    defer diagnostic_list.deinit(allocator);
 
-    const counts = countDiagnostics(diagnostic_list.items);
+    const counts: struct { errors: usize, warnings: usize } = .{ .errors = front.errors, .warnings = front.warnings };
 
     if (args.mode == .inspect) {
-        const ast_dump = try inspect_dump.dumpAstFile(allocator, ast_file);
-        const ir_dump = try inspect_dump.dumpIrModule(allocator, ir_module);
+        const ast_dump = try inspect_dump.dumpAstFile(allocator, front.ast_file);
+        const ir_dump = try inspect_dump.dumpIrModule(allocator, front.ir_module);
 
         try stdout_writer.writeAll("=== Parse Tree ===\n");
         try stdout_writer.writeAll(ast_dump);
         try stdout_writer.writeAll("\n\n=== Resolved IR ===\n");
         try stdout_writer.writeAll(ir_dump);
         try stdout_writer.writeAll("\n\n=== Diagnostics ===\n");
-        _ = try printDiagnosticSet(allocator, stdout_writer, args.input_path, diagnostic_list.items);
-        if (diagnostic_list.items.len == 0) try stdout_writer.writeByte('\n');
+        _ = try printDiagnosticSet(allocator, stdout_writer, args.input_path, front.diagnostics.items);
+        if (front.diagnostics.items.len == 0) try stdout_writer.writeByte('\n');
         try stdout_writer.writeAll("\n=== Summary ===\n");
         try stdout_writer.print("{d} errors, {d} warnings\n", .{ counts.errors, counts.warnings });
         return if (counts.errors > 0) 1 else 0;
@@ -353,32 +297,27 @@ pub fn run(
     // human-readable stderr dump below.
     if (args.mode == .sim) {
         if (counts.errors > 0) {
-            try sim_loop.serveError(stdout_writer, args.input_path, diagnostic_list.items);
+            try sim_loop.serveError(stdout_writer, args.input_path, front.diagnostics.items);
             return 1;
         }
-        var topology = if (maybe_project) |*project|
-            full_serializer.buildFromProject(allocator, project) catch |err| {
-                try reportBackendError(stderr_writer, "topology build failed", err);
-                return 1;
-            }
-        else
-            full_serializer.buildFromModule(allocator, &ir_module) catch |err| {
-                try reportBackendError(stderr_writer, "topology build failed", err);
-                return 1;
-            };
+        var topology = libcirc.modes.buildTopology(allocator, &front, &failure) catch |err| {
+            if (err == error.OutOfMemory) return error.OutOfMemory;
+            try stderr_writer.print("{s}: {s}\n", .{ failure.stage.cliLabel(), @errorName(failure.cause) });
+            return 1;
+        };
         defer topology.deinit(allocator);
 
         const preloads = (try resolvePreloads(allocator, args, topology, stderr_writer)) orelse return 2;
 
         const stdin_reader = std.fs.File.stdin().deprecatedReader();
-        sim_loop.serve(allocator, topology, args.input_path, diagnostic_list.items, preloads, stdin_reader, stdout_writer) catch |err| {
+        sim_loop.serve(allocator, topology, args.input_path, front.diagnostics.items, preloads, stdin_reader, stdout_writer) catch |err| {
             try stderr_writer.print("sim: {s}\n", .{@errorName(err)});
             return 1;
         };
         return 0;
     }
 
-    _ = try printDiagnosticSet(allocator, stderr_writer, args.input_path, diagnostic_list.items);
+    _ = try printDiagnosticSet(allocator, stderr_writer, args.input_path, front.diagnostics.items);
 
     if (counts.errors > 0 or (args.warnings_as_errors and counts.warnings > 0)) {
         return 1;
@@ -387,7 +326,7 @@ pub fn run(
     switch (args.mode) {
         .emit_zig => {
             const emitted = blk: {
-                if (maybe_project) |*project| {
+                if (front.project) |*project| {
                     break :blk emit_main.emitProjectSource(allocator, project, .{
                         .source_name = std.fs.path.basename(args.input_path),
                         .compile_timestamp = "2026-05-01T22:00:00Z",
@@ -397,7 +336,7 @@ pub fn run(
                         return 1;
                     };
                 }
-                break :blk emit_main.emitModuleSource(allocator, &ir_module, .{
+                break :blk emit_main.emitModuleSource(allocator, &front.ir_module, .{
                     .source_name = std.fs.path.basename(args.input_path),
                     .compile_timestamp = "2026-05-01T22:00:00Z",
                     .compiler_version = "circ-compiler/dev",
@@ -413,41 +352,9 @@ pub fn run(
             return 0;
         },
         .compile => {
-            const topology_bytes = blk: {
-                if (maybe_project) |*project| {
-                    break :blk serializer.serializeProject(allocator, project) catch |err| {
-                        try reportBackendError(stderr_writer, "topology serialization failed", err);
-                        return 1;
-                    };
-                }
-                break :blk serializer.serializeModule(allocator, &ir_module) catch |err| {
-                    try reportBackendError(stderr_writer, "topology serialization failed", err);
-                    return 1;
-                };
-            };
-            defer allocator.free(topology_bytes);
-
-            const full_topology_bytes = blk: {
-                if (maybe_project) |*project| {
-                    break :blk full_serializer.serializeProjectFull(allocator, project) catch |err| {
-                        try reportBackendError(stderr_writer, "full topology serialization failed", err);
-                        return 1;
-                    };
-                }
-                break :blk full_serializer.serializeModuleFull(allocator, &ir_module) catch |err| {
-                    try reportBackendError(stderr_writer, "full topology serialization failed", err);
-                    return 1;
-                };
-            };
-            defer allocator.free(full_topology_bytes);
-
-            const wasm_bytes = section_writer.combineTwo(
-                allocator,
-                runtime_embed.runtime_wasm,
-                topology_bytes,
-                full_topology_bytes,
-            ) catch |err| {
-                try stderr_writer.print("wasm assembly failed: {s}\n", .{@errorName(err)});
+            const wasm_bytes = libcirc.modes.compile(allocator, &front, &failure) catch |err| {
+                if (err == error.OutOfMemory) return error.OutOfMemory;
+                try stderr_writer.print("{s}: {s}\n", .{ failure.stage.cliLabel(), @errorName(failure.cause) });
                 return 1;
             };
             defer allocator.free(wasm_bytes);
@@ -461,23 +368,19 @@ pub fn run(
         .inspect => unreachable,
         .sim => unreachable,
         .preview => {
-            var topology = if (maybe_project) |*project|
-                full_serializer.buildFromProject(allocator, project) catch |err| {
-                    try reportBackendError(stderr_writer, "topology build failed", err);
-                    return 1;
-                }
-            else
-                full_serializer.buildFromModule(allocator, &ir_module) catch |err| {
-                    try reportBackendError(stderr_writer, "topology build failed", err);
-                    return 1;
-                };
+            var topology = libcirc.modes.buildTopology(allocator, &front, &failure) catch |err| {
+                if (err == error.OutOfMemory) return error.OutOfMemory;
+                try stderr_writer.print("{s}: {s}\n", .{ failure.stage.cliLabel(), @errorName(failure.cause) });
+                return 1;
+            };
             defer topology.deinit(allocator);
 
-            const grid = layout_orchestrator.build(allocator, topology, .{
+            const grid = libcirc.modes.buildLayout(allocator, topology, .{
                 .expand_macros = args.expand_macros,
                 .expand_display = args.expand_display,
-            }) catch |err| {
-                try stderr_writer.print("layout build failed: {s}\n", .{@errorName(err)});
+            }, &failure) catch |err| {
+                if (err == error.OutOfMemory) return error.OutOfMemory;
+                try stderr_writer.print("{s}: {s}\n", .{ failure.stage.cliLabel(), @errorName(failure.cause) });
                 return 1;
             };
 
@@ -501,90 +404,66 @@ pub fn run(
 
             const no_color = std.process.getEnvVarOwned(allocator, "NO_COLOR") catch null;
             const stdout_handle = std.fs.File.stdout().handle;
-            preview_render.render(allocator, stdout_writer, grid, .{
+            libcirc.modes.renderPreview(allocator, stdout_writer, grid, .{
                 .color = args.color,
                 .stdout_handle = stdout_handle,
                 .no_color_value = no_color,
                 .expand_display = args.expand_display,
-            }) catch |err| {
-                try stderr_writer.print("render failed: {s}\n", .{@errorName(err)});
+            }, &failure) catch |err| {
+                if (err == error.OutOfMemory) return error.OutOfMemory;
+                try stderr_writer.print("{s}: {s}\n", .{ failure.stage.cliLabel(), @errorName(failure.cause) });
                 return 1;
             };
             return 0;
         },
         .truth_table => {
             verbose_engine_logs = args.truth_table_verbose;
-            var topology = if (maybe_project) |*project|
-                full_serializer.buildFromProject(allocator, project) catch |err| {
-                    try reportBackendError(stderr_writer, "topology build failed", err);
-                    return 1;
-                }
-            else
-                full_serializer.buildFromModule(allocator, &ir_module) catch |err| {
-                    try reportBackendError(stderr_writer, "topology build failed", err);
-                    return 1;
-                };
+            var topology = libcirc.modes.buildTopology(allocator, &front, &failure) catch |err| {
+                if (err == error.OutOfMemory) return error.OutOfMemory;
+                try stderr_writer.print("{s}: {s}\n", .{ failure.stage.cliLabel(), @errorName(failure.cause) });
+                return 1;
+            };
             defer topology.deinit(allocator);
 
             const preloads = (try resolvePreloads(allocator, args, topology, stderr_writer)) orelse return 2;
 
-            // Pre-flight the stateful case so the message names the ram
-            // instead of surfacing a bare StatefulComponent from the builder.
-            if (truth_table_builder.firstRamName(topology)) |ram_name| {
-                try stderr_writer.print(
-                    "truth-table: ram '{s}' is stateful (its clk/we would be enumerated as inputs and rows would depend on visiting order); use --sim to drive it\n",
-                    .{ram_name},
-                );
+            // Pre-flight (preloads were already resolved and validated above,
+            // then the stateful ram, then the cap) so users get a specific
+            // message instead of a bare builder error.
+            if (try libcirc.modes.truthTablePreflight(allocator, topology, args.truth_table_cap, preloads)) |refusal| {
+                try refusal.write(stderr_writer, .{ .flag = "--truth-table-cap", .cap_max = cli_args.truth_table_cap_max });
+                try stderr_writer.writeByte('\n');
                 return 1;
             }
 
-            // Pre-flight the cap so users get a specific bit-count
-            // message ("X exceeds cap of Y") instead of a generic
-            // TooManyInputs error from the builder.
-            const total_input_bits = truth_table_builder.countInputBits(topology);
-            if (total_input_bits > args.truth_table_cap) {
-                try stderr_writer.print(
-                    "truth table requires {d} input bits, exceeds cap of {d} (raise with --truth-table-cap, max {d})\n",
-                    .{ total_input_bits, args.truth_table_cap, cli_args.truth_table_cap_max },
-                );
-                return 1;
-            }
-
-            var table = truth_table_builder.build(allocator, topology, .{
+            var table = libcirc.modes.buildTruthTable(allocator, topology, .{
                 .max_input_bits = args.truth_table_cap,
                 .preloads = preloads,
-            }) catch |err| {
-                switch (err) {
-                    // Unreachable after resolvePreloads; kept for the library path.
-                    error.BadPreload => try stderr_writer.writeAll("truth-table: preload failed\n"),
-                    else => try stderr_writer.print("truth-table build failed: {s}\n", .{@errorName(err)}),
+            }, &failure) catch |err| {
+                if (err == error.OutOfMemory) return error.OutOfMemory;
+                // Unreachable after resolvePreloads; kept for the library path.
+                if (failure.cause == error.BadPreload) {
+                    try stderr_writer.writeAll("truth-table: preload failed\n");
+                    return 1;
                 }
+                try stderr_writer.print("{s}: {s}\n", .{ failure.stage.cliLabel(), @errorName(failure.cause) });
                 return 1;
             };
             defer table.deinit();
 
-            const value_format = switch (args.truth_table_value_format) {
-                .binary => truth_table_markdown.ValueFormat.binary,
-                .hex => truth_table_markdown.ValueFormat.hex,
-                .decimal => truth_table_markdown.ValueFormat.decimal,
+            const format: libcirc.TableFormat = switch (args.truth_table_format) {
+                .markdown => .markdown,
+                .csv => .csv,
+                .json => .json,
             };
-            const csv_format = switch (args.truth_table_value_format) {
-                .binary => truth_table_csv.ValueFormat.binary,
-                .hex => truth_table_csv.ValueFormat.hex,
-                .decimal => truth_table_csv.ValueFormat.decimal,
+            const value_format: libcirc.ValueFormat = switch (args.truth_table_value_format) {
+                .binary => .binary,
+                .hex => .hex,
+                .decimal => .decimal,
             };
-            const json_format = switch (args.truth_table_value_format) {
-                .binary => truth_table_json.ValueFormat.binary,
-                .hex => truth_table_json.ValueFormat.hex,
-                .decimal => truth_table_json.ValueFormat.decimal,
-            };
-
-            (switch (args.truth_table_format) {
-                .markdown => truth_table_markdown.render(stdout_writer, table, value_format),
-                .csv => truth_table_csv.render(stdout_writer, table, csv_format),
-                .json => truth_table_json.render(stdout_writer, table, json_format),
-            }) catch |err| {
-                try stderr_writer.print("render failed: {s}\n", .{@errorName(err)});
+            libcirc.modes.renderTruthTable(stdout_writer, table, format, value_format, &failure) catch |err| {
+                if (err == error.OutOfMemory) return error.OutOfMemory;
+                try stderr_writer.print("{s}: {s}\n", .{ failure.stage.cliLabel(), @errorName(failure.cause) });
                 return 1;
             };
 
@@ -659,7 +538,7 @@ fn runAnalyze(allocator: std.mem.Allocator, stdout_writer: anytype, stderr_write
         },
     };
 
-    var overlay = analyzer.Overlay{};
+    var overlay = libcirc.analyzer.Overlay{};
     if (obj.get("overlays")) |ov| switch (ov) {
         .object => |ov_obj| {
             var it = ov_obj.iterator();
@@ -671,7 +550,7 @@ fn runAnalyze(allocator: std.mem.Allocator, stdout_writer: anytype, stderr_write
         else => {},
     };
 
-    const analysis = analyzer.analyze(
+    const analysis = libcirc.modes.analyze(
         allocator,
         root_path,
         if (overlay.count() > 0) overlay else null,
@@ -680,7 +559,7 @@ fn runAnalyze(allocator: std.mem.Allocator, stdout_writer: anytype, stderr_write
         return 1;
     };
 
-    try analyzer.renderJson(stdout_writer, analysis);
+    try libcirc.modes.renderAnalysis(stdout_writer, analysis);
     return 0;
 }
 
@@ -2201,4 +2080,19 @@ test "truth_table_cap_24_admits_8_input_bits" {
     );
     try std.testing.expectEqual(@as(u8, 0), exit_code);
     try std.testing.expect(stdout_buf.items.len > 0);
+}
+
+test "compile fast path takes no project route" {
+    // The perf smoke in tests/cli/integration_test.zig relies on compile
+    // skipping the import scan for a macro-free root; pin that the route
+    // table hands such a root to the single-module pipeline.
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    var failure: libcirc.frontend.Failure = undefined;
+    var front = try libcirc.frontend.run(allocator, "tests/fixtures/circuits/stress_grid_10x10.circ", &.{}, .project_if_imports, &failure);
+    defer front.deinit(allocator);
+    try std.testing.expect(front.project == null);
+    try std.testing.expectEqual(@as(usize, 1), front.file_paths.len);
 }

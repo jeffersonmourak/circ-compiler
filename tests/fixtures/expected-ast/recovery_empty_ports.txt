@@ -1,0 +1,11 @@
+File [f0:1:1-4:1]
+Imports (0)
+Inputs (1)
+  Input a [f0:1:1-1:8]
+Outputs (0)
+Components (0)
+Errors (4)
+  Error "expected a port name" [f0:2:10-2:11]
+  Error "expected '=' after the port name" [f0:3:1-3:8]
+  Error "expected a signal reference after '='" [f0:4:1-4:1]
+  Error "expected ')' to close the connection list" [f0:4:1-4:1]

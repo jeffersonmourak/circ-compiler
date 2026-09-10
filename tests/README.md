@@ -9,6 +9,7 @@ Fixture directories are organized by artifact kind:
 
 - `tests/fixtures/circuits/`: `.circ` source inputs.
 - `tests/fixtures/expected-ast/`: expected AST dumps from parser translation tests.
+- `tests/fixtures/expected-analyze/`: expected `--analyze` JSON for in-memory overlays.
 - `tests/fixtures/expected-ir/`: expected resolved IR dumps from resolver tests.
 - `tests/fixtures/expected-zig/`: expected emitted Zig output.
 - `tests/fixtures/expected-wasm/`: expected WASM behavior fixtures.

@@ -1,0 +1,4 @@
+input[300] a
+input[255] b
+and[300] g(a=b)
+output o(in=b[300])

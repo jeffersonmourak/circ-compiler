@@ -9,3 +9,4 @@ Components (1)
   Component type=rom instance=code width_args=[8, 4] [f0:2:1-2:30]
     Port addr [f0:2:16-2:20]
       NamedRef pc.out [f0:2:23-2:29]
+Errors (0)

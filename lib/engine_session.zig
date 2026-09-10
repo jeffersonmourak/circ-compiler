@@ -61,6 +61,27 @@ pub fn collectMemories(alloc: std.mem.Allocator, topology: full_format.FullTopol
     return list.toOwnedSlice(alloc);
 }
 
+/// The codec's errors plus the read cap from `readFileAlloc`.
+pub const ImageError = engine.memimage.MemoryImageError || error{FileTooBig};
+/// Same cap as the CLI's input-file read. The largest legal image is
+/// 8 << 16 = 512 KiB, so every over-capacity-but-under-cap file reaches
+/// the codec and is reported as TooManyWords.
+pub const IMAGE_READ_CAP: usize = 16 * 1024 * 1024;
+
+/// One human-readable reason (no code, no newline) for an image `err` on
+/// `mem`, given the image length. Shared by `--mem` (stderr), `--sim`'s
+/// `load` (E_MEMFMT) and the library's truth-table refusal, so the three
+/// surfaces never drift.
+pub fn writeImageError(writer: anytype, err: ImageError, mem: MemRef, len: usize) !void {
+    const bpw = engine.memimage.bytesPerWord(mem.data_width);
+    switch (err) {
+        error.LengthNotWordMultiple => try writer.print("length {d} is not a multiple of {d} byte(s)", .{ len, bpw }),
+        error.TooManyWords => try writer.print("{d} words exceed capacity {d}", .{ len / bpw, @as(usize, 1) << @intCast(mem.addr_width) }),
+        error.WordExceedsWidth => try writer.print("a word has bits set beyond data width {d}", .{mem.data_width}),
+        error.FileTooBig => try writer.writeAll("image exceeds 16 MiB"),
+    }
+}
+
 /// Check-only codec entry: the word count a load of `bytes` would produce,
 /// or the error `applyImage` would raise. No `Circuit` involved.
 pub fn validateImage(mem: MemRef, bytes: []const u8) engine.memimage.MemoryImageError!usize {
@@ -407,4 +428,21 @@ test "session drives and reads through the engine" {
     const s = circuit.readState(session.nodeById(out.component_id).?.state_handle);
     try std.testing.expectEqual(@as(u64, 1), s.value);
     try std.testing.expectEqual(@as(u64, 1), s.defined);
+}
+
+test "writeImageError reasons" {
+    var buf: std.ArrayList(u8) = .{};
+    defer buf.deinit(std.testing.allocator);
+    const mem = MemRef{ .name = "code", .component_id = 1, .kind = .rom, .data_width = 12, .addr_width = 2 };
+    try writeImageError(buf.writer(std.testing.allocator), error.LengthNotWordMultiple, mem, 3);
+    try buf.append(std.testing.allocator, '|');
+    try writeImageError(buf.writer(std.testing.allocator), error.TooManyWords, mem, 10);
+    try buf.append(std.testing.allocator, '|');
+    try writeImageError(buf.writer(std.testing.allocator), error.WordExceedsWidth, mem, 8);
+    try buf.append(std.testing.allocator, '|');
+    try writeImageError(buf.writer(std.testing.allocator), error.FileTooBig, mem, 0);
+    try std.testing.expectEqualStrings(
+        "length 3 is not a multiple of 2 byte(s)|5 words exceed capacity 4|a word has bits set beyond data width 12|image exceeds 16 MiB",
+        buf.items,
+    );
 }

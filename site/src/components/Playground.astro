@@ -1,0 +1,460 @@
+---
+import { url } from '../utils/url.ts';
+import { examples } from '../content/examples.ts';
+import { tour } from '../content/tour.ts';
+
+interface Props {
+  manifest: { version: string; revision: string; full_version: number };
+  supportedVersions: readonly number[];
+}
+const { manifest, supportedVersions } = Astro.props;
+const wasmHref = url('/wasm/libcirc.wasm');
+const picks = [
+  ...examples.map((e) => ({ id: `example:${e.slug}`, label: e.title, source: e.source, group: 'Examples' })),
+  ...tour.map((t, i) => ({ id: `tour:${i + 1}`, label: `${i + 1}. ${t.title}`, source: t.source, group: 'Tour' })),
+];
+const initial = picks[0];
+---
+<div
+  class="pg"
+  data-libcirc-wasm={wasmHref}
+  data-supported-versions={supportedVersions.join(',')}
+  data-manifest-full-version={manifest.full_version.toString()}
+>
+  <div class="pg-banner" hidden></div>
+  <div class="pg-panes">
+    <section class="pg-editor">
+      <div class="pg-pane-label">
+        <label for="pg-pick">source</label>
+        <select id="pg-pick" class="pg-pick">
+          {['Examples', 'Tour'].map((group) => (
+            <optgroup label={group}>
+              {picks.filter((p) => p.group === group).map((p) => (
+                <option value={p.id}>{p.label}</option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+      </div>
+      <textarea
+        id="pg-source"
+        class="pg-source"
+        spellcheck="false"
+        autocomplete="off"
+        autocapitalize="off"
+        aria-label="circ source"
+        rows="18"
+      >{initial.source}</textarea>
+      <div class="pg-status" aria-live="polite">Type to compile.</div>
+    </section>
+    <section class="pg-output">
+      <div class="pg-tabs" role="tablist">
+        <button type="button" role="tab" data-tab="diagnostics" aria-selected="true">Diagnostics</button>
+        <button type="button" role="tab" data-tab="preview" aria-selected="false">Preview</button>
+        <button type="button" role="tab" data-tab="truth" aria-selected="false">Truth table</button>
+        <button type="button" role="tab" data-tab="simulate" aria-selected="false">Simulate</button>
+      </div>
+      <div class="pg-panel" data-panel="diagnostics"><ul class="pg-diag"></ul></div>
+      <div class="pg-panel" data-panel="preview" hidden><pre class="pg-preview"></pre></div>
+      <div class="pg-panel" data-panel="truth" hidden><div class="pg-table"></div></div>
+      <div class="pg-panel" data-panel="simulate" hidden>
+        <div class="pg-sim-note"></div>
+        <div class="lc-mount pg-sim-mount" hidden></div>
+      </div>
+    </section>
+  </div>
+  <script type="application/json" id="pg-picks" set:html={JSON.stringify(Object.fromEntries(picks.map((p) => [p.id, p.source])))} />
+</div>
+
+<script>
+  import { LibcircClient, type LibcircVersion, type WorkerReply } from '../scripts/libcirc-client.ts';
+  import { splitFiles, requestFor, PLAYGROUND_DIR, type SplitFile } from '../utils/split-files.ts';
+  import { byteColToUtf16, caretOffset } from '../utils/columns.ts';
+
+  type Tab = 'diagnostics' | 'preview' | 'truth' | 'simulate';
+  interface Range { start_line: number; start_col: number; end_line: number; end_col: number }
+  interface Diagnostic { file_id: number; severity: string; code: string; range: Range; message: string }
+  interface Analysis {
+    files: { file_id: number; path: string }[];
+    diagnostics: Diagnostic[];
+    symbols: { file_id: number; name: string; kind: string; width: number }[];
+  }
+  interface TruthTable { inputs: string[]; outputs: string[]; rows: { in: (number | null)[]; out: (number | null)[] }[] }
+
+  const UI_INPUT_BITS_CAP = 12;
+  const DEBOUNCE_MS = 250;
+
+  const root = document.querySelector<HTMLElement>('.pg');
+  if (root) init(root);
+
+  function init(el: HTMLElement) {
+    const source = el.querySelector<HTMLTextAreaElement>('#pg-source')!;
+    const pick = el.querySelector<HTMLSelectElement>('#pg-pick')!;
+    const status = el.querySelector<HTMLElement>('.pg-status')!;
+    const banner = el.querySelector<HTMLElement>('.pg-banner')!;
+    const diagList = el.querySelector<HTMLUListElement>('.pg-diag')!;
+    const previewEl = el.querySelector<HTMLElement>('.pg-preview')!;
+    const tableEl = el.querySelector<HTMLElement>('.pg-table')!;
+    const simNote = el.querySelector<HTMLElement>('.pg-sim-note')!;
+    const tabs = Array.from(el.querySelectorAll<HTMLButtonElement>('[role=tab]'));
+    const panels = Array.from(el.querySelectorAll<HTMLElement>('.pg-panel'));
+    const picks = JSON.parse(el.querySelector('#pg-picks')!.textContent || '{}') as Record<string, string>;
+    const supported = (el.dataset.supportedVersions || '').split(',').filter(Boolean).map(Number);
+
+    const client = new LibcircClient(el.dataset.libcircWasm!);
+    const state = {
+      gen: 0,
+      files: [] as SplitFile[],
+      analysis: null as Analysis | null,
+      diagnostics: [] as Diagnostic[],
+      artifact: null as { bytes: Uint8Array; hash: number } | null,
+      tab: 'diagnostics' as Tab,
+      version: null as LibcircVersion | null,
+      simulateEnabled: true,
+    };
+    // Slice 8 attaches the simulator here.
+    const hooks = { onArtifact: null as null | ((bytes: Uint8Array | null) => void) };
+    (el as any).__playground = { state, hooks };
+
+    // ---- tabs ----
+    function showTab(tab: Tab) {
+      state.tab = tab;
+      for (const b of tabs) b.setAttribute('aria-selected', String(b.dataset.tab === tab));
+      for (const p of panels) p.hidden = p.dataset.panel !== tab;
+      if (tab === 'preview') void runPreview(state.gen);
+      if (tab === 'truth') void runTruth(state.gen);
+    }
+    for (const b of tabs) b.addEventListener('click', () => showTab(b.dataset.tab as Tab));
+
+    // ---- editor ----
+    source.addEventListener('keydown', (e) => {
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        source.setRangeText('  ', source.selectionStart, source.selectionEnd, 'end');
+        schedule();
+      }
+    });
+    let timer: number | null = null;
+    function schedule() {
+      if (timer !== null) window.clearTimeout(timer);
+      timer = window.setTimeout(() => { timer = null; void fire(); }, DEBOUNCE_MS);
+    }
+    source.addEventListener('input', schedule);
+    pick.addEventListener('change', () => {
+      source.value = picks[pick.value] ?? '';
+      void fire();
+    });
+
+    // ---- version handshake ----
+    async function ensureReady(): Promise<boolean> {
+      if (state.version) return true;
+      status.textContent = 'Loading the compiler…';
+      try {
+        state.version = await client.init();
+      } catch (err) {
+        status.textContent = `Could not load libcirc.wasm: ${(err as Error).message}`;
+        return false;
+      }
+      if (!supported.includes(state.version.full_version)) {
+        banner.textContent =
+          `libcirc.wasm emits topology v${state.version.full_version} but the bundled circ-renderer reads v${supported.join('/')}; ` +
+          'Simulate is disabled until the site is rebuilt from one compiler revision.';
+        banner.hidden = false;
+        state.simulateEnabled = false;
+        simNote.textContent = 'Simulate is disabled: renderer and compiler disagree on the topology version.';
+      }
+      return true;
+    }
+
+    // ---- pipeline ----
+    async function fire() {
+      const gen = ++state.gen;
+      if (!(await ensureReady())) return;
+      if (gen !== state.gen) return;
+      state.files = splitFiles(source.value);
+      status.textContent = 'Compiling…';
+
+      const an = await client.call('analyze', requestFor(state.files));
+      if (gen !== state.gen) return;
+      if (an.status !== 0) {
+        status.textContent = `analyze failed: ${an.error ?? an.status}`;
+        return;
+      }
+      state.analysis = JSON.parse(an.text!) as Analysis;
+      state.diagnostics = state.analysis.diagnostics;
+      renderDiagnostics();
+
+      const errors = state.diagnostics.filter((d) => d.severity === 'error').length;
+      const warnings = state.diagnostics.length - errors;
+      if (errors > 0) {
+        state.artifact = null;
+        hooks.onArtifact?.(null);
+        status.textContent = `${errors} error${errors === 1 ? '' : 's'}${warnings ? `, ${warnings} warning${warnings === 1 ? '' : 's'}` : ''}.`;
+      } else {
+        const c = await client.call('compile', requestFor(state.files));
+        if (gen !== state.gen) return;
+        if (c.status === 0 && c.bytes) {
+          const hash = fnv1a(c.bytes);
+          if (!state.artifact || state.artifact.hash !== hash) {
+            state.artifact = { bytes: c.bytes, hash };
+            hooks.onArtifact?.(c.bytes);
+          }
+          status.textContent = `Compiled: ${c.bytes.length} bytes${warnings ? `, ${warnings} warning${warnings === 1 ? '' : 's'}` : ''}.`;
+        } else if (c.status === 1 && c.text) {
+          state.diagnostics = (JSON.parse(c.text) as Analysis).diagnostics;
+          renderDiagnostics();
+          state.artifact = null;
+          hooks.onArtifact?.(null);
+          status.textContent = 'Compile reported diagnostics.';
+        } else {
+          state.artifact = null;
+          hooks.onArtifact?.(null);
+          status.textContent = `compile failed: ${c.error ?? c.status}`;
+        }
+      }
+      if (state.tab === 'preview') void runPreview(gen);
+      if (state.tab === 'truth') void runTruth(gen);
+    }
+
+    async function runPreview(gen: number) {
+      if (!state.files.length || !state.version) return;
+      const r = await client.call('preview', requestFor(state.files, { color: 'never' }));
+      if (gen !== state.gen) return;
+      previewEl.textContent = r.status === 0 ? r.text! : messageOf(r);
+    }
+
+    function rootInputBits(): number | null {
+      const a = state.analysis;
+      if (!a) return null;
+      const rootPath = `${PLAYGROUND_DIR}/${state.files[state.files.length - 1]?.name}`;
+      const rootId = a.files.find((f) => f.path === rootPath)?.file_id ?? 0;
+      return a.symbols.filter((s) => s.file_id === rootId && s.kind === 'input').reduce((n, s) => n + s.width, 0);
+    }
+
+    async function runTruth(gen: number) {
+      if (!state.files.length || !state.version) return;
+      const bits = rootInputBits();
+      if (bits !== null && bits > UI_INPUT_BITS_CAP) {
+        tableEl.innerHTML = '';
+        tableEl.textContent = `This circuit has ${bits} input bits; the playground enumerates up to ${UI_INPUT_BITS_CAP} (${2 ** UI_INPUT_BITS_CAP} rows). Use circ-compile --truth-table for more.`;
+        return;
+      }
+      const r = await client.call('truth_table', requestFor(state.files, { format: 'json', truth_table_cap: UI_INPUT_BITS_CAP }));
+      if (gen !== state.gen) return;
+      tableEl.innerHTML = '';
+      if (r.status !== 0) {
+        tableEl.textContent = messageOf(r);
+        return;
+      }
+      const table = JSON.parse(r.text!) as TruthTable;
+      const t = document.createElement('table');
+      const head = t.createTHead().insertRow();
+      for (const name of [...table.inputs, ...table.outputs]) {
+        const th = document.createElement('th');
+        th.textContent = name;
+        head.appendChild(th);
+      }
+      const body = t.createTBody();
+      for (const row of table.rows) {
+        const tr = body.insertRow();
+        for (const v of [...row.in, ...row.out]) tr.insertCell().textContent = v === null ? '?' : String(v);
+      }
+      if (bits !== null && bits > 10) {
+        const note = document.createElement('p');
+        note.className = 'pg-table-note';
+        note.textContent = `${table.rows.length} rows.`;
+        tableEl.appendChild(note);
+      }
+      tableEl.appendChild(t);
+    }
+
+    function messageOf(r: WorkerReply): string {
+      if (r.error) return r.error;
+      if (r.status === 1 && r.text) {
+        const diags = (JSON.parse(r.text) as Analysis).diagnostics;
+        return diags.map((d) => `${d.range.start_line}:${d.range.start_col} ${d.code} ${d.message}`).join('\n');
+      }
+      return `status ${r.status}`;
+    }
+
+    // ---- diagnostics ----
+    function locate(d: Diagnostic): { line0: number; col: number } | null {
+      const path = state.analysis?.files.find((f) => f.file_id === d.file_id)?.path;
+      const name = path?.startsWith(`${PLAYGROUND_DIR}/`) ? path.slice(PLAYGROUND_DIR.length + 1) : null;
+      const file = state.files.find((f) => f.name === name);
+      if (!file) return null;
+      const line0 = file.startLine + d.range.start_line - 1;
+      const line = source.value.split('\n')[line0] ?? '';
+      return { line0, col: byteColToUtf16(line, d.range.start_col) };
+    }
+    function renderDiagnostics() {
+      diagList.innerHTML = '';
+      if (state.diagnostics.length === 0) {
+        const li = document.createElement('li');
+        li.className = 'pg-diag-ok';
+        li.textContent = 'No diagnostics.';
+        diagList.appendChild(li);
+        return;
+      }
+      for (const d of state.diagnostics) {
+        const li = document.createElement('li');
+        li.className = `pg-diag-${d.severity}`;
+        const loc = locate(d);
+        const where = loc ? `${loc.line0 + 1}:${loc.col}` : `${d.range.start_line}:${d.range.start_col}`;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = `${where} ${d.code} ${d.message}`;
+        if (loc) {
+          btn.addEventListener('click', () => {
+            const off = caretOffset(source.value, loc.line0, loc.col);
+            source.focus();
+            source.setSelectionRange(off, off);
+          });
+        }
+        li.appendChild(btn);
+        diagList.appendChild(li);
+      }
+    }
+
+    function fnv1a(bytes: Uint8Array): number {
+      let h = 0x811c9dc5;
+      for (let i = 0; i < bytes.length; i++) {
+        h ^= bytes[i];
+        h = Math.imul(h, 0x01000193);
+      }
+      return h >>> 0;
+    }
+
+    // ---- simulate ----
+    type Signal = 0 | 1;
+    type CircView = {
+      runtime: { topology: { components: { id: number; kind: number; name: string; origin: unknown[] }[] }; setPinSignal(id: number, s: Signal): void; run(): void };
+      view: { refreshState(): void; setInputSignal?(id: number, s: Signal): void };
+      canvas: HTMLCanvasElement;
+      destroy(): void;
+    };
+    const simMount = el.querySelector<HTMLElement>('.pg-sim-mount')!;
+    const sim = {
+      view: null as CircView | null,
+      bytes: null as Uint8Array | null,
+      renderedHash: -1,
+      /** Keyed by root input-pin NAME: ids shift as the source changes. */
+      pins: new Map<string, Signal>(),
+      rendererPromise: null as Promise<typeof import('circ-renderer')> | null,
+      themesPromise: null as Promise<typeof import('../utils/circ-theme.mjs')> | null,
+      assetsHooked: false,
+    };
+    const loadRenderer = () => (sim.rendererPromise ??= import('circ-renderer'));
+    const loadThemes = () => (sim.themesPromise ??= import('../utils/circ-theme.mjs'));
+    const INPUT_PIN = 0; // ComponentKind.InputPin
+
+    function rootInputs(view: CircView): Map<string, number> {
+      const m = new Map<string, number>();
+      for (const c of view.runtime.topology.components) {
+        if (c.kind === INPUT_PIN && c.origin.length === 0) m.set(c.name, c.id);
+      }
+      return m;
+    }
+
+    async function buildSim() {
+      if (!state.simulateEnabled || !sim.bytes) return;
+      const bytes = sim.bytes;
+      const [{ renderCircuit }, themeMod] = await Promise.all([loadRenderer(), loadThemes()]);
+      if (sim.bytes !== bytes) return;
+      const { pickTheme, onAssetsReady } = themeMod;
+      sim.view?.destroy();
+      sim.view = null;
+      simMount.innerHTML = '';
+      try {
+        const view = (await renderCircuit({
+          bytes,
+          cell: 14,
+          padding: 16,
+          interactive: true,
+          theme: pickTheme() as any,
+          // Present once the renderer exposes it; the click handler below is
+          // the fallback that keeps the by-name pin map current either way.
+          onPinToggle: (id: number, sig: Signal) => {
+            for (const [name, pid] of rootInputs(view)) if (pid === id) sim.pins.set(name, sig);
+          },
+        } as any)) as unknown as CircView;
+        sim.view = view;
+        simMount.appendChild(view.canvas);
+        simMount.hidden = false;
+        simNote.textContent = 'Click input pins to toggle them.';
+        // Replay the reader's pins by name onto the fresh instance.
+        const ids = rootInputs(view);
+        for (const name of Array.from(sim.pins.keys())) if (!ids.has(name)) sim.pins.delete(name);
+        let replayed = false;
+        for (const [name, sig] of sim.pins) {
+          const id = ids.get(name)!;
+          if (view.view.setInputSignal) view.view.setInputSignal(id, sig);
+          else view.runtime.setPinSignal(id, sig);
+          replayed = true;
+        }
+        if (replayed && !view.view.setInputSignal) {
+          view.runtime.run();
+          view.view.refreshState();
+        }
+        if (!view.view.setInputSignal) {
+          // Older renderer: keep the by-name map from the click itself.
+          view.canvas.addEventListener('click', () => {
+            for (const [name, id] of ids) {
+              const v = (view.runtime as any).readSignal?.(id);
+              if (v === 0 || v === 1) sim.pins.set(name, v);
+            }
+          });
+        }
+        if (!sim.assetsHooked) {
+          sim.assetsHooked = true;
+          onAssetsReady(() => { void rebuildSim(); });
+        }
+      } catch (err) {
+        simNote.textContent = `Could not render the circuit: ${(err as Error).message}`;
+        simMount.hidden = true;
+      }
+    }
+    async function rebuildSim() {
+      if (!sim.view) return;
+      await buildSim();
+    }
+    hooks.onArtifact = (bytes) => {
+      sim.bytes = bytes;
+      if (!bytes) {
+        sim.view?.destroy();
+        sim.view = null;
+        simMount.innerHTML = '';
+        simMount.hidden = true;
+        simNote.textContent = state.simulateEnabled ? 'Fix the errors to simulate.' : simNote.textContent;
+        sim.renderedHash = -1;
+        return;
+      }
+      simNote.textContent = '';
+      if (state.tab === 'simulate' && state.artifact && sim.renderedHash !== state.artifact.hash) {
+        sim.renderedHash = state.artifact.hash;
+        void buildSim();
+      }
+    };
+    const showTabBase = showTab;
+    for (const b of tabs) {
+      if (b.dataset.tab !== 'simulate') continue;
+      b.addEventListener('click', () => {
+        if (state.artifact && sim.renderedHash !== state.artifact.hash) {
+          sim.renderedHash = state.artifact.hash;
+          void buildSim();
+        } else if (!state.artifact && !sim.bytes) {
+          simNote.textContent = state.simulateEnabled ? 'Compile a circuit first.' : simNote.textContent;
+        }
+      });
+    }
+    void showTabBase;
+    // Theme flips: circ-renderer captures the theme at construction.
+    new MutationObserver(() => { void rebuildSim(); }).observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    });
+
+    // Nothing heavy loads until the reader interacts.
+    source.addEventListener('focus', () => { void ensureReady(); }, { once: true });
+  }
+</script>

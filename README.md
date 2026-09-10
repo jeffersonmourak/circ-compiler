@@ -1,6 +1,6 @@
 # circ-compiler
 
-`circ-compiler` compiles `.circ` digital-logic source files into self-contained WebAssembly modules. Each compiled `.wasm` embeds the simulation engine plus circuit-specific construction code and exposes a fixed pull-based runtime API (`init`, `run`, `setPin`, paired `getOutputValue` / `getOutputDefined`, and a `memLoad` / `memStore` family for `rom` / `ram` contents, …) usable from any host that supports WebAssembly. The compiler is written in Zig and ships as a single CLI: `circ-compile`.
+`circ-compiler` compiles `.circ` digital-logic source files into self-contained WebAssembly modules. Each compiled `.wasm` embeds the simulation engine plus circuit-specific construction code and exposes a fixed pull-based runtime API (`init`, `run`, `setPin`, paired `getOutputValue` / `getOutputDefined`, and a `memLoad` / `memStore` family for `rom` / `ram` contents, …) usable from any host that supports WebAssembly. The compiler is written in Zig and ships as a single CLI: `circ-compile`. It also builds as a library — `libcirc.a` for native hosts and `libcirc.wasm` for the browser, which powers the site's `/playground`.
 
 ## What it does
 
@@ -37,8 +37,8 @@ Built-in macros (`or`, `nand`, `nor`, `xor`, `xnor`) are auto-imported from a vi
 Prerequisites:
 
 - [Zig](https://ziglang.org/) 0.15.x.
-- [Go](https://go.dev/) 1.21+ — used to compile the langlang-generated parser into a CGo c-archive that links into the Zig binary. Every build runs `go build` once to (re)produce `lib/parser/parser.a`.
-- Optional: [langlang](https://github.com/clarete/langlang) `v0.0.12` — only needed if you want to regenerate `lib/parser/parser.go` from `lib/grammar/proto-circ.peg`. The generated source is vendored in the repo, so contributors who don't touch the grammar do not need langlang installed. Install with `go install github.com/clarete/langlang/go/cmd/langlang@v0.0.12`.
+- [Node](https://nodejs.org/) on `PATH` — tests only (the behavioural WASM harnesses).
+- Optional: [langlang](https://github.com/jeffersonmourak/langlang) — only needed if you want to regenerate `lib/parser/parser.zig` from `lib/grammar/proto-circ.peg`. The generated source is vendored in the repo, so contributors who don't touch the grammar do not need langlang installed. circ uses the maintainer's fork, which adds a Zig output language on top of upstream `go/v0.0.12`. Install with `go install github.com/jeffersonmourak/langlang/go/cmd/langlang@v0.0.13-zig.2` and confirm with `langlang -version`; `zig build parser:gen` checks the version before regenerating.
 
 Build the CLI:
 
@@ -53,6 +53,10 @@ zig build test
 ```
 
 This is the fast dev-loop suite. `zig build test-all` additionally runs the slow emit-zig backend smoke (`test-emit`, a nested `zig build wasm` per fixture) and is what CI runs. (Set `CIRC_SKIP_PERF=1` to skip the smoke perf test in noisy CI environments.)
+
+The embedded runtime (`zig-out/lib/circ-runtime.wasm`) is always ReleaseSmall and stripped; `-Dwasm-optimize=<mode>` changes that for both wasm artifacts without touching the CLI's own `-Doptimize`.
+
+The compiler front end is also available as a C library — `zig build libcirc` produces `zig-out/lib/libcirc.a` and `zig-out/include/libcirc.h`, and `zig build libcirc-smoke` builds and runs `examples/c/analyze.c` against it; `zig build libcirc-wasm` builds the same API as a freestanding `zig-out/lib/libcirc.wasm` for browsers and Node. See `DOCS/libcirc-api.md`.
 
 ## Usage
 
@@ -79,11 +83,16 @@ Additional flags:
 
 Hard errors block emission — partial or "best-effort" artifacts are never produced. Diagnostics use stable codes (`E001`–`E018`, `W001`–`W003`) so downstream tooling can match on them.
 
+### Library
+
+The same front end is available without the process: `zig build libcirc` produces `zig-out/lib/libcirc.a` + `zig-out/include/libcirc.h`, and `zig build libcirc-wasm` produces `zig-out/lib/libcirc.wasm` for browsers and Node. Ten `circ_*` exports take one JSON request (root, in-memory files, options) and return the `.wasm` artifact, the preview text, the truth table, or the analysis JSON with a status code. See `DOCS/libcirc-api.md`.
+
 ## Documentation
 
 - `DOCS/getting-started.md` — write, compile, and run your first circuit (start here).
 - `DOCS/circuit-format.md` — the `.circ` language reference.
 - `DOCS/wasm-api.md` — runtime API exposed by the compiled `.wasm`.
+- `DOCS/libcirc-api.md` — the compiler as a library (`libcirc.a`, `libcirc.wasm`): request, status codes, C ABI.
 - `DOCS/simulation-engine.md` — the engine the compiler targets.
 - `DOCS/architecture.md` and `DOCS/decisions/` — design rationale for contributors.
 
