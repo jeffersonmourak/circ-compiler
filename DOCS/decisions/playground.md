@@ -1,6 +1,6 @@
 # playground
 
-The entries below record the decisions of the playground-v2 initiative (the site's `/playground` as a workbench: editor, tabs, layout, workspace, source linking, settings, live editors). The fifteen decisions locked at plan time are in `DOCS/PLANS_PROMPT.md`; each phase appends the ones it exercises here as it ships them. The library half of the browser story is in [libcirc.md](libcirc.md).
+The entries below record the decisions of the playground-v2 initiative (the site's `/playground` as a workbench: editor, tabs, layout, workspace, source linking, settings, live editors). The fifteen decisions locked at plan time are in the playground plan prompt, archived at `DOCS/archive/plan-playground.md` and readable in full at `git show ead16a942f6fec53becd9679b01f6e09fa2f0801:DOCS/PLANS_PROMPT.md`; each phase appended the ones it exercised here as it shipped them. The library half of the browser story is in [libcirc.md](libcirc.md).
 
 ### The compile fast path resolves implicit builtins
 

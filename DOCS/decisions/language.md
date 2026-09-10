@@ -167,7 +167,7 @@ See `DOCS/circuit-format.md` for the exact byte layout.
 
 ## Native memories
 
-The entries below record the language-facing half of the native-memory initiative (`rom`/`ram`, topology v03). The numbered decisions they cite are the eleven locked in `DOCS/PLANS_PROMPT.md`; the runtime and tooling half lives in [runtime-api.md](runtime-api.md) `## Native memories`, and the `--mem` flag gating in [cli.md](cli.md). Reference semantics for users are in `DOCS/language.md` §6.5.
+The entries below record the language-facing half of the native-memory initiative (`rom`/`ram`, topology v03). The numbered decisions they cite are the eleven locked in the memories plan prompt, archived at `DOCS/archive/plan-memories.md` and readable in full at `git show 2e15e97b973d822373d2b078dd0261fc3974b989:DOCS/PLANS_PROMPT.md`; the runtime and tooling half lives in [runtime-api.md](runtime-api.md) `## Native memories`, and the `--mem` flag gating in [cli.md](cli.md). Reference semantics for users are in `DOCS/language.md` §6.5.
 
 ### Memory declarations reuse `CallWidths` and reserve two type names
 
