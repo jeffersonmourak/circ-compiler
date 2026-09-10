@@ -11,6 +11,7 @@
 const std = @import("std");
 const corpus = @import("corpus");
 const preview_dump_json = @import("preview_dump_json");
+const invariants = @import("invariants");
 const golden = @import("golden");
 
 test {
@@ -44,4 +45,65 @@ test "layout_conformance_corpus" {
             return err;
         };
     }
+}
+
+// ---------- Corpus invariants ----------
+//
+// The measurement of record (`DOCS/PLANS_PROMPT.md`, decision 10): for every
+// fixture-mode the walk lists, `invariants.check` over the grid — I0 wire
+// cells inside a box, I1 cells two nets share colinearly, I2 cells where
+// nets meet other than as a clean crossing, I3 nets that are not a tree from
+// their source — plus crossings, bends, straight wires and the grid size.
+// Every fixture-mode is listed, zero rows included, so the corpus itself is
+// visible in the golden; the totals line closes it. Until Phase 3 the counts
+// describe the old algorithm; from Phase 3 on I0–I3 are zero everywhere and
+// a non-zero row is a failing test.
+
+pub const INVARIANTS_GOLDEN = "tests/fixtures/preview/layout-invariants.golden";
+
+fn corpusInvariantsTable(out: std.mem.Allocator) ![]const u8 {
+    var list_arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer list_arena.deinit();
+    const w = try corpus.walk(list_arena.allocator());
+
+    var buf: std.ArrayList(u8) = .{};
+    const writer = buf.writer(out);
+    try writer.writeAll("# corpus layout invariants — every previewable fixture-mode; regenerate with UPDATE_GOLDENS=1 zig build test\n");
+    try writer.writeAll("# I0 body cells, I1 shared cells, I2 junctions, I3 non-tree nets, X crossings, B bends, S straight wires of W wires, size WxH\n");
+
+    var total = invariants.Report{};
+    for (w.entries) |entry| {
+        var scratch = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+        defer scratch.deinit();
+        const s = scratch.allocator();
+
+        const grid = try corpus.buildGrid(s, entry.path, entry.mode == .expanded);
+        const r = try invariants.check(s, grid);
+        try writer.print("{s} {s} I0={d} I1={d} I2={d} I3={d} X={d} B={d} S={d}/{d} size={d}x{d}\n", .{
+            entry.name, entry.mode.name(), r.body, r.shared, r.junction, r.tree, r.crossings, r.bends, r.straight, r.wires, grid.width, grid.height,
+        });
+        total.body += r.body;
+        total.shared += r.shared;
+        total.junction += r.junction;
+        total.tree += r.tree;
+        total.crossings += r.crossings;
+        total.bends += r.bends;
+        total.straight += r.straight;
+        total.wires += r.wires;
+    }
+    try writer.print("# totals: fixture-modes={d} skipped={d} I0={d} I1={d} I2={d} I3={d} X={d} B={d} S={d}/{d}\n", .{
+        w.entries.len, w.skipped, total.body, total.shared, total.junction, total.tree, total.crossings, total.bends, total.straight, total.wires,
+    });
+    return buf.toOwnedSlice(out);
+}
+
+test "corpus_layout_invariants" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const table = try corpusInvariantsTable(a);
+    golden.expectGolden(table, INVARIANTS_GOLDEN) catch |err| {
+        std.debug.print("layout invariants moved — current table:\n{s}", .{table});
+        return err;
+    };
 }

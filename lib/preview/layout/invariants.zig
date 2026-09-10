@@ -18,8 +18,9 @@
 //!                  is not contiguous or not axis-aligned.
 //!
 //! Also reported: `crossings` (clean perpendicular crossings between two
-//! nets), `bends` (corners over all wires), `straight` (single-segment wires)
-//! and `wires`.
+//! nets), `bends` (orientation changes over all wires), `straight` (wires
+//! with no orientation change, however many collinear pieces they were
+//! emitted in) and `wires`.
 const std = @import("std");
 const layout = @import("layout");
 
@@ -83,8 +84,17 @@ pub fn check(arena: std.mem.Allocator, grid: LayoutGrid) !Report {
 
     for (grid.wires, 0..) |w, wi| {
         report.wires += 1;
-        if (w.segments.len == 1) report.straight += 1;
-        if (w.segments.len > 1) report.bends += @intCast(w.segments.len - 1);
+        // A bend is a change of orientation between consecutive segments; a
+        // wire whose segments all run the same way is straight however many
+        // pieces it was emitted in (the old router splits an aligned wire at
+        // its track column, so counting segments would never find one).
+        var wire_bends: u32 = 0;
+        var si_prev: usize = 0;
+        while (si_prev + 1 < w.segments.len) : (si_prev += 1) {
+            if (isHorizontal(w.segments[si_prev]) != isHorizontal(w.segments[si_prev + 1])) wire_bends += 1;
+        }
+        report.bends += wire_bends;
+        if (w.segments.len > 0 and wire_bends == 0) report.straight += 1;
 
         const key = NetKey{ .src_id = w.src_id, .src_port = w.src_port };
         const net_entry = try nets.getOrPut(key);
@@ -340,7 +350,17 @@ test "invariants: a disconnected net and a broken chain count as non-tree" {
     const r = try check(arena.allocator(), mkGrid(&.{}, &wires));
     try testing.expectEqual(@as(u32, 2), r.tree);
     try testing.expectEqual(@as(u32, 4), r.wires);
-    try testing.expectEqual(@as(u32, 2), r.bends);
+    try testing.expectEqual(@as(u32, 1), r.bends); // only the `ok` wire turns
+}
+
+test "invariants: a wire split into collinear pieces is still straight" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    // The old router's shape for an aligned wire: source → track, track → sink.
+    const segs = [_]Segment{ sg(5, 1, 6, 1), sg(6, 1, 9, 1) };
+    const wires = [_]RoutedWire{wire(0, 1, &segs)};
+    const r = try check(arena.allocator(), mkGrid(&.{}, &wires));
+    try testing.expectEqual(Report{ .straight = 1, .wires = 1 }, r);
 }
 
 test "invariants: and_of_not's fused cells reproduce as shared" {

@@ -93,6 +93,7 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 
 ### [preview-layout.md](preview-layout.md)
 - The parity contract is a JSON projection, not either side's native type (`dump_json.zig`, camelCase common subset, one golden per fixture-mode)
+- The corpus invariants are the measurement of record (`invariants.zig`: I0–I3 per net over segments only, every fixture-mode listed, zero from Phase 3)
 
 ## Conventions
 
