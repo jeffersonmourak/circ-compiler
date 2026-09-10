@@ -210,14 +210,23 @@ export function preloadsFor(images: RomImageMap, roms: readonly MemorySymbol[]):
   return out;
 }
 
-/** The runtime surface an image is written through. Every member is optional:
- *  an artifact built before memories existed has none of them. */
-export interface MemoryHost {
-  memory?: { buffer: ArrayBufferLike };
-  getMemInfo?: (id: number) => number;
-  memBuffer?: (id: number) => number;
-  memLoad?: (id: number, len: number) => number;
-  memClear?: (id: number) => number;
+/**
+ * The slice of circ-renderer's `CircRuntime` a memory needs.
+ *
+ * Structural rather than imported, so this module pulls no renderer code
+ * into the playground's eager bundle and a test can hand it a fake. The
+ * renderer owns the eight raw exports, the packed shape word and the
+ * staging-buffer dance; nothing here reaches past these three calls.
+ */
+export interface MemoryRuntime {
+  memories(): readonly {
+    id: number;
+    name: string;
+    info: { kind: 'rom' | 'ram'; width: number; addrWidth: number };
+  }[];
+  /** `0` on success; the runtime's own code otherwise. */
+  loadMemImage(id: number, bytes: Uint8Array): number;
+  clearMem(id: number): number;
 }
 
 export interface ApplyResult {
@@ -225,61 +234,36 @@ export interface ApplyResult {
   errors: Map<string, string>;
 }
 
-/** `(kind << 16) | (W << 8) | A`, or -1. */
-export function decodeMemInfo(info: number): { kind: number; width: number; addrWidth: number } | null {
-  if (info < 0) return null;
-  return { kind: (info >> 16) & 0xff, width: (info >> 8) & 0xff, addrWidth: info & 0xff };
-}
-
 /**
  * Write every planned image into a running circuit.
  *
- * The id join is by declared name, and each id is checked with `getMemInfo`
- * before anything is written: a mismatch means the artifact and the analysis
- * have drifted apart, and writing to the wrong memory is worse than not
- * writing at all.
- *
- * `memBuffer` may grow linear memory, so the byte view is re-taken after every
- * call — a view held across it is detached and writes into nothing.
+ * The join is by declared name, against what the RUNTIME says it has: a name
+ * the runtime does not confirm, or one whose shape differs from what the
+ * analysis validated the image against, is refused — the artifact and the
+ * analysis have drifted apart, and writing to the wrong memory is worse than
+ * not writing at all.
  */
 export function applyRomImages(
-  host: MemoryHost,
+  runtime: MemoryRuntime,
   plan: RomPlan,
-  idOf: (name: string) => number | null,
   roms: readonly MemorySymbol[],
 ): ApplyResult {
   const applied: string[] = [];
   const errors = new Map(plan.errors);
-  if (!host.memory || !host.getMemInfo || !host.memBuffer || !host.memLoad) return { applied, errors };
+  const found = new Map(runtime.memories().map((m) => [m.name, m]));
 
   for (const write of plan.writes) {
-    const id = idOf(write.name);
-    if (id === null) {
+    const target = found.get(write.name);
+    if (!target) {
       errors.set(write.name, `${write.name} is not in the compiled circuit.`);
       continue;
     }
     const mem = roms.find((m) => m.name === write.name);
-    const info = decodeMemInfo(host.getMemInfo(id));
-    if (!info || !mem || info.width !== mem.width || info.addrWidth !== mem.addrWidth) {
-      // Writing to a memory whose shape is not the one that was validated
-      // against is worse than not writing.
+    if (!mem || target.info.width !== mem.width || target.info.addrWidth !== mem.addrWidth) {
       errors.set(write.name, `${write.name} does not match the compiled circuit; not loaded.`);
       continue;
     }
-
-    if (write.bytes === null) {
-      if (host.memClear) host.memClear(id);
-      applied.push(write.name);
-      continue;
-    }
-    const ptr = host.memBuffer(id);
-    if (ptr < 0) {
-      errors.set(write.name, `${write.name} has no staging buffer.`);
-      continue;
-    }
-    // Re-taken here, after memBuffer, and never hoisted out of the loop.
-    new Uint8Array(host.memory.buffer).set(write.bytes, ptr);
-    const rc = host.memLoad(id, write.bytes.length);
+    const rc = write.bytes === null ? runtime.clearMem(target.id) : runtime.loadMemImage(target.id, write.bytes);
     if (rc !== 0) {
       errors.set(write.name, `${write.name} was refused by the runtime (code ${rc}).`);
       continue;

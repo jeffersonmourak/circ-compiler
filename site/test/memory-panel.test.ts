@@ -241,6 +241,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { callOp, instantiateLibcirc, type LibcircExports } from '../src/scripts/libcirc-abi.ts';
 import { requestFor, splitFiles } from '../src/utils/split-files.ts';
+import { CircRuntime } from 'circ-renderer';
 import { applyRomImages, parseRomImage, romPlan, romSymbols, type MemorySymbol } from '../src/utils/rom-image.ts';
 import { editWord, imageFromBytes } from '../src/scripts/rom-words.ts';
 import { examples } from '../src/content/examples.ts';
@@ -264,24 +265,20 @@ async function memoriesOf(source: string): Promise<MemorySymbol[]> {
   return romSymbols(analysis.symbols, root ? root.file_id : null);
 }
 
-/** Compile a source and instantiate the artifact, ready to drive. */
-async function runCircuit(source: string) {
+/** Compile a source and run the artifact through the renderer's runtime, the
+ *  way every canvas on the site does. */
+async function runCircuit(source: string): Promise<CircRuntime> {
   const w = await lib();
   const out = callOp(w, 'compile', requestFor(splitFiles(source)));
   expect(out.status).toBe(0);
-  const mod = await WebAssembly.compile(out.bytes as unknown as BufferSource);
-  const { exports } = await WebAssembly.instantiate(mod, {
-    env: { debugEnabled: () => 0, onDebugLog: () => {} },
-  });
-  const host = exports as unknown as Record<string, (...a: never[]) => never> & {
-    memory: { buffer: ArrayBufferLike };
-  };
-  const [section] = WebAssembly.Module.customSections(mod, 'circ.topology.v0.min');
-  const topo = new Uint8Array(section);
-  const ptr = (host.topology_alloc as unknown as (n: number) => number)(topo.length);
-  new Uint8Array(host.memory.buffer).set(topo, ptr);
-  (host.init as unknown as () => void)();
-  return host as unknown as Record<string, unknown> & { memory: { buffer: ArrayBufferLike } };
+  return CircRuntime.loadFromBytes(new Uint8Array(out.bytes));
+}
+
+/** The one memory the source declares, and a reader over its cells. */
+function bind(rt: CircRuntime) {
+  const [mem] = rt.memories();
+  expect(mem).toBeDefined();
+  return { id: mem.id, read: (addr: number): Cell => rt.readMemWord(mem.id, addr) };
 }
 
 describe.skipIf(skip)('which circuits map a memory', () => {
@@ -312,24 +309,9 @@ describe.skipIf(skip)('reading and writing a running memory', () => {
   const source = 'input[4] pc\nrom code[8, 4](addr = pc.out)\noutput[8] out(in = code.out)\n';
   const mem: MemorySymbol = { name: 'code', kind: 'rom', width: 8, addrWidth: 4 };
 
-  /** The id join the panel does, and the two getters it reads through. */
-  function bind(host: Record<string, unknown>) {
-    const getInfo = host.getMemInfo as (id: number) => number;
-    let id = -1;
-    for (let candidate = 0; candidate < 64; candidate += 1) {
-      if (getInfo(candidate) >= 0) { id = candidate; break; }
-    }
-    expect(id).toBeGreaterThanOrEqual(0);
-    const read = (addr: number): Cell => ({
-      value: BigInt((host.getMemValue as (i: number, a: number) => bigint)(id, addr)),
-      defined: BigInt((host.getMemDefined as (i: number, a: number) => bigint)(id, addr)),
-    });
-    return { id, read };
-  }
-
   test('an unloaded rom reads as unknown, not as zeros', async () => {
-    const host = await runCircuit(source);
-    const { read } = bind(host);
+    const rt = await runCircuit(source);
+    const { read } = bind(rt);
     const rows = dumpRows(read, { start: 0, count: 16 }, 8, mem.width, 'hex');
     const texts = rows.flatMap((r) => r.cells.map((c) => c.text));
     expect(texts).toHaveLength(16);
@@ -340,16 +322,11 @@ describe.skipIf(skip)('reading and writing a running memory', () => {
   });
 
   test('a loaded image reads back word for word', async () => {
-    const host = await runCircuit(source);
-    const { id, read } = bind(host);
+    const rt = await runCircuit(source);
+    const { id, read } = bind(rt);
     const parsed = parseRomImage('de ad be ef', mem);
     expect(parsed.ok).toBe(true);
-    const result = applyRomImages(
-      host as never,
-      romPlan(new Map([['code', 'de ad be ef']]), [mem]),
-      () => id,
-      [mem],
-    );
+    const result = applyRomImages(rt, romPlan(new Map([['code', 'de ad be ef']]), [mem]), [mem]);
     expect([...result.errors]).toEqual([]);
     expect(result.applied).toEqual(['code']);
 
@@ -361,9 +338,9 @@ describe.skipIf(skip)('reading and writing a running memory', () => {
   });
 
   test('a word the reader types is written, and ? takes it back', async () => {
-    const host = await runCircuit(source);
-    const { id, read } = bind(host);
-    const write = host.setMemWord as (i: number, a: number, v: bigint, d: bigint) => number;
+    const rt = await runCircuit(source);
+    const { id, read } = bind(rt);
+    const write = (i: number, a: number, v: bigint, d: bigint) => rt.writeMemWord(i, a, v, d);
 
     const typed = parseWord('7f', mem.width, 'hex');
     expect(typed.ok).toBe(true);
@@ -381,11 +358,11 @@ describe.skipIf(skip)('reading and writing a running memory', () => {
   });
 
   test('clear makes every word unknown again', async () => {
-    const host = await runCircuit(source);
-    const { id, read } = bind(host);
-    applyRomImages(host as never, romPlan(new Map([['code', 'ff'.repeat(16)]]), [mem]), () => id, [mem]);
+    const rt = await runCircuit(source);
+    const { id, read } = bind(rt);
+    applyRomImages(rt, romPlan(new Map([['code', 'ff'.repeat(16)]]), [mem]), [mem]);
     expect(formatWord(read(0), mem.width, 'hex')).toBe('ff');
-    expect((host.memClear as (i: number) => number)(id)).toBe(0);
+    expect(rt.clearMem(id)).toBe(0);
     const rows = dumpRows(read, { start: 0, count: 16 }, 16, mem.width, 'hex');
     expect(new Set(rows[0].cells.map((c) => c.text))).toEqual(new Set([UNKNOWN]));
   });
@@ -395,19 +372,6 @@ describe.skipIf(skip)('a grid edit reaching a running rom', () => {
   const source = 'input[4] pc\nrom code[8, 4](addr = pc.out)\noutput[8] out(in = code.out)\n';
   const mem: MemorySymbol = { name: 'code', kind: 'rom', width: 8, addrWidth: 4 };
 
-  function bindRom(host: Record<string, unknown>) {
-    const getInfo = host.getMemInfo as (id: number) => number;
-    let id = -1;
-    for (let candidate = 0; candidate < 64; candidate += 1) {
-      if (getInfo(candidate) >= 0) { id = candidate; break; }
-    }
-    const read = (addr: number): Cell => ({
-      value: BigInt((host.getMemValue as (i: number, a: number) => bigint)(id, addr)),
-      defined: BigInt((host.getMemDefined as (i: number, a: number) => bigint)(id, addr)),
-    });
-    return { id, read };
-  }
-
   test('writing one word past the end lands as the prefix rule says', async () => {
     // The whole loop: a cell edit becomes an image, the image is loaded into a
     // real circuit, and the circuit reads back what the grid promised.
@@ -416,14 +380,9 @@ describe.skipIf(skip)('a grid edit reaching a running rom', () => {
     if (!edit.ok) return;
     expect([...edit.edit.implied].sort((a, b) => a - b)).toEqual([0, 1, 2, 3, 4]);
 
-    const host = await runCircuit(source);
-    const { id, read } = bindRom(host);
-    const applied = applyRomImages(
-      host as never,
-      romPlan(new Map([[mem.name, edit.edit.text]]), [mem]),
-      () => id,
-      [mem],
-    );
+    const rt = await runCircuit(source);
+    const { id, read } = bind(rt);
+    const applied = applyRomImages(rt, romPlan(new Map([[mem.name, edit.edit.text]]), [mem]), [mem]);
     expect(applied.applied).toEqual([mem.name]);
 
     // 0 through 4 are real zeros in the circuit, not unknowns: the format had
@@ -445,13 +404,13 @@ describe.skipIf(skip)('a grid edit reaching a running rom', () => {
     if (!cleared.ok) return;
     expect(cleared.edit.text).toBe('');
 
-    const host = await runCircuit(source);
-    const { id, read } = bindRom(host);
-    applyRomImages(host as never, romPlan(new Map([[mem.name, written.edit.text]]), [mem]), () => id, [mem]);
+    const rt = await runCircuit(source);
+    const { id, read } = bind(rt);
+    applyRomImages(rt, romPlan(new Map([[mem.name, written.edit.text]]), [mem]), [mem]);
     expect(formatWord(read(0), mem.width, 'hex')).toBe('00');
     // An empty image is a legal instruction that reaches the runtime as a
     // clear, so the filler zeros go away rather than lingering.
-    applyRomImages(host as never, romPlan(new Map([[mem.name, cleared.edit.text]]), [mem]), () => id, [mem]);
+    applyRomImages(rt, romPlan(new Map([[mem.name, cleared.edit.text]]), [mem]), [mem]);
     for (let addr = 0; addr < 8; addr += 1) {
       expect(formatWord(read(addr), mem.width, 'hex')).toBe(UNKNOWN);
     }
@@ -463,15 +422,15 @@ describe.skipIf(skip)('a grid edit reaching a running rom', () => {
     expect(fromFile).toEqual({ ok: true, text: 'deadbeef' });
     if (!fromFile.ok) return;
 
-    const host = await runCircuit(source);
-    const { id, read } = bindRom(host);
-    applyRomImages(host as never, romPlan(new Map([[mem.name, fromFile.text]]), [mem]), () => id, [mem]);
+    const rt = await runCircuit(source);
+    const { id, read } = bind(rt);
+    applyRomImages(rt, romPlan(new Map([[mem.name, fromFile.text]]), [mem]), [mem]);
     const viaFile = [0, 1, 2, 3].map((a) => formatWord(read(a), mem.width, 'hex'));
     expect(viaFile).toEqual(['de', 'ad', 'be', 'ef']);
 
-    const host2 = await runCircuit(source);
-    const b2 = bindRom(host2);
-    applyRomImages(host2 as never, romPlan(new Map([[mem.name, 'de ad be ef']]), [mem]), () => b2.id, [mem]);
+    const rt2 = await runCircuit(source);
+    const b2 = bind(rt2);
+    applyRomImages(rt2, romPlan(new Map([[mem.name, 'de ad be ef']]), [mem]), [mem]);
     expect([0, 1, 2, 3].map((a) => formatWord(b2.read(a), mem.width, 'hex'))).toEqual(viaFile);
   });
 });

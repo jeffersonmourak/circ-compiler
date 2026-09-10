@@ -7,7 +7,7 @@ import { resolve } from 'node:path';
 import { decodeFullTopology, ComponentKind } from 'circ-renderer';
 import { callOp, instantiateLibcirc } from '../src/scripts/libcirc-abi.ts';
 import { RENDERER_PIN_VERSION, SUPPORTED_TOPOLOGY_VERSIONS } from '../src/utils/renderer-versions.ts';
-import { CircCanvas } from 'circ-renderer';
+import { CircCanvas, CircRuntime } from 'circ-renderer';
 import { examples } from '../src/content/examples.ts';
 
 const skip = process.env.SKIP_LIBCIRC_TEST === '1';
@@ -48,6 +48,12 @@ describe('renderer pin', () => {
     expect(typeof CircCanvas.prototype.setInputValue).toBe('function');
     expect(typeof CircCanvas.prototype.getInputValue).toBe('function');
     expect(typeof CircCanvas.prototype.boxOf).toBe('function');
+    // Phase 2: the typed memory API. Every memory read and write on the site
+    // goes through these now, and nothing reaches through `raw` any more.
+    for (const method of ['memories', 'memInfo', 'readMemWord', 'writeMemWord', 'loadMemImage', 'storeMemImage', 'clearMem']) {
+      expect(`${method}: ${typeof (CircRuntime.prototype as unknown as Record<string, unknown>)[method]}`).toBe(`${method}: function`);
+    }
+    expect(Object.getOwnPropertyDescriptor(CircRuntime.prototype, 'hasMemory')?.get).toBeDefined();
   });
 
   test.skipIf(skip)('the pinned renderer decodes what libcirc.wasm emits', async () => {

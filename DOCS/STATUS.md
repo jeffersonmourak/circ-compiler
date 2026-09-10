@@ -913,3 +913,22 @@ Before this, a click drove every bit of a pin to one or to zero, and there was n
 3. **The unreachable "older renderer" branch is gone (G11).** The replay it guarded now requires `setInputValue`, which the pin test asserts, and its fallback called a `readSignal` that has never existed in any renderer version. Deleted in the same edit rather than left for Phase 5.
 4. **A design correction made on the renderer side, recorded here because the site depends on it.** The plan seeded the field from the canvas's own memory of what it had driven. The runtime drives every input to Low at load, so a fresh pin would have opened a field showing `?` over a badge reading `0x0`. The toggle, the seed and an edit request all read the runtime's value now.
 5. **The site's guard is the version pin, and it works.** Setting `RENDERER_PIN_VERSION` one phase back fails `renderer-pin.test.ts` immediately, and the same test now probes `setInputValue`, `getInputValue` and `boxOf` on the prototype.
+
+## 2026-09-10 — Renderer sync, Phase 2 — memory through a typed door
+
+**What shipped:** The site pins circ-renderer `de92703` (`2.2.0-alpha.2`), which types the whole memory surface on `CircRuntime`: `memories()`, `memInfo`, `readMemWord`, `writeMemWord`, `loadMemImage`, `storeMemImage`, `clearMem`, and `hasMemory`. Every memory read and write on the site now goes through those. Nothing reaches through `raw` any more, and the site's own copy of the packed-shape decoder, its `MemoryHost` interface, and the gallery's own name-to-id join are deleted — the runtime confirms names and shapes itself.
+
+Two components and two modules moved: `rom-image.ts`'s `applyRomImages` takes the runtime and drops its `idOf` parameter; `canvas-memory.ts` shrinks to the image parse plus one loop; `LiveCanvas.astro` and `Playground.astro` type their `runtime` as the renderer's own `CircRuntime` through an erased type import, so the memory panel's four call sites are plain method calls with no casts.
+
+**Files touched:** `site/package.json`, `site/bun.lock`, `site/src/utils/renderer-versions.ts`, `site/src/utils/rom-image.ts`, `site/src/scripts/canvas-memory.ts`, `site/src/components/LiveCanvas.astro`, `site/src/components/Playground.astro`, `site/test/rom-image.test.ts`, `site/test/canvas-memory.test.ts`, `site/test/memory-panel.test.ts`, `site/test/renderer-pin.test.ts`.
+
+**Tests:** `bun test` 403 pass across 32 files, from 408 — five cases left with the code they tested (four for the gallery's own memory join, one for the decoder), and the renderer carries their replacements. `bun --bun run typecheck` 0 errors. Build and `bun run bundle` green; `/gallery` and `/` are 1.9 KB gzip and `/playground` 28.8 KB, each 0.1 KB lighter. On the renderer: 71 tests, from 57.
+
+**Next slice:** Phase 3 of the plan, highlight on every kind and site-matching skins.
+
+**Notes:**
+
+1. **`hasMemory` is a property of the compiler, not the circuit — found on the renderer side, recorded here because the site relies on it.** Every artifact from the current compiler embeds the same runtime, so a half-adder carries all eight memory exports and declares no memory. `hasMemory` says "this compiler", `memories()` says "this circuit", and the renderer's `MEM_ABSENT` status is reserved for the family being truly absent, which only the pre-memory v1 fixture is. The playground's `memHost()` checks `hasMemory` and then joins by name, which is the right pair.
+2. **The one memory rule the site used to own now has a test that can fail.** The compiler's docs say `memBuffer` may grow linear memory, so a byte view must be taken after it. No shipped artifact provokes that — their staging buffers fit in pages already allocated — so the site's old "views are re-taken" counter test was asserting a discipline nothing could break. The renderer now has a test with a fake instance whose `memBuffer` swaps the buffer, and a hoisted view fails it.
+3. **The integration tests run the artifact the way the site does.** `memory-panel.test.ts` and `canvas-memory.test.ts` used to instantiate the `.wasm` by hand and scan ids for a memory. They boot through `CircRuntime.loadFromBytes` and ask `memories()` now, which is both shorter and the truth.
+4. **The site's guard is the version pin, again.** Setting it one phase back fails `renderer-pin.test.ts` at once, and the probe now names the seven memory methods and the `hasMemory` getter.

@@ -260,13 +260,14 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
 
 <script>
   import { getSharedClient, type LibcircVersion, type WorkerReply } from '../scripts/libcirc-client.ts';
+  // TYPE only: erased at build, so the renderer stays behind its dynamic import.
+  import type { CircRuntime } from 'circ-renderer';
   import { joinConflicts, requestFor, rootOf, PLAYGROUND_DIR } from '../utils/split-files.ts';
   import { createSplitter } from '../scripts/splitter.ts';
   import { fnv1a } from '../utils/artifact-hash.ts';
   import { mountSettingsDrawer, optionsFor, truthTableRefusal } from '../scripts/settings-drawer.ts';
   import {
     applyRomImages,
-    decodeMemInfo,
     maxWords,
     parseRomImage,
     preloadsFor,
@@ -1329,33 +1330,28 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     /** Roms whose hex escape hatch is showing. */
     const hexOpen = new Set<string>();
 
-    /** The running circuit's exports, or null when nothing is simulating.
-     *  Contents can only be read while the Simulate tab has built a view. */
-    function memHost(): Record<string, unknown> | null {
-      const raw = sim.view?.runtime.raw;
-      return raw && typeof raw.getMemValue === 'function' ? raw : null;
+    /** The running circuit's runtime, or null when nothing is simulating or
+     *  the artifact predates memories. Contents can only be read while the
+     *  Simulate tab has built a view. */
+    function memHost(): CircRuntime | null {
+      const rt = sim.view?.runtime;
+      return rt && rt.hasMemory ? rt : null;
     }
 
-    /** The component id of a declared memory in the running circuit, checked
-     *  against `getMemInfo` so a drifted artifact reads nothing rather than
-     *  reading the wrong memory. */
+    /** The id of a declared memory in the running circuit, from the runtime's
+     *  own list and checked against the analysis's shape, so a drifted
+     *  artifact reads nothing rather than reading the wrong memory. */
     function memIdOf(mem: MemorySymbol): number | null {
-      const view = sim.view;
       const host = memHost();
-      if (!view || !host) return null;
-      const c = view.runtime.topology.components.find(
-        (x) => x.name === mem.name && (x.origin?.length ?? 0) === 0,
+      if (!host) return null;
+      const found = host.memories().find(
+        (m) => m.name === mem.name && m.info.width === mem.width && m.info.addrWidth === mem.addrWidth,
       );
-      if (!c) return null;
-      const info = decodeMemInfo((host.getMemInfo as (id: number) => number)(c.id));
-      if (!info || info.width !== mem.width || info.addrWidth !== mem.addrWidth) return null;
-      return c.id;
+      return found ? found.id : null;
     }
 
-    function readCell(host: Record<string, unknown>, id: number, addr: number): Cell {
-      const value = (host.getMemValue as (i: number, a: number) => bigint)(id, addr);
-      const defined = (host.getMemDefined as (i: number, a: number) => bigint)(id, addr);
-      return { value: BigInt(value), defined: BigInt(defined) };
+    function readCell(host: CircRuntime, id: number, addr: number): Cell {
+      return host.readMemWord(id, addr);
     }
 
     /** The tab appears and disappears with the declared set. */
@@ -1869,12 +1865,12 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     function writeLiveWord(mem: MemorySymbol, addr: number, value: bigint, defined: bigint) {
       const host = memHost();
       const id = memIdOf(mem);
-      if (!host || id === null || typeof host.setMemWord !== 'function') {
+      if (!host || id === null) {
         status.textContent = `${mem.name} is not running.`;
         renderMemory({ force: true });
         return;
       }
-      const rc = (host.setMemWord as (i: number, a: number, v: bigint, d: bigint) => number)(id, addr, value, defined);
+      const rc = host.writeMemWord(id, addr, value, defined);
       status.textContent = rc === 0
         ? `${mem.name}[${formatAddress(addr, mem.addrWidth)}] ${defined === 0n ? 'is unknown again' : 'set'}.`
         : `${mem.name} refused the write (code ${rc}).`;
@@ -1892,8 +1888,8 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       }
       const host = memHost();
       const id = memIdOf(mem);
-      if (!host || id === null || typeof host.memClear !== 'function') return;
-      const rc = (host.memClear as (i: number) => number)(id);
+      if (!host || id === null) return;
+      const rc = host.clearMem(id);
       status.textContent = rc === 0
         ? `${mem.name} cleared; every word is unknown.`
         : `${mem.name} refused the clear (code ${rc}).`;
@@ -1939,18 +1935,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       if (!view) return;
       const mems = currentRoms();
       const plan = romPlan(romImages, mems);
-      const idOf = (name: string) => {
-        const c = view.runtime.topology.components.find(
-          (x) => x.name === name && (x.origin?.length ?? 0) === 0,
-        );
-        return c ? c.id : null;
-      };
-      const result = applyRomImages(
-        view.runtime.raw ?? {},
-        plan,
-        idOf,
-        mems,
-      );
+      const result = applyRomImages(view.runtime, plan, mems);
       for (const mem of mems) updateRomStatus(mem);
       if (result.applied.length > 0) view.view.refreshState();
     }
@@ -2647,13 +2632,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     /** What a root input pin holds: the renderer's own BitValue shape. */
     type PinValue = { value: bigint; defined: bigint; width: number };
     type CircView = {
-      runtime: {
-        topology: { components: { id: number; kind: number; name: string; origin: unknown[] }[] };
-        setPinSignal(id: number, s: Signal): void;
-        run(): void;
-        /** The artifact's own exports; the memory family lives here. */
-        raw?: Record<string, unknown>;
-      };
+      runtime: CircRuntime;
       view: {
         refreshState(): void;
         setInputSignal(id: number, s: Signal): void;

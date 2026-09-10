@@ -54,19 +54,13 @@ const memoryAttr = memory && Object.keys(memory).length > 0 ? JSON.stringify(mem
   // renderer + WASM are dynamically imported on first click so a reader who
   // never opens any simulation pays zero bytes for them on initial load.
 
-  // TYPE only: the value side is imported dynamically below, so a reader who
-  // never opens a simulation pays nothing for it — the same rule the renderer
-  // and the theme module already follow on this page.
-  import type { TopologyLike } from '../scripts/canvas-memory.ts';
+  // TYPE only: erased at build, so a reader who never opens a simulation pays
+  // nothing for it — the same rule the renderer and the theme module already
+  // follow on this page.
+  import type { CircRuntime } from 'circ-renderer';
 
   type CircView = {
-    runtime: {
-      destroy(): void;
-      /** The flattened component list, which is where a memory's id lives. */
-      topology: TopologyLike;
-      /** The artifact's own exports; the memory family lives here. */
-      raw?: Record<string, unknown>;
-    };
+    runtime: CircRuntime;
     view: { refreshState(): void };
     canvas: HTMLCanvasElement;
     destroy(): void;
@@ -101,7 +95,7 @@ const memoryAttr = memory && Object.keys(memory).length > 0 ? JSON.stringify(mem
     const { loadMemoryImages, readMemoryAttr } = await import('../scripts/canvas-memory.ts');
     const images = readMemoryAttr(container.dataset.circMemory);
     if (Object.keys(images).length === 0) return;
-    const result = loadMemoryImages(view.runtime.raw ?? {}, view.runtime.topology, images);
+    const result = loadMemoryImages(view.runtime, images);
     for (const [name, message] of result.errors) {
       console.error('LiveCanvas: could not load memory', name, message);
     }
