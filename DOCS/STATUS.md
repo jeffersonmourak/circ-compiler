@@ -947,6 +947,23 @@ Those four kinds have site skins now — `drawSlice`, `drawConcat`, and `drawMem
 
 **Notes:**
 
-1. **The guard flipped, and the old one had been asserting the wrong thing.** `circ-theme-hover.test.ts` used to require that every registered skin branch on `hovered` and draw a ring — which is exactly the design that left four kinds with no ring at all, since a kind without a site skin has no branch to check. It now asserts the opposite: the theme sets `highlight`, no skin body calls `drawHoverRing`, and the helper has exactly one caller. Negative proof: putting a ring back into `drawSubcircuit` fails it.
+1. **The guard flipped, and the old one had been asserting the wrong thing.** `circ-theme-hover.test.ts` used to require that every registered skin branch on `hovered` and draw a ring — which is exactly the design that left four kinds with no ring at all, since a kind without a site skin has no branch to check. It now asserts the opposite: the theme sets `highlight`, no skin body calls `drawHoverRing`, and the helper has exactly one caller. Negative proof: putting a ring back into `drawMemory` fails it. *(Corrected in place: the entry first named `drawSubcircuit`, and that proof had not actually run — its anchor missed the file and the assertion threw before injecting anything, so the test ran against correct code. The proof was rerun against `drawMemory` before the next commit; see the Phase 4 entry.)*
 2. **A skin may still react to `hovered`, and the input pin does.** The ring is uniform; the pin changing its own fill is an extra the canvas leaves open. Both paths stay, which is what kept that skin unchanged.
 3. **The renderer's own default ring exists for hosts that skin nothing.** The gallery's theme is the site's, so it gets the site's ring; a host using `baseTheme` gets a ring in a new `highlight` colour with no work. That is the whole reason the ring moved out of the skins.
+
+## 2026-09-10 — Renderer sync, Phase 4 — a theme flip is a redraw
+
+**What shipped:** The site pins circ-renderer `5129114` (`2.2.0-alpha.4`), which changes a live canvas's theme, cell size, padding and value base in place. Both pages used to destroy every canvas and build another on a theme flip and again when the sprite sheet finished decoding, and a canvas's contents are runtime state of one instance: the reader's toggled pins, typed bus values and loaded memory images all went with it, and the site replayed what it could. Now a theme flip calls `setTheme`, sprites arriving is a `redraw`, and a change to the value-format setting is `setValueFormat`. The gallery's rebuild-and-reload-memory path and the playground's `rebuildSim` are deleted; each page has exactly one `renderCircuit`, the first mount.
+
+**Files touched:** `site/package.json`, `site/bun.lock`, `site/src/utils/renderer-versions.ts`, `site/src/components/LiveCanvas.astro`, `site/src/components/Playground.astro`, `site/test/renderer-pin.test.ts`, `DOCS/STATUS.md` (a correction, below).
+
+**Tests:** `bun test` 405 pass across 32 files, from 404. `bun --bun run typecheck` 0 errors. Build and `bun run bundle` green; eager pages unchanged. On the renderer: 81 tests, from 76, with two negative proofs.
+
+**Next slice:** Phase 5 of the plan, types and packaging, and the site's dead weight.
+
+**Notes:**
+
+1. **A correction to the Phase 3 entry, made in place and named here.** That entry claimed a negative proof against `drawSubcircuit`. The proof had not run: its anchor no longer matched once the new skins sat between that function and the marker it searched for, the assertion threw before injecting anything, and the test ran against correct code — which my chain read as the proof passing. It was rerun before this phase against `drawMemory`, where it fails one test as claimed. The lesson is the one from the layout guard's first draft: a proof whose failure mode is "did not run" reads as success, so the injection has to assert it landed and the run has to be checked for the failure, not for the absence of success.
+2. **The pin replay is now belt and braces.** The playground still keeps `sim.pins` and replays it in `buildSim`, but `buildSim` only runs on a new artifact now, which is the one case where a replay is the right thing: the circuit changed and the reader's pins should carry across by name. A theme flip no longer reaches it.
+3. **The gallery's memory reload on rebuild is gone with the rebuild.** `applyMemory` runs once, on mount. What the reader clocked into a ram survives a theme change now, which it could not before.
+4. **A source-level guard, since the harness cannot run the renderer.** `renderer-pin.test.ts` asserts that both components re-theme through `setTheme(pickTheme())`, that neither contains a rebuild path, and that each has exactly one `renderCircuit`. Negative proof, run and checked for its failure: restoring a destroy in the gallery's theme observer fails it.

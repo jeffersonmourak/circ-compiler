@@ -1950,9 +1950,9 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         // Both output panes read a setting, so both are re-run.
         void runPreview(buildStage.seq);
         void runTruth(buildStage.seq);
-        // The canvas captures its value format at construction; a rebuild
-        // replays the pins, so nothing the reader typed is lost by it.
-        if (settings().valueFormat !== before) void rebuildSim();
+        // The canvas re-spells its badges in place; nothing is rebuilt and
+        // nothing the reader typed or loaded is touched.
+        if (settings().valueFormat !== before) sim.view?.view.setValueFormat(settings().valueFormat);
         schedule();
       },
     });
@@ -2635,6 +2635,11 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       runtime: CircRuntime;
       view: {
         refreshState(): void;
+        /** Phase 4 of the renderer sync: the look changes in place, and the
+         *  pins, typed values and memories stay. */
+        setTheme(theme: unknown): void;
+        setValueFormat(format: 'hex' | 'binary' | 'decimal'): void;
+        redraw(): void;
         setInputSignal(id: number, s: Signal): void;
         /** Phase 1 of the renderer sync: a pin driven to an exact value. The
          *  pin test asserts it exists, so it is not optional here. */
@@ -2735,16 +2740,14 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         }
         if (!sim.assetsHooked) {
           sim.assetsHooked = true;
-          onAssetsReady(() => { void rebuildSim(); });
+          // The theme's sprite sheet finished decoding: the same theme now
+          // draws with sprites, so a repaint is all it takes.
+          onAssetsReady(() => { sim.view?.view.redraw(); });
         }
       } catch (err) {
         simNote.textContent = `Could not render the circuit: ${(err as Error).message}`;
         simMount.hidden = true;
       }
-    }
-    async function rebuildSim() {
-      if (!sim.view) return;
-      await buildSim();
     }
     hooks.onArtifact = (bytes, reason) => {
       sim.bytes = bytes;
@@ -2784,7 +2787,10 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     // canvas is rebuilt; the editor reconfigures its theme compartment in place.
     new MutationObserver(() => {
       if (editorMod) editor?.setTheme(editorMod.currentThemeMode());
-      void rebuildSim();
+      // In place: the pins the reader set, the values they typed and the
+      // images they loaded are all runtime state of THIS canvas, and a
+      // rebuild used to throw every one of them away and replay what it could.
+      if (sim.view) void loadThemes().then(({ pickTheme }) => sim.view?.view.setTheme(pickTheme()));
     }).observe(document.documentElement, {
       attributes: true,
       attributeFilter: ['data-theme'],

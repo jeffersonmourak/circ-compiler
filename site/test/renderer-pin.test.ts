@@ -58,6 +58,25 @@ describe('renderer pin', () => {
     // exported so the site's own rom/ram/slice/concat skins can be built.
     expect(typeof defaultColors.highlight).toBe('string');
     for (const fn of [boxOutline, drawLabel, memoryLabel]) expect(typeof fn).toBe('function');
+    // Phase 4: a theme flip is a redraw, not a rebuild.
+    for (const method of ['setTheme', 'setCell', 'setPadding', 'setValueFormat', 'redraw']) {
+      expect(`${method}: ${typeof (CircCanvas.prototype as unknown as Record<string, unknown>)[method]}`).toBe(`${method}: function`);
+    }
+  });
+
+  test('a theme flip changes a live canvas in place, on both pages', () => {
+    // A rebuilt canvas is a new instance with empty state: the reader's pins,
+    // typed values and loaded memories are gone, and the site used to replay
+    // what it could. Neither page may go back to destroying on a theme change.
+    const gallery = readFileSync(resolve(import.meta.dir, '..', 'src', 'components', 'LiveCanvas.astro'), 'utf8');
+    const playground = readFileSync(resolve(import.meta.dir, '..', 'src', 'components', 'Playground.astro'), 'utf8');
+    for (const [name, source] of [['LiveCanvas', gallery], ['Playground', playground]] as const) {
+      expect(`${name}: ${/setTheme\(pickTheme\(\)/.test(source)}`).toBe(`${name}: true`);
+      expect(`${name}: ${/rebuildAll|rebuildSim/.test(source)}`).toBe(`${name}: false`);
+    }
+    // The only renderCircuit on each page is the first mount.
+    expect([...gallery.matchAll(/renderCircuit\(/g)]).toHaveLength(2); // import + call
+    expect([...playground.matchAll(/await renderCircuit\(/g)]).toHaveLength(1);
   });
 
   test.skipIf(skip)('the pinned renderer decodes what libcirc.wasm emits', async () => {
