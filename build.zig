@@ -1098,6 +1098,13 @@ pub fn build(b: *std.Build) void {
     const run_preview_layout_ports_tests = b.addRunArtifact(preview_layout_ports_tests);
     test_step.dependOn(&run_preview_layout_ports_tests.step);
 
+    const preview_layout_ordering_tests = b.addTest(.{
+        .name = "preview_layout_ordering_tests",
+        .root_module = fe.preview_layout_ordering,
+    });
+    const run_preview_layout_ordering_tests = b.addRunArtifact(preview_layout_ordering_tests);
+    test_step.dependOn(&run_preview_layout_ordering_tests.step);
+
     // Shared engine session: builds a live engine.Circuit from a full topology
     // and resolves root pins by name. Consumed by the truth-table builder and
     // the --sim drive loop.
@@ -1280,6 +1287,7 @@ pub fn build(b: *std.Build) void {
     });
     preview_corpus_mod.addImport("libcirc", fe.libcirc);
     preview_corpus_mod.addImport("layout", preview_layout_mod);
+    preview_corpus_mod.addImport("orchestrator", fe.preview_layout_orchestrator);
     const preview_layout_conformance_mod = b.createModule(.{
         .root_source_file = b.path("tests/preview/layout_conformance_test.zig"),
         .target = target,
@@ -1289,6 +1297,7 @@ pub fn build(b: *std.Build) void {
     preview_layout_conformance_mod.addImport("layout", preview_layout_mod);
     preview_layout_conformance_mod.addImport("preview_dump_json", preview_dump_json_mod);
     preview_layout_conformance_mod.addImport("invariants", fe.preview_layout_invariants);
+    preview_layout_conformance_mod.addImport("ordering", fe.preview_layout_ordering);
     preview_layout_conformance_mod.addImport("golden", b.createModule(.{
         .root_source_file = b.path("tests/helpers/golden.zig"),
         .target = target,

@@ -68,6 +68,7 @@ pub const Modules = struct {
     preview_layout_collapse: *Module,
     preview_layout_layering: *Module,
     preview_layout_rows: *Module,
+    preview_layout_ordering: *Module,
     preview_layout_place: *Module,
     preview_layout_route: *Module,
     preview_layout_orchestrator: *Module,
@@ -270,6 +271,7 @@ pub fn create(b: *std.Build, opts: Options) Modules {
     const preview_layout_orchestrator = mk.module("lib/preview/layout/orchestrator.zig");
     preview_layout_orchestrator.addImport("full_format", full_format);
     preview_layout_orchestrator.addImport("layout", preview_layout);
+    preview_layout_orchestrator.addImport("layout_types", preview_layout_types);
     preview_layout_orchestrator.addImport("collapse", preview_layout_collapse);
     preview_layout_orchestrator.addImport("layering", preview_layout_layering);
     preview_layout_orchestrator.addImport("rows", preview_layout_rows);
@@ -287,6 +289,12 @@ pub fn create(b: *std.Build, opts: Options) Modules {
     preview_layout_ports.addImport("layout", preview_layout);
     preview_layout_ports.addImport("layout_types", preview_layout_types);
     preview_layout_ports.addImport("place", preview_layout_place);
+    const preview_layout_ordering = mk.module("lib/preview/layout/ordering.zig");
+    preview_layout_ordering.addImport("full_format", full_format);
+    preview_layout_ordering.addImport("layout_types", preview_layout_types);
+    preview_layout_ordering.addImport("ports", preview_layout_ports);
+    preview_layout_ordering.addImport("layering", preview_layout_layering);
+    preview_layout_orchestrator.addImport("ordering", preview_layout_ordering);
 
     // ---- preview: render ----
     const preview_render_color = mk.module("lib/preview/render/color.zig");
@@ -387,6 +395,7 @@ pub fn create(b: *std.Build, opts: Options) Modules {
         .preview_layout_orchestrator = preview_layout_orchestrator,
         .preview_layout_invariants = preview_layout_invariants,
         .preview_layout_ports = preview_layout_ports,
+        .preview_layout_ordering = preview_layout_ordering,
         .preview_render_color = preview_render_color,
         .preview_render_canvas = preview_render_canvas,
         .preview_render_glyphs = preview_render_glyphs,

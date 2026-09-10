@@ -4,6 +4,8 @@ const layout = @import("layout");
 const collapse_stage = @import("collapse");
 const layering_stage = @import("layering");
 const rows_stage = @import("rows");
+const ordering_stage = @import("ordering");
+const types = @import("layout_types");
 const place_stage = @import("place");
 const route_stage = @import("route");
 
@@ -11,24 +13,51 @@ const route_stage = @import("route");
 /// `LayoutGrid`. Used by the integration tests and (eventually) Phase 3's CLI
 /// preview path. Lives in its own module to avoid a cyclic import in `layout.zig`
 /// (which only owns types; stages already import `layout` for `LayoutOptions`).
+/// Every intermediate result, for the tests that measure the stages.
+pub const Stages = struct {
+    graph: types.VirtualGraph,
+    layered: types.LayeredGraph,
+    cols: types.ColumnAssignment,
+    rows: types.RowAssignment,
+    ordering: types.Ordering,
+    grid: layout.LayoutGrid,
+};
+
 pub fn build(
     arena: std.mem.Allocator,
     topology: full_format.FullTopology,
     opts: layout.LayoutOptions,
 ) !layout.LayoutGrid {
+    return (try buildStages(arena, topology, opts)).grid;
+}
+
+pub fn buildStages(
+    arena: std.mem.Allocator,
+    topology: full_format.FullTopology,
+    opts: layout.LayoutOptions,
+) !Stages {
     const graph = try collapse_stage.collapse(arena, topology, opts);
     // Phase 1 of the layout rewrite: layers (with dummies for long edges)
     // replace columns; the old row, place and route stages still consume
-    // the ColumnAssignment view over the real nodes.
+    // the ColumnAssignment view over the real nodes, and the old row order
+    // is lifted into an Ordering so its crossings can be counted.
     const layered = try layering_stage.layer(arena, graph);
     const cols = try layering_stage.toColumns(arena, layered, graph.nodes.len);
     const rows = try rows_stage.assignRows(arena, graph, cols);
+    const ordering = try ordering_stage.fromRows(arena, layered, rows);
     const placed = try place_stage.place(arena, graph, cols, rows, opts);
     const route_result = try route_stage.route(arena, graph, placed);
     return .{
-        .width = route_result.width,
-        .height = route_result.height,
-        .components = placed,
-        .wires = route_result.wires,
+        .graph = graph,
+        .layered = layered,
+        .cols = cols,
+        .rows = rows,
+        .ordering = ordering,
+        .grid = .{
+            .width = route_result.width,
+            .height = route_result.height,
+            .components = placed,
+            .wires = route_result.wires,
+        },
     };
 }

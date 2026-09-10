@@ -13,6 +13,7 @@
 const std = @import("std");
 const libcirc = @import("libcirc");
 const layout = @import("layout");
+const orchestrator = @import("orchestrator");
 
 pub const Mode = enum {
     collapsed,
@@ -48,6 +49,16 @@ pub fn buildGrid(arena: std.mem.Allocator, path: []const u8, expand_macros: bool
     if (front.hasErrors()) return error.UnexpectedDiagnostics;
     const topology = try libcirc.modes.buildTopology(arena, &front, &failure);
     return libcirc.modes.buildLayout(arena, topology, .{ .expand_macros = expand_macros }, &failure);
+}
+
+/// Every stage's output for the same build (the tests that measure a
+/// stage read this; `buildGrid` is the same pipeline without the extras).
+pub fn buildStages(arena: std.mem.Allocator, path: []const u8, expand_macros: bool) !orchestrator.Stages {
+    var failure: libcirc.frontend.Failure = undefined;
+    const front = try libcirc.frontend.run(arena, path, &.{}, .project, &failure);
+    if (front.hasErrors()) return error.UnexpectedDiagnostics;
+    const topology = try libcirc.modes.buildTopology(arena, &front, &failure);
+    return orchestrator.buildStages(arena, topology, .{ .expand_macros = expand_macros });
 }
 
 fn hasSubcircuit(grid: layout.LayoutGrid) bool {
