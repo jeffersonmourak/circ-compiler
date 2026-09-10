@@ -3,7 +3,6 @@ const full_format = @import("full_format");
 const layout = @import("layout");
 const collapse_stage = @import("collapse");
 const layering_stage = @import("layering");
-const rows_stage = @import("rows");
 const ordering_stage = @import("ordering");
 const types = @import("layout_types");
 const place_stage = @import("place");
@@ -38,13 +37,12 @@ pub fn buildStages(
 ) !Stages {
     const graph = try collapse_stage.collapse(arena, topology, opts);
     // Phase 1 of the layout rewrite: layers (with dummies for long edges)
-    // replace columns; the old row, place and route stages still consume
-    // the ColumnAssignment view over the real nodes, and the old row order
-    // is lifted into an Ordering so its crossings can be counted.
+    // and a port-aware ordering replace columns and rows; the old place and
+    // route stages still consume the column/row views over the real nodes.
     const layered = try layering_stage.layer(arena, graph);
     const cols = try layering_stage.toColumns(arena, layered, graph.nodes.len);
-    const rows = try rows_stage.assignRows(arena, graph, cols);
-    const ordering = try ordering_stage.fromRows(arena, layered, rows);
+    const ordering = try ordering_stage.order(arena, graph, layered);
+    const rows = try ordering_stage.toRows(arena, layered, ordering, graph.nodes.len);
     const placed = try place_stage.place(arena, graph, cols, rows, opts);
     const route_result = try route_stage.route(arena, graph, placed);
     return .{

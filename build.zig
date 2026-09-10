@@ -1208,12 +1208,6 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_preview_layout_layering_tests.step);
 
     // Phase 2 slice 4: Stage 3 — rows
-    const preview_layout_rows_mod = fe.preview_layout_rows;
-    const preview_layout_rows_tests = b.addTest(.{
-        .root_module = preview_layout_rows_mod,
-    });
-    const run_preview_layout_rows_tests = b.addRunArtifact(preview_layout_rows_tests);
-    test_step.dependOn(&run_preview_layout_rows_tests.step);
 
     // Phase 2 slice 5: Stage 4 — place
     const preview_layout_place_mod = fe.preview_layout_place;
