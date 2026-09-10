@@ -1,10 +1,10 @@
 # Archived plan: zig-free-cli
 
-**Canonical commit:** `f2f43c7f496407f9ee601f02377baca0eed3c53c` (`f2f43c7 Make linux-docker e2e Zig-free in the runtime image`)
+**Canonical commit:** `f2f43c7f496407f9ee601f02377baca0eed3c53c` (pre-squash, not in history; the work landed as `3752502`) (`f2f43c7 Make linux-docker e2e Zig-free in the runtime image`)
 **Archived on:** 2026-05-06
 **Plan duration:** 2026-05-05 → 2026-05-06
 
-> This file is a highlight view. The full plan prompt, every phase plan, and every STATUS entry are preserved in the commit referenced above. Check that commit out (`git show <full-sha>:DOCS/PLANS_PROMPT.md`, etc.) when you need the unabridged source.
+> This file is a highlight view. The plan bundle (plan prompt, phase plans, STATUS log) lived on a branch that was squash-merged as `3752502` (`Self-contained compiler: remove Zig dependency at user runtime (#4)`); the pre-squash commit named above is not in this repository's history, so the unabridged source is not recoverable from git.
 
 ## Goal & scope
 

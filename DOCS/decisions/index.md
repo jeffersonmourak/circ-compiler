@@ -11,7 +11,6 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - Compilation pipeline (`.circ → topology binary → custom-section splice → .wasm`)
 - IR shape: paired `circ.topology.v0.{min,full}` binary payloads
 - Prebuilt runtime WASM embedded in the CLI via `@embedFile`
-- `-Dwasm-optimize` (ReleaseSmall, stripped) for both wasm builds
 - Host protocol: `topology_alloc` + memcpy + `init()`
 
 ### [runtime-api.md](runtime-api.md)
@@ -30,6 +29,7 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - Source-path debug info lives in `circ.topology.v0.full`, not on `Component`
 - Built-in primitives (`and`, `not`, `wire`, `led`, `output_pin`, `input_pin`) vs auto-imported macro family (`or`, `nand`, `nor`, `xor`, `xnor`)
 - Import statement syntax (`import name "path"`)
+- Circular imports are a hard error
 - LEDs vs `output` declarations
 - Multi-bit wires (17 decisions: width syntax, bit numbering, slice/concat, parametric sub-circuits, topology v02)
 - Native memories (`rom`/`ram` declarations via `CallWidths`, contents are runtime configuration, edge rule, `E008` policy, `E017`/`E018`)
@@ -41,8 +41,9 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - Diagnostic format (location + message; snippets deferred)
 
 ### [cli.md](cli.md)
-- Five invocation modes (`-o`, `--emit-zig`, `--inspect`, `--preview`, `--truth-table`)
+- Six invocation modes (`-o`, `--emit-zig`, `--inspect`, `--preview`, `--truth-table`, `--sim`) plus the stdin-driven `--analyze`
 - Mode-specific flag gating (`--expand-macros`, `--format`, `--strict`, …)
+- TypeScript `.d.ts` emission deferred
 - No intermediate `zig build` subprocess; no build-directory override
 - `--mem=<name>=<path>` is scoped to `--sim` and `--truth-table`
 
@@ -93,7 +94,7 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 
 ### [preview-layout.md](preview-layout.md)
 - The parity contract is a JSON projection, not either side's native type (`dump_json.zig`, camelCase common subset, one golden per fixture-mode)
-- The corpus invariants are the measurement of record (`invariants.zig`: I0–I3 per net over segments only, every fixture-mode listed, zero from Phase 3)
+- The corpus invariants are the measurement of record (`invariants.zig`: I0–I3 per net over segments only, every fixture-mode listed; I0/I3 zero everywhere and I1/I2 zero outside multi-driven ports from Phase 3)
 - Long edges get dummy nodes, and a leftward edge is a back edge (`layering.zig`: the old columns as layers, `k − 1` dummies per long edge, cycle and sink-leftward edges flagged `back`)
 - Ordering is port-aware barycenter sweeps with integer arithmetic (`ordering.zig`: `(sum, count)` keys with the sink's port slot, rounds kept while `C` falls, transpose to a fixed point)
 - Every node gets its own row, aligned to the port that feeds it (`coords.zig`: highest input port wins, pack with one gutter, dummies are wire rows, a lone out-wire pulls its source down, `insertSpacerRow`)
@@ -104,5 +105,5 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 
 - Decisions use `###` headings inside topic files.
 - Each decision is small (decision / rationale / alternatives, ~15 lines).
-- No numbering — decisions are referenced by heading slug. The multi-bit fold inside `language.md` is numbered §1–§17 only because it lifted the stage numbering from `DOCS/archive/plan-multi-bit-language.md` verbatim.
+- No numbering — decisions are referenced by their quoted heading text. The multi-bit fold inside `language.md` is numbered §1–§17 only because it lifted the stage numbering from `DOCS/archive/plan-multi-bit-language.md` verbatim.
 - The runtime principle of "few dependencies, Zig-only" applies across every decision unless explicitly noted.

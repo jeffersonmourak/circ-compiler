@@ -23,7 +23,7 @@ The two memory rows are a preloaded `rom` read by address — the native memory 
 
 Total: 98,932 input vectors driven through the engine in a single bench run; ~8.3M events popped, ~8.7k allocator calls totaling ~1.1 MB. Pop efficiency sits at ~100% corpus-wide after the `propagateEvent` no-op short-circuit (the harness's drive-all-inputs-per-vector pattern used to push it as low as 28% on the AND family). The wider adders (`five_bit_adder`, `six_bit_adder`, `eight_bit_adder`) characterize cascading-carry depth, and the 8-bit adder pushing 65k vectors and 3.9M events overtakes `alu_4bit` as the heaviest fixture by both vector count and event volume. The corpus totals above reflect the current engine state; the per-milestone evolution lives in `tests/fixtures/bench/engine.bench.golden.hist.md` (see [Historical evolution](#historical-evolution) below).
 
-The fixture-to-circuit mapping is hand-maintained at `tools/bench/main.zig:36`. Most fixtures are 1:1 with their `.circ` source; a handful (`full_adder` → `full_adder_from_builtins.circ`, `primitive_and` → `and_gate.circ`, etc.) follow the same historical aliases used by the truth-table golden tests.
+The fixture-to-circuit mapping is hand-maintained in the `fixtures` array of `tools/bench/main.zig`. Most fixtures are 1:1 with their `.circ` source; a handful (`full_adder` → `full_adder_from_builtins.circ`, `primitive_and` → `and_gate.circ`, etc.) follow the same historical aliases used by the truth-table golden tests.
 
 ## How it runs
 
@@ -80,12 +80,12 @@ zig build bench -- --human ms
 ```
 
 ```
-[bench] alu_4bit          16.38k vecs     100.494 ms (drv     97.506 ms)    168.03 vec/ms    40.51k events/ms    1.20k allocs   148.33k bytes  100.0% pop  306.1 t/vec
+[bench] alu_4bit          16.38k vecs     100.494 ms (drv     97.506 ms)    168.03 vec/ms    40.51k events/ms    1.20k allocs   152.78k bytes  100.0% pop  306.1 t/vec
 [bench] and_4bit             256 vecs       0.253 ms (drv      0.035 ms)     7.31k vec/ms    28.29k events/ms       43 allocs     4.93k bytes  100.0% pop   45.6 t/vec
-[bench] chain                  2 vecs       0.163 ms (drv      0.000 ms)    0.00e0 vec/ms    0.00e0 events/ms       16 allocs     1.91k bytes  100.0% pop   21.0 t/vec
-[bench] four_bit_adder       256 vecs       0.794 ms (drv      0.207 ms)     1.24k vec/ms    63.54k events/ms      460 allocs    55.97k bytes  100.0% pop  141.6 t/vec
-[bench] nand_4bit            256 vecs       0.252 ms (drv      0.049 ms)     5.22k vec/ms    40.41k events/ms       88 allocs    10.24k bytes  100.0% pop   60.3 t/vec
-[bench] ---  56 fixtures   98.66k vectors (98660)   8.26M events (8260056)   8.58k allocs (8577)   1.03M bytes (1030584)   187.933 ms total (167.502 ms drv, 89.1% engine)
+[bench] chain                  2 vecs       0.163 ms (drv      0.000 ms)    0.00e0 vec/ms    0.00e0 events/ms       18 allocs     2.34k bytes  100.0% pop   21.0 t/vec
+[bench] four_bit_adder       256 vecs       0.794 ms (drv      0.207 ms)     1.24k vec/ms    63.54k events/ms      462 allocs    57.58k bytes  100.0% pop  141.6 t/vec
+[bench] nand_4bit            256 vecs       0.252 ms (drv      0.049 ms)     5.22k vec/ms    40.41k events/ms       90 allocs    10.88k bytes  100.0% pop   60.3 t/vec
+[bench] ---  58 fixtures   98.93k vectors (98932)   8.26M events (8260872)   8.72k allocs (8719)   1.08M bytes (1083960)   187.933 ms total (167.502 ms drv, 89.1% engine)
 ```
 
 The per-fixture rows drop the `(raw)` parenthetical that the totals line carries — on aggregate counts the exact value is useful, on individual rows it just bloats every column. The totals keep it.
@@ -93,16 +93,16 @@ The per-fixture rows drop the `(raw)` parenthetical that the totals line carries
 Same data with `--human s`:
 
 ```
-[bench] alu_4bit          16.38k vecs       0.0984 s (drv      0.0955 s)    171.51k vec/s     41.35M events/s    1.20k allocs   148.33k bytes  100.0% pop  306.1 t/vec
-[bench] chain                  2 vecs       0.0002 s (drv      0.0000 s)     0.00e0 vec/s     0.00e0 events/s       16 allocs     1.91k bytes  100.0% pop   21.0 t/vec
-[bench] ---  56 fixtures   98.66k vectors (98660)   8.26M events (8260056)   8.58k allocs (8577)   1.03M bytes (1030584)   0.1875 s total (0.1677 s drv, 89.5% engine)
+[bench] alu_4bit          16.38k vecs       0.0984 s (drv      0.0955 s)    171.51k vec/s     41.35M events/s    1.20k allocs   152.78k bytes  100.0% pop  306.1 t/vec
+[bench] chain                  2 vecs       0.0002 s (drv      0.0000 s)     0.00e0 vec/s     0.00e0 events/s       18 allocs     2.34k bytes  100.0% pop   21.0 t/vec
+[bench] ---  58 fixtures   98.93k vectors (98932)   8.26M events (8260872)   8.72k allocs (8719)   1.08M bytes (1083960)   0.1875 s total (0.1677 s drv, 89.5% engine)
 ```
 
 And `--human` (default, ns) keeps full precision at the cost of wide numbers and scientific notation for the throughput:
 
 ```
-[bench] alu_4bit          16.38k vecs    97827000 ns (drv   94915000 ns)   1.73e-4 vec/ns    0.0416 events/ns    1.20k allocs   148.33k bytes  100.0% pop  306.1 t/vec
-[bench] ---  56 fixtures   98.66k vectors (98660)   8.26M events (8260056)   8.58k allocs (8577)   1.03M bytes (1030584)   187569000 ns total (166682000 ns drv, 88.9% engine)
+[bench] alu_4bit          16.38k vecs    97827000 ns (drv   94915000 ns)   1.73e-4 vec/ns    0.0416 events/ns    1.20k allocs   152.78k bytes  100.0% pop  306.1 t/vec
+[bench] ---  58 fixtures   98.93k vectors (98932)   8.26M events (8260872)   8.72k allocs (8719)   1.08M bytes (1083960)   187569000 ns total (166682000 ns drv, 88.9% engine)
 ```
 
 Throughput k/M scaling kicks in inside the chosen unit — `1.81M events/s` and `1.31k events/ms` are the same engine; only the denomination is different. The flag only affects the stderr report; the golden comparison and the golden file itself are untouched.
@@ -130,7 +130,7 @@ zig build bench -- --sort events              # default formatting, sorted by ev
 Example output (`--human ms --sort time`, top 6):
 
 ```
-[bench] alu_4bit          16.38k vecs      97.882 ms (drv     94.776 ms)    172.87 vec/ms    41.68k events/ms    1.20k allocs   148.33k bytes  100.0% pop  306.1 t/vec
+[bench] alu_4bit          16.38k vecs      97.882 ms (drv     94.776 ms)    172.87 vec/ms    41.68k events/ms    1.20k allocs   152.78k bytes  100.0% pop  306.1 t/vec
 [bench] eight_bit_adder   65.54k vecs      67.941 ms (drv     66.380 ms)    987.29 vec/ms    58.80k events/ms      985 allocs   118.66k bytes  100.0% pop  195.2 t/vec
 [bench] six_bit_adder      4.10k vecs       4.716 ms (drv      3.778 ms)     1.08k vec/ms    62.33k events/ms      723 allocs    88.64k bytes  100.0% pop  171.6 t/vec
 [bench] stress_chain_100       2 vecs       2.010 ms (drv      0.005 ms)    400.00 vec/ms    40.80k events/ms      310 allocs    37.25k bytes  100.0% pop  506.0 t/vec
@@ -138,11 +138,11 @@ Example output (`--human ms --sort time`, top 6):
 [bench] mux_5bit_2to1      2.05k vecs       0.990 ms (drv      0.459 ms)     4.46k vec/ms    40.16k events/ms      185 allocs    21.94k bytes  100.0% pop   81.0 t/vec
 ```
 
-The `allocs` and `bytes` columns are the same delta values that get written to the golden's two rightmost columns; only the formatting differs (k/M scaling, optional raw value in parens). `and_5bit`'s 54 allocs and `and_6bit`'s 64 allocs grow linearly with fan-out width (about 10 allocs per additional input bit, since each new connection appends to a single `ArrayList` that doubles its capacity at growth boundaries). The wider adders show events and time scaling steeply (`eight_bit_adder` hits 3.9M events), but `peak_queue` caps at 7 across every adder from 4-bit to 8-bit. That's not a sampling artifact; it's the truth-table builder calling `propagateEvent` once per input pin, so peak depth is bounded by per-input fanout rather than total bit width.
+The `allocs` and `bytes` columns are the same delta values that get written to the golden's two rightmost columns; only the formatting differs (k/M scaling, optional raw value in parens). `and_5bit`'s 56 allocs and `and_6bit`'s 66 allocs grow linearly with fan-out width (about 10 allocs per additional input bit, since each new connection appends to a single `ArrayList` that doubles its capacity at growth boundaries). The wider adders show events and time scaling steeply (`eight_bit_adder` hits 3.9M events), but `peak_queue` caps at 7 across every adder from 4-bit to 8-bit. That's not a sampling artifact; it's the truth-table builder calling `propagateEvent` once per input pin, so peak depth is bounded by per-input fanout rather than total bit width.
 
 ### Family rollup
 
-Pass `--rollup` to collapse the 58 per-fixture rows into ~15 per-family lines. Useful for a smell-check: scan whether one family's pop_eff or allocator pressure has shifted, instead of eyeballing every row. The family is inferred from the fixture name — suffix-match on `_adder` groups half/full/N-bit adders together, otherwise the prefix before the first underscore (so `and_4bit` → `and`, `primitive_led` → `primitive`).
+Pass `--rollup` to collapse the 58 per-fixture rows into ~18 per-family lines. Useful for a smell-check: scan whether one family's pop_eff or allocator pressure has shifted, instead of eyeballing every row. The family is inferred from the fixture name — suffix-match on `_adder` groups half/full/N-bit adders together, otherwise the prefix before the first underscore (so `and_4bit` → `and`, `primitive_led` → `primitive`).
 
 ```sh
 zig build bench -- --rollup
@@ -150,23 +150,24 @@ zig build bench -- --rollup --human ms       # rollup is independent of --human;
 ```
 
 ```
-bench rollup: adder         8 fix   71.00k vecs     4.21M events    7 peak    3.49k allocs   421.16k bytes  100.0% pop      68.77 ms drv
-bench rollup: alu           1 fix   16.38k vecs     3.95M events   21 peak    1.20k allocs   148.33k bytes  100.0% pop      95.26 ms drv
-bench rollup: and           6 fix    5.46k vecs    21.58k events    1 peak      230 allocs    26.85k bytes  100.0% pop       0.90 ms drv
-bench rollup: builtin       5 fix       20 vecs       244 events    2 peak      222 allocs    26.16k bytes  100.0% pop       0.01 ms drv
-bench rollup: chain         1 fix        2 vecs        10 events    1 peak       16 allocs     1.91k bytes  100.0% pop       0.00 ms drv
-bench rollup: demux         4 fix       60 vecs       348 events    2 peak      174 allocs    20.59k bytes  100.0% pop       0.01 ms drv
-bench rollup: edge          1 fix      256 vecs       766 events    1 peak       49 allocs     5.70k bytes  100.0% pop       0.03 ms drv
-bench rollup: fan           1 fix        2 vecs        14 events    3 peak       20 allocs     2.34k bytes  100.0% pop       0.00 ms drv
-bench rollup: mux           5 fix    2.73k vecs    24.53k events    2 peak      571 allocs    67.54k bytes  100.0% pop       0.60 ms drv
-bench rollup: nand          3 fix      336 vecs     2.56k events    2 peak      200 allocs    23.30k bytes  100.0% pop       0.06 ms drv
-bench rollup: nor           3 fix      336 vecs     4.81k events    2 peak      356 allocs    42.26k bytes  100.0% pop       0.10 ms drv
-bench rollup: not           3 fix       28 vecs       150 events    1 peak       72 allocs     8.33k bytes  100.0% pop       0.01 ms drv
-bench rollup: or            3 fix      336 vecs     3.43k events    2 peak      255 allocs    29.81k bytes  100.0% pop       0.08 ms drv
-bench rollup: primitive     4 fix       10 vecs        28 events    1 peak       43 allocs     5.24k bytes  100.0% pop       0.00 ms drv
-bench rollup: stress        1 fix        2 vecs       204 events    1 peak      310 allocs    37.25k bytes  100.0% pop       0.00 ms drv
-bench rollup: xnor          3 fix      336 vecs     9.28k events    2 peak      601 allocs    71.77k bytes  100.0% pop       0.15 ms drv
-bench rollup: xor           4 fix    1.36k vecs    29.79k events    2 peak      776 allocs    92.06k bytes  100.0% pop       0.55 ms drv
+bench rollup: adder         8 fix   71.00k vecs     4.21M events    7 peak    3.50k allocs   433.52k bytes  100.0% pop      91.70 ms drv
+bench rollup: alu           1 fix   16.38k vecs     3.95M events   21 peak    1.20k allocs   152.78k bytes  100.0% pop     117.41 ms drv
+bench rollup: and           6 fix    5.46k vecs    21.58k events    1 peak      242 allocs    29.82k bytes  100.0% pop       1.24 ms drv
+bench rollup: builtin       5 fix       20 vecs       244 events    2 peak      232 allocs    28.67k bytes  100.0% pop       0.01 ms drv
+bench rollup: chain         1 fix        2 vecs        10 events    1 peak       18 allocs     2.34k bytes  100.0% pop       0.00 ms drv
+bench rollup: demux         4 fix       60 vecs       348 events    2 peak      182 allocs    22.59k bytes  100.0% pop       0.02 ms drv
+bench rollup: edge          1 fix      256 vecs       766 events    1 peak       51 allocs     6.21k bytes  100.0% pop       0.04 ms drv
+bench rollup: fan           1 fix        2 vecs        14 events    3 peak       22 allocs     2.78k bytes  100.0% pop       0.00 ms drv
+bench rollup: mux           5 fix    2.73k vecs    24.53k events    2 peak      581 allocs    70.98k bytes  100.0% pop       0.78 ms drv
+bench rollup: nand          3 fix      336 vecs     2.56k events    2 peak      206 allocs    25.02k bytes  100.0% pop       0.08 ms drv
+bench rollup: nor           3 fix      336 vecs     4.81k events    2 peak      362 allocs    44.42k bytes  100.0% pop       0.12 ms drv
+bench rollup: not           3 fix       28 vecs       150 events    1 peak       78 allocs     9.70k bytes  100.0% pop       0.01 ms drv
+bench rollup: or            3 fix      336 vecs     3.43k events    2 peak      261 allocs    31.68k bytes  100.0% pop       0.10 ms drv
+bench rollup: primitive     4 fix       10 vecs        28 events    1 peak       51 allocs     6.88k bytes  100.0% pop       0.00 ms drv
+bench rollup: rom           2 fix      272 vecs       816 events    1 peak       30 allocs     7.82k bytes  100.0% pop       0.03 ms drv
+bench rollup: stress        1 fix        2 vecs       204 events    1 peak      312 allocs    38.45k bytes  100.0% pop       0.00 ms drv
+bench rollup: xnor          3 fix      336 vecs     9.28k events    2 peak      607 allocs    74.58k bytes  100.0% pop       0.21 ms drv
+bench rollup: xor           4 fix    1.36k vecs    29.79k events    2 peak      784 allocs    95.73k bytes  100.0% pop       0.73 ms drv
 ```
 
 Rollup columns are always sums except `peak` which is the family max (depth is per-iteration, not additive) and `pop` which is computed from total committed / total popped. Pop efficiency reads 100% across every family today because `propagateEvent` short-circuits no-op enqueues (events the caller asks for that already match the component's current state, the dominant waste pattern under the bench harness). The family rows still make some patterns obvious that get lost across 58 fixtures: `alu` reaches the only peak_queue above 7, `fan` is the only family with peak_queue = 3 (one upstream feeding three independent downstreams), and `adder` accounts for ~half the corpus's events and allocator pressure thanks to `eight_bit_adder`.
@@ -198,10 +199,10 @@ The `topology` hash is the diff renderer's "what changed" signal. If the hash ho
 Take a row from `tests/fixtures/bench/engine.bench.golden`:
 
 ```
-| xor_4bit                 |     256 |         76 |          5598 |             5598 |    5602 |          2 |      24830 |     221 |     25984 | 6cc538e8 |
+| xor_4bit                 |     256 |         76 |          5598 |             5598 |    5602 |          2 |      24830 |     223 |     26976 | 9e220cbc |
 ```
 
-That means: an XOR over 4-bit operands exhaustively driven across all 256 input combinations against a 76-component graph (XOR macro expansion: 4 XOR cells × ~19 primitives each, minus shared inputs). The engine popped 5,598 events from its heap, every one of which changed state (`events_popped == events_committed`, the post-short-circuit norm); it ran 5,602 downstream gate evaluations; the heap never held more than 2 events at once; the final propagation settled at logical time 24,830; the run made 221 allocator calls totaling 25,984 bytes (≈118 bytes per alloc, mostly `Component` structs plus a handful of `ArrayList` growth slabs); and the topology hash `6cc538e8` identifies this exact shape of components and wires.
+That means: an XOR over 4-bit operands exhaustively driven across all 256 input combinations against a 76-component graph (XOR macro expansion: 4 XOR cells × ~19 primitives each, minus shared inputs). The engine popped 5,598 events from its heap, every one of which changed state (`events_popped == events_committed`, the post-short-circuit norm); it ran 5,602 downstream gate evaluations; the heap never held more than 2 events at once; the final propagation settled at logical time 24,830; the run made 223 allocator calls totaling 26,976 bytes (≈121 bytes per alloc, mostly `Component` structs plus a handful of `ArrayList` growth slabs); and the topology hash `9e220cbc` identifies this exact shape of components and wires.
 
 The split between `events_popped` and `events_committed` is the diagnostic-grade column. It's not exposed in any other test path, and it catches algorithmic regressions where the scheduler enqueues redundant events that are correctly dedup'd downstream — the circuit gives the right answer, function tests pass, but the heap work has silently doubled.
 
@@ -225,7 +226,7 @@ By design, the bench skips several signals:
 
 - **`createComponent` / `connect` cost in isolation**. `drive_ns` covers only the `2^N` replay loop, so the inner stderr throughput excludes engine construction. But construction itself isn't separately itemized — it's lumped into `(total - drive)` along with parse, validate, and topology build. Splitting further would only matter if construction ever dominated, which it currently doesn't (look at `alu_4bit`: drive_ns is ~98% of total).
 - **WASM runtime cost**. Counters live on the native `Circuit` and the native `memory` module. The shipped `.wasm` runtime is built with `collect_metrics=false` and carries zero metrics overhead — both the engine counter bumps and the allocator wrapper are dead code stripped.
-- **Compile-time perf**. That has its own gate at `tests/cli/integration_test.zig:260` (the 30-second budget on `stress_grid_10x10` compile).
+- **Compile-time perf**. That has its own gate in `tests/cli/integration_test.zig` (`perf smoke: 100-component grid compiles under budget`) (the 30-second budget on `stress_grid_10x10` compile).
 
 ## Where the counters live
 

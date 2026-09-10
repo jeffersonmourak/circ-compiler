@@ -26,15 +26,17 @@ The compiler validates `.circ` source semantically before emission. Any hard err
 - Circular import chain
 - Combinational loop (a feedback path with no delay element)
 
+Added since: unknown sub-circuit port (`E012`), missing sub-circuit input (`E013`), width mismatch (`E014`), call-widths on a non-parametric sub-circuit (`E015`), parameter-count mismatch (`E016`), malformed memory parameter list (`E017`), memory width out of range (`E018`).
+
 **Rationale.** Each of these makes the circuit either ill-defined (undeclared references, missing connections), ambiguous (name collisions, multi-driven ports), or non-terminating (combinational loops, import cycles). None of them have a defensible default interpretation.
 
 **Alternatives.** Treating multi-driver as wired-OR by default. Plausible but surprising; deferred until a syntax for explicit bus semantics exists.
 
 ### Combinational loops are hard errors
 
-**Decision.** A feedback path with no delay element (e.g. `not a (in = a.out)`) is rejected at compile time via a graph cycle check on the connection topology, ignoring delay-bearing components.
+**Decision.** A component driving itself (e.g. `not a (in = a.out)`) and any cycle that runs only through *transparent* components — `wire`, `led`, `output`, `slice`, `concat`, `rom` and sub-circuit boundaries — is rejected at compile time as `E008` by a graph cycle check on the connection topology (`lib/validator/passes/combinational_loop.zig`). `and`, `not` and `ram` are *cycle-breaking*: every edge touching one is dropped before the check, so a ring through gates (a cross-coupled pair, an SR latch) is accepted as sequential logic and is not detected.
 
-**Rationale.** The runtime engine processes such loops by oscillating events forever — `propagate()` never terminates. A compile-time check is the only place this can be caught without leaving a settle-only runtime hanging on a malformed circuit. Detection is cheap (DFS over the connection graph).
+**Rationale.** A loop of pure wires has no delay element and would oscillate events forever — `propagate()` never terminates — so compile time is the only place to catch it. Gate rings are the building block of every latch and must compile; the gate delay is what lets them settle. A ring that never settles (an odd number of inverters) is not rejected today. Detection is cheap (DFS over the connection graph).
 
 **Alternatives.** Runtime detection with a max-iterations cap. Catches the bug later, leaks into runtime API, and arbitrary cap values mean some legitimate-but-slow circuits get aborted.
 

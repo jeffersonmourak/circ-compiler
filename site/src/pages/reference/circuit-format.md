@@ -131,7 +131,7 @@ led result (
 
 This circuit computes `pin1 AND (NOT pin2)` and displays the result on an LED.
 
-The compiled `.wasm` does not expose a programmatic graph-construction API — the topology is baked into the artifact as a custom section and materialised by the embedded runtime at `init()`. Hosts only see the fixed export surface (`setPin`, `run`, paired `getOutputValue` / `getOutputDefined`, …) described in [`wasm-api.md`](/reference/wasm-api); the component IDs they need are emitted by `circ-compile --inspect` under each module's `Inputs (...)` / `Outputs (...)` block.
+The compiled `.wasm` does not expose a programmatic graph-construction API — the topology is baked into the artifact as a custom section and materialised by the embedded runtime at `init()`. Hosts only see the fixed export surface (`setPin`, `run`, paired `getOutputValue` / `getOutputDefined`, …) described in [`wasm-api.md`](/reference/wasm-api); the component IDs they need come from the `circ.topology.v0.full` section (each record carries the component's name and kind); `circ-compile --inspect` prints resolver-local ids that match the artifact's only for a single-file circuit without sub-circuits.
 
 ## Grammar
 
@@ -152,17 +152,28 @@ Compiled `.wasm` artifacts embed the resolved circuit as a custom section. The c
 
 ## Diagnostic Codes
 
-The stable validator surface (E001–E018, W001–W003) is enumerated in [`language.md`](/reference) §4.2 and `lib/validator/codes.zig`. The multi-bit codes added with v02 are:
+The stable validator surface (E001–E018, W001–W003) is registered in `lib/validator/codes.zig`; the rules behind each code are in [`language.md`](/reference) §4.1. The full catalogue, with each code's default message:
 
 | Code | Meaning |
 | --- | --- |
-| E014 | width mismatch between a driver and the port it feeds |
-| E015 | sub-circuit is not parametric (caller passed `[N]` call-widths to a scalar callee) |
-| E016 | parameter count mismatch (wrong number of `[w0, w1, ...]` call-widths at the call site) |
-
-The memory codes added with v03 are:
-
-| Code | Meaning |
-| --- | --- |
-| E017 | memory parameter list malformed (a `rom`/`ram` declaration without exactly two instance-position width arguments `[W, A]`) |
-| E018 | memory width out of range (`W` outside `1..64` or `A` outside `1..16`) |
+| E001 | undeclared name |
+| E002 | unknown port (also an out-of-range or inverted slice, and an unknown memory port) |
+| E003 | multiple drivers for input port |
+| E004 | required input is unconnected |
+| E005 | duplicate instance name |
+| E006 | name shadows built-in (`and`, `not`, `wire`, `led`, `rom`, `ram`, `input_pin`, `output_pin`, …) |
+| E007 | output has no assigned driver |
+| E008 | combinational loop detected |
+| E009 | import not found |
+| E010 | import cycle detected |
+| E011 | import alias collision (with another import or a built-in name) |
+| E012 | unknown sub-circuit port |
+| E013 | sub-circuit arity mismatch (a required sub-circuit input left unconnected) |
+| E014 | width mismatch between a driver and the port it feeds (added with v02) |
+| E015 | sub-circuit is not parametric (caller passed `[N]` call-widths to a scalar callee; v02) |
+| E016 | parameter count mismatch (wrong number of `[w0, w1, ...]` call-widths at the call site; v02) |
+| E017 | memory parameter list malformed (a `rom`/`ram` declaration without exactly two instance-position width arguments `[W, A]`; v03) |
+| E018 | memory width out of range (`W` outside `1..64` or `A` outside `1..16`; v03) |
+| W001 | unused input declaration |
+| W002 | dangling output declaration |
+| W003 | unused import declaration |

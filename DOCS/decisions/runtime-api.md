@@ -22,7 +22,7 @@ The compiled `.wasm` artifact exposes a fixed runtime API for hosts (browsers, N
 
 **Decision.** `setPin(component_id, value, defined)` accepts the **input pin's** component ID. The paired `getOutputValue(component_id)` / `getOutputDefined(component_id)` getters accept the **driver** component ID — that is, the ID of the component whose `out` port feeds the `output` declaration, not the `output_pin`'s own ID. There is no separate pin-index space.
 
-**Rationale.** One identifier scheme is simpler than two. Component IDs are dense `0..nodes.len` integers assigned by `Circuit.createComponent` and stable for the life of a compiled artifact (the topology serializer fixes them at emission time), so they're as stable as a separate pin index would be. The mapping from declaration name to component ID is printed under each module's `Inputs (...)` / `Outputs (...)` block by `circ-compile --inspect`, and the same information is encoded in the `circ.topology.v0.full` custom section for programmatic readers.
+**Rationale.** One identifier scheme is simpler than two. Component IDs are dense `0..nodes.len` integers assigned by `Circuit.createComponent` and stable for the life of a compiled artifact (the topology serializer fixes them at emission time), so they're as stable as a separate pin index would be. The mapping from declaration name to component ID is encoded in the `circ.topology.v0.full` custom section (each record carries its name and kind); `circ-compile --inspect` prints resolver-local ids under each module's `Inputs (...)` / `Outputs (...)` block, which coincide with the artifact's only for a single-file circuit without sub-circuits (see "`--inspect` prints widths, not global ids" below).
 
 **Alternatives.** A separate pin index (`0..N` for inputs, `0..M` for outputs) decouples the host API from internal IDs, but in this design the IDs are already stable; the abstraction would add a translation table for no clear benefit.
 
@@ -145,7 +145,7 @@ The entries below record the engine, format, runtime and tooling half of the nat
 
 ### `--inspect` prints widths, not global ids
 
-**Decision.** `--inspect` shows a memory as the IR line `kind=rom[W=8,A=4]` and the AST line `widths=[8, 4]`, nothing more. It does not print a name → global-component-id table for memories.
+**Decision.** `--inspect` shows a memory as the IR line `kind=rom[W=8,A=4]` and the AST line `width_args=[8, 4]`, nothing more. It does not print a name → global-component-id table for memories.
 
 **Rationale.** Decision 9. `--inspect`'s ids are resolver-local and are not the positional ids a WASM host passes to `getMemInfo`; printing them under a "global id" heading would be a lie for any project with imports. Hosts learn memory ids from the `.full` section (a kind 8/9 record with the declared `name` and an empty origin), which is already the documented way to map pins.
 

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this project is
 
-`circ-compiler` is a one-shot compiler. It takes a `.circ` digital-logic source (plus any siblings it imports) and emits a self-contained `.wasm` artifact whose exports simulate that exact circuit. The compiler is pure Zig (the parser is `lib/parser/parser.zig`, generated from `lib/grammar/proto-circ.peg` by the maintainer's langlang fork and vendored); it also builds as a library — `zig build libcirc` (`libcirc.a` + `include/libcirc.h`) and `zig build libcirc-wasm` (`libcirc.wasm`, the module behind the site's `/playground`). There is no runtime SDK, no rendering layer, and no JavaScript in the build. Every compiled `.wasm` carries a vendored prebuilt runtime plus two custom sections (`circ.topology.v0.min`, `circ.topology.v0.full`) and exposes a fixed pull-based API: `topology_alloc`, `init`, `run`, `setPin(id, value, defined)`, `getOutputValue(id)`, `getOutputDefined(id)`, plus the memory family (`getMemInfo`, `memBuffer`, `memLoad`, `memStore`, `memClear`, `setMemWord`, `getMemValue`, `getMemDefined`) for circuits that declare `rom`/`ram` — memory contents are runtime state loaded by the host, never part of the artifact. The two getters return paired `BitVecState` halves crossed as `i64`/`BigInt`.
+`circ-compiler` is a one-shot compiler. It takes a `.circ` digital-logic source (plus any siblings it imports) and emits a self-contained `.wasm` artifact whose exports simulate that exact circuit. The compiler is pure Zig (the parser is `lib/parser/parser.zig`, generated from `lib/grammar/proto-circ.peg` by the maintainer's langlang fork and vendored); it also builds as a library — `zig build libcirc` (`libcirc.a` + `include/libcirc.h`) and `zig build libcirc-wasm` (`libcirc.wasm`, the module behind the site's `/playground`). The Zig build has no runtime SDK, no rendering layer and no JavaScript; the docs site under `site/` is a separate bun/Astro build that consumes `libcirc.wasm` and the pinned `circ-renderer` package. Every compiled `.wasm` carries a vendored prebuilt runtime plus two custom sections (`circ.topology.v0.min`, `circ.topology.v0.full`) and exposes a fixed pull-based API: `topology_alloc`, `init`, `run`, `setPin(id, value, defined)`, `getOutputValue(id)`, `getOutputDefined(id)`, plus the memory family (`getMemInfo`, `memBuffer`, `memLoad`, `memStore`, `memClear`, `setMemWord`, `getMemValue`, `getMemDefined`), always exported and meaningful only for circuits that declare `rom`/`ram` — memory contents are runtime state loaded by the host, never part of the artifact. The two getters return paired `BitVecState` halves crossed as `i64`/`BigInt`.
 
 ## Analysis philosophy
 
@@ -48,7 +48,7 @@ Useful environment variables:
 - `UPDATE_GOLDENS=1` regenerates fixtures under `tests/fixtures/expected-*/` instead of comparing against them. Diff the result before committing.
 - `NO_COLOR=1` strips ANSI from `--preview` output.
 
-There is no `-Dtest-filter` flag wired into `build.zig`. To run a single test module in isolation, invoke `zig test <path>` against its root file (e.g. `zig test tests/validator/run_test.zig`). The `test` step is the fast dev-loop aggregator; `zig build test-all` adds the slow emit-zig smoke (`test-emit`) and is the full gate CI runs.
+There is no `-Dtest-filter` flag wired into `build.zig`, and a bare `zig test <file>` cannot resolve the module imports `build.zig` wires (`translate`, `resolver`, `golden`, …), so run `zig build test` and read the failing test's name from the output. The `test` step is the fast dev-loop aggregator; `zig build test-all` adds the slow emit-zig smoke (`test-emit`) and is the full gate CI runs.
 
 ## CLI shape
 
@@ -61,7 +61,7 @@ There is no `-Dtest-filter` flag wired into `build.zig`. To run a single test mo
 | `circ-compile in.circ --inspect` | Pretty-printed parse tree, resolved IR, diagnostics. |
 | `circ-compile in.circ --preview` | ASCII schematic of the resolved circuit. |
 | `circ-compile in.circ --truth-table` | Enumerated truth table. Pair with `--format=markdown\|csv\|json`. |
-| `circ-compile in.circ --sim` | Interactive stdio drive protocol (proto=1): drive the circuit by pin name for testing/tooling, load/inspect `rom`/`ram` contents by declared name (`--mem=<name>=<path>` preloads, `load`/`save`/`peek`/`poke`/`mem`/`clear` verbs); see `DOCS/sim-protocol.md`. |
+| `circ-compile in.circ --sim` | Interactive stdio drive protocol (proto=1): drive the circuit by pin name for testing/tooling, load/inspect `rom`/`ram` contents by declared name (`--mem=<name>=<path>` preloads, also accepted by `--truth-table`; `load`/`save`/`peek`/`poke`/`mem`/`mems`/`clear` verbs); see `DOCS/sim-protocol.md`. |
 | `echo '<json>' \| circ-compile --analyze` | JSON analysis (files, diagnostics, symbols, references) on stdout for editor tooling; see `DOCS/analyze-api.md`. |
 
 Hard errors block emission; partial or "best-effort" artifacts are never produced. `--warnings-as-errors` (alias `-Werror`) promotes warnings.
@@ -156,9 +156,10 @@ Facts that materially shape edits:
 Fixture directories under `tests/fixtures/` are organised by artifact kind:
 
 - `circuits/` (`.circ` source inputs)
-- `expected-ast/`, `expected-ir/`, `expected-zig/`, `expected-wasm/`, `expected-diagnostics/`
+- `expected-ast/`, `expected-ir/`, `expected-zig/`, `expected-wasm/`, `expected-diagnostics/`, `expected-analyze/`, `expected-inspect/`, `expected-sim/` (one golden per feature, matched by stem)
+- `projects/` (multi-file roots), `preview/` (render, layout and invariants goldens), `truth_table/`, `sim/`, `mem/` (memory images), `bench/`
 
-Naming convention: `<feature>.circ` with paired outputs such as `<feature>.zig`, `<feature>.wasm.json`, `<feature>.diagnostics`. Behavior fixtures in `expected-wasm/*.txt` use one line per vector:
+Naming convention: `<feature>.circ` with paired outputs of the same stem in the matching directory (`expected-wasm/<feature>.txt`, `expected-diagnostics/<feature>.txt`, `expected-zig/<feature>.zig`, …). Behavior fixtures in `expected-wasm/*.txt` use one line per vector:
 
 ```
 <inputs as space-separated pin=state> => <outputs as space-separated pin=state>
@@ -170,11 +171,9 @@ To add a test: place the `.circ` in `circuits/`, write the expected artifact in 
 
 This file lives on `main` and does not track in-progress initiatives. Before making changes, orient on what is currently being implemented:
 
-- `git status` and `git log -20 --oneline` for the current branch and recent commits.
-- The branch name itself; the convention so far has been `<stage>.<sub>-<scope>` (e.g. `s1.3-circuit-multi-tier`), where the stage maps into a plan doc.
-- `DOCS/` for plan files (typically `plan-*.md`). They capture locked decisions, stage ordering, and out-of-scope items for multi-PR initiatives. Read the relevant plan before touching code in its area.
-- The GitHub project is the tracker for this work. Stage IDs in branch names and plan docs map directly to GitHub issues: `S<N>` (e.g. `S1`, `S2`) is a top-level stage issue, and `S<N>.<M>` (e.g. `S1.3`) is always a sub-issue of `S<N>`. Use `gh issue list`, `gh issue view <N>`, and `gh issue view <N> --comments` to read scope, acceptance criteria, and open discussion before starting; the issue is the source of truth when the plan doc and the branch disagree.
-- `gh pr list` (and `gh pr view <N>`) if GitHub is reachable.
+- `git status` and `git log -20 --oneline` for the current branch and recent commits. Branches are named after their initiative (`memories`, `libcirc`, `playground`, `layout`) and stack on each other as nested PRs.
+- An active initiative keeps its plan bundle in the tree: `DOCS/PLANS_PROMPT.md` (locked decisions, phase index, working loop), `DOCS/PLANS/PHASE_<N>_*.md` (per-phase specs) and `DOCS/STATUS.md` (one entry per shipped slice). Read them before touching code in their area. A finished initiative has none of these: its highlight view is `DOCS/archive/plan-<name>.md` (indexed by `DOCS/archive/index.md`), produced per `DOCS/prompts/ARCHIVE.md` before the branch merges into `main`.
+- `gh pr list` (and `gh pr view <N>`) if GitHub is reachable; a PR body carries the initiative's summary and test plan.
 - If still ambiguous, ask the human.
 
 ## Git, commits, and PRs

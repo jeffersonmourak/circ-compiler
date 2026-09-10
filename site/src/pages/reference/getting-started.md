@@ -24,10 +24,10 @@ Expected:
 
 ```
 === Parse Tree ===
-File [f0:1:1-3:23]
+File [f0:1:1-4:1]
 Imports (0)
 Inputs (1)
-  Input a [f0:1:7-1:8]
+  Input a [f0:1:1-1:8]
 Outputs (1)
   Output out [f0:3:1-3:23]
     NamedRef inv.out [f0:3:15-3:22]
@@ -95,7 +95,7 @@ zig-out/bin/circ-compile examples/inverter.circ --truth-table
 | 1 | 0   |
 ```
 
-`--truth-table` runs the resolver and validator first; circuits with combinational loops (E008) are rejected before any simulation. The mode caps at 16 inputs (2^16 = 65,536 rows) to avoid accidental blow-up — wider circuits should be exercised through the `.wasm` runtime instead.
+`--truth-table` runs the resolver and validator first; circuits with combinational loops (E008) are rejected before any simulation, and so is any circuit containing a `ram` (stateful — drive it with `--sim` instead). The mode caps at 16 total input *bits* (an `input[4]` counts four; 2^16 = 65,536 rows) to avoid accidental blow-up; `--truth-table-cap=N` raises that to at most 24, and wider circuits should be exercised through the `.wasm` runtime instead.
 
 The relevant block tells you which component IDs to drive from JavaScript:
 
@@ -154,7 +154,7 @@ a=0 -> NOT a = high
 a=1 -> NOT a = low
 ```
 
-The two i64 parameters cross the boundary as JavaScript `BigInt` values; `value` and `defined` each pack one bit per signal bit. A scalar pin uses `(0n, 1n)` for low, `(1n, 1n)` for high, and `(_, 0n)` for undefined. The core export list emitted by `circ-compile … -o out.wasm` is `topology_alloc`, `init`, `run`, `setPin`, `getOutputValue`, `getOutputDefined` (plus `memory`); circuits that declare `rom`/`ram` memories additionally get the memory family `getMemInfo`, `memBuffer`, `memLoad`, `memStore`, `memClear`, `setMemWord`, `getMemValue`, `getMemDefined` (step 7 below); see [`DOCS/wasm-api.md`](/reference/wasm-api) for the full contract. The two `env` callbacks (`debugEnabled` and `onDebugLog`) are required imports — supply the no-op stubs above unless you want debug logging.
+The two i64 parameters cross the boundary as JavaScript `BigInt` values; `value` and `defined` each pack one bit per signal bit. A scalar pin uses `(0n, 1n)` for low, `(1n, 1n)` for high, and `(_, 0n)` for undefined. The core export list emitted by `circ-compile … -o out.wasm` is `topology_alloc`, `init`, `run`, `setPin`, `getOutputValue`, `getOutputDefined` (plus `memory`); every artifact also exports the memory family `getMemInfo`, `memBuffer`, `memLoad`, `memStore`, `memClear`, `setMemWord`, `getMemValue`, `getMemDefined`, meaningful only for the ids of `rom`/`ram` components (step 7 below); see [`DOCS/wasm-api.md`](/reference/wasm-api) for the full contract. The two `env` callbacks (`debugEnabled` and `onDebugLog`) are required imports — supply the no-op stubs above unless you want debug logging.
 
 ### Driving a multi-bit input
 

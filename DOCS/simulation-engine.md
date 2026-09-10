@@ -84,19 +84,23 @@ const Kind = union(ComponentType) {
     output_pin:     struct { inputs: std.ArrayList(*Component) = .{} },
     slice:          struct { from: ?*Component = null, lo: u8 = 0, hi: u8 = 0 },
     concat:         struct { operands: std.ArrayList(*Component) = .{} },
-    memory:         struct {
-        mode: MemoryMode,
-        cells: MemCells,
-        addr: ?*Component = null,
-        din: ?*Component = null,   // ram only
-        we: ?*Component = null,    // ram only
-        clk: ?*Component = null,   // ram only
-        prev_clk: BitVecState = BitVecState.undefined_(1),
-    },
+    memory:         *MemoryState,   // boxed so the union does not grow by ~56 bytes per component
+};
+
+pub const MemoryState = struct {
+    mode: MemoryMode,
+    cells: MemCells,
+    addr: ?*Component = null,
+    din: ?*Component = null,   // ram only
+    we: ?*Component = null,    // ram only
+    clk: ?*Component = null,   // ram only
+    prev_clk: BitVecState = BitVecState.undefined_(1),
 };
 ```
 
-Backward edges are flat `std.ArrayList(*Component)` lists for the eight-input gates (`and_gate` uses `inputs_a` / `inputs_b`; every other "input-based" kind uses a single `inputs` list keyed by `"in"`). `output_pin` is the sub-circuit/root output primitive: it appears in the IR for every `output …` declaration and acts as a wire-with-a-name.
+A memory kind is built through `memoryKind(mode, addr_width)`, which allocates the `MemoryState` box; `Circuit.createComponent` allocates the cell planes.
+
+Backward edges are flat `std.ArrayList(*Component)` lists for the six list-input kinds (`and_gate` uses `inputs_a` / `inputs_b`; `input_pin_gate`, `not_gate`, `led`, `wire` and `output_pin` use a single `inputs` list keyed by `"in"`); `slice` holds one `from` pointer, `concat` an ordered operand list, and `memory` one optional pointer per port. `output_pin` is the sub-circuit/root output primitive: it appears in the IR for every `output …` declaration and acts as a wire-with-a-name.
 
 `slice` and `concat` are bit-shape kinds, not user-written primitives. The resolver lowers the language-level `a[lo..hi]`, `a[i]`, and `{a, b, ...}` signal sources into these kinds; users never write them directly.
 
@@ -119,6 +123,7 @@ Per-kind port names:
 | `led`            | `"in"`                                     | `"out"`     |
 | `slice`          | `"in"`                                     | `"out"`     |
 | `concat`         | `"operand_0"`, `"operand_1"`, … one per op | `"out"`     |
+| `memory`         | `"addr"`; a `ram` also `"din"`, `"we"`, `"clk"` (refused on a `rom`) | `"out"`     |
 
 ### `Component`
 
@@ -140,7 +145,7 @@ pub const Component = struct {
 };
 ```
 
-The `state_handle` default (`slot = maxInt(u32)`) is a sentinel: reads against it trap with an out-of-bounds panic in `Pool.read`. This catches the "constructed a Component without going through `Circuit.createComponent`" mistake.
+The `state_handle` default (`slot = maxInt(u32)`) is a sentinel: reads against it trap on the null-tier unwrap in `Circuit.readState` (tier 0 is never allocated), before `Pool.read` is reached. This catches the "constructed a Component without going through `Circuit.createComponent`" mistake.
 
 There is no `output_state` field on `Component` anymore. To read a component's current wire value, use `circuit.readState(component.state_handle)`.
 
@@ -182,7 +187,7 @@ pub const Pool = struct {
 };
 ```
 
-The pool packs 64 slots per `u64` word across two parallel buffers (one for value bits, one for defined bits). The two buffers grow together; `allocateSlot` is the only growth site and always appends to both, so length-mismatch is structurally impossible.
+The width-1 pool packs 64 slots per `u64` word across two parallel buffers (one for value bits, one for defined bits); the pools for widths 2–64 use one `u64` per slot in each buffer. The two buffers grow together; `allocateSlot` is the only growth site and always appends to both, so length-mismatch is structurally impossible.
 
 `PoolHandle.tier` selects which pool to dispatch to. The convention is `tier == width`; tier 0 is unused and tiers 1..64 each carry their own pool, lazily allocated the first time a component of that width is created. Width is recovered from the handle's tier, not stored on the handle's body, so handles stay 8 bytes.
 
@@ -350,7 +355,7 @@ const WIRE_PROPAGATION_DELAY: Timestamp = 1;
 pub fn encodeState(self: *Circuit) ![]u8;
 ```
 
-Allocates and returns a buffer encoding every component's `(state, kind, id)` triplet via `lib/transport.zig`. Caller owns the slice and must free it with the engine's allocator. Used by tooling and the experimental `--emit-zig` runtime (`lib/emit/runtime.zig`'s `getStateSnapshot`); not wired into the default-compile WASM artifact.
+Allocates and returns a buffer encoding every component's `(state, kind, id)` triplet via `lib/transport.zig`. Width-1 circuits only (`toTransportByte` asserts `width == 1`), and the id is truncated to one byte. Caller owns the slice and must free it with the engine's allocator. Used by tooling and the experimental `--emit-zig` runtime (`lib/emit/runtime.zig`'s `getStateSnapshot`); not wired into the default-compile WASM artifact.
 
 ### Debug printing
 
@@ -372,8 +377,8 @@ fn calculateDominantState(
 
 Used by every multi-driver port read:
 
-- Returns `high` immediately if **any** driver reads as `high` (wired-OR bus behaviour).
-- Otherwise returns the last seen state during the scan (the loop unconditionally overwrites `dominant_state` on each iteration, so the final iteration wins among the non-`high` drivers).
+- Every bit that reads defined-`high` on **some** driver is locked high (wired-OR bus behaviour); the loop accumulates `value & defined` across all drivers rather than returning early.
+- The remaining bits come from the last driver scanned (the loop unconditionally overwrites the running state on each iteration).
 - Returns `undefined` if every driver is `undefined`.
 
 The width=1 helpers (`isHigh`, `isLow`) are the comparison currency on scalar buses (the most common case). Multi-bit fan-in works the same way per bit: any `defined` bit set to high across the drivers wins; the dominant state is computed bit-parallel against the BitVecState `value` and `defined` fields.

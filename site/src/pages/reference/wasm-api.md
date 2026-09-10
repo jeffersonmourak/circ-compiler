@@ -60,11 +60,11 @@ The compiled `.wasm` carries the circuit topology as a `circ.topology.v0.min` cu
 3. Copy the section bytes to that pointer in `memory.buffer`.
 4. Call `init()`. The runtime parses the buffer, builds the circuit graph, and marks itself initialised.
 
-`init()` is idempotent: calling it after the runtime is initialised is a no-op. It silently bails out if no topology was loaded or the topology fails to parse, so always copy the section before calling `init`.
+`init()` is idempotent: calling it after the runtime is initialised is a no-op. With no topology loaded it initialises an *empty* circuit and latches, so a later `topology_alloc` + `init()` is ignored; only a topology that fails to parse leaves the runtime uninitialised and `init()` retryable. Always copy the section before the first `init`.
 
 ### `run()`
 
-Drains the engine's event queue until empty. Settling delays are `5` time-units per gate and `1` per wire/output_pin (see `lib/circuit.zig`); a single `run()` call is enough to settle any cascade — there is no "tick" semantics to worry about.
+Drains the engine's event queue until empty. Settling delays are `5` time-units per gate (memories included) and `1` per `wire`/`output_pin`/`led`/`slice`/`concat` (see `lib/circuit.zig`); a single `run()` call is enough to settle any cascade — there is no "tick" semantics to worry about.
 
 `run()` is a no-op if `init()` has not run successfully.
 
@@ -78,7 +78,7 @@ For width-1 inputs the usual encodings are `setPin(id, 0n, 1n)` for low, `setPin
 
 ### `getOutputValue(component_id)` and `getOutputDefined(component_id)`
 
-Paired exports. Each call returns one of the two `BitVecState` fields of the component's current output. Returns `0n` for both if the runtime is not initialised or the ID is out of range — the host distinguishes "definitely low" from "undefined" by checking `getOutputDefined` first. The argument is the **driver component ID**, not an output-pin index — for an `output out(in=inv.out)` declaration, you pass `inv`'s component ID, not `out`'s pin ID. The `--inspect` output of the compiler prints this mapping under its `Outputs (...)` block.
+Paired exports. Each call returns one of the two `BitVecState` fields of the component's current output. Returns `0n` for both if the runtime is not initialised or the ID is out of range — the host distinguishes "definitely low" from "undefined" by checking `getOutputDefined` first. The argument is the **driver component ID**, not an output-pin index — for an `output out(in=inv.out)` declaration, you pass `inv`'s component ID, not `out`'s pin ID. `--inspect` prints resolver-local ids (`driver=<id>.<port>` under `Outputs (...)`) that equal the artifact's ids only for a single-file circuit without sub-circuits; for a project, read the `circ.topology.v0.full` section, whose records carry each component's name and kind.
 
 #### Why paired exports instead of one out-pointer call
 
@@ -152,8 +152,9 @@ const dump = new Uint8Array(w.memory.buffer, w.memBuffer(mem), n).slice();
 | Section name              | Contents                                                            |
 |---------------------------|---------------------------------------------------------------------|
 | `circ.topology.v0.min`    | Compact topology consumed by `init()`. Required.                    |
-| `circ.topology.v0.full`   | Verbose topology used by tooling (`circ-compile --inspect`, preview rendering). The runtime never reads it. |
-| `name`                    | Standard Zig-emitted name section. Useful for debuggers, ignored at runtime. |
+| `circ.topology.v0.full`   | Verbose topology for external tooling (names, origin chains, per-port labels); decode it with `lib/topology/full_decoder.zig`. The runtime never reads it, and the in-tree modes (`--preview`, `--sim`, `--truth-table`) build the same payload in process rather than reading it back. |
+
+The runtime is built stripped (`-Dwasm-optimize` defaults to ReleaseSmall), so a shipped artifact carries no `name` section; only a `-Dwasm-optimize=Debug` build keeps one.
 
 The `.full` section is not required for execution. Hosts that only run circuits can ignore it; tools that need names, hierarchy, or per-port labels should read `.full`.
 

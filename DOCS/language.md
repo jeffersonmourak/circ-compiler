@@ -11,14 +11,15 @@ This document is the language reference. For an end-to-end tutorial see
 [`getting-started.md`](getting-started.md); for the runtime API exposed by the
 compiled artifact see [`wasm-api.md`](wasm-api.md).
 
-> **Status.** This reference covers the surface as of the multi-bit-wires
+> **Status.** This reference covers the surface as of the native-memories
 > release: imports, input/output pins, primitive components (`and`, `not`,
-> `led`, `wire`), the auto-imported macro family (`or`, `nand`, `nor`, `xor`,
-> `xnor`), anonymous nested components, sub-circuit instantiation, and width
-> annotations on every signal-carrying declaration (`[N]` for literal widths,
-> `<W>` for parametric ones). Slice (`a[lo..hi]`), bit-index (`a[i]`), and
-> concatenation (`{a, b}`) signal expressions are also part of the language.
-> Anything not mentioned here is not part of the language yet.
+> `led`, `wire`), the memories `rom` and `ram` (§3.5, §6.5), the auto-imported
+> macro family (`or`, `nand`, `nor`, `xor`, `xnor`), anonymous nested
+> components, sub-circuit instantiation, and width annotations on every
+> signal-carrying declaration (`[N]` for literal widths, `<W>` for parametric
+> ones). Slice (`a[lo..hi]`), bit-index (`a[i]`), and concatenation (`{a, b}`)
+> signal expressions are also part of the language. Anything not mentioned
+> here is not part of the language yet.
 
 ---
 
@@ -31,50 +32,72 @@ and `|` separates alternatives. The authoritative PEG source lives at
 reading of it.
 
 ```
-program     = { item } .
-item        = comment
-            | import
-            | input-decl
-            | output-decl
-            | component-decl .
+program      = { item } .
+item         = comment
+             | import
+             | input-decl
+             | component-decl
+             | connection .
 
-comment     = "//" { any-char-except-newline } newline .
+comment      = "//" { any-char-except-newline } newline .
 
-import      = "import" alias string-literal .
-alias       = identifier .
+import       = "import" alias string-literal .
+alias        = identifier .
 
-input-decl  = "input" identifier { "," identifier } .
-output-decl = "output" identifier "(" "in" "=" signal ")" .
+input-decl   = "input" [ param-intro ] [ width-annot ] ident-list .
+param-intro  = "<" identifier { "," identifier } ">" .    (* declares width parameters *)
+width-annot  = "[" width-arg "]" .
+width-arg    = integer | identifier .                     (* a literal or a parameter *)
+ident-list   = identifier { "," identifier } .
 
 component-decl
-            = type identifier "(" port-binding { "," port-binding } ")" .
-type        = "and" | "not" | "led" | "wire"
-            | "or" | "nand" | "nor" | "xor" | "xnor"
-            | identifier .            (* user-defined sub-circuit alias *)
-
+             = type [ width-annot ] identifier [ call-widths ] bindings
+             | type [ width-annot ] ident-list .          (* port-less form, see below *)
+type         = "output" | "bus" | "led" | "and" | "or" | "not" | "xor" | "nand"
+             | identifier .          (* wire, nor, xnor, rom, ram and every
+                                        sub-circuit alias arrive through this branch *)
+call-widths  = "[" width-arg { "," width-arg } "]" .      (* also a memory's [W, A] *)
+bindings     = "(" port-binding { "," port-binding } ")" .
 port-binding = identifier "=" signal .
 
-signal      = qualified-ref
-            | anonymous-component "." identifier .
-qualified-ref
-            = identifier [ "." identifier ] .   (* "name" or "name.port" *)
+signal       = concat | indexed-ref .
+concat       = "{" signal { "," signal } "}" .
+indexed-ref  = base-ref [ subscript ] .
+subscript    = "[" integer ".." integer "]" | "[" integer "]" .
+base-ref     = anonymous-component "." identifier
+             | identifier [ "." identifier ] .            (* "name" or "name.port" *)
 anonymous-component
-            = type "(" port-binding { "," port-binding } ")" .
+             = type bindings .
 
-identifier  = ( letter | "_" ) { letter | digit | "_" } .
+connection   = signal "<>" signal .                       (* parsed, then discarded *)
+
+identifier   = ( letter | "_" ) { letter | digit | "_" } .
+integer      = digit { digit } .
 string-literal
-            = '"' { any-char-except-double-quote } '"' .
+             = '"' { any-char-except-double-quote } '"' .
 ```
 
-A few intentional shapes to note in the grammar:
+A few intentional shapes, and a few accidents, to note in the grammar:
 
 * The order of items in a program is irrelevant for *semantics* (the validator
   resolves names globally) but parsing is strictly left-to-right line-oriented.
 * There is no statement terminator. Items are separated by whitespace; a single
   declaration may span multiple lines as long as its parentheses balance.
-* `output` is technically a component-shaped declaration (it has one port,
-  `in`), but it is special-cased above to make the asymmetry with `input`
-  explicit.
+* `output` is an ordinary component-shaped declaration with one port. The
+  binding name is **not checked**: `output r(zzz = g.out)` compiles, and any
+  binding after the first is dropped. Write `in` anyway.
+* The `type` keywords carry no word boundary, so an identifier in type
+  position that merely *begins* with one is split: `andx g(a=a, b=a)` parses
+  as `and x(...)` plus a syntax error (`recovery_keyword_prefix.circ`). A
+  sub-circuit alias must therefore not start with `and`, `or`, `not`, `xor`,
+  `nand`, `led`, `bus` or `output`.
+* `bus` is a keyword nothing implements: `bus x(in = y)` resolves to an
+  undeclared name (`E001`).
+* The port-less form `type ident-list` (`led x`, `and g1, g2`) parses but has
+  no use today: a gate or LED declared that way reports `E004` (unconnected
+  input), and `output q` makes the pin its own driver (`E008`).
+* A `<>` connection line is parsed and then discarded without a diagnostic
+  (`recovery_connection_line.circ`).
 
 ---
 
@@ -182,7 +205,7 @@ The available primitive types are:
 | ------ | ----------- | ------ | ---------------------------------------------------------------------- |
 | `and`  | `a`, `b`    | `out`  | Bitwise AND. Width controlled by `[N]`; defaults to 1.                 |
 | `not`  | `in`        | `out`  | Bitwise inverter. Width controlled by `[N]`; defaults to 1.            |
-| `led`  | `in`        | —      | Visualisation sink. Multi-bit form renders per `--preview` flags.      |
+| `led`  | `in`        | `out`  | Visualisation sink; `out` re-drives `in` so an LED can feed a gate. Multi-bit form renders per `--preview` flags. |
 | `wire` | `in`        | `out`  | Pass-through. See §5.                                                  |
 
 The auto-imported macro family is parametric in width; the default-missing-`[N]`
@@ -314,12 +337,13 @@ and[4] low_half(a = bus[0..4], b = some_other_4bit_signal)
 `bus[0..4]` covers bits 0, 1, 2, 3 — a 4-bit signal. The width of a slice is
 `hi - lo`. An out-of-range or inverted slice is `E002`.
 
-**Concatenation (`{low, high, ...}`).** Joins two or more signals into a wider
+**Concatenation (`{low, high, ...}`).** Joins one or more signals into a wider
 one, low-on-left:
 
 ```
 input a, b, c, d
-and[4] combine(a = {a, b, c, d}, b = ...)
+input[4] mask
+and[4] combine(a = {a, b, c, d}, b = mask)
 // bits: [0]=a, [1]=b, [2]=c, [3]=d
 ```
 
@@ -343,8 +367,9 @@ rules as a named one.
 ### 4.1 Validation Rules
 
 The compiler enforces a small set of rules on the resulting graph; violations
-produce diagnostics with stable codes (`E001`–`E018`, `W001`–`W003`, see
-`circuit-format.md` for the full catalogue):
+produce diagnostics with stable codes (`E001`–`E018`, `W001`–`W003`; the
+catalogue with each code's message is in `circuit-format.md` "Diagnostic
+Codes", the registry in `lib/validator/codes.zig`):
 
 * Every signal reference must resolve to a declared name (`E001`).
 * Every named port on a component must exist on that component's type
@@ -406,8 +431,11 @@ and  g2(a = na.out, b = b2)
 
 ### 5.2 Wires and cycles
 
-Wires participate in cycle detection like any other component. A pair of wires
-that drive each other's `in` is a hard error (`E008`):
+Wires are *transparent* to cycle detection: a cycle that runs only through
+`wire`, `led`, `output`, `slice`, `concat`, `rom` and sub-circuit boundaries
+has no delay element and is a hard error (`E008`), as is any component
+driving itself. A pair of wires that drive each other's `in` is the simplest
+case:
 
 ```
 // E008_wire_loop.circ — rejected at compile time
@@ -415,18 +443,21 @@ wire w1(in = w2.out)
 wire w2(in = w1.out)
 ```
 
-This is *not* a special-case for `wire`; it is the same rule that forbids
-combinational feedback through any chain of components. The fixture
-`clean_gated_feedback.circ` illustrates the legal counterpart, where wires
-break two NOT gates into a sequence rather than a loop:
+`and`, `not` and `ram` are *cycle-breaking*: a loop that passes through one
+of them is sequential logic (a latch), not a combinational loop, and is
+accepted. The fixture `clean_gated_feedback.circ` is a ring of two NOT gates
+and two wires — a genuine cycle in the signal graph — and compiles cleanly
+because the NOT gates break it:
 
 ```
 not  n1(in = w2.out)   // n1 is fed from w2
 wire w1(in = n1.out)
 not  n2(in = w1.out)
-wire w2(in = n2.out)   // closes the chain — but the chain has length 4 and
-                       // — crucially — has no cycle in the *signal* graph
+wire w2(in = n2.out)   // closes the ring; legal because it passes through gates
 ```
+
+The check does not judge whether such a ring settles: a ring with an odd
+number of inverters compiles and oscillates at run time.
 
 (In this snippet `w2.out` is forward-referenced; the validator resolves names
 globally, so order in source is irrelevant for binding.)

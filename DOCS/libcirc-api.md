@@ -9,7 +9,7 @@ Zig API (`lib/libcirc.zig`), so the two cannot drift: the driver tests
 prove the library equals the in-process CLI byte for byte across the
 render, table and compile fixtures.
 
-There are two surfaces:
+There are three surfaces:
 
 - **Zig** — `lib/libcirc.zig`: `analyze`, `compile`, `preview`, `truthTable`
   take an allocator and a `Request` and return an `Outcome{ status, body }`.
@@ -79,7 +79,7 @@ Warnings are not returned on status 0 — call `circ_analyze` for them.
 `circ_version` is always status 0 with:
 
 ```json
-{"version":"0.0.2","revision":"<git short sha>","topology_version":2,"full_version":2,
+{"version":"0.0.2","revision":"<git short sha>","topology_version":3,"full_version":3,
  "parser":"langlang go/v0.0.12 abi=1",
  "parser_runtime_sha256":"<sha256 of the runtime pasted into lib/parser/parser.zig>",
  "grammar_sha256":"<sha256 of lib/grammar/proto-circ.peg at build time>"}
@@ -230,7 +230,7 @@ identify the exact parser and grammar the module was built from.
 
 **Size.** Measure with `stat -f%z zig-out/lib/libcirc.wasm` and
 `gzip -9 -c zig-out/lib/libcirc.wasm | wc -c`. Budget 600 KB raw / 200 KB
-gzip; the test suite fails above 3 MiB. On 2026-09-08 (pre-memories):
-383,324 B raw, 146,549 B gzip.
+gzip; the test suite fails above 3 MiB. On 2026-09-10 (the layout
+rewrite): 437,566 B raw, 167,036 B gzip.
 
 **Not exported.** `--inspect`, `--sim` and `--emit-zig` stay CLI-only.

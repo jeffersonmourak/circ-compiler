@@ -1,6 +1,6 @@
 # Preview: ASCII circuit schematics
 
-`circ-compile <foo.circ> --preview` renders a digital circuit as a styled ASCII schematic to stdout. The output is deterministic — the same `.circ` source produces byte-identical output on every invocation — and includes the wires, gate glyphs, fan-out taps, and jump-arc crossings that make the diagram readable in a terminal.
+`circ-compile <foo.circ> --preview` renders a digital circuit as a styled ASCII schematic to stdout. The output is deterministic — the same `.circ` source produces byte-identical output on every invocation — and includes the wires, gate glyphs, fan-out taps, and `┼` crossings that make the diagram readable in a terminal.
 
 ## Quick start
 
@@ -25,14 +25,12 @@ zig-out/bin/circ-compile tests/fixtures/circuits/builtin_xor.circ --preview
 ```
 
 ```
-╭───╮     ╭───────╮     ╭─────╮
-│ a ├○───▶┤       │ ╭──▶┤ out │
-╰───╯     │[xor:g]├○╯   ╰─────╯
-       ╭─▶┤       │            
-       │  ╰───────╯            
-       │                       
-╭───╮  │                       
-│ b ├○─╯                       
+╭───╮     ╭───────╮            
+│ a ├○───▶┤       │     ╭─────╮
+╰───╯     │[xor:g]├○───▶┤ out │
+      ╭──▶┤       │     ╰─────╯
+╭───╮ │   ╰───────╯            
+│ b ├○╯                        
 ╰───╯                          
 ```
 
@@ -42,9 +40,9 @@ The `[xor:g]` box represents the entire `xor g(...)` instance as a single labele
 
 | Flag | Purpose |
 |------|---------|
-| `--preview` | Selects preview mode. Mutually exclusive with `--emit-zig` and `--inspect`. `-o` is rejected at parse time. |
+| `--preview` | Selects preview mode. Mutually exclusive with `--emit-zig`, `--inspect`, `--truth-table` and `--sim`. `-o` is rejected at parse time. |
 | `--expand-macros` | Renders subcircuits as their full primitive expansion instead of as a single labeled box. Only valid with `--preview`. |
-| `--expand-display` | Renders an `led[N]` (width > 1) as a row of `N` single-bit LED cells with explicit `b0..bN-1` slice connections, instead of the default opaque multi-bit numeric display box. Only valid with `--preview`. |
+| `--expand-display` | Renders a multi-bit `led[N]` (widths 2..7) as a row of `·` indicator glyphs inside its box, LSB on the left, instead of the `0x?` hex display; a width of 8 or more falls back to the hex display and warns on stderr. Only valid with `--preview`. |
 | `--color=auto\|always\|never` | Enables ANSI color (per-kind: input pins green, gates cyan, LEDs yellow, macros magenta, wires dim). Defaults to `auto` (color when stdout is a TTY *and* `NO_COLOR` is unset). `always` overrides `NO_COLOR` per the convention used by `git`/`ls`/`grep`. |
 
 The render path is fully in-memory: parse → resolve → translate → topology build → layout → render → stdout. No `.wasm` is written, no temp directory, no subprocess.
@@ -59,8 +57,10 @@ The render path is fully in-memory: parse → resolve → translate → topology
 | `output_pin` | `╭───╮` / `┤ <n> │` / `╰───╯` — input port `┤` on left edge | 5×3 (wider for long names) |
 | `not_gate` | `╭───╮` / `┤NOT├○` / `╰───╯` — input `┤` left, output `├○` right | 5×3 |
 | `and_gate` | `╭───╮` / `┤   │` / `│AND├○` / `┤   │` / `╰───╯` — two stacked input ports flanking the label row | 5×5 |
-| `led` | `╭───╮` / `│LED│` / `╰───╯` — input rides on the centre row, no separate port glyph | 5×3 |
-| `subcircuit` (opaque) | `╭─...─╮` / `┤     │` / `│[<sub>:<alias>]├○` / `┤     │` / `╰─...─╯` — width grows to fit the label | (label width + 2) × 5 |
+| `led` | `╭───╮` / `┤LED│` / `╰───╯` — input port `┤` on the left edge like every sink; a multi-bit LED shows `0x?` (one `?` per nibble) or, with `--expand-display`, one `·` per bit | 5×3 (wider for the multi-bit labels) |
+| `subcircuit` (opaque) | `╭─...─╮` / `┤     │` / `│[<sub>:<alias>]├○` / `┤     │` / `╰─...─╯` — width grows to fit the label, one input port per odd border row | max(8, label width + 2) × (2·inputs + 1, at least 3) |
+| `rom` | `╭─...─╮` / `┤ rom <name>[W,A] ├○` / `╰─...─╯` — one input port `addr` | (label width + 4) × 3 |
+| `ram` | same label as `rom`; input ports `addr`, `din`, `we`, `clk` on rows 1, 3, 5, 7 | (label width + 4) × 9 |
 
 Names longer than the cell width are truncated; shorter names pad with spaces. The `○` port-side bubbles aren't part of the box itself — they sit one column outside the `╭╮╰╯` border, so a 5-column box with bubbles looks 6 columns wide on the wire side.
 
@@ -68,38 +68,36 @@ Names longer than the cell width are truncated; shorter names pad with spaces. T
 
 - `─` horizontal rail, `│` vertical rail.
 - `╭` `╮` `╰` `╯` corners between perpendicular segments. The glyph is picked from the two segment directions: `{W,S} → ╮`, `{E,S} → ╭`, `{W,N} → ╯`, `{E,N} → ╰`.
-- `┬` `┴` `├` `┤` 3-way junctions. Picked by the same neighbour-inspection pass that handles corners; you'll see these wherever a wire branches into a T off another wire.
-- `┼` 4-way crossings — only drawn where two unrelated wires pass over each other (no shared endpoint). The renderer prefers ┼ over the older "jump-arc" trick.
-- `●` fan-out / fan-in branch point — drawn where one wire splits into two destinations, or two wires merge into one port.
-- `○` port-side bubble — drawn on the cell immediately outside a gate's input or output port (the cell where the wire begins or ends).
+- `┬` `┴` `├` `┤` 3-way junctions. Picked by the same neighbour-inspection pass that handles corners. Under the channel router every fan-out branches at a `●` tap, so no current golden contains one; the glyphs remain for a wire that branches into a T off another.
+- `┼` 4-way crossings — drawn on any cell where two wires cross and neither *diverges* there: two wires that share a source or a destination but merely pass over each other still get `┼`. The renderer prefers ┼ over the older "jump-arc" trick.
+- `●` fan-out / fan-in branch point — drawn where two wires of one net diverge (one corners at the cell while the other passes straight through), and on any source cell that three or more wires leave from.
+- `○` port-side bubble — drawn only on the cell immediately outside a component's *output* port (the cell where the wire begins); the destination end always carries an arrowhead.
 - `▶` `◀` `▲` `▼` arrowhead — drawn on the destination end of every wire, just before it enters the target port. Direction matches the segment's last step.
 - `+` fallback — appears only on cells that have no connecting neighbours in any direction. It's a *visible warning glyph* meaning the router placed a wire that nothing connects to; if you see one, something is off.
 
-**Layout determinism.** Rendering uses a five-stage pipeline (collapse → columns → rows → place → route), followed by a junction-picker pass that resolves crossings into the right corner/T-glyph. Every decision uses ascending node id as the universal tie-breaker; hash-map iteration is forbidden as an ordering source. The same `.circ` source produces byte-identical output across runs and platforms.
+**Layout determinism.** Rendering uses a five-stage layout pipeline (collapse → layering → ordering → coords → channels, described below), followed by a junction-picker pass that resolves crossings into the right corner/T-glyph. Every decision uses ascending node id as the universal tie-breaker; hash-map iteration is forbidden as an ordering source. The same `.circ` source produces byte-identical output across runs and platforms.
 
 ## Multi-bit pins
 
-A component declared with a width annotation (`input[4] a`, `led[4] disp`, `wire[8] bus`) renders with the width appended to its label as `[N]`:
+A pin declared with a width annotation (`input[4] a`, `wire[8] bus`) renders with the width appended to its label as `[N]`; a multi-bit LED shows a hex placeholder instead (`led_4bit_default.circ`):
 
 ```
-╭──────╮     ╭────────────╮
-│ a[4] ├○───▶┤ [led:disp] │
-╰──────╯     ╰────────────╯
+╭──────╮     ╭─────╮
+│ a[4] ├○───▶┤ 0x? │
+╰──────╯     ╰─────╯
 ```
 
 A scalar pin omits the suffix, so the label width-marker is the visual cue that distinguishes a 1-bit and an N-bit wire. The wire glyph itself is the same — there is no "bus" glyph.
 
-### LED rendering modes
+### LED labels
 
-A multi-bit `led[N]` (width > 1) has three rendering modes:
+The preview is static — it never knows a signal's value — so an LED's label depends only on its width and the flags:
 
-| Mode | Trigger | Cell content |
-|------|---------|--------------|
-| **Numeric** | width > 1, all bits `defined` | The unsigned integer value (`0`–`2^N-1`) inside the box. |
-| **Numeric + warning** | width > 1, some bits `defined`, others `undefined` | The integer value formed from the defined bits, with a warning marker (`?`) showing partial state. |
-| **Indicator** | width = 1 | The single-bit LED glyph: lit on `high`, dim on `low`, `?` on `undefined`. |
-
-With `--expand-display`, the multi-bit form decomposes into `N` scalar LEDs wired to explicit bit-index slices of the input signal, which is the right view when you need to debug per-bit drive state.
+| Label | When |
+|-------|------|
+| `LED` | width 1 |
+| `0x?…?` (one `?` per nibble) | width > 1 (default) |
+| `····` (one `·` per bit, LSB left) | width 2..7 with `--expand-display`; width 8 or more keeps the hex form and warns once on stderr |
 
 ## Macro modes
 
@@ -114,7 +112,7 @@ The renderer reads from a versioned topology payload embedded in compiled `.wasm
 
 | Section | Contains |
 |---------|----------|
-| `circ.topology.v0.min` | Flat primitive components (id, kind, `width: u8`) + connections. Magic `CIRC`, version `0x03`. The "lightweight" payload — what the runtime needs. |
+| `circ.topology.v0.min` | Flat primitive components (id, kind, `width: u8`, plus kind-dispatched aux bytes: `slice` carries `lo`/`hi`, `rom`/`ram` the address width) + connections. Magic `CIRC`, version `0x03`. The "lightweight" payload — what the runtime needs. |
 | `circ.topology.v0.full` | Adds per-component instance names + subcircuit-origin chains. Magic `CIRF`, version `0x03`. The "rich" payload — what the renderer (and any future inspection tooling) needs. |
 
 `--preview` builds the `full` payload in memory (skipping the `.wasm` write) and feeds it directly into the layout. Tools that consume a `.wasm` artifact from disk can parse the same payload via `lib/topology/full_decoder.zig:decode`.

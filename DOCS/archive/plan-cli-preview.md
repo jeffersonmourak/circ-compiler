@@ -1,10 +1,10 @@
 # Archived plan: cli-preview
 
-**Canonical commit:** `ffe92ac79b4ae3a7df2ab8de744146766ae0a123` (`ffe92ac Plan prompt: record post-Phase-3 future-cleanup traps`)
+**Canonical commit:** `ffe92ac79b4ae3a7df2ab8de744146766ae0a123` (pre-squash, not in history; the work landed as `ea8fff9`) (`ffe92ac Plan prompt: record post-Phase-3 future-cleanup traps`)
 **Archived on:** 2026-05-06
 **Plan duration:** 2026-05-06 → 2026-05-06
 
-> This file is a highlight view. The full plan prompt, every phase plan, and every STATUS entry are preserved in the commit referenced above. Check that commit out (`git show <full-sha>:DOCS/PLANS_PROMPT.md`, etc.) when you need the unabridged source.
+> This file is a highlight view. The plan bundle (plan prompt, phase plans, STATUS log) lived on a branch that was squash-merged as `ea8fff9` (`Add ASCII circuit preview to circ-compile (#5)`); the pre-squash commit named above is not in this repository's history, so the unabridged source is not recoverable from git.
 
 ## Goal & scope
 

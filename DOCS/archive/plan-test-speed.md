@@ -1,10 +1,10 @@
 # Archived plan: test-speed
 
-**Canonical commit:** `06fdc4f6b13b3d0df68ff596e9fae2ad968eddda` (`06fdc4f Document completion of Phase 2 of the test suite speed-up initiative in \`DOCS/STATUS.md\`. Confirmed significant performance improvements with final warm run time of 25.33s, achieving a speedup factor of ~3.8× compared to the baseline. No new tests added; initiative is now complete.`)
+**Canonical commit:** `06fdc4f6b13b3d0df68ff596e9fae2ad968eddda` (pre-squash, not in history; the work landed as `acad4f7`) (`06fdc4f Document completion of Phase 2 of the test suite speed-up initiative in \`DOCS/STATUS.md\`. Confirmed significant performance improvements with final warm run time of 25.33s, achieving a speedup factor of ~3.8× compared to the baseline. No new tests added; initiative is now complete.`)
 **Archived on:** 2026-05-04
 **Plan duration:** 2026-05-04 → 2026-05-04
 
-> This file is a highlight view. The full plan prompt, every phase plan, and every STATUS entry are preserved in the commit referenced above. Check that commit out (`git show 06fdc4f6b13b3d0df68ff596e9fae2ad968eddda:DOCS/PLANS_PROMPT.md`, etc.) when you need the unabridged source.
+> This file is a highlight view. The plan bundle (plan prompt, phase plans, STATUS log) lived on a branch that was squash-merged as `acad4f7` (`Plan: speed up test suite (~3 min → <60 s) (#2)`); the pre-squash commit named above is not in this repository's history, so the unabridged source is not recoverable from git.
 
 ## Goal & scope
 

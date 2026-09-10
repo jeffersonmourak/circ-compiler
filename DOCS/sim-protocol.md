@@ -3,7 +3,8 @@
 `circ-compile <input>.circ --sim` compiles the circuit, then serves a small
 line-oriented request/response protocol over stdin/stdout. It lets an external
 process (a test runner, a REPL, an editor) drive the circuit by pin name:
-set inputs, settle, read outputs. It writes no file.
+set inputs, settle, read outputs. It writes no artifact (only the `save`
+verb touches the filesystem, to write a memory image).
 
 The mode runs the same native simulation engine as `--truth-table`, built from
 the same resolved topology, so behavior matches the compiled `.wasm`. In fact

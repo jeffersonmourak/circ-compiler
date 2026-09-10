@@ -10,7 +10,7 @@ Only when **all** of the following are true:
 
 - The latest entry in `DOCS/STATUS.md` declares the plan complete (e.g. "v0 sign-off", "all phases shipped") with no pending next slice.
 - `git log --oneline` confirms every slice STATUS claims as shipped is in the tree.
-- `zig build test` passes on the current `HEAD`.
+- `zig build test-all` passes on the current `HEAD`.
 - The user has explicitly asked to archive (do not archive proactively).
 
 If any of these is false, stop and tell the user what is missing instead of archiving.
@@ -23,13 +23,13 @@ A "plan" is the bundle of three artefact kinds that drove the implementation:
 2. **The phase plans** — every `DOCS/PLANS/PHASE_<N>_*.md`. Each one decomposes a phase into slices with explicit deliverables and tests.
 3. **The rolling status log** — `DOCS/STATUS.md`. Every shipped slice has a dated entry (`YYYY-MM-DD — Phase N — <slice title>` with `What shipped` / `Files touched` / `Tests` / `Next slice` / `Notes`).
 
-Treat the three as a single bundle. The plan's name is the slug of `PLANS_PROMPT.md` — for the v0 work, use `v0`.
+Treat the three as a single bundle. The plan's name is the initiative's slug from `PLANS_PROMPT.md`'s title (`layout` for "Plan Prompt — Layout rewrite", `memories`, `playground`, …).
 
 ## Steps
 
 ### 1. Pick the plan name
 
-Default: `v0`. If the user supplies a different name, use that. The archive file becomes `DOCS/archive/plan-<name>.md`. If `DOCS/archive/plan-<name>.md` already exists, stop and ask the user — never overwrite an existing archive.
+There is no fixed default: derive it from the plan prompt's title, and use the name the user supplies if they give one. The archive file becomes `DOCS/archive/plan-<name>.md`. If `DOCS/archive/plan-<name>.md` already exists, stop and ask the user — never overwrite an existing archive.
 
 ### 2. Capture the canonical git hash
 
@@ -68,9 +68,9 @@ Mandatory body sections, in this order:
    - One sentence from the phase plan's "Goal" / "What ships" section.
    - The bullet list of *what actually shipped*, distilled from the STATUS entries for that phase (one bullet per slice, ≤ 200 chars each). Quote diagnostic codes, file paths, and test names verbatim — those are durable references; rewording them strips usefulness. Do NOT repeat per-slice "Files touched" lists; mention only files whose name is itself the load-bearing decision (e.g., a fixture filename that captures the regression).
    - Any "definition of done" deviations or open questions that landed differently than the phase plan predicted.
-3. **Diagnostic / API surface frozen at v0** — a single table or bullet list pulled from STATUS or `DOCS/decisions/`: every stable diagnostic code (`E001`–`E0NN`, `W0NN`), every emitted runtime export, every CLI flag. This is the reference future readers will grep for first.
-4. **Known v0 papercuts carried forward** — reproduce the "Notes" callouts from STATUS that flag deferred work or v1 candidates (e.g., "single-file CLI mode skips `scan_imports`", "no programmatic root-pin id helper"). Each papercut gets one bullet with enough context to act on without re-reading STATUS.
-5. **Decisions & specs that survived the plan** — pointers (not copies) to `DOCS/architecture.md`, `DOCS/circuit-format.md`, `DOCS/wasm-api.md`, `DOCS/simulation-engine.md`, `DOCS/decisions/`. The archive is for plan-process artefacts, not the living specs.
+3. **API surface frozen by the plan** — a single table or bullet list pulled from STATUS or `DOCS/decisions/`: every stable diagnostic code (`E001`–`E0NN`, `W0NN`), every emitted runtime export, every CLI flag. This is the reference future readers will grep for first.
+4. **Known papercuts carried forward** — reproduce the "Notes" callouts from STATUS that flag deferred work or v1 candidates (e.g., "single-file CLI mode skips `scan_imports`", "no programmatic root-pin id helper"). Each papercut gets one bullet with enough context to act on without re-reading STATUS.
+5. **Decisions & specs that survived the plan** — pointers (not copies) to the living specs the plan touched (`DOCS/architecture.md`, `DOCS/language.md`, `DOCS/wasm-api.md`, `DOCS/preview.md`, `DOCS/libcirc-api.md`, …) and the `DOCS/decisions/` entries it appended. The archive is for plan-process artefacts, not the living specs.
 
 Style rules:
 
@@ -87,7 +87,7 @@ After the archive file is written and the user has reviewed it (you stop for rev
 - Every file under `DOCS/PLANS/`
 - `DOCS/STATUS.md`
 
-`DOCS/index.md` and any other doc that points at these files gets its pointer removed (or repointed at `DOCS/archive/index.md`). Add a row for the new archive file to `DOCS/archive/index.md`. Do **not** delete `DOCS/decisions/`, `DOCS/architecture.md`, `DOCS/circuit-format.md`, `DOCS/wasm-api.md`, `DOCS/simulation-engine.md`, or anything under `DOCS/getting-started.md` — those are living specs, not plan artefacts.
+`DOCS/index.md` and any other doc that points at these files gets its pointer removed (or repointed at `DOCS/archive/index.md`). Add a row for the new archive file to `DOCS/archive/index.md`. Do **not** delete anything else under `DOCS/` — `DOCS/decisions/`, `DOCS/archive/`, `DOCS/prompts/` and every reference document (`architecture.md`, `language.md`, `wasm-api.md`, …) are living specs, not plan artefacts.
 
 If the repository contains a `DOCS/prompts/ARCHIVE.md` (this file), keep it. The archive prompt is a process artefact for *future* plans and survives across plan cycles.
 
@@ -95,7 +95,7 @@ Use `git status` to confirm the only modifications/deletions are the ones listed
 
 ### 6. Verify
 
-Run `zig build test` one final time. The archive must not break the build (it shouldn't — only docs moved — but the suite is the bar). If anything fails, stop and report; do not commit a broken tree even by accident via the human.
+Run `zig build test-all` one final time. The archive must not break the build (it shouldn't — only docs moved — but the suite is the bar). If anything fails, stop and report; do not commit a broken tree even by accident via the human.
 
 ## Working loop
 

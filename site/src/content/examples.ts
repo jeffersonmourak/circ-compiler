@@ -433,7 +433,7 @@ output cout(in=c3.out)
     slug: 'sr-latch',
     title: 'SR latch',
     level: 'advanced',
-    lede: 'Two NOT gates connected end-to-end through two `wire` pass-throughs. Chain length four, no cycle in the signal graph — compiles cleanly. The substrate the SR latch above is built on. (No inputs to drive — open the live canvas to read the wire states.)',
+    lede: 'Two cross-coupled NOR cells, each a pair of NOTs feeding an AND (De Morgan), with feedback inverters closing the loop. Drive `s` to set `q`, `r` to reset it; the cycle passes through gates, so it compiles as sequential logic.',
     source: `// SR-latch built from cross-coupled NOR gates.
 //   Q    = NOR(R, Qbar)
 //   Qbar = NOR(S, Q)

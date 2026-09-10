@@ -108,16 +108,16 @@ output sum(in=s.out)
 output carry(in=c.out)
 `;
 
-const HERO_PREVIEW = `╭───╮     ╭───╮         ╭───────╮
-│ a ├○─●─▶┤   │ ╭──────▶┤ carry │
-╰───╯  │  │AND├○╯       ╰───────╯
-      ╭┼─▶┤   │
-      ││  ╰───╯
-      ││
-╭───╮ ││  ╭───────╮     ╭─────╮
-│ b ├○●╰─▶┤       │ ╭──▶┤ sum │
-╰───╯ │   │[xor:s]├○╯   ╰─────╯
-      ╰──▶┤       │
+const HERO_PREVIEW = `╭───╮     ╭───╮
+│ a ├○●──▶┤   │         ╭───────╮
+╰───╯ │   │AND├○───────▶┤ carry │
+      │╭─▶┤   │         ╰───────╯
+╭───╮ ││  ╰───╯
+│ b ├○┼╯
+╰───╯ ││  ╭───────╮
+      ╰┼─▶┤       │     ╭─────╮
+       │  │[xor:s]├○───▶┤ sum │
+       ╰─▶┤       │     ╰─────╯
           ╰───────╯`;
 
 function emitLandingTwin(): void {
@@ -147,11 +147,11 @@ function emitLandingTwin(): void {
     '',
     '## What it is',
     '',
-    '`circ` is a declarative language. Programs are flat lists of declarations: name an input pin, instantiate a gate, wire its ports to signals from other components. The primitives are `and`, `not`, `led`, and `wire`; macros for `or`, `nand`, `nor`, `xor`, and `xnor` expand to those primitives at compile time. Larger circuits live in their own `.circ` file and get pulled in with `import`.',
+    '`circ` is a declarative language. Programs are flat lists of declarations: name an input pin, instantiate a gate, wire its ports to signals from other components. The primitives are `and`, `not`, `led`, and `wire`, plus the `rom`/`ram` memories; macros for `or`, `nand`, `nor`, `xor`, and `xnor` expand to those primitives at compile time. Larger circuits live in their own `.circ` file and get pulled in with `import`.',
     '',
     "## What it isn't",
     '',
-    '`circ` is a v0. There are no multi-bit buses, no clocked registers, no analog signals, no tri-state lines. A `wire` is a single-bit pass-through, not a let-binding for a vector. The language deliberately stops at the same boundary as the early Nand2Tetris hardware chapters.',
+    '`circ` is a v0. Signals are up to 64 bits wide (`input[4] a`, slices, concatenation), and the only clocked element is `ram`; there are no other registers, no analog signals, no tri-state lines. A `wire` is a pass-through that names a signal, not a let-binding. The language deliberately stops at the same boundary as the early Nand2Tetris hardware chapters.',
     '',
     '## Where it runs',
     '',
@@ -255,8 +255,8 @@ function emitLlmsTxt(): void {
     '',
     'Important notes:',
     '',
-    '- `circ` is a v0 — single-bit signals only, no clocked registers, no multi-bit buses.',
-    '- Primitives are `and`, `not`, `led`, and `wire`; macros for `or`, `nand`, `nor`, `xor`, and `xnor` expand to those primitives at compile time.',
+    '- `circ` is a v0 — signals up to 64 bits wide, `ram` as the only clocked element, no other registers, no analog or tri-state.',
+    '- Primitives are `and`, `not`, `led`, and `wire`, plus the `rom`/`ram` memories; macros for `or`, `nand`, `nor`, `xor`, and `xnor` expand to those primitives at compile time.',
     '- Sub-circuits live in their own `.circ` files and are pulled in with `import`.',
     '',
     '## Docs',

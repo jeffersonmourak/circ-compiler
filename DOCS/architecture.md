@@ -1,6 +1,6 @@
 # Architecture
 
-`circ-compiler` is a one-shot compiler: it takes a `.circ` source (plus any sibling files it imports) and emits a self-contained `.wasm` artifact. The shipping pipeline is pure Zig from front to back; there is no runtime SDK in this repo, no rendering layer, and no JavaScript code in the build.
+`circ-compiler` is a one-shot compiler: it takes a `.circ` source (plus any sibling files it imports) and emits a self-contained `.wasm` artifact. The shipping pipeline is pure Zig from front to back; the Zig build has no runtime SDK, no rendering layer and no JavaScript. (The docs site under `site/` is a separate bun/Astro build that consumes `libcirc.wasm` and the pinned `circ-renderer` package.)
 
 ## End-to-end pipeline
 
@@ -115,7 +115,7 @@ The value currency above the pool is `BitVecState` (`value`, `defined`, `width`)
 
 ## Layer 2 — Prebuilt runtime template (`templates/`)
 
-The runtime template is the WASM shell that ships embedded inside every compiled artifact. It lives in `templates/main.zig` and `templates/interpreter.zig`, and is built once (`zig build`) into `zig-out/lib/circ-runtime.wasm`. The CLI embeds that blob via `lib/runtime_embed` (a `@embedFile` of the prebuilt artifact) so users do not need a Zig toolchain at runtime.
+The runtime template is the WASM shell that ships embedded inside every compiled artifact. It lives in `templates/main.zig` and `templates/interpreter.zig`, and is built once (`zig build`) into `zig-out/lib/circ-runtime.wasm`. `build.zig` generates a `runtime_embed` module (a `@embedFile` of the prebuilt artifact) that `lib/libcirc/modes.zig` splices the topology into, so users do not need a Zig toolchain at runtime.
 
 The template:
 
@@ -144,7 +144,11 @@ This is the heart of the compiler:
 
 ## Layer 5 — Preview (`lib/preview/`)
 
-`circ-compile --preview` renders an ASCII schematic of the resolved circuit without producing any artifact. The pipeline reuses `full_serializer.buildFromModule|Project` to get the structured topology, runs `lib/preview/layout.zig` to place gates, then `lib/preview/render.zig` to draw wires (with detour routing for crossing/feedback). See [preview.md](preview.md) for the conventions and flags.
+`circ-compile --preview` renders an ASCII schematic of the resolved circuit without producing any artifact. The pipeline reuses `full_serializer.buildFromModule|Project` to get the structured topology, then `lib/preview/layout/orchestrator.zig` turns it into a `LayoutGrid` through five stages — `collapse` (macro boxes; wires, slices and concats folded away) → `layering` (longest-path layers, dummy nodes for long edges, back edges flagged) → `ordering` (port-aware barycenter sweeps) → `coords` (one row per node, aligned to the port that feeds it) → `channels` (per-gap track routing with doglegs, return lanes for feedback and demand-sized gaps) — and `lib/preview/render.zig` paints the routed grid with box, wire and junction glyphs. See [preview.md](preview.md) for the conventions and flags, and [decisions/preview-layout.md](decisions/preview-layout.md) for the layout decisions.
+
+## Drivers over the engine (`lib/sim/`, `lib/truth_table/`, `lib/analyze/`)
+
+Three more modes run the front end in process and produce no artifact. `lib/sim/` implements the `--sim` stdio protocol (`protocol.zig` parses verbs, `loop.zig` drives an `lib/engine_session.zig` instance, images go through `lib/memimage.zig`; see [sim-protocol.md](sim-protocol.md)). `lib/truth_table/` enumerates every input vector for `--truth-table` over the same engine session. `lib/analyze/` produces the `--analyze` JSON for editor tooling ([analyze-api.md](analyze-api.md)). The back halves live in `lib/libcirc/modes.zig`, so the CLI and the library share them.
 
 ## Layer 6 — Library (`lib/libcirc.zig`, `lib/libcirc/`)
 
@@ -162,5 +166,9 @@ The front end above is also a library. `lib/libcirc/frontend.zig` runs load → 
 | `zig build libcirc-wasm` | `zig-out/lib/libcirc.wasm`        | The same C ABI for `wasm32-freestanding`; the site's `/playground` runs it in a Web Worker. |
 | `zig build test`       | fast unit + integration suite       | Suite under `tests/` (dev-loop default). Set `CIRC_SKIP_PERF=1` to skip the perf smoke.  |
 | `zig build test-all`   | `test` + slow emit-zig smoke        | Adds `test-emit` (a nested `zig build wasm` per fixture); the gate CI runs.  |
+| `zig build test-emit`  | the emit-zig smoke alone            | The nested per-fixture `zig build wasm` that `test-all` adds. |
+| `zig build bench`      | engine benchmark                    | Runs the engine over the truth-table fixtures against the goldens under `tests/fixtures/bench/` (see [benchmark.md](benchmark.md)). |
+| `zig build libcirc-smoke` | runs `examples/c/analyze.c`      | Compiles and runs the C example against `libcirc.a`. |
+| `zig build parser:gen` | `lib/parser/parser.zig`             | Regenerates the vendored parser from `lib/grammar/proto-circ.peg` (needs the pinned langlang fork). |
 
-There is no longer a "TypeScript SDK" target, a Canvas-2D rendering layer, or a `compiler:run` step — those were prototypes that have been removed in favour of the CLI-only model.
+There is no longer a "TypeScript SDK" target, a Canvas-2D rendering layer, or a `compiler:run` step in this build — those were prototypes that have been removed in favour of the CLI-only model. The canvas that draws circuits today is the separate `circ-renderer` package, pinned by the site.

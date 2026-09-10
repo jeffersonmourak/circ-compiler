@@ -7,8 +7,8 @@ JSON. It is the stable contract the external [`circ-lsp`](https://github.com/jef
 language server is built on; the compiler never depends on that repo, only
 the reverse.
 
-Unlike the five output modes (`--inspect`, `--preview`, `--truth-table`,
-`--emit-zig`, default compile), `--analyze` takes its input as a JSON
+Unlike the six file-path modes (`--inspect`, `--preview`, `--truth-table`,
+`--sim`, `--emit-zig`, default compile), `--analyze` takes its input as a JSON
 request on **stdin** rather than a file path, so it can be handed unsaved
 editor buffers. Implemented in `lib/analyze/analyze.zig`; mode dispatch is
 in `cmd/circ-compile/main.zig`.
@@ -35,7 +35,7 @@ message on stderr for a malformed request or an internal failure.
 ```
 
 - `root_path` (required): absolute path of the file to analyze as the project root.
-- `overlays` (optional): map of absolute path to unsaved buffer text. Keys are normalised the way the loader looks them up (POSIX-style, `.`/`..` folded), and the overlay is consulted *before* disk: a path in the overlay is read from memory, and an import whose joined path is an overlay key resolves to that key without touching the filesystem, so a root plus overlay-only siblings analyzes with no disk access. Anything not in the overlay (including imported files not listed) is read from disk. `files[].path` for an overlay-keyed file is the key as given, not its realpath; a never-saved root resolves against its overlay entry even though it does not exist on disk.
+- `overlays` (optional): map of absolute path to unsaved buffer text. Keys must already be normalised the way the loader looks them up (POSIX-style, `.`/`..` folded): the library's `files` map normalises its keys, but `circ-compile --analyze` inserts request keys verbatim, so an un-normalised key silently misses. The overlay is consulted *before* disk: a path in the overlay is read from memory, and an import whose joined path is an overlay key resolves to that key without touching the filesystem, so a root plus overlay-only siblings analyzes with no disk access. Anything not in the overlay (including imported files not listed) is read from disk. `files[].path` for an overlay-keyed file is the key as given, not its realpath; a never-saved root resolves against its overlay entry even though it does not exist on disk.
 
 ## Response (stdout)
 
