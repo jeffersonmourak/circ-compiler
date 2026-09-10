@@ -151,7 +151,7 @@ function emitLandingTwin(): void {
     '',
     "## What it isn't",
     '',
-    '`circ` is a v0. Signals are up to 64 bits wide (`input[4] a`, slices, concatenation), and the only clocked element is `ram`; there are no other registers, no analog signals, no tri-state lines. A `wire` is a pass-through that names a signal, not a let-binding. The language deliberately stops at the same boundary as the early Nand2Tetris hardware chapters.',
+    '`circ` is a v0. Signals are up to 64 bits wide (`input[4] a`, slices, concatenation); `ram` is the only clocked element, and the language has no other registers, no analog signals, and no tri-state lines. A `wire` is a pass-through that names a signal, not a let-binding. The language deliberately stops at the same boundary as the early Nand2Tetris hardware chapters.',
     '',
     '## Where it runs',
     '',

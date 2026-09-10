@@ -2,7 +2,7 @@
 
 ### Six invocation modes
 
-**Decision.** The CLI supports six modes, selected by mutually-exclusive flags, plus `--analyze`, which is dispatched before the mode parser and reads a JSON request on stdin instead of a file path:
+**Decision.** The CLI supports six modes, selected by mutually-exclusive flags, plus `--analyze`, which runs before the mode parser and reads a JSON request on stdin instead of a file path:
 
 ```
 circ-compile <input.circ> -o <output.wasm>           # produce WASM (default)

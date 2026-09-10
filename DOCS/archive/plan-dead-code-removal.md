@@ -1,10 +1,10 @@
 # Archived plan: dead-code-removal
 
-**Canonical commit:** `cf0a34a1c8ae8aad373ccf099fdc0c8c98a097a8` (pre-squash, not in history; the work landed as `30cf95a`) (`cf0a34a Remove dead code from \`lib/log.zig\` and delete unused \`lib/syntax/helpers.zig\``)
+**Canonical commit:** `cf0a34a1c8ae8aad373ccf099fdc0c8c98a097a8` (`cf0a34a Remove dead code from \`lib/log.zig\` and delete unused \`lib/syntax/helpers.zig\``). Absent from this repository's history: the work landed squashed as `30cf95a`.
 **Archived on:** 2026-05-04
 **Plan duration:** 2026-05-04 → 2026-05-04
 
-> This file is a highlight view. The plan bundle (plan prompt, phase plans, STATUS log) lived on a branch that was squash-merged as `30cf95a` (`Add dead code removal planning documentation (#1)`); the pre-squash commit named above is not in this repository's history, so the unabridged source is not recoverable from git.
+> This file is a highlight view. The plan bundle (plan prompt, phase plans, STATUS log) lived on a branch that the squash merge `30cf95a` (`Add dead code removal planning documentation (#1)`) replaced, so the commit named above is absent from this repository's history and the unabridged source is lost.
 
 ## Goal & scope
 

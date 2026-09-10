@@ -74,7 +74,7 @@ Names longer than the cell width are truncated; shorter names pad with spaces. T
 - `╭` `╮` `╰` `╯` corners between perpendicular segments. The glyph is picked from the two segment directions: `{W,S} → ╮`, `{E,S} → ╭`, `{W,N} → ╯`, `{E,N} → ╰`.
 - `┬` `┴` `├` `┤` 3-way junctions. Picked by the same neighbour-inspection pass that handles corners. Under the channel router every fan-out branches at a `●` tap, so no current golden contains one; the glyphs remain for a wire that branches into a T off another.
 - `┼` 4-way crossings — drawn on any cell where two wires cross and neither *diverges* there: two wires that share a source or a destination but merely pass over each other still get `┼`. The renderer prefers ┼ over the older "jump-arc" trick.
-- `●` fan-out / fan-in branch point — drawn where two wires of one net diverge (one corners at the cell while the other passes straight through), and on any source cell that three or more wires leave from.
+- `●` fan-out / fan-in branch point — drawn where two wires of one net diverge (one corners at the cell while the other passes straight through), and on any source cell from which three or more wires leave.
 - `○` port-side bubble — drawn only on the cell immediately outside a component's *output* port (the cell where the wire begins); the destination end always carries an arrowhead.
 - `▶` `◀` `▲` `▼` arrowhead — drawn on the destination end of every wire, just before it enters the target port. Direction matches the segment's last step.
 - `+` fallback — appears only on cells that have no connecting neighbours in any direction. It's a *visible warning glyph* meaning the router placed a wire that nothing connects to; if you see one, something is off.
@@ -95,7 +95,7 @@ A scalar pin omits the suffix, so the label width-marker is the visual cue that 
 
 ### LED labels
 
-The preview is static — it never knows a signal's value — so an LED's label depends only on its width and the flags:
+The preview is static, so it never knows a signal's value; an LED's label depends only on its width and the flags:
 
 | Label | When |
 |-------|------|

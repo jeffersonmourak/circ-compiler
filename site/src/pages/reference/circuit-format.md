@@ -152,7 +152,7 @@ Compiled `.wasm` artifacts embed the resolved circuit as a custom section. The c
 
 ## Diagnostic Codes
 
-The stable validator surface (E001–E018, W001–W003) is registered in `lib/validator/codes.zig`; the rules behind each code are in [`language.md`](/reference) §4.1. The full catalogue, with each code's default message:
+The stable validator surface (E001–E018, W001–W003) is registered in `lib/validator/codes.zig`; the rules behind each code are in [`language.md`](/reference) §4.1. The full catalogue follows, with each code's default message:
 
 | Code | Meaning |
 | --- | --- |

@@ -29,7 +29,7 @@ Treat the three as a single bundle. The plan's name is the initiative's slug fro
 
 ### 1. Pick the plan name
 
-There is no fixed default: derive it from the plan prompt's title, and use the name the user supplies if they give one. The archive file becomes `DOCS/archive/plan-<name>.md`. If `DOCS/archive/plan-<name>.md` already exists, stop and ask the user — never overwrite an existing archive.
+The name has no fixed default: derive it from the plan prompt's title, or use the name the user supplies. The archive file becomes `DOCS/archive/plan-<name>.md`. If `DOCS/archive/plan-<name>.md` already exists, stop and ask the user — never overwrite an existing archive.
 
 ### 2. Capture the canonical git hash
 

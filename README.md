@@ -12,7 +12,7 @@ not inv(in=a)
 output out(in=inv.out)
 ```
 
-`circ-compile inverter.circ -o inverter.wasm` produces a `.wasm` whose exported `setPin` / `run` / `getOutputValue` / `getOutputDefined` functions simulate that exact circuit. The two getters return paired `BitVecState` halves (value bits + defined-bits) crossed as `i64` / `BigInt`. Every artifact also exports the memory family — `getMemInfo`, `memBuffer`, `memLoad`, `memStore`, `memClear`, `setMemWord`, `getMemValue`, and `getMemDefined` — which only does something for circuits that declare `rom` / `ram`, so the host loads and reads back memory contents at runtime (see `DOCS/wasm-api.md`). Multi-file projects work the same way — the root file imports siblings and the compiler flattens every sub-circuit into a single ordered topology before serializing it into the `.wasm`:
+`circ-compile inverter.circ -o inverter.wasm` produces a `.wasm` whose exported `setPin` / `run` / `getOutputValue` / `getOutputDefined` functions simulate that exact circuit. The two getters return paired `BitVecState` halves (value bits + defined-bits) crossed as `i64` / `BigInt`. Every artifact also exports the memory family — `getMemInfo`, `memBuffer`, `memLoad`, `memStore`, `memClear`, `setMemWord`, `getMemValue`, and `getMemDefined` — which acts only on the ids of `rom` / `ram` components, so the host loads and reads back memory contents at runtime (see `DOCS/wasm-api.md`). Multi-file projects work the same way — the root file imports siblings and the compiler flattens every sub-circuit into a single ordered topology before serializing it into the `.wasm`:
 
 ```text
 // half_adder.circ

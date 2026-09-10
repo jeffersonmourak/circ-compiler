@@ -4,7 +4,7 @@ The surface syntax of `.circ` is documented in [../circuit-format.md](../circuit
 
 ### Sub-circuits emit a flat topology binary at serialize time
 
-**Decision.** Each instantiation of a sub-circuit is flattened by the topology serializer into primitive `createComponent` / `connect` records with fresh global ids; the runtime never sees a sub-circuit boundary. The function-per-file form this decision originally described — one Zig function `buildXxx(circuit, inputs...) → outputs` per `.circ` file, one call site per instantiation — survives only in the experimental `--emit-zig` path (see [compiler-pipeline.md](compiler-pipeline.md) "IR shape").
+**Decision.** The topology serializer flattens each sub-circuit instantiation into primitive `createComponent` / `connect` records with fresh global ids; the runtime never sees a sub-circuit boundary. The function-per-file form this decision originally described — one Zig function `buildXxx(circuit, inputs...) → outputs` per `.circ` file, one call site per instantiation — survives only in the experimental `--emit-zig` path (see [compiler-pipeline.md](compiler-pipeline.md) "IR shape").
 
 **Rationale.** A function-per-file IR is the smallest unit that maps cleanly onto the source — one source file, one emitted symbol. Calls flatten at runtime so the engine only ever sees primitives, which keeps the engine simple and lets the Zig compiler decide whether to inline. Component IDs are fresh per call, so multiple instances of the same sub-circuit don't collide.
 
@@ -28,7 +28,7 @@ The surface syntax of `.circ` is documented in [../circuit-format.md](../circuit
 
 ### Import statement: `import name "path"`
 
-**Decision.** Sub-circuit imports use the form `import <alias> "<path>"`. The alias becomes the gate-kind identifier in the importing file. Paths are resolved relative to the importing file. Built-in gates (`and`, `not`, `wire`, `led`, `output`, `input`, and since native memories `rom`, `ram`, `input_pin`, `output_pin`) require no import and live in a global namespace; the auto-imported macro family (`or`, `nand`, `nor`, `xor`, `xnor`) is materialised under the virtual `<builtin>/<name>.circ` path and is treated as if `import <name> "<builtin>/<name>.circ"` were written when the file participates in a project.
+**Decision.** Sub-circuit imports use the form `import <alias> "<path>"`. The alias becomes the gate-kind identifier in the importing file. Paths are resolved relative to the importing file. Built-in gates (`and`, `not`, `wire`, `led`, `output`, `input`; since native memories also `rom`, `ram`, `input_pin`, `output_pin`) require no import and live in a global namespace; the auto-imported macro family (`or`, `nand`, `nor`, `xor`, `xnor`) is materialised under the virtual `<builtin>/<name>.circ` path and is treated as if `import <name> "<builtin>/<name>.circ"` were written when the file participates in a project.
 
 **Rationale.** The explicit-alias form gives users a way to rename on import to resolve collisions. Relative paths make `.circ` files portable as a directory tree. A built-in global namespace means simple circuits don't pay an import-statement tax for `and` and `not`. The earlier draft of this decision included a `from` keyword (`import name from "path"`); the keyword was dropped from the grammar because the trailing string already unambiguously identifies the import path, and shaving a keyword keeps the surface lean.
 
@@ -88,7 +88,7 @@ The 17 decisions below were locked during the multi-bit wires initiative (stages
 
 **Decision.** Angle brackets are the *introduction* form (declares a parameter). Square brackets are the *reference* form (an integer literal or a previously-introduced parameter name).
 
-**Rationale.** Visually different brackets make it immediately obvious whether you're looking at a declaration or a use. The compiler can also produce better diagnostics: call-widths passed to a sub-circuit that introduces no parameter trigger `E015` at the call site, and the suggestion can point at the exact spelling change. (A `[W]` inside a file whose `input<…>` never introduced `W` is a hard front-end failure today — `error.UnboundParameter` with no diagnostic code.)
+**Rationale.** Visually different brackets make it immediately obvious whether you're looking at a declaration or a use. The compiler can also produce better diagnostics: passing call-widths to a sub-circuit that introduces no parameter triggers `E015` at the call site, and the suggestion can point at the exact spelling change. (A `[W]` in a file whose `input<…>` never introduced `W` fails hard in the front end today, as `error.UnboundParameter` with no diagnostic code.)
 
 ### 7. Where parameters can appear
 
@@ -159,7 +159,7 @@ The two i64 fields are read by JS as `BigInt`. The full rationale (paired export
 
 ### 17. Topology format version
 
-**Decision.** Bumped from `0x01` (pre-multibit) to `0x02` (and to `0x03` since native memories — see `circuit-format.md`). Both `ComponentRecord` (min) and `FullComponentRecord` (full) carry a `width: u8` byte per component. Slice records carry auxiliary `(lo, hi)` bytes in the min section. Concat records carry no aux bytes: their operand order rides the connection records, whose port byte is the operand index.
+**Decision.** Bumped from `0x01` (pre-multibit) to `0x02` (and to `0x03` with native memories; see `circuit-format.md`). Both `ComponentRecord` (min) and `FullComponentRecord` (full) carry a `width: u8` byte per component. Slice records carry auxiliary `(lo, hi)` bytes in the min section. Concat records carry no aux bytes: their operand order rides the connection records, whose port byte is the operand index.
 
 See `DOCS/circuit-format.md` for the exact byte layout.
 

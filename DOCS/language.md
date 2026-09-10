@@ -84,10 +84,10 @@ A few intentional shapes, and a few accidents, to note in the grammar:
 * There is no statement terminator. Items are separated by whitespace; a single
   declaration may span multiple lines as long as its parentheses balance.
 * `output` is an ordinary component-shaped declaration with one port. The
-  binding name is **not checked**: `output r(zzz = g.out)` compiles, and any
-  binding after the first is dropped. Write `in` anyway.
-* The `type` keywords carry no word boundary, so an identifier in type
-  position that merely *begins* with one is split: `andx g(a=a, b=a)` parses
+  translator **ignores the binding name**: `output r(zzz = g.out)` compiles,
+  and it drops any binding after the first. Write `in` anyway.
+* The `type` keywords carry no word boundary, so the parser splits an
+  identifier in type position that merely *begins* with one: `andx g(a=a, b=a)` parses
   as `and x(...)` plus a syntax error (`recovery_keyword_prefix.circ`). A
   sub-circuit alias must therefore not start with `and`, `or`, `not`, `xor`,
   `nand`, `led`, `bus` or `output`.
@@ -96,8 +96,8 @@ A few intentional shapes, and a few accidents, to note in the grammar:
 * The port-less form `type ident-list` (`led x`, `and g1, g2`) parses but has
   no use today: a gate or LED declared that way reports `E004` (unconnected
   input), and `output q` makes the pin its own driver (`E008`).
-* A `<>` connection line is parsed and then discarded without a diagnostic
-  (`recovery_connection_line.circ`).
+* The parser accepts a `<>` connection line and the translator discards it
+  without a diagnostic (`recovery_connection_line.circ`).
 
 ---
 
@@ -362,11 +362,11 @@ and g(
 
 Anonymous nesting may nest arbitrarily deep. It is purely a syntactic sugar:
 the resolver lowers it to an unnamed component instance with the same wiring
-rules as a named one. It is accepted inside a component's port binding
-(`and`, `not`, `wire`, `led`, a macro, a sub-circuit) but **not** inside an
-`output` declaration: `output o(in = and(a = a, b = b).out)` loses the nested
-gate's bindings and fails with `E004`. Name the gate, or route it through a
-`wire`, when an output needs it.
+rules as a named one. Any component's port binding (`and`, `not`, `wire`,
+`led`, a macro, a sub-circuit) accepts it; an `output` declaration does
+**not**: `output o(in = and(a = a, b = b).out)` loses the nested gate's
+bindings and fails with `E004`. Name the gate, or route it through a `wire`,
+when an output needs it.
 
 ### 4.1 Validation Rules
 
@@ -448,8 +448,8 @@ wire w2(in = w1.out)
 ```
 
 `and`, `not` and `ram` are *cycle-breaking*: a loop that passes through one
-of them is sequential logic (a latch), not a combinational loop, and is
-accepted. The fixture `clean_gated_feedback.circ` is a ring of two NOT gates
+of them is sequential logic (a latch), not a combinational loop, and the
+validator accepts it. The fixture `clean_gated_feedback.circ` is a ring of two NOT gates
 and two wires — a genuine cycle in the signal graph — and compiles cleanly
 because the NOT gates break it:
 
@@ -460,7 +460,7 @@ not  n2(in = w1.out)
 wire w2(in = n2.out)   // closes the ring; legal because it passes through gates
 ```
 
-The check does not judge whether such a ring settles: a ring with an odd
+The check says nothing about whether such a ring settles: a ring with an odd
 number of inverters compiles and oscillates at run time.
 
 (In this snippet `w2.out` is forward-referenced; the validator resolves names
@@ -595,10 +595,10 @@ nor n[8](a = x, b = y)         // bitwise NOR across all 8 bits
 output[8] z(in = n.out)
 ```
 
-The width of a macro or sub-circuit instance is passed in *instance* position
-as call-widths (`n[8]`), exactly as for a user sub-circuit (§6.3). A `[N]` in
-*type* position (`nor[8] n(...)`) only sizes primitives; on a macro it leaves
-the callee at width 1 and the call fails with `E014`.
+Pass the width of a macro or sub-circuit instance in *instance* position, as
+call-widths (`n[8]`), exactly as for a user sub-circuit (§6.3). A `[N]` in
+*type* position (`nor[8] n(...)`) sizes only primitives; on a macro it leaves
+the callee at width 1, and the call fails with `E014`.
 
 ### 6.5 Memories (`rom`/`ram`)
 

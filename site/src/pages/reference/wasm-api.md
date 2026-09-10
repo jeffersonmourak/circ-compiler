@@ -60,7 +60,7 @@ The compiled `.wasm` carries the circuit topology as a `circ.topology.v0.min` cu
 3. Copy the section bytes to that pointer in `memory.buffer`.
 4. Call `init()`. The runtime parses the buffer, builds the circuit graph, and marks itself initialised.
 
-`init()` is idempotent: calling it after the runtime is initialised is a no-op. With no topology loaded it initialises an *empty* circuit and latches, so a later `topology_alloc` + `init()` is ignored; only a topology that fails to parse leaves the runtime uninitialised and `init()` retryable. Always copy the section before the first `init`.
+`init()` is idempotent: calling it after the runtime is initialised is a no-op. With no topology loaded it initialises an *empty* circuit and latches, so the runtime ignores a later `topology_alloc` + `init()`; only a topology that fails to parse leaves the runtime uninitialised and `init()` retryable. Always copy the section before the first `init`.
 
 ### `run()`
 
@@ -154,7 +154,7 @@ const dump = new Uint8Array(w.memory.buffer, w.memBuffer(mem), n).slice();
 | `circ.topology.v0.min`    | Compact topology consumed by `init()`. Required.                    |
 | `circ.topology.v0.full`   | Verbose topology for external tooling (names, origin chains, per-port labels); decode it with `lib/topology/full_decoder.zig`. The runtime never reads it, and the in-tree modes (`--preview`, `--sim`, `--truth-table`) build the same payload in process rather than reading it back. |
 
-The runtime is built stripped (`-Dwasm-optimize` defaults to ReleaseSmall), so a shipped artifact carries no `name` section; only a `-Dwasm-optimize=Debug` build keeps one.
+`-Dwasm-optimize` defaults to ReleaseSmall and strips the runtime, so a shipped artifact carries no `name` section; only a `-Dwasm-optimize=Debug` build keeps one.
 
 The `.full` section is not required for execution. Hosts that only run circuits can ignore it; tools that need names, hierarchy, or per-port labels should read `.full`.
 

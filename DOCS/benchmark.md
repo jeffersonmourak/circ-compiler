@@ -226,7 +226,7 @@ By design, the bench skips several signals:
 
 - **`createComponent` / `connect` cost in isolation**. `drive_ns` covers only the `2^N` replay loop, so the inner stderr throughput excludes engine construction. But construction itself isn't separately itemized — it's lumped into `(total - drive)` along with parse, validate, and topology build. Splitting further would only matter if construction ever dominated, which it currently doesn't (look at `alu_4bit`: drive_ns is ~98% of total).
 - **WASM runtime cost**. Counters live on the native `Circuit` and the native `memory` module. The shipped `.wasm` runtime is built with `collect_metrics=false` and carries zero metrics overhead — both the engine counter bumps and the allocator wrapper are dead code stripped.
-- **Compile-time perf**. That has its own gate in `tests/cli/integration_test.zig` (`perf smoke: 100-component grid compiles under budget`) (the 30-second budget on `stress_grid_10x10` compile).
+- **Compile-time perf**. That has its own gate, the `perf smoke: 100-component grid compiles under budget` test in `tests/cli/integration_test.zig`, which holds the `stress_grid_10x10` compile to 30 seconds.
 
 ## Where the counters live
 

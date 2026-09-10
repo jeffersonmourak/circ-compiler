@@ -91,7 +91,7 @@ zig-out/bin/circ-compile examples/inverter.circ --truth-table
 | 1 | 0   |
 ```
 
-`--truth-table` runs the resolver and validator first; circuits with combinational loops (E008) are rejected before any simulation, and so is any circuit containing a `ram` (stateful — drive it with `--sim` instead). The mode caps at 16 total input *bits* (an `input[4]` counts four; 2^16 = 65,536 rows) to avoid accidental blow-up; `--truth-table-cap=N` raises that to at most 24, and wider circuits should be exercised through the `.wasm` runtime instead.
+`--truth-table` runs the resolver and validator first; it rejects circuits with combinational loops (E008) before any simulation, and any circuit containing a `ram` (stateful; drive it with `--sim` instead). The mode caps at 16 total input *bits* (an `input[4]` counts four; 2^16 = 65,536 rows) to avoid accidental blow-up; `--truth-table-cap=N` raises the cap to 24 at most, and wider circuits belong on the `.wasm` runtime.
 
 The relevant block tells you which component IDs to drive from JavaScript:
 

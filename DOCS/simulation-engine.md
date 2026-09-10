@@ -145,7 +145,7 @@ pub const Component = struct {
 };
 ```
 
-The `state_handle` default (`slot = maxInt(u32)`) is a sentinel: reads against it trap on the null-tier unwrap in `Circuit.readState` (tier 0 is never allocated), before `Pool.read` is reached. This catches the "constructed a Component without going through `Circuit.createComponent`" mistake.
+The `state_handle` default (`slot = maxInt(u32)`) is a sentinel: reads against it trap on the null-tier unwrap in `Circuit.readState` (tier 0 is never allocated), before reaching `Pool.read`. This catches the "constructed a Component without going through `Circuit.createComponent`" mistake.
 
 There is no `output_state` field on `Component` anymore. To read a component's current wire value, use `circuit.readState(component.state_handle)`.
 
@@ -355,7 +355,7 @@ const WIRE_PROPAGATION_DELAY: Timestamp = 1;
 pub fn encodeState(self: *Circuit) ![]u8;
 ```
 
-Allocates and returns a buffer encoding every component's `(state, kind, id)` triplet via `lib/transport.zig`. Width-1 circuits only (`toTransportByte` asserts `width == 1`), and the id is truncated to one byte. Caller owns the slice and must free it with the engine's allocator. Used by tooling and the experimental `--emit-zig` runtime (`lib/emit/runtime.zig`'s `getStateSnapshot`); not wired into the default-compile WASM artifact.
+Allocates and returns a buffer encoding every component's `(state, kind, id)` triplet via `lib/transport.zig`. Width-1 circuits only (`toTransportByte` asserts `width == 1`), and the encoder truncates the id to one byte. Caller owns the slice and must free it with the engine's allocator. Used by tooling and the experimental `--emit-zig` runtime (`lib/emit/runtime.zig`'s `getStateSnapshot`); not wired into the default-compile WASM artifact.
 
 ### Debug printing
 

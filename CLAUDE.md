@@ -48,7 +48,7 @@ Useful environment variables:
 - `UPDATE_GOLDENS=1` regenerates fixtures under `tests/fixtures/expected-*/` instead of comparing against them. Diff the result before committing.
 - `NO_COLOR=1` strips ANSI from `--preview` output.
 
-There is no `-Dtest-filter` flag wired into `build.zig`, and a bare `zig test <file>` cannot resolve the module imports `build.zig` wires (`translate`, `resolver`, `golden`, …), so run `zig build test` and read the failing test's name from the output. The `test` step is the fast dev-loop aggregator; `zig build test-all` adds the slow emit-zig smoke (`test-emit`) and is the full gate CI runs.
+`build.zig` wires no `-Dtest-filter` flag, and a bare `zig test <file>` cannot resolve the module imports `build.zig` wires (`translate`, `resolver`, `golden`, …), so run `zig build test` and read the failing test's name from the output. The `test` step is the fast dev-loop aggregator; `zig build test-all` adds the slow emit-zig smoke (`test-emit`) and is the full gate CI runs.
 
 ## CLI shape
 
