@@ -9,6 +9,6 @@
     { "id": 4, "kind": { "tag": "primitive", "kind": 5 }, "name": "o", "x": 10, "y": 12, "width": 8, "height": 3, "inPorts": [{ "portName": "in", "coord": { "x": 9, "y": 13 } }], "outPort": { "x": 18, "y": 13 }, "bitWidth": 4 }
   ],
   "wires": [
-    { "srcId": 3, "srcPort": 3, "dstId": 4, "dstPort": 0, "segments": [{ "from": { "x": 5, "y": 13 }, "to": { "x": 6, "y": 13 } }, { "from": { "x": 6, "y": 13 }, "to": { "x": 9, "y": 13 } }] }
+    { "srcId": 3, "srcPort": 3, "dstId": 4, "dstPort": 0, "segments": [{ "from": { "x": 5, "y": 13 }, "to": { "x": 9, "y": 13 } }] }
   ]
 }

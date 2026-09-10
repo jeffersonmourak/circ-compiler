@@ -6,7 +6,7 @@ const layering_stage = @import("layering");
 const ordering_stage = @import("ordering");
 const types = @import("layout_types");
 const coords_stage = @import("coords");
-const route_stage = @import("route");
+const channels_stage = @import("channels");
 
 /// Phase 2 slice 6b orchestrator: composes the five layout stages into a single
 /// `LayoutGrid`. Used by the integration tests and (eventually) Phase 3's CLI
@@ -18,6 +18,7 @@ pub const Stages = struct {
     layered: types.LayeredGraph,
     ordering: types.Ordering,
     coords: types.Coords,
+    plan: types.RoutePlan,
     grid: layout.LayoutGrid,
 };
 
@@ -36,20 +37,23 @@ pub fn buildStages(
 ) !Stages {
     const graph = try collapse_stage.collapse(arena, topology, opts);
     // The layout rewrite: layers (with dummies for long edges), a port-aware
-    // ordering, per-node coordinates; the old route stage still consumes the
-    // PlacedComponent list, with channel widths stubbed at the old gutter
-    // until Phase 3 measures demand.
+    // ordering, per-node rows, then channel routing in two passes — the plan
+    // on stub-width columns decides tracks, doglegs, spacer rows and return
+    // lanes (rows only), the columns are laid out again from the measured
+    // gap widths, and the wires are emitted on those.
     const layered = try layering_stage.layer(arena, graph);
     const ordering = try ordering_stage.order(arena, graph, layered);
-    const widths = try coords_stage.stubWidths(arena, layered.num_layers);
-    const coords = try coords_stage.assign(arena, graph, layered, ordering, opts, widths);
+    var coords = try coords_stage.assign(arena, graph, layered, ordering, opts, try coords_stage.stubWidths(arena, layered.num_layers));
+    const plan = try channels_stage.plan(arena, graph, layered, &coords);
+    coords_stage.relayoutColumns(&coords, layered, try channels_stage.widths(arena, plan, layered.num_layers));
     const placed = try coords_stage.toPlaced(arena, graph, layered, coords, opts);
-    const route_result = try route_stage.route(arena, graph, placed);
+    const route_result = try channels_stage.emit(arena, graph, layered, coords, plan);
     return .{
         .graph = graph,
         .layered = layered,
         .ordering = ordering,
         .coords = coords,
+        .plan = plan,
         .grid = .{
             .width = route_result.width,
             .height = route_result.height,

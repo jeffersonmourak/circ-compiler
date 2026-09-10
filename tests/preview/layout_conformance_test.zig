@@ -14,6 +14,7 @@ const preview_dump_json = @import("preview_dump_json");
 const invariants = @import("invariants");
 const ordering = @import("ordering");
 const channels = @import("channels");
+const layout_types = @import("layout_types");
 const golden = @import("golden");
 
 test {
@@ -151,10 +152,10 @@ test "layout_determinism" {
 
 // ---------- Channel planning over the corpus ----------
 //
-// Every layer-adjacent edge of every fixture-mode lands in exactly one net
-// of the gap it crosses, and the constraint graph of every gap is planned;
-// the cycles the left-edge assignment cannot resolve on its own are counted
-// and printed (Phase 3 slice 3 breaks them with doglegs).
+// The plan every fixture-mode was routed with: how many spacer rows it
+// needed, how many return lanes, how many nets fell back, and the widest
+// gap. Fallbacks are the number to watch — zero means every net found a
+// track or a dogleg.
 
 test "channels_corpus_plan" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -162,46 +163,54 @@ test "channels_corpus_plan" {
     const a = arena.allocator();
 
     const w = try corpus.walk(a);
-    var gaps: usize = 0;
-    var nets: usize = 0;
-    var straight: usize = 0;
-    var cycles: usize = 0;
-    var tracks_total: u64 = 0;
+    var spacers: usize = 0;
+    var lanes: usize = 0;
+    var fallbacks: usize = 0;
     var widest: u32 = 0;
     var widest_name: []const u8 = "";
+    var doglegs: usize = 0;
+    var multi_driven_modes: usize = 0;
     for (w.entries) |entry| {
         var scratch = std.heap.ArenaAllocator.init(std.heap.page_allocator);
         defer scratch.deinit();
         const s = scratch.allocator();
         const st = try corpus.buildStages(s, entry.path, entry.mode == .expanded);
-        var k: u32 = 0;
-        while (k + 1 < st.layered.num_layers) : (k += 1) {
-            gaps += 1;
-            const gap_nets = try channels.extractNets(s, st.graph, st.layered, st.coords, k);
-            var covered: usize = 0;
-            for (gap_nets) |net| {
-                nets += 1;
-                if (net.straight) straight += 1;
-                covered += net.sinks.len;
-            }
-            var edges_in_gap: usize = 0;
-            for (st.layered.edges) |e| {
-                if (st.layered.nodes[e.src].layer == k) edges_in_gap += 1;
-            }
-            try std.testing.expectEqual(edges_in_gap, covered);
-            const tracks = channels.assignTracks(s, gap_nets) catch |err| switch (err) {
-                error.ConstraintCycle => {
-                    cycles += 1;
-                    continue;
-                },
-                else => return err,
-            };
-            tracks_total += tracks;
-            if (tracks > widest) {
-                widest = tracks;
+        spacers += st.plan.spacer_rows.len;
+        lanes += st.plan.return_rows;
+        fallbacks += st.plan.fallbacks;
+        for (st.plan.gaps) |g| {
+            if (g.tracks > widest) {
+                widest = g.tracks;
                 widest_name = try a.dupe(u8, entry.name);
             }
+            for (g.nets) |net| doglegs += net.jogs.len;
+        }
+        const md = try multiDrivenPorts(s, st.layered);
+        if (md > 0) {
+            multi_driven_modes += 1;
+            std.debug.print("multi-driven ports: {s} {s} ({d})\n", .{ entry.name, entry.mode.name(), md });
         }
     }
-    std.debug.print("channels corpus: gaps={d} nets={d} straight={d} cycles={d} tracks={d} widest={d} ({s})\n", .{ gaps, nets, straight, cycles, tracks_total, widest, widest_name });
+    std.debug.print("channels corpus: spacers={d} return_lanes={d} doglegs={d} fallbacks={d} widest={d} tracks ({s}) multi_driven_modes={d}\n", .{ spacers, lanes, doglegs, fallbacks, widest, widest_name, multi_driven_modes });
+}
+
+/// Sink ports that more than one net drives. The collapse stage maps every
+/// macro input port whose name is not `a`, `in` or `b` onto `in`, so a
+/// parametric macro with two such inputs receives two nets on one port
+/// cell — a topology-level fan-in no router can draw without the two
+/// wires sharing that cell (`DOCS/decisions/preview-layout.md`).
+fn multiDrivenPorts(arena: std.mem.Allocator, layered: layout_types.LayeredGraph) !usize {
+    const Key = struct { dst: usize, port: u8 };
+    var drivers = std.AutoHashMap(Key, std.AutoHashMap(u64, void)).init(arena);
+    for (layered.originals) |o| {
+        const entry = try drivers.getOrPut(.{ .dst = o.dst, .port = o.dst_port });
+        if (!entry.found_existing) entry.value_ptr.* = std.AutoHashMap(u64, void).init(arena);
+        try entry.value_ptr.put((@as(u64, @intCast(o.src)) << 8) | o.src_port, {});
+    }
+    var n: usize = 0;
+    var it = drivers.valueIterator();
+    while (it.next()) |set| {
+        if (set.count() > 1) n += 1;
+    }
+    return n;
 }

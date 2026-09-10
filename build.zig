@@ -1232,12 +1232,6 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_preview_layout_channels_tests.step);
 
     // Phase 2 slice 6a: Stage 5 — route
-    const preview_layout_route_mod = fe.preview_layout_route;
-    const preview_layout_route_tests = b.addTest(.{
-        .root_module = preview_layout_route_mod,
-    });
-    const run_preview_layout_route_tests = b.addRunArtifact(preview_layout_route_tests);
-    test_step.dependOn(&run_preview_layout_route_tests.step);
 
     // Phase 3 slice 3: glyphs — depends on layout types.
     const preview_render_glyphs_mod = fe.preview_render_glyphs;
@@ -1307,6 +1301,7 @@ pub fn build(b: *std.Build) void {
     preview_layout_conformance_mod.addImport("invariants", fe.preview_layout_invariants);
     preview_layout_conformance_mod.addImport("ordering", fe.preview_layout_ordering);
     preview_layout_conformance_mod.addImport("channels", fe.preview_layout_channels);
+    preview_layout_conformance_mod.addImport("layout_types", fe.preview_layout_types);
     preview_layout_conformance_mod.addImport("golden", b.createModule(.{
         .root_source_file = b.path("tests/helpers/golden.zig"),
         .target = target,

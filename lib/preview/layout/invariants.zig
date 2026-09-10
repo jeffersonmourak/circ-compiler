@@ -151,38 +151,50 @@ pub fn check(arena: std.mem.Allocator, grid: LayoutGrid) !Report {
         }
     }
 
-    // Per-cell classification of every cell two or more nets cover.
+    // Per-cell classification of every cell two or more nets cover. The
+    // claims of one net are folded first: a fan-out's wires all cover the
+    // trunk, and that is one net passing through, not several — unless one
+    // of them corners there (a tap), in which case the net corners there.
     var it = claims.iterator();
     while (it.next()) |entry| {
         const list = entry.value_ptr.items;
-        var first_net: ?NetKey = null;
-        var net_count: u32 = 0;
-        var second_net: ?NetKey = null;
+        const Folded = struct { net: NetKey, horizontal: bool, vertical: bool, corner: bool };
+        var folded: [8]Folded = undefined;
+        var nf: usize = 0;
+        var overflow = false;
         for (list) |c| {
-            if (first_net == null) {
-                first_net = c.net;
-                net_count = 1;
-            } else if (!std.meta.eql(first_net.?, c.net)) {
-                if (second_net == null) {
-                    second_net = c.net;
-                    net_count = 2;
-                } else if (!std.meta.eql(second_net.?, c.net)) {
-                    net_count = 3;
-                }
+            var found: ?usize = null;
+            for (folded[0..nf], 0..) |f, i| {
+                if (std.meta.eql(f.net, c.net)) found = i;
             }
+            if (found) |i| {
+                if (c.horizontal) folded[i].horizontal = true else folded[i].vertical = true;
+                if (!c.through) folded[i].corner = true;
+            } else if (nf < folded.len) {
+                folded[nf] = .{ .net = c.net, .horizontal = c.horizontal, .vertical = !c.horizontal, .corner = !c.through };
+                nf += 1;
+            } else overflow = true;
         }
-        if (net_count < 2) continue;
+        if (nf < 2 and !overflow) continue;
 
-        var all_same = true;
-        for (list[1..]) |c| {
-            if (c.horizontal != list[0].horizontal) all_same = false;
+        // Same orientation everywhere: shared cells.
+        var all_h = true;
+        var all_v = true;
+        for (folded[0..nf]) |f| {
+            if (!f.horizontal or f.vertical) all_h = false;
+            if (!f.vertical or f.horizontal) all_v = false;
         }
-        if (all_same) {
+        if ((all_h or all_v) and !overflow) {
             report.shared += 1;
             continue;
         }
 
-        if (net_count == 2 and list.len == 2 and list[0].through and list[1].through and list[0].horizontal != list[1].horizontal) {
+        // A clean crossing: exactly two nets, one horizontal and one vertical,
+        // neither cornering.
+        if (nf == 2 and !overflow and !folded[0].corner and !folded[1].corner and
+            ((folded[0].horizontal and !folded[0].vertical and folded[1].vertical and !folded[1].horizontal) or
+                (folded[1].horizontal and !folded[1].vertical and folded[0].vertical and !folded[0].horizontal)))
+        {
             report.crossings += 1;
         } else {
             report.junction += 1;
@@ -324,6 +336,28 @@ test "invariants: three nets meeting is a junction" {
     const r = try check(arena.allocator(), mkGrid(&.{}, &wires));
     try testing.expectEqual(@as(u32, 1), r.junction);
     try testing.expectEqual(@as(u32, 0), r.crossings);
+}
+
+test "invariants: another net crossing a fan-out trunk is a crossing, at a tap a junction" {
+    var arena = std.heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    // Net 0 fans out down a trunk on x=7 (rows 1..8) with a tap at row 4;
+    // net 2 crosses the trunk on row 6 (clean) and net 4 on row 4 (the tap).
+    const up = [_]Segment{ sg(5, 1, 7, 1), sg(7, 1, 7, 8), sg(7, 8, 12, 8) };
+    const mid = [_]Segment{ sg(5, 1, 7, 1), sg(7, 1, 7, 4), sg(7, 4, 12, 4) };
+    const cross = [_]Segment{sg(0, 6, 12, 6)};
+    const at_tap = [_]Segment{sg(0, 4, 6, 4)};
+    const wires = [_]RoutedWire{ wire(0, 1, &up), wire(0, 2, &mid), wire(2, 3, &cross), wire(4, 5, &at_tap) };
+    const r = try check(arena.allocator(), mkGrid(&.{}, &wires));
+    try testing.expectEqual(@as(u32, 1), r.crossings);
+    // (7,4): net 0 corners there (the tap) — but net 4 stops at x=6, so no
+    // junction; extend it to be sure it is one when it reaches the tap.
+    try testing.expectEqual(@as(u32, 0), r.junction);
+    const through_tap = [_]Segment{sg(0, 4, 8, 4)};
+    const wires2 = [_]RoutedWire{ wire(0, 1, &up), wire(0, 2, &mid), wire(4, 5, &through_tap) };
+    const r2 = try check(arena.allocator(), mkGrid(&.{}, &wires2));
+    try testing.expectEqual(@as(u32, 1), r2.junction);
+    try testing.expectEqual(@as(u32, 0), r2.crossings);
 }
 
 test "invariants: fan-out sharing its own trunk is not shared" {

@@ -71,7 +71,6 @@ pub const Modules = struct {
     preview_layout_boxes: *Module,
     preview_layout_coords: *Module,
     preview_layout_channels: *Module,
-    preview_layout_route: *Module,
     preview_layout_orchestrator: *Module,
     preview_layout_invariants: *Module,
     preview_layout_ports: *Module,
@@ -267,17 +266,12 @@ pub fn create(b: *std.Build, opts: Options) Modules {
     preview_layout_boxes.addImport("layout_types", preview_layout_types);
     preview_layout_boxes.addImport("sizing", preview_layout_sizing);
     preview_layout_boxes.addImport("ports", preview_layout_ports);
-    const preview_layout_route = mk.module("lib/preview/layout/route.zig");
-    preview_layout_route.addImport("full_format", full_format);
-    preview_layout_route.addImport("layout", preview_layout);
-    preview_layout_route.addImport("layout_types", preview_layout_types);
     const preview_layout_orchestrator = mk.module("lib/preview/layout/orchestrator.zig");
     preview_layout_orchestrator.addImport("full_format", full_format);
     preview_layout_orchestrator.addImport("layout", preview_layout);
     preview_layout_orchestrator.addImport("layout_types", preview_layout_types);
     preview_layout_orchestrator.addImport("collapse", preview_layout_collapse);
     preview_layout_orchestrator.addImport("layering", preview_layout_layering);
-    preview_layout_orchestrator.addImport("route", preview_layout_route);
     // Render-free invariant counters over a LayoutGrid (the layout rewrite's
     // measurement of record; see DOCS/decisions/preview-layout.md).
     const preview_layout_invariants = mk.module("lib/preview/layout/invariants.zig");
@@ -403,7 +397,6 @@ pub fn create(b: *std.Build, opts: Options) Modules {
         .preview_layout_boxes = preview_layout_boxes,
         .preview_layout_coords = preview_layout_coords,
         .preview_layout_channels = preview_layout_channels,
-        .preview_layout_route = preview_layout_route,
         .preview_layout_orchestrator = preview_layout_orchestrator,
         .preview_layout_invariants = preview_layout_invariants,
         .preview_layout_ports = preview_layout_ports,

@@ -16,19 +16,19 @@
     { "id": 19, "kind": { "tag": "primitive", "kind": 1 }, "name": "n", "x": 20, "y": 15, "width": 5, "height": 3, "inPorts": [{ "portName": "in", "coord": { "x": 19, "y": 16 } }], "outPort": { "x": 25, "y": 16 }, "bitWidth": 1 }
   ],
   "wires": [
-    { "srcId": 0, "srcPort": 3, "dstId": 11, "dstPort": 0, "segments": [{ "from": { "x": 5, "y": 1 }, "to": { "x": 7, "y": 1 } }, { "from": { "x": 7, "y": 1 }, "to": { "x": 7, "y": 7 } }, { "from": { "x": 7, "y": 7 }, "to": { "x": 9, "y": 7 } }] },
-    { "srcId": 0, "srcPort": 3, "dstId": 18, "dstPort": 1, "segments": [{ "from": { "x": 5, "y": 1 }, "to": { "x": 7, "y": 1 } }, { "from": { "x": 7, "y": 1 }, "to": { "x": 7, "y": 15 } }, { "from": { "x": 7, "y": 15 }, "to": { "x": 9, "y": 15 } }] },
-    { "srcId": 0, "srcPort": 3, "dstId": 2, "dstPort": 1, "segments": [{ "from": { "x": 5, "y": 1 }, "to": { "x": 7, "y": 1 } }, { "from": { "x": 7, "y": 1 }, "to": { "x": 9, "y": 1 } }] },
-    { "srcId": 1, "srcPort": 3, "dstId": 12, "dstPort": 0, "segments": [{ "from": { "x": 5, "y": 5 }, "to": { "x": 6, "y": 5 } }, { "from": { "x": 6, "y": 5 }, "to": { "x": 6, "y": 11 } }, { "from": { "x": 6, "y": 11 }, "to": { "x": 9, "y": 11 } }] },
-    { "srcId": 1, "srcPort": 3, "dstId": 18, "dstPort": 2, "segments": [{ "from": { "x": 5, "y": 5 }, "to": { "x": 6, "y": 5 } }, { "from": { "x": 6, "y": 5 }, "to": { "x": 6, "y": 17 } }, { "from": { "x": 6, "y": 17 }, "to": { "x": 9, "y": 17 } }] },
-    { "srcId": 1, "srcPort": 3, "dstId": 2, "dstPort": 2, "segments": [{ "from": { "x": 5, "y": 5 }, "to": { "x": 6, "y": 5 } }, { "from": { "x": 6, "y": 5 }, "to": { "x": 6, "y": 3 } }, { "from": { "x": 6, "y": 3 }, "to": { "x": 9, "y": 3 } }] },
-    { "srcId": 2, "srcPort": 3, "dstId": 4, "dstPort": 0, "segments": [{ "from": { "x": 15, "y": 2 }, "to": { "x": 16, "y": 2 } }, { "from": { "x": 16, "y": 2 }, "to": { "x": 49, "y": 2 } }] },
-    { "srcId": 7, "srcPort": 3, "dstId": 3, "dstPort": 0, "segments": [{ "from": { "x": 45, "y": 9 }, "to": { "x": 46, "y": 9 } }, { "from": { "x": 46, "y": 9 }, "to": { "x": 49, "y": 9 } }] },
-    { "srcId": 11, "srcPort": 3, "dstId": 13, "dstPort": 1, "segments": [{ "from": { "x": 15, "y": 7 }, "to": { "x": 17, "y": 7 } }, { "from": { "x": 17, "y": 7 }, "to": { "x": 19, "y": 7 } }] },
-    { "srcId": 12, "srcPort": 3, "dstId": 13, "dstPort": 2, "segments": [{ "from": { "x": 15, "y": 11 }, "to": { "x": 18, "y": 11 } }, { "from": { "x": 18, "y": 11 }, "to": { "x": 18, "y": 9 } }, { "from": { "x": 18, "y": 9 }, "to": { "x": 19, "y": 9 } }] },
-    { "srcId": 13, "srcPort": 3, "dstId": 14, "dstPort": 0, "segments": [{ "from": { "x": 25, "y": 8 }, "to": { "x": 26, "y": 8 } }, { "from": { "x": 26, "y": 8 }, "to": { "x": 29, "y": 8 } }] },
-    { "srcId": 14, "srcPort": 3, "dstId": 7, "dstPort": 1, "segments": [{ "from": { "x": 35, "y": 8 }, "to": { "x": 36, "y": 8 } }, { "from": { "x": 36, "y": 8 }, "to": { "x": 39, "y": 8 } }] },
-    { "srcId": 18, "srcPort": 3, "dstId": 19, "dstPort": 0, "segments": [{ "from": { "x": 15, "y": 16 }, "to": { "x": 18, "y": 16 } }, { "from": { "x": 18, "y": 16 }, "to": { "x": 19, "y": 16 } }] },
-    { "srcId": 19, "srcPort": 3, "dstId": 7, "dstPort": 2, "segments": [{ "from": { "x": 25, "y": 16 }, "to": { "x": 27, "y": 16 } }, { "from": { "x": 27, "y": 16 }, "to": { "x": 27, "y": 10 } }, { "from": { "x": 27, "y": 10 }, "to": { "x": 39, "y": 10 } }] }
+    { "srcId": 0, "srcPort": 3, "dstId": 11, "dstPort": 0, "segments": [{ "from": { "x": 5, "y": 1 }, "to": { "x": 6, "y": 1 } }, { "from": { "x": 6, "y": 1 }, "to": { "x": 6, "y": 7 } }, { "from": { "x": 6, "y": 7 }, "to": { "x": 9, "y": 7 } }] },
+    { "srcId": 0, "srcPort": 3, "dstId": 18, "dstPort": 1, "segments": [{ "from": { "x": 5, "y": 1 }, "to": { "x": 6, "y": 1 } }, { "from": { "x": 6, "y": 1 }, "to": { "x": 6, "y": 15 } }, { "from": { "x": 6, "y": 15 }, "to": { "x": 9, "y": 15 } }] },
+    { "srcId": 0, "srcPort": 3, "dstId": 2, "dstPort": 1, "segments": [{ "from": { "x": 5, "y": 1 }, "to": { "x": 9, "y": 1 } }] },
+    { "srcId": 1, "srcPort": 3, "dstId": 12, "dstPort": 0, "segments": [{ "from": { "x": 5, "y": 5 }, "to": { "x": 7, "y": 5 } }, { "from": { "x": 7, "y": 5 }, "to": { "x": 7, "y": 11 } }, { "from": { "x": 7, "y": 11 }, "to": { "x": 9, "y": 11 } }] },
+    { "srcId": 1, "srcPort": 3, "dstId": 18, "dstPort": 2, "segments": [{ "from": { "x": 5, "y": 5 }, "to": { "x": 7, "y": 5 } }, { "from": { "x": 7, "y": 5 }, "to": { "x": 7, "y": 17 } }, { "from": { "x": 7, "y": 17 }, "to": { "x": 9, "y": 17 } }] },
+    { "srcId": 1, "srcPort": 3, "dstId": 2, "dstPort": 2, "segments": [{ "from": { "x": 5, "y": 5 }, "to": { "x": 7, "y": 5 } }, { "from": { "x": 7, "y": 5 }, "to": { "x": 7, "y": 3 } }, { "from": { "x": 7, "y": 3 }, "to": { "x": 9, "y": 3 } }] },
+    { "srcId": 2, "srcPort": 3, "dstId": 4, "dstPort": 0, "segments": [{ "from": { "x": 15, "y": 2 }, "to": { "x": 49, "y": 2 } }] },
+    { "srcId": 7, "srcPort": 3, "dstId": 3, "dstPort": 0, "segments": [{ "from": { "x": 45, "y": 9 }, "to": { "x": 49, "y": 9 } }] },
+    { "srcId": 11, "srcPort": 3, "dstId": 13, "dstPort": 1, "segments": [{ "from": { "x": 15, "y": 7 }, "to": { "x": 19, "y": 7 } }] },
+    { "srcId": 12, "srcPort": 3, "dstId": 13, "dstPort": 2, "segments": [{ "from": { "x": 15, "y": 11 }, "to": { "x": 16, "y": 11 } }, { "from": { "x": 16, "y": 11 }, "to": { "x": 16, "y": 9 } }, { "from": { "x": 16, "y": 9 }, "to": { "x": 19, "y": 9 } }] },
+    { "srcId": 13, "srcPort": 3, "dstId": 14, "dstPort": 0, "segments": [{ "from": { "x": 25, "y": 8 }, "to": { "x": 29, "y": 8 } }] },
+    { "srcId": 14, "srcPort": 3, "dstId": 7, "dstPort": 1, "segments": [{ "from": { "x": 35, "y": 8 }, "to": { "x": 39, "y": 8 } }] },
+    { "srcId": 18, "srcPort": 3, "dstId": 19, "dstPort": 0, "segments": [{ "from": { "x": 15, "y": 16 }, "to": { "x": 19, "y": 16 } }] },
+    { "srcId": 19, "srcPort": 3, "dstId": 7, "dstPort": 2, "segments": [{ "from": { "x": 25, "y": 16 }, "to": { "x": 36, "y": 16 } }, { "from": { "x": 36, "y": 16 }, "to": { "x": 36, "y": 10 } }, { "from": { "x": 36, "y": 10 }, "to": { "x": 39, "y": 10 } }] }
   ]
 }

@@ -7,6 +7,6 @@
     { "id": 2, "kind": { "tag": "primitive", "kind": 5 }, "name": "out", "x": 15, "y": 0, "width": 7, "height": 3, "inPorts": [{ "portName": "in", "coord": { "x": 14, "y": 1 } }], "outPort": { "x": 22, "y": 1 }, "bitWidth": 1 }
   ],
   "wires": [
-    { "srcId": 0, "srcPort": 3, "dstId": 2, "dstPort": 0, "segments": [{ "from": { "x": 8, "y": 1 }, "to": { "x": 9, "y": 1 } }, { "from": { "x": 9, "y": 1 }, "to": { "x": 14, "y": 1 } }] }
+    { "srcId": 0, "srcPort": 3, "dstId": 2, "dstPort": 0, "segments": [{ "from": { "x": 8, "y": 1 }, "to": { "x": 14, "y": 1 } }] }
   ]
 }
