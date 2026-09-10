@@ -58,9 +58,10 @@ test "layout_conformance_corpus" {
 // nets meet other than as a clean crossing, I3 nets that are not a tree from
 // their source — plus crossings, bends, straight wires and the grid size.
 // Every fixture-mode is listed, zero rows included, so the corpus itself is
-// visible in the golden; the totals line closes it. Until Phase 3 the counts
-// describe the old algorithm; from Phase 3 on I0–I3 are zero everywhere and
-// a non-zero row is a failing test.
+// visible in the golden; the totals line closes it. I0 and I3 are zero on
+// every row and I1 and I2 on every row without a multi-driven sink port —
+// asserted, not ratcheted; the table stays as the record of crossings,
+// bends, straight wires, ordering crossings, fallbacks and size.
 
 pub const INVARIANTS_GOLDEN = "tests/fixtures/preview/layout-invariants.golden";
 
@@ -91,6 +92,18 @@ fn corpusInvariantsTable(out: std.mem.Allocator) ![]const u8 {
         try writer.print("{s} {s} I0={d} I1={d} I2={d} I3={d} X={d} B={d} S={d}/{d} C={d} F={d} size={d}x{d}\n", .{
             entry.name, entry.mode.name(), r.body, r.shared, r.junction, r.tree, r.crossings, r.bends, r.straight, r.wires, c, st.plan.fallbacks, grid.width, grid.height,
         });
+        // The gates (DOCS/PLANS_PROMPT.md decision 10): no wire in a box and
+        // every net a tree, always; no shared cell and no junction unless the
+        // topology itself drives one port from two nets (a macro port the
+        // collapse stage could not name — DOCS/decisions/preview-layout.md).
+        if (r.body != 0 or r.tree != 0) {
+            std.debug.print("layout invariant broken: {s} {s} I0={d} I3={d}\n", .{ entry.name, entry.mode.name(), r.body, r.tree });
+            return error.LayoutInvariantBroken;
+        }
+        if ((r.shared != 0 or r.junction != 0) and (try multiDrivenPorts(s, st.layered)) == 0) {
+            std.debug.print("layout invariant broken: {s} {s} I1={d} I2={d} with no multi-driven port\n", .{ entry.name, entry.mode.name(), r.shared, r.junction });
+            return error.LayoutInvariantBroken;
+        }
         total.body += r.body;
         total.shared += r.shared;
         total.junction += r.junction;
