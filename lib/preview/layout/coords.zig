@@ -250,6 +250,28 @@ pub fn insertSpacerRow(coords: *Coords, at: u32) void {
     coords.height += 1;
 }
 
+/// Append `n` rows below the diagram for return lanes.
+pub fn reserveReturnRows(coords: *Coords, n: u32) void {
+    coords.height += n;
+}
+
+/// Recompute every column from `layer_w` and the given widths; rows are
+/// untouched. Idempotent for the same widths.
+pub fn relayoutColumns(coords: *Coords, layered: LayeredGraph, widths: ChannelWidths) void {
+    var acc: u32 = 0;
+    for (0..layered.num_layers) |k| {
+        coords.layer_x[k] = acc;
+        coords.channel_x[k] = acc + coords.layer_w[k];
+        acc += coords.layer_w[k] + widths.after[k];
+    }
+    var width: u32 = 0;
+    for (layered.nodes, 0..) |ln, i| {
+        coords.x[i] = coords.layer_x[ln.layer];
+        if (coords.x[i] + coords.w[i] > width) width = coords.x[i] + coords.w[i];
+    }
+    coords.width = width;
+}
+
 /// The `PlacedComponent` list for the real nodes, in `VirtualGraph` order —
 /// what the router and the render read.
 pub fn toPlaced(
