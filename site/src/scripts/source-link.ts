@@ -4,13 +4,16 @@
 // carries no source positions, so there is nothing else to match on. The
 // analysis supplies the names and their ranges; the layout supplies the boxes.
 //
-// Pure and DOM-free, and it imports no value from anywhere — the renderer's
-// types are restated structurally so this module never drags the renderer into
-// the playground's eager bundle. `bun test` drives all of it headlessly.
+// Pure and DOM-free. The one value it imports, `ComponentKind`, comes through
+// the renderer's topology-only entry point, which is the decoder and nothing of
+// the canvas, so this module still drags no renderer into the playground's
+// eager bundle; the layout's shape is restated structurally for the same
+// reason. `bun test` drives all of it headlessly.
 
 /** The analyze contract has exactly one definition and the diagnostics module
  *  owns it; re-declaring it here would fork it. An `import type` is erased, so
  *  this costs nothing at runtime. */
+import { ComponentKind } from 'circ-renderer/topology';
 import type { AnalyzeRange, AnalyzeSymbol, Analysis } from './circ-diagnostics.ts';
 import { byteColToUtf16 } from '../utils/columns.ts';
 import { PLAYGROUND_DIR } from '../utils/split-files.ts';
@@ -29,7 +32,7 @@ export interface PlacedLike {
   id: number;
   name: string;
   origin: readonly unknown[];
-  kind: { tag: 'primitive'; kind: number } | { tag: 'subcircuit'; subcircuit: string };
+  kind: { tag: 'primitive'; kind: ComponentKind } | { tag: 'subcircuit'; subcircuit: string };
 }
 
 export interface LayoutLike {
@@ -37,19 +40,18 @@ export interface LayoutLike {
 }
 
 /**
- * The topology kind byte each symbol kind draws as. Hard-coded for the same
- * reason the island hard-codes the input-pin byte; a test asserts it against
- * the renderer's own enum, so a renumbering fails here rather than silently
- * mis-joining.
+ * The topology kind each symbol kind draws as, named from the renderer's own
+ * enum rather than copied as bytes, so a renumbering there is a type error
+ * here rather than a silent mis-join.
  */
-export const TOPOLOGY_KIND_OF: Record<SymbolKind, number | 'subcircuit'> = {
-  input: 0,
-  not: 1,
-  and: 2,
-  led: 4,
-  output: 5,
-  rom: 8,
-  ram: 9,
+export const TOPOLOGY_KIND_OF: Record<SymbolKind, ComponentKind | 'subcircuit'> = {
+  input: ComponentKind.InputPin,
+  not: ComponentKind.NotGate,
+  and: ComponentKind.AndGate,
+  led: ComponentKind.Led,
+  output: ComponentKind.OutputPin,
+  rom: ComponentKind.Rom,
+  ram: ComponentKind.Ram,
   instance: 'subcircuit',
 };
 

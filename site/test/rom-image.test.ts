@@ -6,8 +6,6 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
-  ROM_KIND,
-  RAM_KIND,
   bytesPerWord,
   describeRomError,
   maxWords,
@@ -43,11 +41,6 @@ describe('word geometry', () => {
     expect(maxWords(1)).toBe(2);
     expect(maxWords(4)).toBe(16);
     expect(maxWords(16)).toBe(65536);
-  });
-
-  test('the kind bytes are the wire values', () => {
-    expect(ROM_KIND).toBe(8);
-    expect(RAM_KIND).toBe(9);
   });
 });
 

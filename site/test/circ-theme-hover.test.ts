@@ -77,7 +77,7 @@ describe('circ-theme hover', () => {
 
   test('a memory is labelled by the renderer, so the canvas and the preview agree', () => {
     // `rom code[8,4]` comes from one function in one place.
-    expect(source).toContain("import { ComponentKind, memoryLabel } from 'circ-renderer';");
+    expect(source).toMatch(/^import \{[^}]*\bmemoryLabel\b[^}]*\} from 'circ-renderer';$/m);
     expect(skinBody('drawMemory')).toContain('memoryLabel(');
   });
 });

@@ -261,7 +261,11 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
 <script>
   import { getSharedClient, type LibcircVersion, type WorkerReply } from '../scripts/libcirc-client.ts';
   // TYPE only: erased at build, so the renderer stays behind its dynamic import.
-  import type { CircRuntime } from 'circ-renderer';
+  import type { BitValue, CircRuntime, CircView } from 'circ-renderer';
+  import type { PaletteKey } from '../utils/circ-theme.mjs';
+  // A VALUE, but from the topology-only entry point: the decoder and its enum,
+  // nothing of the canvas, so the eager bundle stays what it was.
+  import { ComponentKind } from 'circ-renderer/topology';
   import { joinConflicts, requestFor, rootOf, PLAYGROUND_DIR } from '../utils/split-files.ts';
   import { createSplitter } from '../scripts/splitter.ts';
   import { fnv1a } from '../utils/artifact-hash.ts';
@@ -300,7 +304,6 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     type SourceLink,
     type Declaration,
     type LinkTable,
-    type PlacedLike,
   } from '../scripts/source-link.ts';
   import { decodeShare, encodeShare, readHash, shareUrl, webStreamsCodec } from '../utils/share-link.ts';
   import { generateSillyName } from '../utils/sillyname.ts';
@@ -2628,36 +2631,15 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
 
 
     // ---- simulate ----
-    type Signal = 0 | 1;
-    /** What a root input pin holds: the renderer's own BitValue shape. */
-    type PinValue = { value: bigint; defined: bigint; width: number };
-    type CircView = {
-      runtime: CircRuntime;
-      view: {
-        refreshState(): void;
-        /** Phase 4 of the renderer sync: the look changes in place, and the
-         *  pins, typed values and memories stay. */
-        setTheme(theme: unknown): void;
-        setValueFormat(format: 'hex' | 'binary' | 'decimal'): void;
-        redraw(): void;
-        setInputSignal(id: number, s: Signal): void;
-        /** Phase 1 of the renderer sync: a pin driven to an exact value. The
-         *  pin test asserts it exists, so it is not optional here. */
-        setInputValue(id: number, value: bigint, defined: bigint): void;
-        getInputValue(id: number): PinValue | null;
-        /** Host hooks added in circ-renderer 2.1.0-alpha.2. Optional here so a
-         *  stale pin degrades to no highlighting rather than a crash — the pin
-         *  test is what makes their absence loud. */
-        setHighlight?(id: number | null): void;
-        getLayout?(): { components: readonly PlacedLike[] };
-      };
-      canvas: HTMLCanvasElement;
-      destroy(): void;
-    };
+    /** What a root input pin holds: the renderer's own value shape. */
+    type PinValue = BitValue;
+    /** The renderer's view over the site's palette. Every method the island
+     *  calls is typed there; the pin test is what makes a missing one loud. */
+    type View = CircView<PaletteKey>;
     const simMount = el.querySelector<HTMLElement>('.pg-sim-mount')!;
     const simNoteBase = 'Click input pins to toggle them; hover one to find it in the source.';
     const sim = {
-      view: null as CircView | null,
+      view: null as View | null,
       bytes: null as Uint8Array | null,
       renderedHash: -1,
       /** Keyed by root input-pin NAME: ids shift as the source changes. Holds
@@ -2670,12 +2652,11 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     };
     const loadRenderer = () => (sim.rendererPromise ??= import('circ-renderer'));
     const loadThemes = () => (sim.themesPromise ??= import('../utils/circ-theme.mjs'));
-    const INPUT_PIN = 0; // ComponentKind.InputPin
 
-    function rootInputs(view: CircView): Map<string, number> {
+    function rootInputs(view: View): Map<string, number> {
       const m = new Map<string, number>();
       for (const c of view.runtime.topology.components) {
-        if (c.kind === INPUT_PIN && c.origin.length === 0) m.set(c.name, c.id);
+        if (c.kind === ComponentKind.InputPin && c.origin.length === 0) m.set(c.name, c.id);
       }
       return m;
     }
@@ -2690,14 +2671,12 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       sim.view = null;
       simMount.innerHTML = '';
       try {
-        const view = (await renderCircuit({
+        const view = await renderCircuit({
           bytes,
           cell: 14,
           padding: 16,
           interactive: true,
-          theme: pickTheme() as any,
-          // Present once the renderer exposes it; the click handler below is
-          // the fallback that keeps the by-name pin map current either way.
+          theme: pickTheme(),
           // onPinChange, not onPinToggle: the older callback collapses any
           // mixed bus to High, so a reader who typed 0x2A and then flipped the
           // theme would get 0xFF back on the rebuilt canvas.
@@ -2709,20 +2688,18 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
             if (memVisible()) renderMemory();
           },
           // The base the bus badges are written in and a bare typed value is
-          // read in. Captured at construction, so a change to the setting
-          // rebuilds the canvas (see the settings drawer's `set`).
+          // read in. A change to the setting reaches the live canvas through
+          // `setValueFormat` (see the settings drawer's `set`).
           valueFormat: settings().valueFormat,
           // Fires only on a change, so this needs no debounce of its own.
           onHover: (id: number | null) => {
             markInEditor(id === null ? null : (link.table?.byComponentId.get(id) ?? null));
           },
-        } as any)) as unknown as CircView;
+        });
         sim.view = view;
         // The layout is the only place a collapsed macro box exists, so the
         // join is built from it rather than from the topology.
-        link.table = view.view.getLayout
-          ? linkLayout(link.decls, view.view.getLayout())
-          : null;
+        link.table = linkLayout(link.decls, view.view.getLayout());
         // Images are session state, so a rebuilt canvas starts empty and has
         // to be re-loaded before the reader sees it.
         applyToView();

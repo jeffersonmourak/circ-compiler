@@ -7,7 +7,18 @@ import { resolve } from 'node:path';
 import { decodeFullTopology, ComponentKind } from 'circ-renderer';
 import { callOp, instantiateLibcirc } from '../src/scripts/libcirc-abi.ts';
 import { RENDERER_PIN_VERSION, SUPPORTED_TOPOLOGY_VERSIONS } from '../src/utils/renderer-versions.ts';
-import { CircCanvas, CircRuntime, boxOutline, defaultColors, drawLabel, memoryLabel } from 'circ-renderer';
+import {
+  CircCanvas,
+  CircRuntime,
+  boxOutline,
+  defaultColors,
+  defaultArcRadius,
+  drawLabel,
+  memoryLabel,
+  traceWire,
+  wirePath,
+} from 'circ-renderer';
+import { ComponentKind as TopologyKind } from 'circ-renderer/topology';
 import { examples } from '../src/content/examples.ts';
 
 const skip = process.env.SKIP_LIBCIRC_TEST === '1';
@@ -62,6 +73,44 @@ describe('renderer pin', () => {
     for (const method of ['setTheme', 'setCell', 'setPadding', 'setValueFormat', 'redraw']) {
       expect(`${method}: ${typeof (CircCanvas.prototype as unknown as Record<string, unknown>)[method]}`).toBe(`${method}: function`);
     }
+    // Phase 5: the wire tracer the site's theme strokes, and the topology-only
+    // entry point the eager bundle names its kind bytes from.
+    for (const fn of [traceWire, wirePath, defaultArcRadius]) expect(typeof fn).toBe('function');
+    expect(TopologyKind).toBe(ComponentKind);
+    const pkg = JSON.parse(
+      readFileSync(resolve(import.meta.dir, '..', 'node_modules', 'circ-renderer', 'package.json'), 'utf8'),
+    ) as { exports: Record<string, string> };
+    expect(pkg.exports['./topology']).toBe('./src/wasm/topology.ts');
+  });
+
+  test('no kind byte is hand-copied and no view type is restated on the site', () => {
+    // Phase 5 deleted the site's copies of the renderer's shapes. A copy that
+    // comes back is a number that can drift from the enum, or a type that
+    // can fall behind the class it stands in for; the renderer's own are the
+    // only ones now, and this is what keeps them the only ones.
+    const src = (rel: string) => readFileSync(resolve(import.meta.dir, '..', 'src', rel), 'utf8');
+    const playground = src('components/Playground.astro');
+    const gallery = src('components/LiveCanvas.astro');
+    const sourceLink = src('scripts/source-link.ts');
+    const romImage = src('utils/rom-image.ts');
+    const theme = src('utils/circ-theme.mjs');
+    for (const [name, text] of [['Playground', playground], ['LiveCanvas', gallery]] as const) {
+      expect(`${name}: ${/type CircView = \{/.test(text)}`).toBe(`${name}: false`);
+      expect(`${name}: ${/renderCircuit\([\s\S]*?\}\)\) as unknown as/.test(text)}`).toBe(`${name}: false`);
+      expect(`${name}: ${/pickTheme\(\) as any/.test(text)}`).toBe(`${name}: false`);
+      expect(`${name}: ${/import type \{[^}]*\bCircView\b[^}]*\} from 'circ-renderer'/.test(text)}`).toBe(`${name}: true`);
+    }
+    expect(playground).not.toMatch(/INPUT_PIN = 0/);
+    expect(playground).toContain("import { ComponentKind } from 'circ-renderer/topology';");
+    expect(sourceLink).toContain("import { ComponentKind } from 'circ-renderer/topology';");
+    expect(sourceLink).not.toMatch(/^\s+(input|rom|ram): \d+,$/m);
+    expect(romImage).not.toMatch(/ROM_KIND|RAM_KIND/);
+    // The theme strokes the renderer's trace and styles a bus as a bus.
+    expect(theme).toContain('traceWire(ctx, wire, cell)');
+    expect(theme).toContain('wireStyleOf(value)');
+    expect((theme.match(/^\s+wireBus: /gm) ?? []).length).toBe(2);
+    // …and no longer carries its own copy of the crossing-jump loop.
+    expect(theme).not.toMatch(/wire\.crossings/);
   });
 
   test('a theme flip changes a live canvas in place, on both pages', () => {

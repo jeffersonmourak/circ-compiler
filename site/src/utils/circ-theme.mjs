@@ -15,10 +15,15 @@
 // mode rebuilds via the onAssetsReady hook in LiveCanvas just like dark.
 //
 // Active theme is selected at click-load time via pickTheme() reading the
-// data-theme attribute on <html>. Toggling the site theme later requires
-// destroying and re-creating the canvas (handled in LiveCanvas.astro).
+// data-theme attribute on <html>. Toggling the site theme later hands the
+// other palette to the live canvas through `setTheme` (LiveCanvas.astro and
+// Playground.astro both do); nothing is rebuilt.
+//
+// Typed through JSDoc so the components that pass a theme to `renderCircuit`
+// get the renderer's own `CircView` back, with this palette's keys, and need
+// no cast. `PaletteKey` is exported for them.
 
-import { ComponentKind, memoryLabel } from 'circ-renderer';
+import { ComponentKind, memoryLabel, traceWire, wireColorKey, wireStyleOf } from 'circ-renderer';
 import { loadAssets } from './circ-assets.mjs';
 
 /* ───── async sprite loading ───────────────────────────────────────── */
@@ -59,6 +64,9 @@ const colorsDark = {
   wireIdle: '#dee2e6',
   wireActive: 'hsl(134 61% 41% / 1)',
   wireUndefined: '#3a2752',
+  // A defined multi-bit wire: the badge above it says the number, so the
+  // wire itself does not need to be green or grey.
+  wireBus: '#d0bfff',
   label: '#ffffff',
   labelMuted: '#aaa',
   // Used for labels drawn ON a component's surface (centered on the gate
@@ -85,6 +93,9 @@ const colorsDark = {
 // on the lavender pane-bg (#f4eefb). Uses the same PNG sprites as dark
 // mode; the canvas is transparent so sprite pixels composite onto the
 // pane's lavender bg instead of a black canvas paint.
+/** @typedef {keyof typeof colorsDark} PaletteKey */
+
+/** @type {Record<PaletteKey, string>} */
 const colorsLight = {
   background: '#f4eefb',
   grid: '#d4c8e8',
@@ -95,6 +106,7 @@ const colorsLight = {
   wireIdle: '#5d3a96',
   wireActive: 'hsl(134 61% 32% / 1)',
   wireUndefined: '#a89cc0',
+  wireBus: '#5f3dc4',
   label: '#443856',
   labelMuted: '#8a7e9a',
   // White on the component surface — see colorsDark.labelOnComponent.
@@ -629,48 +641,23 @@ const drawMemory = (args) => {
  * over recorded crossings so wires of different signals read as
  * separate strands rather than fusing at intersections.
  */
-function wireRenderer({ ctx, cell, wire, signal, theme }) {
-  ctx.strokeStyle =
-    signal === 1
-      ? theme.colors.wireActive
-      : signal === 0
-        ? theme.colors.wireIdle
-        : theme.colors.wireUndefined;
-  ctx.lineWidth = 4;
+/**
+ * A wire in the palette's colour for what it carries. A bus with a defined
+ * value is a bus, whatever its bits: the badge above it says the number. The
+ * route — every segment, arcing over its crossings — is traced by the
+ * renderer's own `traceWire`, the same function its default painter uses, so
+ * the site cannot draw a jump anywhere the renderer would not.
+ */
+function wireRenderer({ ctx, cell, wire, value, theme }) {
+  const style = wireStyleOf(value);
+  ctx.strokeStyle = theme.colors[wireColorKey(style)];
+  // A touch heavier for a bus, so it reads as more than one bit.
+  ctx.lineWidth = style === 'bus' ? 6 : 4;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  const arcRadius = cell * 0.4;
-  for (const seg of wire.segments) {
-    const horiz = seg.from.y === seg.to.y;
-    const startX = seg.from.x * cell + cell / 2;
-    const startY = seg.from.y * cell + cell / 2;
-    const endX = seg.to.x * cell + cell / 2;
-    const endY = seg.to.y * cell + cell / 2;
-    if (!horiz) {
-      ctx.beginPath();
-      ctx.moveTo(startX, startY);
-      ctx.lineTo(endX, endY);
-      ctx.stroke();
-      continue;
-    }
-    const [segLo, segHi] = [startX, endX].sort((a, b) => a - b);
-    const y = startY;
-    const jumps = wire.crossings
-      .filter((c) => c.y === seg.from.y && c.x * cell + cell / 2 >= segLo && c.x * cell + cell / 2 <= segHi)
-      .map((c) => c.x * cell + cell / 2)
-      .sort((a, b) => a - b);
-    ctx.beginPath();
-    let cursor = segLo;
-    for (const jx of jumps) {
-      ctx.moveTo(cursor, y);
-      ctx.lineTo(jx - arcRadius, y);
-      ctx.arc(jx, y, arcRadius, Math.PI, 0, false);
-      cursor = jx + arcRadius;
-    }
-    ctx.moveTo(cursor, y);
-    ctx.lineTo(segHi, y);
-    ctx.stroke();
-  }
+  ctx.beginPath();
+  traceWire(ctx, wire, cell);
+  ctx.stroke();
 }
 
 const skins = {
@@ -706,15 +693,18 @@ const sharedRenderers = {
   highlight: ({ ctx, cell, component, theme }) => drawHoverRing(ctx, cell, component, theme),
 };
 
+/** @type {import('circ-renderer').CircTheme<PaletteKey>} */
 export const blogTheme = {
   colors: colorsDark,
   ...sharedRenderers,
 };
 
+/** @type {import('circ-renderer').CircTheme<PaletteKey>} */
 export const blogThemeLight = {
   colors: colorsLight,
   ...sharedRenderers,
 };
 
+/** @returns {import('circ-renderer').CircTheme<PaletteKey>} */
 export const pickTheme = () =>
   document.documentElement.dataset.theme === 'dark' ? blogTheme : blogThemeLight;

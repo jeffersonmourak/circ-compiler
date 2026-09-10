@@ -11,12 +11,6 @@
 // bug, and it must never reach a throw.
 import type { AnalyzeSymbol } from '../scripts/circ-diagnostics.ts';
 
-/** Topology kind bytes for the two memory kinds. Inlined rather than imported:
- *  the renderer is loaded lazily, and a static import here would drag it into
- *  the playground's eager bundle. */
-export const ROM_KIND = 8;
-export const RAM_KIND = 9;
-
 export interface MemorySymbol {
   name: string;
   kind: 'rom' | 'ram';

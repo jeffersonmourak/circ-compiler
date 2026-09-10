@@ -56,19 +56,12 @@ const memoryAttr = memory && Object.keys(memory).length > 0 ? JSON.stringify(mem
 
   // TYPE only: erased at build, so a reader who never opens a simulation pays
   // nothing for it — the same rule the renderer and the theme module already
-  // follow on this page.
-  import type { CircRuntime } from 'circ-renderer';
+  // follow on this page. The view is the renderer's own, over the site's
+  // palette, so there is no local restatement to fall behind it.
+  import type { CircView } from 'circ-renderer';
+  import type { PaletteKey } from '../utils/circ-theme.mjs';
 
-  type CircView = {
-    runtime: CircRuntime;
-    view: {
-      refreshState(): void;
-      /** Phase 4 of the renderer sync: a theme flip is a redraw, not a rebuild. */
-      setTheme(theme: unknown): void;
-    };
-    canvas: HTMLCanvasElement;
-    destroy(): void;
-  };
+  type View = CircView<PaletteKey>;
 
   let rendererPromise: Promise<typeof import('circ-renderer')> | null = null;
   let themesPromise: Promise<typeof import('../utils/circ-theme.mjs')> | null = null;
@@ -78,7 +71,7 @@ const memoryAttr = memory && Object.keys(memory).length > 0 ? JSON.stringify(mem
     (themesPromise ??= import('../utils/circ-theme.mjs'));
 
   // Track active views per container so theme toggles can rebuild them.
-  const active = new WeakMap<HTMLElement, { view: CircView; opts: { url: string; cell: number; padding: number } }>();
+  const active = new WeakMap<HTMLElement, { view: View; opts: { url: string; cell: number; padding: number } }>();
   /** Cards whose mount has begun. `mount` is async and now has two callers —
    *  a click and the observer — so without this a card that scrolls into view
    *  as it is clicked builds two canvases and leaks the first. */
@@ -92,7 +85,7 @@ const memoryAttr = memory && Object.keys(memory).length > 0 ? JSON.stringify(mem
    * would silently lose them. A failure is logged and nothing else — a card
    * with one bad image should still show its circuit.
    */
-  async function applyMemory(container: HTMLElement, view: CircView) {
+  async function applyMemory(container: HTMLElement, view: View) {
     // Checked before the import, so a card with no memory never fetches the
     // chunk at all.
     if (!container.dataset.circMemory) return;
@@ -130,13 +123,13 @@ const memoryAttr = memory && Object.keys(memory).length > 0 ? JSON.stringify(mem
         loadThemes(),
       ]);
       const { pickTheme, onAssetsReady } = themeMod;
-      const view = (await renderCircuit({
+      const view = await renderCircuit({
         url: wasmUrl,
         cell,
         padding,
         interactive: true,
-        theme: pickTheme() as any,
-      })) as unknown as CircView;
+        theme: pickTheme(),
+      });
       await applyMemory(container, view);
       mountEl.innerHTML = '';
       mountEl.appendChild(view.canvas);
