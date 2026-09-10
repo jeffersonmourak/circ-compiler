@@ -94,7 +94,7 @@ and_of_not opaque I0=0 I1=… I2=… I3=0 X=… B=… S=…/… size=…x…
 # totals: fixture-modes=… skipped=… I0=… I1=… I2=… I3=… X=… B=… S=…/…
 ```
 
-JSON golden path: `tests/fixtures/preview/layouts-json/<name>.<mode>.layout.json` where `<name>` is the entry's `name` (projects use their directory name; a circuit and a project with the same stem would collide — the walk asserts uniqueness).
+JSON golden path: `tests/fixtures/preview/layouts-json/<name>.<mode>.layout.json` where `<name>` is the entry's `name` — the file stem for a circuit, `project-<dir>` for a project root (`half_adder` and `W003_unused_import` exist as both a circuit and a project directory); the walk asserts uniqueness.
 
 `RoutedWire`, `LayoutGrid` and the JSON shape are inherited unchanged (decision 12; `lib/preview/layout.zig`).
 

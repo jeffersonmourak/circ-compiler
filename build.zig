@@ -1260,6 +1260,42 @@ pub fn build(b: *std.Build) void {
     const run_preview_layout_integration_tests = b.addRunArtifact(preview_layout_integration_tests);
     test_step.dependOn(&run_preview_layout_integration_tests.step);
 
+    // The previewable fixture corpus, built through the library front end
+    // (the CLI's and the site's exact path), and the layout-parity goldens
+    // over it: one JSON LayoutGrid per fixture-mode that
+    // circ-renderer/test/layout-parity.test.ts compares buildLayout() against.
+    const preview_corpus_mod = b.createModule(.{
+        .root_source_file = b.path("tests/preview/corpus.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    preview_corpus_mod.addImport("libcirc", fe.libcirc);
+    preview_corpus_mod.addImport("layout", preview_layout_mod);
+    const preview_layout_conformance_mod = b.createModule(.{
+        .root_source_file = b.path("tests/preview/layout_conformance_test.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    preview_layout_conformance_mod.addImport("corpus", preview_corpus_mod);
+    preview_layout_conformance_mod.addImport("layout", preview_layout_mod);
+    preview_layout_conformance_mod.addImport("preview_dump_json", preview_dump_json_mod);
+    preview_layout_conformance_mod.addImport("invariants", fe.preview_layout_invariants);
+    preview_layout_conformance_mod.addImport("golden", b.createModule(.{
+        .root_source_file = b.path("tests/helpers/golden.zig"),
+        .target = target,
+        .optimize = optimize,
+    }));
+    const preview_layout_conformance_tests = b.addTest(.{
+        .name = "preview_layout_conformance_tests",
+        .root_module = preview_layout_conformance_mod,
+    });
+    const run_preview_layout_conformance_tests = b.addRunArtifact(preview_layout_conformance_tests);
+    run_preview_layout_conformance_tests.step.dependOn(&install_runtime.step);
+    // Reads every fixture and (under UPDATE_GOLDENS) rewrites goldens: never
+    // serve it from the run-step cache, or a regeneration silently no-ops.
+    run_preview_layout_conformance_tests.has_side_effects = true;
+    test_step.dependOn(&run_preview_layout_conformance_tests.step);
+
     const topology_full_emit_integration_mod = b.createModule(.{
         .root_source_file = b.path("tests/topology/full_emit_integration_test.zig"),
         .target = target,

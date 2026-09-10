@@ -1,0 +1,19 @@
+{
+  "width": 43,
+  "height": 15,
+  "components": [
+    { "id": 0, "kind": { "tag": "primitive", "kind": 0 }, "name": "d", "x": 0, "y": 0, "width": 8, "height": 3, "inPorts": [], "outPort": { "x": 8, "y": 1 }, "bitWidth": 8 },
+    { "id": 1, "kind": { "tag": "primitive", "kind": 0 }, "name": "a", "x": 0, "y": 4, "width": 8, "height": 3, "inPorts": [], "outPort": { "x": 8, "y": 5 }, "bitWidth": 4 },
+    { "id": 2, "kind": { "tag": "primitive", "kind": 0 }, "name": "we", "x": 0, "y": 8, "width": 6, "height": 3, "inPorts": [], "outPort": { "x": 6, "y": 9 }, "bitWidth": 1 },
+    { "id": 3, "kind": { "tag": "primitive", "kind": 0 }, "name": "clk", "x": 0, "y": 12, "width": 7, "height": 3, "inPorts": [], "outPort": { "x": 7, "y": 13 }, "bitWidth": 1 },
+    { "id": 4, "kind": { "tag": "primitive", "kind": 5 }, "name": "q", "x": 35, "y": 0, "width": 8, "height": 3, "inPorts": [{ "portName": "in", "coord": { "x": 34, "y": 1 } }], "outPort": { "x": 43, "y": 1 }, "bitWidth": 8 },
+    { "id": 11, "kind": { "tag": "subcircuit", "subcircuit": "mem_wrap" }, "name": "inst", "x": 13, "y": 0, "width": 17, "height": 3, "inPorts": [{ "portName": "in", "coord": { "x": 12, "y": 1 } }], "outPort": { "x": 30, "y": 1 }, "bitWidth": 1 }
+  ],
+  "wires": [
+    { "srcId": 0, "srcPort": 3, "dstId": 11, "dstPort": 0, "segments": [{ "from": { "x": 8, "y": 1 }, "to": { "x": 9, "y": 1 } }, { "from": { "x": 9, "y": 1 }, "to": { "x": 12, "y": 1 } }] },
+    { "srcId": 1, "srcPort": 3, "dstId": 11, "dstPort": 0, "segments": [{ "from": { "x": 8, "y": 5 }, "to": { "x": 9, "y": 5 } }, { "from": { "x": 9, "y": 5 }, "to": { "x": 9, "y": 1 } }, { "from": { "x": 9, "y": 1 }, "to": { "x": 12, "y": 1 } }] },
+    { "srcId": 2, "srcPort": 3, "dstId": 11, "dstPort": 0, "segments": [{ "from": { "x": 6, "y": 9 }, "to": { "x": 8, "y": 9 } }, { "from": { "x": 8, "y": 9 }, "to": { "x": 8, "y": 1 } }, { "from": { "x": 8, "y": 1 }, "to": { "x": 12, "y": 1 } }] },
+    { "srcId": 3, "srcPort": 3, "dstId": 11, "dstPort": 0, "segments": [{ "from": { "x": 7, "y": 13 }, "to": { "x": 8, "y": 13 } }, { "from": { "x": 8, "y": 13 }, "to": { "x": 8, "y": 1 } }, { "from": { "x": 8, "y": 1 }, "to": { "x": 12, "y": 1 } }] },
+    { "srcId": 11, "srcPort": 3, "dstId": 4, "dstPort": 0, "segments": [{ "from": { "x": 30, "y": 1 }, "to": { "x": 31, "y": 1 } }, { "from": { "x": 31, "y": 1 }, "to": { "x": 34, "y": 1 } }] }
+  ]
+}

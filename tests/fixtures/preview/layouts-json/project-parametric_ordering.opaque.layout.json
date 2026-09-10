@@ -1,0 +1,17 @@
+{
+  "width": 41,
+  "height": 7,
+  "components": [
+    { "id": 0, "kind": { "tag": "primitive", "kind": 0 }, "name": "x", "x": 0, "y": 0, "width": 8, "height": 3, "inPorts": [], "outPort": { "x": 8, "y": 1 }, "bitWidth": 4 },
+    { "id": 1, "kind": { "tag": "primitive", "kind": 0 }, "name": "y", "x": 0, "y": 4, "width": 8, "height": 3, "inPorts": [], "outPort": { "x": 8, "y": 5 }, "bitWidth": 8 },
+    { "id": 2, "kind": { "tag": "primitive", "kind": 5 }, "name": "dout", "x": 30, "y": 0, "width": 11, "height": 3, "inPorts": [{ "portName": "in", "coord": { "x": 29, "y": 1 } }], "outPort": { "x": 41, "y": 1 }, "bitWidth": 4 },
+    { "id": 3, "kind": { "tag": "primitive", "kind": 5 }, "name": "aout", "x": 30, "y": 4, "width": 11, "height": 3, "inPorts": [{ "portName": "in", "coord": { "x": 29, "y": 5 } }], "outPort": { "x": 41, "y": 5 }, "bitWidth": 8 },
+    { "id": 10, "kind": { "tag": "subcircuit", "subcircuit": "lib" }, "name": "inst", "x": 13, "y": 0, "width": 12, "height": 3, "inPorts": [{ "portName": "in", "coord": { "x": 12, "y": 1 } }], "outPort": { "x": 25, "y": 1 }, "bitWidth": 1 }
+  ],
+  "wires": [
+    { "srcId": 0, "srcPort": 3, "dstId": 10, "dstPort": 0, "segments": [{ "from": { "x": 8, "y": 1 }, "to": { "x": 9, "y": 1 } }, { "from": { "x": 9, "y": 1 }, "to": { "x": 12, "y": 1 } }] },
+    { "srcId": 1, "srcPort": 3, "dstId": 10, "dstPort": 0, "segments": [{ "from": { "x": 8, "y": 5 }, "to": { "x": 9, "y": 5 } }, { "from": { "x": 9, "y": 5 }, "to": { "x": 9, "y": 1 } }, { "from": { "x": 9, "y": 1 }, "to": { "x": 12, "y": 1 } }] },
+    { "srcId": 10, "srcPort": 3, "dstId": 2, "dstPort": 0, "segments": [{ "from": { "x": 25, "y": 1 }, "to": { "x": 26, "y": 1 } }, { "from": { "x": 26, "y": 1 }, "to": { "x": 29, "y": 1 } }] },
+    { "srcId": 10, "srcPort": 3, "dstId": 3, "dstPort": 0, "segments": [{ "from": { "x": 25, "y": 1 }, "to": { "x": 26, "y": 1 } }, { "from": { "x": 26, "y": 1 }, "to": { "x": 26, "y": 5 } }, { "from": { "x": 26, "y": 5 }, "to": { "x": 29, "y": 5 } }] }
+  ]
+}

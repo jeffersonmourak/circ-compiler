@@ -1,0 +1,13 @@
+{
+  "width": 37,
+  "height": 3,
+  "components": [
+    { "id": 0, "kind": { "tag": "primitive", "kind": 0 }, "name": "x", "x": 0, "y": 0, "width": 5, "height": 3, "inPorts": [], "outPort": { "x": 5, "y": 1 }, "bitWidth": 1 },
+    { "id": 1, "kind": { "tag": "primitive", "kind": 5 }, "name": "y", "x": 32, "y": 0, "width": 5, "height": 3, "inPorts": [{ "portName": "in", "coord": { "x": 31, "y": 1 } }], "outPort": { "x": 37, "y": 1 }, "bitWidth": 1 },
+    { "id": 5, "kind": { "tag": "subcircuit", "subcircuit": "wide_not" }, "name": "inst", "x": 10, "y": 0, "width": 17, "height": 3, "inPorts": [{ "portName": "a", "coord": { "x": 9, "y": 1 } }], "outPort": { "x": 27, "y": 1 }, "bitWidth": 1 }
+  ],
+  "wires": [
+    { "srcId": 0, "srcPort": 3, "dstId": 5, "dstPort": 1, "segments": [{ "from": { "x": 5, "y": 1 }, "to": { "x": 6, "y": 1 } }, { "from": { "x": 6, "y": 1 }, "to": { "x": 9, "y": 1 } }] },
+    { "srcId": 5, "srcPort": 3, "dstId": 1, "dstPort": 0, "segments": [{ "from": { "x": 27, "y": 1 }, "to": { "x": 28, "y": 1 } }, { "from": { "x": 28, "y": 1 }, "to": { "x": 31, "y": 1 } }] }
+  ]
+}
