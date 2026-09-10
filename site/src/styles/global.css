@@ -1657,17 +1657,31 @@ a.install-line:hover {
 }
 .pg-status-spacer { flex: 1; }
 .pg-status-actions { display: flex; align-items: center; gap: 0.3rem; }
-.pg-share {
+/* The two status-bar actions: Download .wasm and Share. One shape, an icon
+   and a label each; a label flashes ("Copied", "Saved") through data-state. */
+.pg-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
   border: 1px solid var(--border);
   border-radius: 4px;
   background: var(--pane-label-bg);
   color: var(--fg);
   font-family: inherit;
   font-size: 0.72rem;
-  padding: 0.1rem 0.45rem;
+  line-height: 1.2;
+  padding: 0.15rem 0.5rem;
   cursor: pointer;
+  transition: border-color 120ms, color 120ms, background 120ms;
 }
-.pg-share:hover { border-color: var(--accent); color: var(--accent); }
+.pg-action-icon { width: 0.85rem; height: 0.85rem; flex: none; }
+.pg-action:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.pg-action:disabled { opacity: 0.45; cursor: not-allowed; }
+.pg-action[data-state='done'] { border-color: var(--accent); color: var(--accent); }
+.pg-action[data-state='failed'] { border-color: var(--danger); color: var(--danger); }
+/* A build the source has moved past is still worth saving, but say so. */
+.pg-download[data-stale] .pg-action-icon { opacity: 0.6; }
+.pg-download[data-stale] .pg-action-label::after { content: ' (stale)'; opacity: 0.7; }
 .pg-share-fallback {
   font-family: var(--font-mono);
   font-size: 0.7rem;

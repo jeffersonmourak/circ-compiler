@@ -248,7 +248,19 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         the version handshake resolves; the island overwrites it after. */}
     <span class="pg-status-identity">circ {manifest.version} · {manifest.revision} · CIRF v{manifest.full_version}</span>
     <span class="pg-status-actions">
-      <button type="button" class="pg-share">Share</button>
+      {/* Disabled until a build exists; the island keeps the title current. */}
+      <button type="button" class="pg-action pg-download" disabled title="Compile a circuit first">
+        <svg class="pg-action-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <path d="M8 2v7.5M4.75 6.5 8 9.75l3.25-3.25M3 12.5h10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span class="pg-action-label">Download .wasm</span>
+      </button>
+      <button type="button" class="pg-action pg-share" title="Copy a link to this circuit">
+        <svg class="pg-action-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <path d="M6.5 9.5 9.5 6.5M7 4.5l1.3-1.3a2.5 2.5 0 0 1 3.5 3.5L10.5 8M5.5 8 4.2 9.3a2.5 2.5 0 0 0 3.5 3.5L9 11.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span class="pg-action-label">Share</span>
+      </button>
     </span>
     {/* The announcement channel: file-tab operations and store notes. */}
     <span class="pg-status" role="status" aria-live="polite"></span>
@@ -269,7 +281,9 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
   import { joinConflicts, requestFor, rootOf, PLAYGROUND_DIR } from '../utils/split-files.ts';
   import { createSplitter } from '../scripts/splitter.ts';
   import { fnv1a } from '../utils/artifact-hash.ts';
+  import { artifactFileName } from '../utils/artifact-name.ts';
   import { mountSettingsDrawer, optionsFor, truthTableRefusal } from '../scripts/settings-drawer.ts';
+  import { formatBytes } from '../scripts/pipeline.ts';
   import {
     applyRomImages,
     maxWords,
@@ -406,6 +420,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     const wsNew = el.querySelector<HTMLButtonElement>('.pg-ws-new')!;
     const wsError = el.querySelector<HTMLElement>('.pg-ws-error')!;
     const shareBtn = el.querySelector<HTMLButtonElement>('.pg-share')!;
+    const downloadBtn = el.querySelector<HTMLButtonElement>('.pg-download')!;
     const statusActions = el.querySelector<HTMLElement>('.pg-status-actions')!;
     const panels = Array.from(el.querySelectorAll<HTMLElement>('.pg-panel'));
     // The dock: the editor's own strip, distinct from both the output tabs
@@ -454,12 +469,24 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     // Slice 8 attaches the simulator here.
     const hooks = {
       onArtifact: null as null | ((bytes: Uint8Array | null, reason: 'built' | 'files-changed') => void),
+      /** Re-read the artifact into the Download button; set once the status
+       *  actions are wired, called from every place the artifact changes. */
+      refreshActions: null as null | (() => void),
     };
     // `renderMemory` is a deliberate test seam alongside the two above: the
     // memory panel only exists once an analysis reports a rom or a ram, and no
     // headless harness can run the worker that produces one. The smoke test
     // sets `state.analysis` and calls this.
-    (el as any).__playground = { state, hooks, renderMemory: () => renderMemory({ force: true }) };
+    // `refreshActions` and `setStale` are seams too: the Download button
+    // follows the artifact, which only the worker produces, so the smoke test
+    // hands the state one and flips staleness the way the compile reply does.
+    (el as any).__playground = {
+      state,
+      hooks,
+      renderMemory: () => renderMemory({ force: true }),
+      refreshActions: () => hooks.refreshActions?.(),
+      setStale: (stale: boolean) => setStale(stale),
+    };
 
     // ---- tabs ----
     /**
@@ -1284,23 +1311,111 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       }
     }
 
+    /** Flash a button's label for a moment — "Copied", "Saved" — then put it
+     *  back. The status line carries the full sentence; this is the glance. */
+    function flash(button: HTMLButtonElement, text: string, state: 'done' | 'failed' = 'done') {
+      const label = button.querySelector<HTMLElement>('.pg-action-label');
+      if (!label) return;
+      const was = label.textContent;
+      label.textContent = text;
+      button.dataset.state = state;
+      window.setTimeout(() => {
+        label.textContent = was;
+        delete button.dataset.state;
+      }, 1600);
+    }
+
     shareBtn.addEventListener('click', async () => {
-      const source = toSource(state.tabs);
-      const result = await encodeShare(source, webStreamsCodec());
-      if (!result.ok) {
-        // Past the cap the link is useless, so offer the thing that is not.
-        const copied = await copyText(source);
+      if (shareBtn.disabled) return;
+      shareBtn.disabled = true;
+      try {
+        const source = toSource(state.tabs);
+        const result = await encodeShare(source, webStreamsCodec());
+        if (!result.ok) {
+          // Past the cap the link is useless, so offer the thing that is not.
+          const copied = await copyText(source);
+          flash(shareBtn, copied ? 'Source copied' : 'Too long', copied ? 'done' : 'failed');
+          status.textContent = copied
+            ? `Too long to put in a link (${result.chars} characters, limit ${result.cap}); the source is on your clipboard.`
+            : `Too long to put in a link (${result.chars} characters, limit ${result.cap}); the source is selected below.`;
+          return;
+        }
+        const link = shareUrl(location.href, result.fragment);
+        // A phone has a share sheet, and a link is what it is for; a desktop
+        // reader wants the link on the clipboard, where the sheet would only
+        // be in the way. Dismissing the sheet is not a failure.
+        const sheet = typeof navigator.share === 'function' && matchMedia('(pointer: coarse)').matches;
+        if (sheet) {
+          try {
+            await navigator.share({ title: `${activeLabel()} — circ`, url: link });
+            flash(shareBtn, 'Shared');
+            status.textContent = `Link shared (${result.chars} characters).`;
+            return;
+          } catch (err) {
+            if ((err as { name?: string }).name === 'AbortError') return;
+            // Anything else falls through to the clipboard.
+          }
+        }
+        const copied = await copyText(link);
+        flash(shareBtn, copied ? 'Copied' : 'Select below', copied ? 'done' : 'failed');
         status.textContent = copied
-          ? `Too long to put in a link (${result.chars} characters, limit ${result.cap}); the source is on your clipboard.`
-          : `Too long to put in a link (${result.chars} characters, limit ${result.cap}); the source is selected below.`;
-        return;
+          ? `Link copied (${result.chars} characters).`
+          : 'Link selected below — copy it with your keyboard.';
+      } finally {
+        shareBtn.disabled = false;
       }
-      const link = shareUrl(location.href, result.fragment);
-      const copied = await copyText(link);
-      status.textContent = copied
-        ? `Link copied (${result.chars} characters).`
-        : 'Link selected below — copy it with your keyboard.';
     });
+
+    // ---- download ----
+    /** The name the tree shows for the open project: an example's title, a
+     *  scratch project's name. */
+    function activeLabel(): string {
+      const id = store.envelope.activeId;
+      if (!id) return 'circuit';
+      if (idKind(id) === 'scratch') return store.envelope.scratch.find((p) => p.id === id)?.name ?? 'circuit';
+      return catalogue.find((c) => c.id === id)?.label ?? 'circuit';
+    }
+
+    /**
+     * The button follows the artifact: disabled with no build, and with a
+     * build it says what it would save and whether the source has moved on
+     * since. Called wherever the artifact or its staleness changes.
+     */
+    function refreshActions() {
+      const a = state.artifact;
+      downloadBtn.disabled = !a;
+      downloadBtn.title = !a
+        ? 'Compile a circuit first'
+        : state.stale
+          ? `Download the last good build, ${artifactFileName(activeLabel())} (${formatBytes(a.size)}) — the source has changed since it was built`
+          : `Download ${artifactFileName(activeLabel())} (${formatBytes(a.size)})`;
+      if (state.stale && a) downloadBtn.dataset.stale = '';
+      else delete downloadBtn.dataset.stale;
+    }
+
+    downloadBtn.addEventListener('click', () => {
+      const a = state.artifact;
+      if (!a) return;
+      const name = artifactFileName(activeLabel());
+      // A copy, not a view: the worker transferred this buffer and a later
+      // build may replace it while the download is still being written.
+      const blob = new Blob([a.bytes.slice() as BlobPart], { type: 'application/wasm' });
+      const href = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = href;
+      link.download = name;
+      link.hidden = true;
+      // In the document for the click, so the page's own listeners see it.
+      statusActions.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(href), 1000);
+      flash(downloadBtn, 'Saved');
+      status.textContent = state.stale
+        ? `Saved ${name} (${formatBytes(a.size)}) from the last good build; the source has changed since.`
+        : `Saved ${name} (${formatBytes(a.size)}).`;
+    });
+    hooks.refreshActions = refreshActions;
 
     // ---- settings ----
     const settings = () => store.envelope.settings;
@@ -2318,6 +2433,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         tableEl.innerHTML = '';
         outputPane.removeAttribute('data-stale');
         hooks.onArtifact?.(null, 'files-changed');
+        hooks.refreshActions?.();
         return;
       }
       state.renderedFiles = nextFiles;
@@ -2328,6 +2444,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       pipe.stale = stale;
       if (stale) outputPane.setAttribute('data-stale', '');
       else outputPane.removeAttribute('data-stale');
+      hooks.refreshActions?.();
       renderStatus();
     }
 
@@ -2392,6 +2509,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         if (!state.artifact || state.artifact.hash !== hash) {
           state.artifact = { bytes: c.bytes, hash, size };
           hooks.onArtifact?.(c.bytes, 'built');
+          hooks.refreshActions?.();
         }
         pipe.artifactBytes = size;
         pipe.failure = null;

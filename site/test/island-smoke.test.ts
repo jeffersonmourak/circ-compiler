@@ -51,6 +51,19 @@ function drive<T>(fn: (doc: Window['document']) => T): T {
   }
 }
 
+/** `drive` for a handler that keeps working after the click returns — a
+ *  share that awaits an encode and a clipboard write. The globals stay
+ *  installed until `fn`'s promise settles, not just until it returns. */
+async function driveAsync<T>(fn: (doc: Window['document']) => Promise<T>): Promise<T> {
+  if (!lastWindow) throw new Error('no window: the mounting test must run first');
+  const undo = installGlobals(lastWindow);
+  try {
+    return await fn(lastWindow.document);
+  } finally {
+    undo();
+  }
+}
+
 /**
  * A recording stand-in for `IntersectionObserver`, which happy-dom does not
  * implement.
@@ -505,6 +518,91 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     (doc.querySelector('.pg-mem-hextoggle input') as unknown as { click(): void }).click();
     expect(doc.querySelector('.pg-mem-hex')).toBeNull();
   }));
+
+  test('Download follows the artifact, and saves it under the project\'s name', async () => {
+    // No harness can run the worker that builds an artifact, so the island's
+    // state is handed one directly and its refresh seam is called, the way
+    // the compile reply does.
+    type Island = {
+      state: { artifact: unknown; stale: boolean };
+      refreshActions(): void;
+      setStale(stale: boolean): void;
+    };
+    const saved: { name: string; href: string }[] = [];
+    const island = drive((doc) => {
+      const button = doc.querySelector('.pg-download') as unknown as { disabled: boolean; title: string };
+      expect(button.disabled).toBe(true);
+      expect(button.title).toBe('Compile a circuit first');
+      // The anchor the click creates is caught here, before happy-dom tries
+      // to navigate to a blob: URL.
+      doc.addEventListener('click', (e) => {
+        const t = (e as { target: { tagName?: string; download?: string; href?: string } }).target;
+        if (t.tagName === 'A' && t.download) {
+          saved.push({ name: t.download, href: t.href ?? '' });
+          (e as { preventDefault(): void }).preventDefault();
+        }
+      }, true);
+      return (doc.querySelector('.pg') as unknown as { __playground: Island }).__playground;
+    });
+
+    island.state.artifact = { bytes: new Uint8Array([0, 0x61, 0x73, 0x6d, 1, 0, 0, 0]), hash: 7, size: 8 };
+    island.state.stale = false;
+    island.refreshActions();
+    drive((doc) => {
+      const button = doc.querySelector('.pg-download') as unknown as { disabled: boolean; title: string; click(): void; hasAttribute(n: string): boolean };
+      expect(button.disabled).toBe(false);
+      expect(button.title).toMatch(/^Download [a-z0-9-]+\.wasm \(8 B\)$/);
+      expect(button.hasAttribute('data-stale')).toBe(false);
+      button.click();
+      expect(saved).toHaveLength(1);
+      expect(saved[0].name).toMatch(/^[a-z0-9-]+\.wasm$/);
+      expect(saved[0].href.startsWith('blob:')).toBe(true);
+      expect(doc.querySelector('.pg-status')?.textContent).toMatch(/^Saved [a-z0-9-]+\.wasm \(8 B\)\.$/);
+      expect(doc.querySelector('.pg-download')?.getAttribute('data-state')).toBe('done');
+      // The anchor was a means, not a leftover.
+      expect(doc.querySelector('.pg-status-actions a')).toBeNull();
+    });
+
+    // A build the source has moved past is still offered, and says so. This
+    // goes through the island's own setStale, the path the compile reply
+    // takes, so a refresh dropped from it fails here.
+    island.setStale(true);
+    drive((doc) => {
+      const button = doc.querySelector('.pg-download') as unknown as { disabled: boolean; title: string; hasAttribute(n: string): boolean };
+      expect(button.disabled).toBe(false);
+      expect(button.hasAttribute('data-stale')).toBe(true);
+      expect(button.title).toContain('the source has changed');
+    });
+
+    // And no build is no button.
+    island.state.artifact = null;
+    island.setStale(false);
+    drive((doc) => {
+      expect((doc.querySelector('.pg-download') as unknown as { disabled: boolean }).disabled).toBe(true);
+    });
+  });
+
+  test('Share copies a link and says so on the button and in the status line', async () => {
+    const written: string[] = [];
+    await driveAsync(async (doc) => {
+      // happy-dom's clipboard is a stub; record what the island hands it.
+      const nav = globalThis.navigator as unknown as { clipboard?: { writeText(t: string): Promise<void> } };
+      Object.defineProperty(nav, 'clipboard', {
+        configurable: true,
+        value: { writeText: async (t: string) => { written.push(t); } },
+      });
+      (doc.querySelector('.pg-share') as unknown as { click(): void }).click();
+      // The handler is async — an encode through a CompressionStream and the
+      // clipboard write — so the globals have to outlive the click.
+      await new Promise((r) => setTimeout(r, 100));
+      expect(written).toHaveLength(1);
+      expect(written[0]).toMatch(/#src0?=[A-Za-z0-9_-]+$/);
+      expect(doc.querySelector('.pg-status')?.textContent).toMatch(/^Link copied \(\d+ characters\)\.$/);
+      expect(doc.querySelector('.pg-share')?.getAttribute('data-state')).toBe('done');
+      expect(doc.querySelector('.pg-share .pg-action-label')?.textContent).toBe('Copied');
+      expect((doc.querySelector('.pg-share') as unknown as { disabled: boolean }).disabled).toBe(false);
+    });
+  });
 
   test('every canvas that asks to auto-run is watched, and nothing else is', async () => {
     FakeIntersectionObserver.instances.length = 0;

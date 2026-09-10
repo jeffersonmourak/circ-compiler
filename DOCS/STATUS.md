@@ -1014,3 +1014,17 @@ Those four kinds have site skins now — `drawSlice`, `drawConcat`, and `drawMem
 
 1. **The renderer's hit-test and `boxOf` follow the rendered rect on both axes**, so a uniformly shrunk gallery canvas stays exact; the workbench never shrinks, so it never needed that.
 2. **Auto margins, not flex centring.** The `.lc-mount` mobile note already records why: a flex-centred child wider than its container hangs off the left edge, where no scroll reaches it.
+
+## 2026-09-10 — Share polished, and the compiled artifact can be downloaded
+
+**What shipped:** The status bar's actions are two now. **Download .wasm** saves the artifact the worker built, named after the project the tree shows (`half-adder.wasm`, `brave-otter.wasm`; `circuit.wasm` when the label has nothing usable in it), through `artifactFileName` in a new `src/utils/artifact-name.ts`. It is disabled until a build exists, its tooltip says what it would save and how big, and a build the source has moved past is still offered but marked stale on the button, in the tooltip and in the status line. **Share** got an icon, a tooltip, a disabled state while it encodes, and a flashed label — "Copied", "Source copied", "Select below" — beside the status sentence it already wrote; on a coarse-pointer device with a share sheet it offers the sheet, and a dismissed sheet is not a failure. Both buttons share one `.pg-action` shape.
+
+**Files touched:** `site/src/components/Playground.astro`, `site/src/styles/global.css`, `site/src/utils/artifact-name.ts`, `site/test/artifact-name.test.ts`, `site/test/island-smoke.test.ts`.
+
+**Tests:** `bun test` 414 pass across 33 files, from 407. `bun --bun run typecheck` 0 errors. **Build and `bun run bundle` ran for the first time since the Phase 4 slice** — `astro build` on its own reads `public/` and writes `dist/`, which the dev server never touches; the race the earlier rule guards against is the `sync` step, which the dev server had already run — and the budget is green on every route, eager pages unchanged. Negative proof, run and checked for its failure: a `setStale` that skips the refresh fails the smoke test (see note 2).
+
+**Notes:**
+
+1. **The smoke test drives the seam, so the proof had to go through the path.** Its first draft set `state.stale` and called `refreshActions()` itself, which proved the button reads the state and nothing about who calls the refresh; dropping the call from `setStale` passed it. The island exposes `setStale` on the test seam now and the test flips staleness through it, the way the compile reply does, and the same injection fails one test.
+2. **An async click handler outlives `drive()`.** The share handler awaits an encode and a clipboard write, and the harness restored its globals the moment the click returned, so the write ran against bun's own `navigator` and threw where nothing surfaces it. `driveAsync` keeps the globals until the handler's promise settles; the Download test did not need it because its handler is synchronous.
+3. **The download anchor is put in the document for the click.** An anchor that is never attached fires a click nobody else can see; attached to the status actions for the one call and removed after, the page's own listeners — and the test's — see it, and happy-dom's attempt to navigate to a `blob:` URL is prevented there.
