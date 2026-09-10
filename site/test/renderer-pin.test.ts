@@ -74,9 +74,12 @@ describe('renderer pin', () => {
       expect(`${name}: ${/setTheme\(pickTheme\(\)/.test(source)}`).toBe(`${name}: true`);
       expect(`${name}: ${/rebuildAll|rebuildSim/.test(source)}`).toBe(`${name}: false`);
     }
-    // The only renderCircuit on each page is the first mount.
-    expect([...gallery.matchAll(/renderCircuit\(/g)]).toHaveLength(2); // import + call
-    expect([...playground.matchAll(/await renderCircuit\(/g)]).toHaveLength(1);
+    // The only renderCircuit call on each page is the first mount. Both pages
+    // destructure the import (`const [{ renderCircuit }, ...]`), so the call
+    // form is what is counted, not the bare name.
+    for (const [name, source] of [['LiveCanvas', gallery], ['Playground', playground]] as const) {
+      expect(`${name}: ${[...source.matchAll(/await renderCircuit\(/g)].length}`).toBe(`${name}: 1`);
+    }
   });
 
   test.skipIf(skip)('the pinned renderer decodes what libcirc.wasm emits', async () => {
