@@ -13,6 +13,7 @@ const corpus = @import("corpus");
 const preview_dump_json = @import("preview_dump_json");
 const invariants = @import("invariants");
 const ordering = @import("ordering");
+const channels = @import("channels");
 const golden = @import("golden");
 
 test {
@@ -146,4 +147,61 @@ test "layout_determinism" {
             return error.NonDeterministicLayout;
         }
     }
+}
+
+// ---------- Channel planning over the corpus ----------
+//
+// Every layer-adjacent edge of every fixture-mode lands in exactly one net
+// of the gap it crosses, and the constraint graph of every gap is planned;
+// the cycles the left-edge assignment cannot resolve on its own are counted
+// and printed (Phase 3 slice 3 breaks them with doglegs).
+
+test "channels_corpus_plan" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    const w = try corpus.walk(a);
+    var gaps: usize = 0;
+    var nets: usize = 0;
+    var straight: usize = 0;
+    var cycles: usize = 0;
+    var tracks_total: u64 = 0;
+    var widest: u32 = 0;
+    var widest_name: []const u8 = "";
+    for (w.entries) |entry| {
+        var scratch = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+        defer scratch.deinit();
+        const s = scratch.allocator();
+        const st = try corpus.buildStages(s, entry.path, entry.mode == .expanded);
+        var k: u32 = 0;
+        while (k + 1 < st.layered.num_layers) : (k += 1) {
+            gaps += 1;
+            const gap_nets = try channels.extractNets(s, st.graph, st.layered, st.coords, k);
+            var covered: usize = 0;
+            for (gap_nets) |net| {
+                nets += 1;
+                if (net.straight) straight += 1;
+                covered += net.sinks.len;
+            }
+            var edges_in_gap: usize = 0;
+            for (st.layered.edges) |e| {
+                if (st.layered.nodes[e.src].layer == k) edges_in_gap += 1;
+            }
+            try std.testing.expectEqual(edges_in_gap, covered);
+            const tracks = channels.assignTracks(s, gap_nets) catch |err| switch (err) {
+                error.ConstraintCycle => {
+                    cycles += 1;
+                    continue;
+                },
+                else => return err,
+            };
+            tracks_total += tracks;
+            if (tracks > widest) {
+                widest = tracks;
+                widest_name = try a.dupe(u8, entry.name);
+            }
+        }
+    }
+    std.debug.print("channels corpus: gaps={d} nets={d} straight={d} cycles={d} tracks={d} widest={d} ({s})\n", .{ gaps, nets, straight, cycles, tracks_total, widest, widest_name });
 }

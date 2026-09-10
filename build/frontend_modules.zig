@@ -70,6 +70,7 @@ pub const Modules = struct {
     preview_layout_ordering: *Module,
     preview_layout_boxes: *Module,
     preview_layout_coords: *Module,
+    preview_layout_channels: *Module,
     preview_layout_route: *Module,
     preview_layout_orchestrator: *Module,
     preview_layout_invariants: *Module,
@@ -296,6 +297,15 @@ pub fn create(b: *std.Build, opts: Options) Modules {
     preview_layout_coords.addImport("layering", preview_layout_layering);
     preview_layout_coords.addImport("ordering", preview_layout_ordering);
     preview_layout_orchestrator.addImport("coords", preview_layout_coords);
+    const preview_layout_channels = mk.module("lib/preview/layout/channels.zig");
+    preview_layout_channels.addImport("full_format", full_format);
+    preview_layout_channels.addImport("layout", preview_layout);
+    preview_layout_channels.addImport("layout_types", preview_layout_types);
+    preview_layout_channels.addImport("ports", preview_layout_ports);
+    preview_layout_channels.addImport("coords", preview_layout_coords);
+    preview_layout_channels.addImport("layering", preview_layout_layering);
+    preview_layout_channels.addImport("ordering", preview_layout_ordering);
+    preview_layout_orchestrator.addImport("channels", preview_layout_channels);
 
     // ---- preview: render ----
     const preview_render_color = mk.module("lib/preview/render/color.zig");
@@ -392,6 +402,7 @@ pub fn create(b: *std.Build, opts: Options) Modules {
         .preview_layout_layering = preview_layout_layering,
         .preview_layout_boxes = preview_layout_boxes,
         .preview_layout_coords = preview_layout_coords,
+        .preview_layout_channels = preview_layout_channels,
         .preview_layout_route = preview_layout_route,
         .preview_layout_orchestrator = preview_layout_orchestrator,
         .preview_layout_invariants = preview_layout_invariants,

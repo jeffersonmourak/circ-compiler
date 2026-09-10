@@ -1224,6 +1224,13 @@ pub fn build(b: *std.Build) void {
     const run_preview_layout_coords_tests = b.addRunArtifact(preview_layout_coords_tests);
     test_step.dependOn(&run_preview_layout_coords_tests.step);
 
+    const preview_layout_channels_tests = b.addTest(.{
+        .name = "preview_layout_channels_tests",
+        .root_module = fe.preview_layout_channels,
+    });
+    const run_preview_layout_channels_tests = b.addRunArtifact(preview_layout_channels_tests);
+    test_step.dependOn(&run_preview_layout_channels_tests.step);
+
     // Phase 2 slice 6a: Stage 5 — route
     const preview_layout_route_mod = fe.preview_layout_route;
     const preview_layout_route_tests = b.addTest(.{
@@ -1299,6 +1306,7 @@ pub fn build(b: *std.Build) void {
     preview_layout_conformance_mod.addImport("preview_dump_json", preview_dump_json_mod);
     preview_layout_conformance_mod.addImport("invariants", fe.preview_layout_invariants);
     preview_layout_conformance_mod.addImport("ordering", fe.preview_layout_ordering);
+    preview_layout_conformance_mod.addImport("channels", fe.preview_layout_channels);
     preview_layout_conformance_mod.addImport("golden", b.createModule(.{
         .root_source_file = b.path("tests/helpers/golden.zig"),
         .target = target,

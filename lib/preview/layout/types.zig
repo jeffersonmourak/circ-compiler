@@ -124,6 +124,69 @@ pub const Coords = struct {
     height: u32,
 };
 
+// ---------- Channels (Phase 3 of the layout rewrite) ----------
+
+/// A net's end in one gap. `rail` says which horizontal the terminal owns
+/// inside the gap: a source's rail runs from its port cell to the track, a
+/// sink's from the track to its port cell; a return-lane end on the return
+/// row owns none.
+pub const Terminal = struct {
+    node: u32, // LayerNode index
+    port: u8,
+    row: u32,
+    rail: enum(u8) { left, right, none },
+};
+
+/// One vertical run of a net on one track.
+pub const Piece = struct {
+    track: u32,
+    lo: u32,
+    hi: u32,
+};
+
+/// The horizontal jog between two pieces of a dogleg.
+pub const Jog = struct {
+    row: u32,
+    from_track: u32,
+    to_track: u32,
+};
+
+pub const Net = struct {
+    /// Identity: the source node's index in `VirtualGraph` and its port,
+    /// which is what render and the invariants call a net.
+    src_real: usize,
+    src_port: u8,
+    src: Terminal,
+    sinks: []Terminal, // ascending row
+    lo: u32,
+    hi: u32,
+    /// All terminals on one row: no track, one horizontal.
+    straight: bool,
+    /// Ascending `lo`; one piece unless a dogleg split the net.
+    pieces: []Piece,
+    jogs: []Jog,
+    /// Half of a back edge's return lane (see `channels.zig`).
+    back: bool,
+    /// Routed by the fallback search rather than by a track.
+    fallback: bool,
+};
+
+pub const Gap = struct {
+    after_layer: u32,
+    nets: []Net,
+    tracks: u32,
+    width: u32,
+};
+
+pub const RoutePlan = struct {
+    gaps: []Gap,
+    /// One row per back edge, appended below the diagram.
+    return_rows: u32,
+    /// Rows `insertSpacerRow` inserted, in order.
+    spacer_rows: []u32,
+    fallbacks: u32,
+};
+
 test "types: pipeline structs compile" {
     comptime {
         std.debug.assert(@typeInfo(VirtualNode).@"struct".fields.len == 8);
@@ -137,5 +200,7 @@ test "types: pipeline structs compile" {
         std.debug.assert(@typeInfo(Ordering).@"struct".fields.len == 3);
         std.debug.assert(@typeInfo(ChannelWidths).@"struct".fields.len == 1);
         std.debug.assert(@typeInfo(Coords).@"struct".fields.len == 9);
+        std.debug.assert(@typeInfo(Net).@"struct".fields.len == 11);
+        std.debug.assert(@typeInfo(RoutePlan).@"struct".fields.len == 4);
     }
 }
