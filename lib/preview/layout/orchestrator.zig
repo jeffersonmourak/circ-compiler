@@ -5,7 +5,7 @@ const collapse_stage = @import("collapse");
 const layering_stage = @import("layering");
 const ordering_stage = @import("ordering");
 const types = @import("layout_types");
-const place_stage = @import("place");
+const coords_stage = @import("coords");
 const route_stage = @import("route");
 
 /// Phase 2 slice 6b orchestrator: composes the five layout stages into a single
@@ -16,9 +16,8 @@ const route_stage = @import("route");
 pub const Stages = struct {
     graph: types.VirtualGraph,
     layered: types.LayeredGraph,
-    cols: types.ColumnAssignment,
-    rows: types.RowAssignment,
     ordering: types.Ordering,
+    coords: types.Coords,
     grid: layout.LayoutGrid,
 };
 
@@ -36,21 +35,21 @@ pub fn buildStages(
     opts: layout.LayoutOptions,
 ) !Stages {
     const graph = try collapse_stage.collapse(arena, topology, opts);
-    // Phase 1 of the layout rewrite: layers (with dummies for long edges)
-    // and a port-aware ordering replace columns and rows; the old place and
-    // route stages still consume the column/row views over the real nodes.
+    // The layout rewrite: layers (with dummies for long edges), a port-aware
+    // ordering, per-node coordinates; the old route stage still consumes the
+    // PlacedComponent list, with channel widths stubbed at the old gutter
+    // until Phase 3 measures demand.
     const layered = try layering_stage.layer(arena, graph);
-    const cols = try layering_stage.toColumns(arena, layered, graph.nodes.len);
     const ordering = try ordering_stage.order(arena, graph, layered);
-    const rows = try ordering_stage.toRows(arena, layered, ordering, graph.nodes.len);
-    const placed = try place_stage.place(arena, graph, cols, rows, opts);
+    const widths = try coords_stage.stubWidths(arena, layered.num_layers);
+    const coords = try coords_stage.assign(arena, graph, layered, ordering, opts, widths);
+    const placed = try coords_stage.toPlaced(arena, graph, layered, coords, opts);
     const route_result = try route_stage.route(arena, graph, placed);
     return .{
         .graph = graph,
         .layered = layered,
-        .cols = cols,
-        .rows = rows,
         .ordering = ordering,
+        .coords = coords,
         .grid = .{
             .width = route_result.width,
             .height = route_result.height,

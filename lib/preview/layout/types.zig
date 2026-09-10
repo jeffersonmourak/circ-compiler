@@ -100,6 +100,30 @@ pub const Ordering = struct {
     rounds: u8 = 0,
 };
 
+// ---------- Coordinates (Phase 2 of the layout rewrite) ----------
+
+pub const ChannelWidths = struct {
+    /// Width in cells of the gap after layer `k` (source marker, sink marker
+    /// and every track). Indexed `0 .. num_layers`; the last entry is unused.
+    after: []const u32,
+};
+
+pub const Coords = struct {
+    /// Per LayerNode: the top-left cell of a real node's box; a dummy's cell.
+    x: []u32,
+    y: []u32,
+    /// Per LayerNode: box size (a dummy is 0 wide, 1 tall).
+    w: []u32,
+    h: []u32,
+    /// Per layer: left edge and width of its widest box.
+    layer_x: []u32,
+    layer_w: []u32,
+    /// Per layer: the first cell of the channel after it.
+    channel_x: []u32,
+    width: u32,
+    height: u32,
+};
+
 test "types: pipeline structs compile" {
     comptime {
         std.debug.assert(@typeInfo(VirtualNode).@"struct".fields.len == 8);
@@ -111,5 +135,7 @@ test "types: pipeline structs compile" {
         std.debug.assert(@typeInfo(LayerEdge).@"struct".fields.len == 5);
         std.debug.assert(@typeInfo(LayeredGraph).@"struct".fields.len == 4);
         std.debug.assert(@typeInfo(Ordering).@"struct".fields.len == 3);
+        std.debug.assert(@typeInfo(ChannelWidths).@"struct".fields.len == 1);
+        std.debug.assert(@typeInfo(Coords).@"struct".fields.len == 9);
     }
 }

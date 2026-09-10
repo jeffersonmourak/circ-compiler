@@ -1,22 +1,22 @@
 {
   "width": 37,
-  "height": 19,
+  "height": 15,
   "components": [
     { "id": 0, "kind": { "tag": "primitive", "kind": 0 }, "name": "a0", "x": 0, "y": 0, "width": 6, "height": 3, "inPorts": [], "outPort": { "x": 6, "y": 1 }, "bitWidth": 1 },
-    { "id": 1, "kind": { "tag": "primitive", "kind": 0 }, "name": "a1", "x": 0, "y": 12, "width": 6, "height": 3, "inPorts": [], "outPort": { "x": 6, "y": 13 }, "bitWidth": 1 },
-    { "id": 2, "kind": { "tag": "primitive", "kind": 0 }, "name": "b0", "x": 0, "y": 6, "width": 6, "height": 3, "inPorts": [], "outPort": { "x": 6, "y": 7 }, "bitWidth": 1 },
-    { "id": 3, "kind": { "tag": "primitive", "kind": 0 }, "name": "b1", "x": 0, "y": 16, "width": 6, "height": 3, "inPorts": [], "outPort": { "x": 6, "y": 17 }, "bitWidth": 1 },
-    { "id": 4, "kind": { "tag": "primitive", "kind": 5 }, "name": "out0", "x": 29, "y": 0, "width": 8, "height": 3, "inPorts": [{ "portName": "in", "coord": { "x": 28, "y": 1 } }], "outPort": { "x": 37, "y": 1 }, "bitWidth": 1 },
-    { "id": 5, "kind": { "tag": "primitive", "kind": 5 }, "name": "out1", "x": 29, "y": 6, "width": 8, "height": 3, "inPorts": [{ "portName": "in", "coord": { "x": 28, "y": 7 } }], "outPort": { "x": 37, "y": 7 }, "bitWidth": 1 },
+    { "id": 1, "kind": { "tag": "primitive", "kind": 0 }, "name": "a1", "x": 0, "y": 8, "width": 6, "height": 3, "inPorts": [], "outPort": { "x": 6, "y": 9 }, "bitWidth": 1 },
+    { "id": 2, "kind": { "tag": "primitive", "kind": 0 }, "name": "b0", "x": 0, "y": 4, "width": 6, "height": 3, "inPorts": [], "outPort": { "x": 6, "y": 5 }, "bitWidth": 1 },
+    { "id": 3, "kind": { "tag": "primitive", "kind": 0 }, "name": "b1", "x": 0, "y": 12, "width": 6, "height": 3, "inPorts": [], "outPort": { "x": 6, "y": 13 }, "bitWidth": 1 },
+    { "id": 4, "kind": { "tag": "primitive", "kind": 5 }, "name": "out0", "x": 29, "y": 1, "width": 8, "height": 3, "inPorts": [{ "portName": "in", "coord": { "x": 28, "y": 2 } }], "outPort": { "x": 37, "y": 2 }, "bitWidth": 1 },
+    { "id": 5, "kind": { "tag": "primitive", "kind": 5 }, "name": "out1", "x": 29, "y": 9, "width": 8, "height": 3, "inPorts": [{ "portName": "in", "coord": { "x": 28, "y": 10 } }], "outPort": { "x": 37, "y": 10 }, "bitWidth": 1 },
     { "id": 16, "kind": { "tag": "subcircuit", "subcircuit": "nand" }, "name": "bit0", "x": 11, "y": 0, "width": 13, "height": 5, "inPorts": [{ "portName": "a", "coord": { "x": 10, "y": 1 } }, { "portName": "b", "coord": { "x": 10, "y": 3 } }], "outPort": { "x": 24, "y": 2 }, "bitWidth": 1 },
-    { "id": 17, "kind": { "tag": "subcircuit", "subcircuit": "nand" }, "name": "bit1", "x": 11, "y": 6, "width": 13, "height": 5, "inPorts": [{ "portName": "a", "coord": { "x": 10, "y": 7 } }, { "portName": "b", "coord": { "x": 10, "y": 9 } }], "outPort": { "x": 24, "y": 8 }, "bitWidth": 1 }
+    { "id": 17, "kind": { "tag": "subcircuit", "subcircuit": "nand" }, "name": "bit1", "x": 11, "y": 8, "width": 13, "height": 5, "inPorts": [{ "portName": "a", "coord": { "x": 10, "y": 9 } }, { "portName": "b", "coord": { "x": 10, "y": 11 } }], "outPort": { "x": 24, "y": 10 }, "bitWidth": 1 }
   ],
   "wires": [
     { "srcId": 0, "srcPort": 3, "dstId": 16, "dstPort": 1, "segments": [{ "from": { "x": 6, "y": 1 }, "to": { "x": 7, "y": 1 } }, { "from": { "x": 7, "y": 1 }, "to": { "x": 10, "y": 1 } }] },
-    { "srcId": 1, "srcPort": 3, "dstId": 17, "dstPort": 1, "segments": [{ "from": { "x": 6, "y": 13 }, "to": { "x": 9, "y": 13 } }, { "from": { "x": 9, "y": 13 }, "to": { "x": 9, "y": 7 } }, { "from": { "x": 9, "y": 7 }, "to": { "x": 10, "y": 7 } }] },
-    { "srcId": 2, "srcPort": 3, "dstId": 16, "dstPort": 2, "segments": [{ "from": { "x": 6, "y": 7 }, "to": { "x": 9, "y": 7 } }, { "from": { "x": 9, "y": 7 }, "to": { "x": 9, "y": 3 } }, { "from": { "x": 9, "y": 3 }, "to": { "x": 10, "y": 3 } }] },
-    { "srcId": 3, "srcPort": 3, "dstId": 17, "dstPort": 2, "segments": [{ "from": { "x": 6, "y": 17 }, "to": { "x": 8, "y": 17 } }, { "from": { "x": 8, "y": 17 }, "to": { "x": 8, "y": 9 } }, { "from": { "x": 8, "y": 9 }, "to": { "x": 10, "y": 9 } }] },
-    { "srcId": 16, "srcPort": 3, "dstId": 4, "dstPort": 0, "segments": [{ "from": { "x": 24, "y": 2 }, "to": { "x": 25, "y": 2 } }, { "from": { "x": 25, "y": 2 }, "to": { "x": 25, "y": 1 } }, { "from": { "x": 25, "y": 1 }, "to": { "x": 28, "y": 1 } }] },
-    { "srcId": 17, "srcPort": 3, "dstId": 5, "dstPort": 0, "segments": [{ "from": { "x": 24, "y": 8 }, "to": { "x": 26, "y": 8 } }, { "from": { "x": 26, "y": 8 }, "to": { "x": 26, "y": 7 } }, { "from": { "x": 26, "y": 7 }, "to": { "x": 28, "y": 7 } }] }
+    { "srcId": 1, "srcPort": 3, "dstId": 17, "dstPort": 1, "segments": [{ "from": { "x": 6, "y": 9 }, "to": { "x": 8, "y": 9 } }, { "from": { "x": 8, "y": 9 }, "to": { "x": 10, "y": 9 } }] },
+    { "srcId": 2, "srcPort": 3, "dstId": 16, "dstPort": 2, "segments": [{ "from": { "x": 6, "y": 5 }, "to": { "x": 9, "y": 5 } }, { "from": { "x": 9, "y": 5 }, "to": { "x": 9, "y": 3 } }, { "from": { "x": 9, "y": 3 }, "to": { "x": 10, "y": 3 } }] },
+    { "srcId": 3, "srcPort": 3, "dstId": 17, "dstPort": 2, "segments": [{ "from": { "x": 6, "y": 13 }, "to": { "x": 9, "y": 13 } }, { "from": { "x": 9, "y": 13 }, "to": { "x": 9, "y": 11 } }, { "from": { "x": 9, "y": 11 }, "to": { "x": 10, "y": 11 } }] },
+    { "srcId": 16, "srcPort": 3, "dstId": 4, "dstPort": 0, "segments": [{ "from": { "x": 24, "y": 2 }, "to": { "x": 25, "y": 2 } }, { "from": { "x": 25, "y": 2 }, "to": { "x": 28, "y": 2 } }] },
+    { "srcId": 17, "srcPort": 3, "dstId": 5, "dstPort": 0, "segments": [{ "from": { "x": 24, "y": 10 }, "to": { "x": 26, "y": 10 } }, { "from": { "x": 26, "y": 10 }, "to": { "x": 28, "y": 10 } }] }
   ]
 }

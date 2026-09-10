@@ -1,13 +1,13 @@
 {
-  "width": 23,
+  "width": 24,
   "height": 7,
   "components": [
     { "id": 0, "kind": { "tag": "primitive", "kind": 0 }, "name": "a", "x": 0, "y": 0, "width": 5, "height": 3, "inPorts": [], "outPort": { "x": 5, "y": 1 }, "bitWidth": 1 },
-    { "id": 1, "kind": { "tag": "primitive", "kind": 4 }, "name": "l", "x": 15, "y": 0, "width": 5, "height": 3, "inPorts": [{ "portName": "in", "coord": { "x": 14, "y": 1 } }], "outPort": { "x": 20, "y": 1 }, "bitWidth": 1 },
-    { "id": 2, "kind": { "tag": "primitive", "kind": 5 }, "name": "out", "x": 15, "y": 4, "width": 7, "height": 3, "inPorts": [{ "portName": "in", "coord": { "x": 14, "y": 5 } }], "outPort": { "x": 22, "y": 5 }, "bitWidth": 1 }
+    { "id": 1, "kind": { "tag": "primitive", "kind": 4 }, "name": "l", "x": 16, "y": 0, "width": 5, "height": 3, "inPorts": [{ "portName": "in", "coord": { "x": 15, "y": 1 } }], "outPort": { "x": 21, "y": 1 }, "bitWidth": 1 },
+    { "id": 2, "kind": { "tag": "primitive", "kind": 5 }, "name": "out", "x": 16, "y": 4, "width": 7, "height": 3, "inPorts": [{ "portName": "in", "coord": { "x": 15, "y": 5 } }], "outPort": { "x": 23, "y": 5 }, "bitWidth": 1 }
   ],
   "wires": [
-    { "srcId": 0, "srcPort": 3, "dstId": 1, "dstPort": 0, "segments": [{ "from": { "x": 5, "y": 1 }, "to": { "x": 6, "y": 1 } }, { "from": { "x": 6, "y": 1 }, "to": { "x": 14, "y": 1 } }] },
-    { "srcId": 1, "srcPort": 3, "dstId": 2, "dstPort": 0, "segments": [{ "from": { "x": 20, "y": 1 }, "to": { "x": 22, "y": 1 } }, { "from": { "x": 22, "y": 1 }, "to": { "x": 22, "y": 3 } }, { "from": { "x": 22, "y": 3 }, "to": { "x": 13, "y": 3 } }, { "from": { "x": 13, "y": 3 }, "to": { "x": 13, "y": 5 } }, { "from": { "x": 13, "y": 5 }, "to": { "x": 14, "y": 5 } }] }
+    { "srcId": 0, "srcPort": 3, "dstId": 1, "dstPort": 0, "segments": [{ "from": { "x": 5, "y": 1 }, "to": { "x": 6, "y": 1 } }, { "from": { "x": 6, "y": 1 }, "to": { "x": 15, "y": 1 } }] },
+    { "srcId": 1, "srcPort": 3, "dstId": 2, "dstPort": 0, "segments": [{ "from": { "x": 21, "y": 1 }, "to": { "x": 23, "y": 1 } }, { "from": { "x": 23, "y": 1 }, "to": { "x": 23, "y": 3 } }, { "from": { "x": 23, "y": 3 }, "to": { "x": 14, "y": 3 } }, { "from": { "x": 14, "y": 3 }, "to": { "x": 14, "y": 5 } }, { "from": { "x": 14, "y": 5 }, "to": { "x": 15, "y": 5 } }] }
   ]
 }

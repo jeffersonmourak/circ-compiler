@@ -1217,12 +1217,12 @@ pub fn build(b: *std.Build) void {
     // Phase 2 slice 4: Stage 3 — rows
 
     // Phase 2 slice 5: Stage 4 — place
-    const preview_layout_place_mod = fe.preview_layout_place;
-    const preview_layout_place_tests = b.addTest(.{
-        .root_module = preview_layout_place_mod,
+    const preview_layout_coords_tests = b.addTest(.{
+        .name = "preview_layout_coords_tests",
+        .root_module = fe.preview_layout_coords,
     });
-    const run_preview_layout_place_tests = b.addRunArtifact(preview_layout_place_tests);
-    test_step.dependOn(&run_preview_layout_place_tests.step);
+    const run_preview_layout_coords_tests = b.addRunArtifact(preview_layout_coords_tests);
+    test_step.dependOn(&run_preview_layout_coords_tests.step);
 
     // Phase 2 slice 6a: Stage 5 — route
     const preview_layout_route_mod = fe.preview_layout_route;

@@ -112,3 +112,26 @@ Append-only log, one entry per shipped slice. Newest at the bottom. See `DOCS/PL
 **Invariants:** unchanged.
 **Next slice:** Slice 2 — `coords.zig` (rows from port alignment, packing, columns from a stub `ChannelWidths`), `toPlaced`, `place.zig` deleted, goldens regenerated.
 **Notes:** A leftover `pub` from the removed `Ports` struct broke the first compile; the module wiring now has `ports → boxes → place`, no cycle.
+
+## 2026-09-10 — Phase 2 — Slice 2: rows from alignment, columns from widths
+
+**What shipped:** `lib/preview/layout/coords.zig` — `assign(arena, graph, layered, ordering, opts, widths) !Coords`: per node a preferred top (a real node from the in-edge whose input port sits highest on its border: the source's output-port row minus the port's row offset; a dummy from its source's port row exactly; no preference without an in-edge), packed top to bottom in the Phase 1 order at `max(cursor, preferred)` with `ROW_GUTTER = 1` between boxes; columns from each layer's widest box plus `widths.after[layer]`, stubbed at `STUB_CHANNEL_WIDTH = 5` (`stubWidths`) until Phase 3. `toPlaced` materialises the `PlacedComponent` list through `boxes.zig`; `insertSpacerRow` (the door for Phase 3) shipped here with its test since it is four lines. `types.zig` gains `ChannelWidths` and `Coords`. `place.zig` deleted; `layering.toColumns` and `ordering.toRows` deleted with it; `orchestrator.Stages` now carries `coords` instead of `cols`/`rows`.
+**Files touched:** `lib/preview/layout/coords.zig` (new), `lib/preview/layout/place.zig` (deleted), `lib/preview/layout/types.zig`, `lib/preview/layout/orchestrator.zig`, `lib/preview/layout/layering.zig`, `lib/preview/layout/ordering.zig`, `build/frontend_modules.zig`, `build.zig`, `tests/fixtures/preview/layouts-json/` (120 goldens moved), `tests/fixtures/preview/layout-invariants.golden`, `tests/fixtures/preview/layouts/` (4 text goldens), `tests/fixtures/preview/renders/` (14 render goldens), `DOCS/STATUS.md`.
+**Tests:** added `coords: a NOT feeding an AND's b port sits two rows lower`, `coords: packing never overlaps and never reorders`, `coords: layer 0 packs from row 0 with one free row between boxes`, `coords: insertSpacerRow shifts every node at or below the row and grows height`. Ran `UPDATE_GOLDENS=1 zig build test`, `zig build test` (pass; `preview_layout_coords_tests 4 passed`), `zig build test-all` (pass). `chain`, `single_gate` and `fan_out` renders are byte-identical, as the spec required.
+**Invariants:** `S` (straight wires) 1013 → **1912** of 3759; row by row against Phase 1's table: up on 135, down on 0, unchanged on 88. The rest, with the old router on the new coordinates: I0 315 → 235, I1 3219 → 3608, I2 2257 → 1620, X 1443 → 713, B 5938 → 3792, C unchanged at 6166. Heights: `sum(height)` 4941 → 5131 over the corpus, 29 fixture-modes taller and 88 shorter; the largest growth is `alu_4bit expanded` 111 → 213 rows (`TODO(phase2)`: the human's call at slice 3).
+**Next slice:** Slice 3 — the reverse pass (a lone source pulled level with its sink) and the height spike.
+**Notes:**
+1. **`and_of_not` is clean at this stage.** The render golden now reads: `a` straight into `AND.a`, `b` straight into `NOT`, the NOT two rows lower so its output rises one column into `AND.b`, no shared cell. The fused rail was a placement problem first: with per-grid rows the NOT could never sit where `b` needed it, and the router was left to fake it.
+
+```
+╭───╮               ╭───╮            
+│ a ├○─────────────▶┤   │     ╭─────╮
+╰───╯               │AND├○───▶┤ out │
+                ╭──▶┤   │     ╰─────╯
+╭───╮     ╭───╮ │   ╰───╯            
+│ b ├○───▶┤NOT├○╯                    
+╰───╯     ╰───╯                      
+```
+
+2. I1 went up (3219 → 3608) while I2, X and B went down: the old router's trunk allocator was tuned to grid rows, and per-node rows put more sources on the same rails in the dense adders. Phase 3 replaces that router; the number is recorded, not fixed here.
+3. The conformance step now takes about fourteen seconds (the determinism test builds every fixture twice).

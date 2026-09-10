@@ -313,24 +313,6 @@ pub fn order(arena: std.mem.Allocator, graph: VirtualGraph, layered: LayeredGrap
     return .{ .order = order_const, .pos = pos, .rounds = rounds };
 }
 
-/// The old `RowAssignment` view over the real nodes: a real node's row is
-/// its index among the real nodes of its layer.
-pub fn toRows(arena: std.mem.Allocator, layered: LayeredGraph, ordering: Ordering, real_count: usize) !RowAssignment {
-    const row_of = try arena.alloc(u32, real_count);
-    var num_rows: u32 = 0;
-    for (ordering.order) |lo| {
-        var r: u32 = 0;
-        for (lo) |ni| {
-            if (layered.nodes[ni].real) |ri| {
-                row_of[ri] = r;
-                r += 1;
-            }
-        }
-        if (r > num_rows) num_rows = r;
-    }
-    return .{ .row_of = row_of, .num_rows = num_rows };
-}
-
 // ---------- Tests ----------
 
 const VirtualNode = types.VirtualNode;
@@ -427,8 +409,6 @@ test "ordering: order resolves a crossed pair and keeps an uncrossed one" {
     try std.testing.expectEqual(@as(u64, 0), try countCrossings(a, graph, layered, o));
     try std.testing.expectEqualSlices(u32, &.{ 3, 2 }, o.order[1]);
     try std.testing.expectEqualSlices(u32, &.{ 0, 1 }, o.order[0]); // layer 0 keeps id order
-    const rows = try toRows(a, layered, o, 4);
-    try std.testing.expectEqualSlices(u32, &.{ 0, 1, 1, 0 }, rows.row_of);
 }
 
 test "ordering: equal barycenters keep the current order" {

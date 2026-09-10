@@ -1,12 +1,12 @@
-LayoutGrid 32x9
+LayoutGrid 32x7
 
 Components:
   [0] input_pin "a" @(0,0) 5x3
-  [1] input_pin "b" @(0,6) 5x3
-  [2] output_pin "out" @(25,0) 7x3
+  [1] input_pin "b" @(0,4) 5x3
+  [2] output_pin "out" @(25,1) 7x3
   [23] subcircuit:xnor "g" @(10,0) 10x5
 
 Wires:
   0.out -> 23.a: (5,1) -> (6,1) -> (9,1)
-  1.out -> 23.b: (5,7) -> (7,7) -> (7,3) -> (9,3)
-  23.out -> 2.in: (20,2) -> (21,2) -> (21,1) -> (24,1)
+  1.out -> 23.b: (5,5) -> (7,5) -> (7,3) -> (9,3)
+  23.out -> 2.in: (20,2) -> (21,2) -> (24,2)

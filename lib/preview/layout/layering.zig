@@ -164,14 +164,6 @@ pub fn layer(arena: std.mem.Allocator, graph: VirtualGraph) !LayeredGraph {
     };
 }
 
-/// The old `ColumnAssignment` view over the real nodes, for the stages that
-/// still consume it.
-pub fn toColumns(arena: std.mem.Allocator, layered: LayeredGraph, real_count: usize) !types.ColumnAssignment {
-    const column_of = try arena.alloc(u32, real_count);
-    for (layered.nodes[0..real_count], 0..) |ln, i| column_of[i] = ln.layer;
-    return .{ .column_of = column_of, .num_columns = layered.num_layers };
-}
-
 fn isInputPin(node_: VirtualNode) bool {
     return switch (node_.kind) {
         .primitive => |p| p == .input_pin,
@@ -245,9 +237,6 @@ test "layering: longest path, input pins at 0, sinks last" {
     try std.testing.expectEqual(DST_IN, segs[2].dst_port);
     try std.testing.expectEqual(@as(u8, 0), segs[1].dst_port);
     for (segs) |s| try std.testing.expectEqual(@as(u32, 1), s.original);
-    const cols = try toColumns(a, lg, 5);
-    try std.testing.expectEqualSlices(u32, &.{ 0, 1, 2, 3, 3 }, cols.column_of);
-    try std.testing.expectEqual(@as(u32, 4), cols.num_columns);
 }
 
 test "layering: a back edge is flagged, gets no dummy, and bumps its destination to layer 1" {
