@@ -94,6 +94,8 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 ### [preview-layout.md](preview-layout.md)
 - The parity contract is a JSON projection, not either side's native type (`dump_json.zig`, camelCase common subset, one golden per fixture-mode)
 - The corpus invariants are the measurement of record (`invariants.zig`: I0–I3 per net over segments only, every fixture-mode listed, zero from Phase 3)
+- Long edges get dummy nodes, and a leftward edge is a back edge (`layering.zig`: the old columns as layers, `k − 1` dummies per long edge, cycle and sink-leftward edges flagged `back`)
+- Ordering is port-aware barycenter sweeps with integer arithmetic (`ordering.zig`: `(sum, count)` keys with the sink's port slot, rounds kept while `C` falls, transpose to a fixed point)
 
 ## Conventions
 

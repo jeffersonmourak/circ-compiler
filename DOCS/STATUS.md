@@ -94,3 +94,12 @@ Append-only log, one entry per shipped slice. Newest at the bottom. See `DOCS/PL
 1. **Only one render golden changed** (`full_adder_from_builtins.render.expanded.golden`, two rows taller): 39 JSON goldens changed because rows reordered inside their columns, but the old placement gives every node in a grid row the same top, so most reorders move wires, not glyphs enough to change a render that has a golden. `and_of_not`'s picture is untouched — its `C` went to zero because the NOT is now ordered below `a`'s straight run, while the fused rail is a routing defect the ordering cannot reach.
 2. The conformance step takes about eight seconds with the transpose pass (it took seven to eight before), so `TODO(phase1)` on `stress_grid_10x10` is closed: not worth measuring finer.
 3. Zig's shadowing rule again: a local named `order` inside `fromRows` collided with the new `order` function.
+
+## 2026-09-10 — Phase 1 — Slice 4: determinism and close-out
+
+**What shipped:** `layout_determinism` in `tests/preview/layout_conformance_test.zig` — every corpus fixture-mode built twice in fresh arenas, JSON byte-identical (catches hash-map iteration order, uninitialised memory and allocator-dependent tie-breaks). Two decisions entries in `DOCS/decisions/preview-layout.md`, registered in `DOCS/decisions/index.md`: "Long edges get dummy nodes, and a leftward edge is a back edge" and "Ordering is port-aware barycenter sweeps with integer arithmetic".
+**Files touched:** `tests/preview/layout_conformance_test.zig`, `DOCS/decisions/preview-layout.md`, `DOCS/decisions/index.md`, `DOCS/STATUS.md`.
+**Tests:** added `layout_determinism` (223 fixture-modes, green). Ran `zig build test` (pass; `preview_layout_conformance_tests 4 passed`), `zig build test-all` (pass); no golden changed.
+**Invariants:** as after slice 3b — I0=315 I1=3219 I2=2257 I3=0 X=1443 B=5938 S=1013/3759 C=6166 over 223 fixture-modes.
+**Next slice:** none — Phase 1 is complete in five commits (`8ec33e5`, `a565870`, `4e6f36a`, `3c8d6ea`, and this one). Phase 2 (`DOCS/PLANS/PHASE_2_coordinate_assignment.md`) needs the human's go-ahead as a new phase.
+**Notes:** The pipeline is now `collapse → layering → ordering → place → route` with `ports.zig` beside them; `columns.zig` and `rows.zig` are gone. Phase 2 replaces `place.zig` (and the `toColumns`/`toRows` views die with it); Phase 3 replaces `route.zig`. Nothing is pushed.

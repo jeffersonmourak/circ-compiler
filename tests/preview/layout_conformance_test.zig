@@ -112,3 +112,38 @@ test "corpus_layout_invariants" {
         return err;
     };
 }
+
+// ---------- Determinism ----------
+//
+// The pipeline must be a pure function of its input: two builds of the same
+// fixture-mode in fresh arenas produce byte-identical JSON. Hash-map
+// iteration order, uninitialised memory and allocator-dependent tie-breaks
+// are what this catches.
+
+test "layout_determinism" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    const w = try corpus.walk(a);
+    for (w.entries) |entry| {
+        var first: std.ArrayList(u8) = .{};
+        var second: std.ArrayList(u8) = .{};
+        {
+            var scratch = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+            defer scratch.deinit();
+            const grid = try corpus.buildGrid(scratch.allocator(), entry.path, entry.mode == .expanded);
+            try preview_dump_json.dumpLayoutJson(first.writer(a), grid);
+        }
+        {
+            var scratch = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+            defer scratch.deinit();
+            const grid = try corpus.buildGrid(scratch.allocator(), entry.path, entry.mode == .expanded);
+            try preview_dump_json.dumpLayoutJson(second.writer(a), grid);
+        }
+        if (!std.mem.eql(u8, first.items, second.items)) {
+            std.debug.print("layout is not deterministic: {s} ({s})\n", .{ entry.name, entry.mode.name() });
+            return error.NonDeterministicLayout;
+        }
+    }
+}
