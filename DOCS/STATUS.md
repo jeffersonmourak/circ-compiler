@@ -146,3 +146,12 @@ Append-only log, one entry per shipped slice. Newest at the bottom. See `DOCS/PL
 **Notes:**
 1. **A visible regression that belongs to Phase 3.** `regression_led_out_drives_gate.render.golden` now shows the leftward `LED.out → AND.a` wire drawn straight through the `AND` box (its I0 went 0 → 5): the old router's leftward detour needs the "west gutter" geometry the old placement guaranteed, and per-node rows put the LED's output row level with the gate's body. Six other rows' I0 rose for the same reason (`alu_4bit expanded` 50 → 105). Phase 3 routes back edges as return lanes and deletes that router; the picture is recorded here so the change is not mistaken for a Phase 3 regression later.
 2. Two test shapes were wrong before the code was: the reverse pass never moves a node *up* (the second of two pins stays packed below the first), and a sink packed under another sink cannot be level with a straight dummy chain, so the wire's last leg bends. Both tests now assert what the design says.
+
+## 2026-09-10 — Phase 2 — Slice 4: close-out
+
+**What shipped:** The decisions entry "Every node gets its own row, aligned to the port that feeds it" in `DOCS/decisions/preview-layout.md`, registered in `DOCS/decisions/index.md`. Documentation only.
+**Files touched:** `DOCS/decisions/preview-layout.md`, `DOCS/decisions/index.md`, `DOCS/STATUS.md`.
+**Tests:** none added; the suite is as after slice 3 (`zig build test-all` green at `ab3fd0a`).
+**Invariants:** I0=310 I1=3455 I2=1559 I3=0 X=615 B=3680 S=1963/3759 C=6166 over 223 fixture-modes; `sum(height)` 4945.
+**Next slice:** none — Phase 2 is complete in four commits (`13e2a61`, `350d2de`, `ab3fd0a`, and this one). Phase 3 (`DOCS/PLANS/PHASE_3_channel_routing.md`) needs the human's go-ahead as a new phase, and the height numbers in slice 3's entry are the ones to accept or reject first.
+**Notes:** The pipeline is `collapse → layering → ordering → coords → route`, with `ports.zig` and `boxes.zig` beside them; `columns.zig`, `rows.zig` and `place.zig` are gone. `route.zig` is the last of the old code, and it is now running on coordinates it was never tuned for: I0 rose on seven rows (the leftward wire through the `AND` box in `regression_led_out_drives_gate` is the visible one). Phase 3 replaces it. Nothing is pushed.
