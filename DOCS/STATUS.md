@@ -1001,3 +1001,16 @@ Those four kinds have site skins now — `drawSlice`, `drawConcat`, and `drawMem
 1. **Closing on blur had to go.** With one `<input>`, blur meant "the reader left". With a slider and three buttons it means "the reader moved to the next part", and in Safari a button takes no focus on click, so the field's blur would have closed the dialog before Apply's click landed. The renderer closes on a pointer-down outside the dialog and on a focusout whose destination is outside it; a focusout with no destination is left alone. The stub grew a document event bus and `contains` to prove both ways.
 2. **Clear drives zero and closes**, rather than setting the field to zero and waiting for Apply. A reset that takes two clicks is not a reset; a reader who wants to look before driving can slide to zero instead.
 3. **The site's CSS is a probe's subject.** The dialog is styled by class name, which the renderer's README names as a stable surface, and the pin test reads the installed renderer's source to check every class the stylesheet targets is one the dialog emits — the three button classes through the template they are built from.
+
+## 2026-09-10 — The simulate panel keeps a circuit's proportion
+
+**What shipped:** A wide circuit in the workbench was squashed sideways: the renderer writes the canvas's width and height inline, `.lc-mount canvas { max-width: 100% }` shrank the width past that, and the stylesheet's `height: auto` lost to the inline height, so the circuit kept its full height at a fraction of its width. `height: auto !important` is the one way a stylesheet wins there, and it fixes the gallery too, where the same rule had the same flaw on any card wider than its column. The workbench then opts out of the shrink altogether: `.pg-sim-mount` is block layout with the canvas at `max-width: none` and auto margins, so a small circuit is centred, a wide one is left-aligned, and the panel scrolls both ways at the drawn cell size.
+
+**Files touched:** `site/src/styles/global.css`, `site/test/app-layout.test.ts`.
+
+**Tests:** `bun test` 407 pass across 32 files, from 406. Build not run (dev server up).
+
+**Notes:**
+
+1. **The renderer's hit-test and `boxOf` follow the rendered rect on both axes**, so a uniformly shrunk gallery canvas stays exact; the workbench never shrinks, so it never needed that.
+2. **Auto margins, not flex centring.** The `.lc-mount` mobile note already records why: a flex-centred child wider than its container hangs off the left edge, where no scroll reaches it.

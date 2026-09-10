@@ -490,7 +490,13 @@ hr {
 }
 .lc-mount canvas {
   max-width: 100%;
-  height: auto;
+  /* The renderer sets width AND height inline, in px. `max-width` shrinks
+     the width past an inline width, but a plain `height: auto` loses to the
+     inline height, so a wide circuit used to keep its full height at a
+     narrower width: squashed sideways, unreadable. `!important` is the one
+     way a stylesheet wins over an inline declaration; the renderer hit-tests
+     and positions from the rendered rect, so a uniform shrink stays exact. */
+  height: auto !important;
   display: block;
 }
 .lc-error {
@@ -1049,7 +1055,14 @@ hr {
 .pg-table th { background: var(--pane-label-bg); }
 .pg-table-note { color: var(--muted); font-size: 0.85rem; margin: 0 0 0.5rem; }
 .pg-sim-note { color: var(--muted); font-size: 0.9rem; }
-.pg-sim-mount { padding: 0; }
+/* The workbench does not shrink a circuit to fit: it keeps every cell at its
+   drawn size and lets the panel scroll both ways, since a large circuit
+   squeezed into the pane is a picture of a circuit rather than one a reader
+   can follow. Block layout with auto margins centres a small circuit and
+   left-aligns a wide one, so no pixel is ever pushed out of reach the way
+   flex centring does (see the .lc-mount mobile note above). */
+.pg-sim-mount { padding: 0; display: block; overflow: visible; }
+.pg-sim-mount canvas { max-width: none; margin-inline: auto; }
 
 /* ---------- landing ---------- */
 .landing-tagline {

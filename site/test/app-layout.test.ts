@@ -71,6 +71,23 @@ describe('app layout', () => {
     for (const selector of mentioning) expect(selector).not.toContain('data-layout');
   });
 
+  test('a canvas keeps its proportion everywhere, and the workbench scrolls instead of shrinking', () => {
+    // The renderer writes width and height inline; a stylesheet height only
+    // wins with !important. Without it a wide circuit in a narrow pane keeps
+    // its full height at a shrunken width.
+    const gallery = /\.lc-mount canvas \{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(gallery).toMatch(/height:\s*auto\s*!important/);
+    expect(gallery).toMatch(/max-width:\s*100%/);
+    // The workbench opts out of the shrink and lets the panel scroll.
+    const mount = /\.pg-sim-mount \{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(mount).toMatch(/display:\s*block/);
+    const canvas = /\.pg-sim-mount canvas \{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(canvas).toMatch(/max-width:\s*none/);
+    expect(canvas).toMatch(/margin-inline:\s*auto/);
+    // …and the panel that holds it is the scroll container.
+    expect(/\.pg-panel \{[^}]*overflow:\s*auto/.test(css)).toBe(true);
+  });
+
   test('the app layout is always scoped to the attribute', () => {
     const appRules = selectorsOf(css).filter((s) => s.includes("data-layout='app'"));
     expect(appRules.length).toBeGreaterThan(5);
