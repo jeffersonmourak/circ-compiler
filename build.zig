@@ -1090,6 +1090,14 @@ pub fn build(b: *std.Build) void {
     const run_preview_layout_invariants_tests = b.addRunArtifact(preview_layout_invariants_tests);
     test_step.dependOn(&run_preview_layout_invariants_tests.step);
 
+    // Port tables — the agreement test against place.zig's private copy.
+    const preview_layout_ports_tests = b.addTest(.{
+        .name = "preview_layout_ports_tests",
+        .root_module = fe.preview_layout_ports,
+    });
+    const run_preview_layout_ports_tests = b.addRunArtifact(preview_layout_ports_tests);
+    test_step.dependOn(&run_preview_layout_ports_tests.step);
+
     // Shared engine session: builds a live engine.Circuit from a full topology
     // and resolves root pins by name. Consumed by the truth-table builder and
     // the --sim drive loop.

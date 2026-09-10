@@ -19,7 +19,7 @@ const COL_GUTTER: u32 = 5;
 /// Spacing between adjacent row cells.
 const ROW_GUTTER: u32 = 1;
 
-const Ports = struct {
+pub const Ports = struct {
     in_ports: []const PortSlot,
     out_port: PortCoord,
 };
@@ -202,7 +202,7 @@ fn countActiveSubcircuitInputs(node: VirtualNode) u32 {
     return n;
 }
 
-fn resolvePortCoords(arena: std.mem.Allocator, node: VirtualNode, x: u32, y: u32, w: u32, h: u32) !Ports {
+pub fn resolvePortCoords(arena: std.mem.Allocator, node: VirtualNode, x: u32, y: u32, w: u32, h: u32) !Ports {
     var in_list: std.ArrayList(PortSlot) = .{};
     // Default out_port one cell east of right border, middle row; specific
     // kinds override below.

@@ -72,6 +72,7 @@ pub const Modules = struct {
     preview_layout_route: *Module,
     preview_layout_orchestrator: *Module,
     preview_layout_invariants: *Module,
+    preview_layout_ports: *Module,
     preview_render_color: *Module,
     preview_render_canvas: *Module,
     preview_render_glyphs: *Module,
@@ -278,6 +279,14 @@ pub fn create(b: *std.Build, opts: Options) Modules {
     // measurement of record; see DOCS/decisions/preview-layout.md).
     const preview_layout_invariants = mk.module("lib/preview/layout/invariants.zig");
     preview_layout_invariants.addImport("layout", preview_layout);
+    // Port tables (input slots in border order, output row) shared by the
+    // ordering and coordinate stages; `place` is imported for the agreement
+    // test only, until Phase 2 deletes place.zig.
+    const preview_layout_ports = mk.module("lib/preview/layout/ports.zig");
+    preview_layout_ports.addImport("full_format", full_format);
+    preview_layout_ports.addImport("layout", preview_layout);
+    preview_layout_ports.addImport("layout_types", preview_layout_types);
+    preview_layout_ports.addImport("place", preview_layout_place);
 
     // ---- preview: render ----
     const preview_render_color = mk.module("lib/preview/render/color.zig");
@@ -377,6 +386,7 @@ pub fn create(b: *std.Build, opts: Options) Modules {
         .preview_layout_route = preview_layout_route,
         .preview_layout_orchestrator = preview_layout_orchestrator,
         .preview_layout_invariants = preview_layout_invariants,
+        .preview_layout_ports = preview_layout_ports,
         .preview_render_color = preview_render_color,
         .preview_render_canvas = preview_render_canvas,
         .preview_render_glyphs = preview_render_glyphs,
