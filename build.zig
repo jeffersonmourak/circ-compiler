@@ -1098,6 +1098,13 @@ pub fn build(b: *std.Build) void {
     const run_preview_layout_ports_tests = b.addRunArtifact(preview_layout_ports_tests);
     test_step.dependOn(&run_preview_layout_ports_tests.step);
 
+    const preview_layout_boxes_tests = b.addTest(.{
+        .name = "preview_layout_boxes_tests",
+        .root_module = fe.preview_layout_boxes,
+    });
+    const run_preview_layout_boxes_tests = b.addRunArtifact(preview_layout_boxes_tests);
+    test_step.dependOn(&run_preview_layout_boxes_tests.step);
+
     const preview_layout_ordering_tests = b.addTest(.{
         .name = "preview_layout_ordering_tests",
         .root_module = fe.preview_layout_ordering,

@@ -68,6 +68,7 @@ pub const Modules = struct {
     preview_layout_collapse: *Module,
     preview_layout_layering: *Module,
     preview_layout_ordering: *Module,
+    preview_layout_boxes: *Module,
     preview_layout_place: *Module,
     preview_layout_route: *Module,
     preview_layout_orchestrator: *Module,
@@ -255,11 +256,21 @@ pub fn create(b: *std.Build, opts: Options) Modules {
     const preview_layout_layering = mk.module("lib/preview/layout/layering.zig");
     preview_layout_layering.addImport("full_format", full_format);
     preview_layout_layering.addImport("layout_types", preview_layout_types);
+    const preview_layout_ports = mk.module("lib/preview/layout/ports.zig");
+    preview_layout_ports.addImport("full_format", full_format);
+    preview_layout_ports.addImport("layout", preview_layout);
+    preview_layout_ports.addImport("layout_types", preview_layout_types);
+    const preview_layout_boxes = mk.module("lib/preview/layout/boxes.zig");
+    preview_layout_boxes.addImport("full_format", full_format);
+    preview_layout_boxes.addImport("layout", preview_layout);
+    preview_layout_boxes.addImport("layout_types", preview_layout_types);
+    preview_layout_boxes.addImport("sizing", preview_layout_sizing);
+    preview_layout_boxes.addImport("ports", preview_layout_ports);
     const preview_layout_place = mk.module("lib/preview/layout/place.zig");
     preview_layout_place.addImport("full_format", full_format);
     preview_layout_place.addImport("layout", preview_layout);
     preview_layout_place.addImport("layout_types", preview_layout_types);
-    preview_layout_place.addImport("sizing", preview_layout_sizing);
+    preview_layout_place.addImport("boxes", preview_layout_boxes);
     const preview_layout_route = mk.module("lib/preview/layout/route.zig");
     preview_layout_route.addImport("full_format", full_format);
     preview_layout_route.addImport("layout", preview_layout);
@@ -276,14 +287,6 @@ pub fn create(b: *std.Build, opts: Options) Modules {
     // measurement of record; see DOCS/decisions/preview-layout.md).
     const preview_layout_invariants = mk.module("lib/preview/layout/invariants.zig");
     preview_layout_invariants.addImport("layout", preview_layout);
-    // Port tables (input slots in border order, output row) shared by the
-    // ordering and coordinate stages; `place` is imported for the agreement
-    // test only, until Phase 2 deletes place.zig.
-    const preview_layout_ports = mk.module("lib/preview/layout/ports.zig");
-    preview_layout_ports.addImport("full_format", full_format);
-    preview_layout_ports.addImport("layout", preview_layout);
-    preview_layout_ports.addImport("layout_types", preview_layout_types);
-    preview_layout_ports.addImport("place", preview_layout_place);
     const preview_layout_ordering = mk.module("lib/preview/layout/ordering.zig");
     preview_layout_ordering.addImport("full_format", full_format);
     preview_layout_ordering.addImport("layout_types", preview_layout_types);
@@ -384,6 +387,7 @@ pub fn create(b: *std.Build, opts: Options) Modules {
         .preview_layout_sizing = preview_layout_sizing,
         .preview_layout_collapse = preview_layout_collapse,
         .preview_layout_layering = preview_layout_layering,
+        .preview_layout_boxes = preview_layout_boxes,
         .preview_layout_place = preview_layout_place,
         .preview_layout_route = preview_layout_route,
         .preview_layout_orchestrator = preview_layout_orchestrator,

@@ -1,9 +1,8 @@
 //! Port tables: which input ports a node exposes, in border order, at which
 //! row offset from its box top, and where its output port sits. This is the
 //! one source both `ordering.zig` (port order for crossing counts) and
-//! `coords.zig` (port rows for alignment) read; `place.zig`'s
-//! `resolvePortCoords` keeps an identical private copy until Phase 2 deletes
-//! it, and a test below asserts the two agree for every kind.
+//! `coords.zig` (port rows for alignment) read, through `boxes.zig`'s
+//! `resolvePortCoords` (which `boxes.zig` tests against these tables).
 //!
 //! Port coordinates live one cell outside the box border (`x - 1` for inputs,
 //! `x + width` for the output); only the row offsets are tabled here.
@@ -114,7 +113,6 @@ pub fn outputRow(node: VirtualNode, height: u32) u32 {
 
 // ---------- Tests ----------
 
-const place = @import("place");
 const layout = @import("layout");
 const InputEdge = types.InputEdge;
 
@@ -125,40 +123,6 @@ fn mk(kind: types.NodeKind, inputs: []const InputEdge) VirtualNode {
 const in_a = InputEdge{ .src_id = 9, .src_port = @intFromEnum(P.out), .dst_port = @intFromEnum(P.a) };
 const in_in = InputEdge{ .src_id = 9, .src_port = @intFromEnum(P.out), .dst_port = @intFromEnum(P.in) };
 const in_b = InputEdge{ .src_id = 9, .src_port = @intFromEnum(P.out), .dst_port = @intFromEnum(P.b) };
-
-test "ports: every kind agrees with place.zig's resolvePortCoords" {
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-    const a = arena.allocator();
-
-    const cases = [_]struct { n: VirtualNode, w: u32, h: u32 }{
-        .{ .n = mk(.{ .primitive = .input_pin }, &.{}), .w = 5, .h = 3 },
-        .{ .n = mk(.{ .primitive = .output_pin }, &.{in_in}), .w = 5, .h = 3 },
-        .{ .n = mk(.{ .primitive = .not_gate }, &.{in_in}), .w = 5, .h = 3 },
-        .{ .n = mk(.{ .primitive = .and_gate }, &.{ in_a, in_b }), .w = 5, .h = 5 },
-        .{ .n = mk(.{ .primitive = .led }, &.{in_in}), .w = 5, .h = 3 },
-        .{ .n = mk(.{ .primitive = .rom }, &.{}), .w = 12, .h = 3 },
-        .{ .n = mk(.{ .primitive = .ram }, &.{}), .w = 12, .h = 9 },
-        .{ .n = mk(.{ .subcircuit = "xor" }, &.{ in_a, in_b }), .w = 7, .h = 5 },
-        .{ .n = mk(.{ .subcircuit = "m" }, &.{ in_a, in_in, in_b }), .w = 7, .h = 7 },
-        .{ .n = mk(.{ .subcircuit = "buf" }, &.{in_in}), .w = 7, .h = 3 },
-        .{ .n = mk(.{ .subcircuit = "hb" }, &.{ in_in, in_b }), .w = 7, .h = 5 },
-    };
-    const x: u32 = 10;
-    const y: u32 = 20;
-    for (cases) |c| {
-        const placed = try place.resolvePortCoords(a, c.n, x, y, c.w, c.h);
-        const slots = inputSlots(c.n);
-        try std.testing.expectEqual(placed.in_ports.len, slots.len);
-        for (placed.in_ports, slots) |pp, s| {
-            try std.testing.expectEqualStrings(pp.port_name, s.name);
-            try std.testing.expectEqual(x - 1, pp.coord.x);
-            try std.testing.expectEqual(y + s.row, pp.coord.y);
-        }
-        try std.testing.expectEqual(x + c.w, placed.out_port.x);
-        try std.testing.expectEqual(y + outputRow(c.n, c.h), placed.out_port.y);
-    }
-}
 
 test "ports: input slots are in border order and slotIndex finds them" {
     const ram = mk(.{ .primitive = .ram }, &.{});

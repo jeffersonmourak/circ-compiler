@@ -103,3 +103,12 @@ Append-only log, one entry per shipped slice. Newest at the bottom. See `DOCS/PL
 **Invariants:** as after slice 3b — I0=315 I1=3219 I2=2257 I3=0 X=1443 B=5938 S=1013/3759 C=6166 over 223 fixture-modes.
 **Next slice:** none — Phase 1 is complete in five commits (`8ec33e5`, `a565870`, `4e6f36a`, `3c8d6ea`, and this one). Phase 2 (`DOCS/PLANS/PHASE_2_coordinate_assignment.md`) needs the human's go-ahead as a new phase.
 **Notes:** The pipeline is now `collapse → layering → ordering → place → route` with `ports.zig` beside them; `columns.zig` and `rows.zig` are gone. Phase 2 replaces `place.zig` (and the `toColumns`/`toRows` views die with it); Phase 3 replaces `route.zig`. Nothing is pushed.
+
+## 2026-09-10 — Phase 2 — Slice 1: boxes.zig
+
+**What shipped:** `lib/preview/layout/boxes.zig` — `sizeOf`, `composeDisplayLabel`, `composeLedLabel` and `countActiveSubcircuitInputs` moved out of `place.zig` unchanged, plus `Ports` and `resolvePortCoords` rewritten over `ports.zig`'s tables (input `x − 1`, row from the table; output `x + width`, row from `outputRow`) — the private switch `place.zig` carried is gone, which is what Phase 1's agreement test was for. `place.zig` calls `boxes.*`; `ports.zig` no longer imports `place` and its place-backed test moved to `boxes.zig` as the table-plus-origin check. Modules: `preview_layout_boxes` (imports `full_format`, `layout`, `layout_types`, `sizing`, `ports`); `preview_layout_place` now imports `boxes` instead of `sizing`; `preview_layout_ports` is defined before `boxes` and imports nothing test-only.
+**Files touched:** `lib/preview/layout/boxes.zig` (new), `lib/preview/layout/place.zig`, `lib/preview/layout/ports.zig`, `build/frontend_modules.zig`, `build.zig`, `DOCS/STATUS.md`.
+**Tests:** added `boxes: port coordinates equal the ports table plus the box origin` (four shapes plus the `and` gate's `(9,1)`/`(9,3)`/`(15,2)` spelled out) and `boxes: labels and sizes` (`bus[8]`, `0x?`, `····`, the 23-wide macro label). `ports.zig` keeps its border-order test. Ran `zig build test` (pass), `zig build test-all` (pass); `git diff --stat tests/fixtures` empty — every golden byte-identical.
+**Invariants:** unchanged.
+**Next slice:** Slice 2 — `coords.zig` (rows from port alignment, packing, columns from a stub `ChannelWidths`), `toPlaced`, `place.zig` deleted, goldens regenerated.
+**Notes:** A leftover `pub` from the removed `Ports` struct broke the first compile; the module wiring now has `ports → boxes → place`, no cycle.
