@@ -284,23 +284,30 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(editorPane.querySelector('.pg-footer')).not.toBeNull();
     expect(doc.querySelectorAll('.pg-footer [data-setting]').length).toBeGreaterThan(0);
 
-    // The output strip is the four compiled views, diagnostics gone: the
-    // Data tab is the circuit as values, over the same session as Simulate.
-    const outTabs = Array.from(
-      doc.querySelectorAll('.pg-tabs [role=tab]'),
-      (b) => (b as unknown as { dataset: Record<string, string> }).dataset.tab,
+    // The canvas region's furniture: the view switch with its three views,
+    // the Data button carrying the card, the hint and zoom lines. The output
+    // strip and its tooltip are gone.
+    const views = Array.from(
+      doc.querySelectorAll('.pg-view-switch [role=tab]'),
+      (b) => (b as unknown as { dataset: Record<string, string> }).dataset.view,
     );
-    expect(outTabs).toEqual(['preview', 'truth', 'simulate', 'data']);
-    expect(doc.querySelector('.pg-panel[data-panel="data"] .pg-data')).not.toBeNull();
-    expect(doc.querySelector('.pg-panel[data-panel="data"] .pg-data-reset')).not.toBeNull();
-    expect(doc.querySelector('.pg-tabs [data-tab="preview"]')?.getAttribute('aria-selected')).toBe('true');
-
-    // The tooltip exists and is empty — no analysis lands in this harness, so
-    // the truth tab is not blocked and must say nothing.
-    const tip = doc.querySelector('#pg-tab-tip-truth')!;
-    expect(tip.getAttribute('role')).toBe('tooltip');
-    expect(tip.textContent).toBe('');
-    expect(doc.querySelector('.pg-tabs [data-tab="truth"]')?.getAttribute('aria-disabled')).toBe('false');
+    expect(views).toEqual(['schematic', 'live', 'truth']);
+    expect(doc.querySelector('.pg-view-tab[data-view="schematic"]')?.getAttribute('aria-selected')).toBe('true');
+    expect(doc.querySelector('.pg-tabs')).toBeNull();
+    expect(doc.querySelector('#pg-tab-tip-truth')).toBeNull();
+    expect(doc.querySelector('.pg-panel')).toBeNull();
+    // No analysis lands in this harness, so the truth view is not blocked and
+    // the note beside the switch says nothing.
+    expect(doc.querySelector('.pg-view-tab[data-view="truth"]')?.getAttribute('aria-disabled')).toBe('false');
+    expect(doc.querySelector('.pg-view-note')?.textContent).toBe('');
+    expect(doc.querySelector('.pg-data-btn')?.getAttribute('aria-pressed')).toBe('false');
+    expect(doc.querySelector('.pg-data-card')?.hasAttribute('hidden')).toBe(true);
+    expect(doc.querySelector('.pg-data-card .pg-data')).not.toBeNull();
+    expect(doc.querySelector('.pg-data-card .pg-data-reset')).not.toBeNull();
+    expect(doc.querySelector('.pg-hint')).not.toBeNull();
+    expect(doc.querySelector('.pg-zoom .pg-zoom-pct')?.textContent).toBe('100%');
+    expect(doc.querySelector('.pg-zoom .pg-zoom-fit')?.getAttribute('aria-disabled')).toBe('true');
+    expect(doc.querySelector('.pg-sim-mount')?.classList.contains('lc-mount')).toBe(false);
 
     // The bench's chrome: no site nav or footer; a nav with the wordmark, the
     // breadcrumb naming the open project, the status cluster, the two
@@ -367,6 +374,47 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     deleteOn().click();
     deleteOn().click();
     expect(tabs()).toEqual(before);
+  }));
+
+  test('the view switch shows one view, and the Data button opens the card', () => drive((doc) => {
+    const view = (name: string) => doc.querySelector(`.pg-view-tab[data-view="${name}"]`) as unknown as { click(): void; getAttribute(n: string): string | null; tabIndex: number };
+    const panel = (name: string) => doc.querySelector(`[data-view-panel="${name}"]`)!;
+    const region = doc.querySelector('.pg-output') as unknown as { dataset: Record<string, string> };
+    const press = (el: unknown, key: string) =>
+      (el as { dispatchEvent(e: unknown): void }).dispatchEvent(
+        new (globalThis as unknown as { KeyboardEvent: new (t: string, o: unknown) => unknown })
+          .KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }),
+      );
+
+    view('live').click();
+    expect(view('live').getAttribute('aria-selected')).toBe('true');
+    expect(panel('live').hasAttribute('hidden')).toBe(false);
+    expect(panel('schematic').hasAttribute('hidden')).toBe(true);
+    expect(panel('truth').hasAttribute('hidden')).toBe(true);
+    expect(doc.querySelector('.pg-hint')?.textContent).toBe('click a pin to toggle · hover a part to find it in the source');
+    // The drawer never hides with the view now; it is the frame's own row.
+    expect(doc.querySelector('.pg-drawer')?.hasAttribute('hidden')).toBe(false);
+    // One tab stop, and the arrows move it.
+    const stops = Array.from(doc.querySelectorAll('.pg-view-switch [role=tab]')).filter((b) => (b as unknown as { tabIndex: number }).tabIndex === 0);
+    expect(stops).toHaveLength(1);
+    press(view('live'), 'ArrowRight');
+    expect(view('truth').getAttribute('aria-selected')).toBe('true');
+    press(view('truth'), 'Home');
+    expect(view('schematic').getAttribute('aria-selected')).toBe('true');
+    expect(doc.querySelector('.pg-hint')?.textContent).toBe('');
+
+    // The Data button toggles the card over whichever view, and the region
+    // says so for the view's inset.
+    const data = doc.querySelector('.pg-data-btn') as unknown as { click(): void; getAttribute(n: string): string | null };
+    data.click();
+    expect(data.getAttribute('aria-pressed')).toBe('true');
+    expect(doc.querySelector('.pg-data-card')?.hasAttribute('hidden')).toBe(false);
+    expect(region.dataset.dataOpen).toBe('true');
+    expect(view('schematic').getAttribute('aria-selected')).toBe('true');
+    data.click();
+    expect(data.getAttribute('aria-pressed')).toBe('false');
+    expect(doc.querySelector('.pg-data-card')?.hasAttribute('hidden')).toBe(true);
+    expect(region.dataset.dataOpen).toBe('false');
   }));
 
   test('the breadcrumb opens the tree and gives focus back', () => drive((doc) => {
@@ -499,11 +547,11 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     const toggle = doc.querySelector('.pg-drawer-toggle') as unknown as { click(): void };
     const consoleTab = doc.querySelector('.pg-drawer-tab[data-drawer="console"]') as unknown as { click(): void };
 
-    // Whatever the output tab, the row is there and shut.
-    const tab = (name: string) => doc.querySelector(`.pg-tabs [data-tab="${name}"]`) as unknown as { click(): void };
-    tab('simulate').click();
+    // Whatever the view, the row is there and shut.
+    const view = (name: string) => doc.querySelector(`.pg-view-tab[data-view="${name}"]`) as unknown as { click(): void };
+    view('live').click();
     expect(term.dataset.open).toBe('false');
-    tab('preview').click();
+    view('schematic').click();
     expect(term.dataset.open).toBe('false');
 
     // The line reads the transcript: the last echo and the first reply.

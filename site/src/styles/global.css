@@ -707,76 +707,138 @@ hr {
   font-size: 0.75rem;
   color: var(--muted);
 }
-.pg-tabs {
+/* ---------- the canvas region's furniture ----------
+   Design file, board 2a: the view switch top-left (a segmented control on the
+   pane surface, the active segment filled with the accent), the Data button
+   top-right, the hint line bottom-left and the zoom line bottom-right, all
+   16px in; the view itself in the inset `60px 16px 40px`. The region is
+   `.pg-output`, positioned in Phase 0. */
+.pg-view-bar {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  right: 16px;
+  z-index: 5;
   display: flex;
-  gap: 0;
-  border-bottom: 1px solid var(--border);
-  background: var(--pane-label-bg);
-  /* The tooltip is positioned against this strip, so it cannot be the thing
-     that scrolls — `overflow-x: auto` here would clip it. The tabs are three
-     short words and wrap sooner than they overflow. */
-  flex-wrap: wrap;
-  position: relative;
+  align-items: center;
+  gap: 12px;
+  pointer-events: none;
 }
-.pg-tabs button {
+.pg-view-bar > * { pointer-events: auto; }
+.pg-view-switch {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--pane-bg);
+  flex: none;
+}
+.pg-view-tab {
   font: inherit;
   font-family: var(--font-mono);
-  font-size: 0.75rem;
-  letter-spacing: 0.04em;
-  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.3;
+  padding: 4px 12px;
+  border: 0;
+  border-radius: 4px;
   background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  padding: 0.45rem 0.85rem;
+  color: var(--muted);
   cursor: pointer;
   white-space: nowrap;
 }
-.pg-tabs button[aria-selected="true"] {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
+.pg-view-tab:hover { color: var(--fg); }
+.pg-view-tab[aria-selected='true'] { background: var(--accent); color: var(--bg); }
+.pg-view-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Blocked, not disabled: the element stays focusable so the reason beside it
+   is reachable without a pointer. */
+.pg-view-tab[aria-disabled='true'] { opacity: 0.45; cursor: not-allowed; }
+.pg-view-note {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-/* Blocked, not disabled: the element stays focusable so the reason below is
-   reachable without a pointer. `not-allowed` is the only cursor that says the
-   click will be refused before it is. */
-.pg-tabs button[aria-disabled="true"] {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-.pg-tabs button[aria-disabled="true"][aria-selected="true"] { border-bottom-color: currentColor; }
-/* The tooltip. Empty and unlinked whenever the tab is available, so there is
-   nothing to show; `:empty` makes that structural rather than a class the
-   island has to remember to remove. */
-.pg-tab-tip {
-  position: absolute;
-  top: 100%;
-  left: 0.5rem;
-  right: 0.5rem;
-  z-index: 5;
-  margin-top: 0.25rem;
-  padding: 0.45rem 0.6rem;
+.pg-view-note:empty { display: none; }
+.pg-data-btn {
+  margin-left: auto;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.3;
+  padding: 5px 10px;
   border: 1px solid var(--border);
-  border-radius: 5px;
-  background: var(--bg);
+  border-radius: 6px;
+  background: var(--pane-bg);
   color: var(--fg);
-  font-size: 0.75rem;
-  line-height: 1.45;
-  box-shadow: 0 4px 14px rgb(0 0 0 / 0.18);
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 100ms ease;
-  pointer-events: none;
+  cursor: pointer;
+  white-space: nowrap;
 }
-.pg-tabs button[aria-disabled="true"]:hover ~ .pg-tab-tip,
-.pg-tabs button[aria-disabled="true"]:focus-visible ~ .pg-tab-tip {
-  opacity: 1;
-  visibility: visible;
+.pg-data-btn:hover { border-color: var(--accent); }
+.pg-data-btn[aria-pressed='true'] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.pg-data-count { color: var(--muted); }
+.pg-data-count:empty { display: none; }
+.pg-data-btn[aria-pressed='true'] .pg-data-count { color: var(--bg); opacity: 0.8; }
+.pg-view-panel {
+  position: absolute;
+  inset: 60px 16px 40px;
+  overflow: auto;
+  min-height: 0;
 }
-.pg-tab-tip:empty { display: none; }
-@media (prefers-reduced-motion: reduce) {
-  .pg-tab-tip { transition: none; }
+.pg-view-panel[hidden] { display: none; }
+/* While the Data card is open the view keeps clear of it (design file: the
+   region takes `padding-right: 344px`). */
+.pg-output[data-data-open='true'] .pg-view-panel { right: 344px; }
+.pg-live { overflow: hidden; display: flex; flex-direction: column; }
+.pg-hint,
+.pg-zoom {
+  position: absolute;
+  bottom: 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  z-index: 5;
 }
-.pg-panel { padding: 0.75rem 0.85rem; overflow: auto; flex: 1; }
-.pg-panel[hidden] { display: none; }
+.pg-hint { left: 16px; }
+.pg-hint:empty { display: none; }
+.pg-zoom { right: 16px; display: inline-flex; align-items: center; gap: 6px; }
+.pg-zoom button {
+  font: inherit;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.pg-zoom button:hover { color: var(--fg); }
+.pg-zoom button[aria-disabled='true'] { opacity: 0.5; cursor: default; }
+.pg-zoom button[aria-disabled='true']:hover { color: var(--muted); }
+/* The Data card under its button (design file, board 3d: 312px on the pane
+   surface, the popover's shadow). Phase 5 makes it draggable. */
+.pg-data-card {
+  position: absolute;
+  top: 52px;
+  right: 16px;
+  z-index: 6;
+  width: 312px;
+  max-width: calc(100% - 32px);
+  max-height: calc(100% - 100px);
+  overflow: auto;
+  padding: 10px 12px;
+  background: var(--pane-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+}
+.pg-data-card[hidden] { display: none; }
 /* ---------- the diagnostics footer ----------
    Under the editor (design file 3b: a 30px bar, mono 11px in --muted; the
    counts in --fg with a caret when either is non-zero). Its body opens on the
@@ -1374,8 +1436,12 @@ span.pg-diag-pos { color: var(--muted); cursor: default; }
    can follow. Block layout with auto margins centres a small circuit and
    left-aligns a wide one, so no pixel is ever pushed out of reach the way
    flex centring does (see the .lc-mount mobile note above). */
-.pg-sim-mount { padding: 0; display: block; overflow: visible; }
-.pg-sim-mount canvas { max-width: none; margin-inline: auto; }
+/* The Live view's mount fills the inset; the renderer sizes its canvas to it
+   (`viewport: 'parent'`) and centres the circuit by fitting, so the canvas
+   takes no margins of its own. Not `.lc-mount`: that class is the gallery's. */
+.pg-sim-mount { flex: 1; min-height: 0; padding: 0; display: block; overflow: hidden; }
+.pg-sim-mount[hidden] { display: none; }
+.pg-sim-mount canvas { max-width: none; display: block; }
 
 /* ---------- landing ---------- */
 .landing-tagline {

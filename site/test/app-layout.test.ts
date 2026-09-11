@@ -78,14 +78,16 @@ describe('app layout', () => {
     const gallery = /\.lc-mount canvas \{([^}]*)\}/.exec(css)?.[1] ?? '';
     expect(gallery).toMatch(/height:\s*auto\s*!important/);
     expect(gallery).toMatch(/max-width:\s*100%/);
-    // The workbench opts out of the shrink and lets the panel scroll.
+    // The bench's mount fills the Live view's inset and the renderer sizes
+    // the canvas to it, so the canvas takes no shrink and no margin.
     const mount = /\.pg-sim-mount \{([^}]*)\}/.exec(css)?.[1] ?? '';
     expect(mount).toMatch(/display:\s*block/);
+    expect(mount).toMatch(/overflow:\s*hidden/);
     const canvas = /\.pg-sim-mount canvas \{([^}]*)\}/.exec(css)?.[1] ?? '';
     expect(canvas).toMatch(/max-width:\s*none/);
-    expect(canvas).toMatch(/margin-inline:\s*auto/);
-    // …and the panel that holds it is the scroll container.
-    expect(/\.pg-panel \{[^}]*overflow:\s*auto/.test(css)).toBe(true);
+    expect(canvas).not.toMatch(/margin-inline/);
+    // …and the Schematic and Truth panels are the scroll containers.
+    expect(/\.pg-view-panel \{[^}]*overflow:\s*auto/.test(css)).toBe(true);
   });
 
   test('the app layout is always scoped to the attribute', () => {

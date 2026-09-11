@@ -191,39 +191,45 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       aria-controls="pg-pane-editor pg-pane-output"
     ></div>
     <section class="pg-output" id="pg-pane-output">
-      <div class="pg-tabs" role="tablist">
-        <button type="button" role="tab" data-tab="preview" aria-selected="true">Preview</button>
-        <button
-          type="button"
-          role="tab"
-          data-tab="truth"
-          aria-selected="false"
-          aria-describedby="pg-tab-tip-truth"
-        >Truth table</button>
-        <button type="button" role="tab" data-tab="simulate" aria-selected="false">Simulate</button>
-        <button type="button" role="tab" data-tab="data" aria-selected="false">Data</button>
-        {/* Empty and invisible until the tab is actually blocked; the island
-            fills it with the same sentence the panel shows. `role=tooltip`
-            plus the aria-describedby above is what makes the reason reachable
-            without a pointer. */}
-        <span class="pg-tab-tip" id="pg-tab-tip-truth" role="tooltip"></span>
+      {/* The canvas region (design file, board 2a): the view switch top-left,
+          the Data button top-right, the hint line bottom-left, the zoom line
+          bottom-right, and the view itself in the inset between them. */}
+      <div class="pg-view-bar">
+        <div class="pg-view-switch" role="tablist" aria-label="View">
+          <button type="button" role="tab" class="pg-view-tab" data-view="schematic" aria-selected="true" aria-controls="pg-view-schematic" tabindex="0">Schematic</button>
+          <button type="button" role="tab" class="pg-view-tab" data-view="live" aria-selected="false" aria-controls="pg-view-live" tabindex="-1">Live</button>
+          <button type="button" role="tab" class="pg-view-tab" data-view="truth" aria-selected="false" aria-controls="pg-view-truth" tabindex="-1">Truth</button>
+        </div>
+        {/* Why the Truth view is blocked, when it is; empty otherwise. Phase 3
+            makes it the chip. */}
+        <span class="pg-view-note" id="pg-view-note"></span>
+        <button type="button" class="pg-data-btn" aria-pressed="false" aria-controls="pg-data-card">Data <span class="pg-data-count"></span></button>
       </div>
-      <div class="pg-panel" data-panel="preview"><pre class="pg-preview"></pre></div>
-      <div class="pg-panel" data-panel="truth" hidden><div class="pg-table"></div></div>
-      <div class="pg-panel" data-panel="simulate" hidden>
+      <div class="pg-view-panel" id="pg-view-schematic" data-view-panel="schematic" role="tabpanel"><pre class="pg-preview"></pre></div>
+      <div class="pg-view-panel" id="pg-view-truth" data-view-panel="truth" role="tabpanel" hidden><div class="pg-table"></div></div>
+      <div class="pg-view-panel pg-live" id="pg-view-live" data-view-panel="live" role="tabpanel" hidden>
         <div class="pg-sim-note"></div>
-        <div class="lc-mount pg-sim-mount" hidden></div>
+        <div class="pg-sim-mount" hidden></div>
       </div>
-      <div class="pg-panel" data-panel="data" hidden>
-        {/* The same circuit as Simulate, as values: one row per root pin,
-            inputs editable in the settings' base, outputs read. Drives the
-            same session the canvas draws. */}
+      {/* The same circuit as the Live view, as values: one row per root pin,
+          inputs editable in the settings' base, outputs read. Drives the
+          same session the canvas draws. A card under the button until Phase 5
+          makes it the floating panel. */}
+      <div class="pg-data-card" id="pg-data-card" hidden>
         <div class="pg-data-note"></div>
         <div class="pg-data-head" hidden>
           <span class="pg-data-hint">Type a value and press Enter; ? makes a pin unknown.</span>
           <button type="button" class="pg-data-reset" title="Every pin unknown, ROM images re-applied">Reset</button>
         </div>
         <div class="pg-data" hidden></div>
+      </div>
+      <div class="pg-hint"></div>
+      <div class="pg-zoom">
+        <span class="pg-zoom-cell">cell 14</span>
+        <span class="pg-zoom-sep" aria-hidden="true">·</span>
+        <button type="button" class="pg-zoom-pct" aria-label="Reset zoom to 100%" aria-disabled="true">100%</button>
+        <span class="pg-zoom-sep" aria-hidden="true">·</span>
+        <button type="button" class="pg-zoom-fit" aria-label="Fit the circuit" aria-disabled="true">fit</button>
       </div>
     </section>
   </div>
@@ -383,6 +389,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
   import { HELP_VERB, HistoryRing, MemoryTabFiles, Transcript, commandFor, helpLines, promptEcho, scriptOf } from '../scripts/console.ts';
   import { summaryOf } from '../scripts/terminal-line.ts';
   import { summarize, summaryLabels } from '../scripts/footer-summary.ts';
+  import { pinCountLabel } from '../scripts/pin-count.ts';
   import { joinConflicts, requestFor, rootOf, PLAYGROUND_DIR } from '../utils/split-files.ts';
   import { createSplitter } from '../scripts/splitter.ts';
   import { fnv1a } from '../utils/artifact-hash.ts';
@@ -490,12 +497,6 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     type TabbedDiagnostic,
   } from '../scripts/circ-diagnostics.ts';
 
-  type Tab = 'preview' | 'truth' | 'simulate' | 'data';
-  /** The bridge until Phase 2 draws the view switch: the four output tabs
-   *  read and write the envelope's `view`. Two tabs share `live`, so the
-   *  bridge remembers which of them was last shown in memory only. */
-  const viewOfTab = (tab: Tab): StoredView => (tab === 'preview' ? 'schematic' : tab === 'truth' ? 'truth' : 'live');
-  const tabOfView = (view: StoredView): Tab => (view === 'schematic' ? 'preview' : view === 'truth' ? 'truth' : 'simulate');
 
   type DrawerTab = 'console' | 'memory';
   /** A mapped diagnostic plus the file tab it belongs to; `null` when the
@@ -529,10 +530,17 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     const dataHead = el.querySelector<HTMLElement>('.pg-data-head')!;
     const dataEl = el.querySelector<HTMLElement>('.pg-data')!;
     const dataReset = el.querySelector<HTMLButtonElement>('.pg-data-reset')!;
-    // Narrowed to the OUTPUT strip: an unscoped [role=tab] would also collect
-    // the file tabs, and showTab() would then clobber their aria-selected and
-    // blank the output pane.
-    const tabs = Array.from(el.querySelectorAll<HTMLButtonElement>('.pg-tabs [role=tab]'));
+    // Narrowed to the view switch: an unscoped [role=tab] would also collect
+    // the file strip, and showView() would then clobber its aria-selected.
+    const viewSwitch = el.querySelector<HTMLElement>('.pg-view-switch')!;
+    const viewTabs = Array.from(el.querySelectorAll<HTMLButtonElement>('.pg-view-switch [role=tab]'));
+    const viewNote = el.querySelector<HTMLElement>('.pg-view-note')!;
+    const dataBtn = el.querySelector<HTMLButtonElement>('.pg-data-btn')!;
+    const dataCount = el.querySelector<HTMLElement>('.pg-data-count')!;
+    const dataCard = el.querySelector<HTMLElement>('.pg-data-card')!;
+    const hintEl = el.querySelector<HTMLElement>('.pg-hint')!;
+    const zoomPct = el.querySelector<HTMLButtonElement>('.pg-zoom-pct')!;
+    const zoomFit = el.querySelector<HTMLButtonElement>('.pg-zoom-fit')!;
     const wsRoot = el.querySelector<HTMLElement>('.pg-ws')!;
     const crumb = el.querySelector<HTMLButtonElement>('.pg-crumb')!;
     const wsBody = el.querySelector<HTMLElement>('.pg-ws-body')!;
@@ -545,7 +553,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     const downloadMeta = el.querySelector<HTMLElement>('.pg-download .pg-action-meta')!;
     const crumbGroup = el.querySelector<HTMLElement>('.pg-crumb-group')!;
     const crumbName = el.querySelector<HTMLElement>('.pg-crumb-name')!;
-    const panels = Array.from(el.querySelectorAll<HTMLElement>('.pg-panel'));
+    const viewPanels = Array.from(el.querySelectorAll<HTMLElement>('[data-view-panel]'));
     // The diagnostics footer under the editor: its bar, the two openers, and
     // the body the two panels share.
     const footer = el.querySelector<HTMLElement>('.pg-footer')!;
@@ -578,8 +586,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     const memTab = el.querySelector<HTMLButtonElement>('.pg-drawer-tab[data-drawer="memory"]')!;
     const memCount = el.querySelector<HTMLElement>('.pg-drawer-count')!;
     const memPanel = el.querySelector<HTMLElement>('.pg-mem')!;
-    const truthTab = el.querySelector<HTMLButtonElement>('.pg-tabs [data-tab="truth"]')!;
-    const truthTip = el.querySelector<HTMLElement>('#pg-tab-tip-truth')!;
+    const truthTab = el.querySelector<HTMLButtonElement>('.pg-view-tab[data-view="truth"]')!;
     const catalogue = JSON.parse(el.querySelector('#pg-picks')!.textContent || '[]') as CatalogueItem[];
     const supported = (el.dataset.supportedVersions || '').split(',').filter(Boolean).map(Number);
 
@@ -606,7 +613,9 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
        *  document. Refreshed by BOTH producers in the pipeline. */
       mapped: [] as MappedRow[],
       artifact: null as { bytes: Uint8Array; hash: number; size: number } | null,
-      tab: 'preview' as Tab,
+      view: 'schematic' as StoredView,
+      /** The Data card: open over whichever view; its rows are the session's. */
+      dataOpen: false,
       version: null as LibcircVersion | null,
       simulateEnabled: true,
     };
@@ -670,47 +679,101 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     function applyTruthGate() {
       const reason = truthBlock();
       truthTab.setAttribute('aria-disabled', String(reason !== null));
-      truthTip.textContent = reason ?? '';
-      // A tooltip pointing at an empty element says nothing; drop the link
-      // entirely rather than describing the tab as ''.
+      // The reason sits in the region's toolbar, beside the switch, and the
+      // tab is described by it only while there is one to read.
+      viewNote.textContent = reason ?? '';
       if (reason === null) truthTab.removeAttribute('aria-describedby');
-      else truthTab.setAttribute('aria-describedby', 'pg-tab-tip-truth');
-      // Blocked while it is the open tab: say so in the panel rather than
+      else truthTab.setAttribute('aria-describedby', 'pg-view-note');
+      // Blocked while it is the open view: say so in the panel rather than
       // moving the reader somewhere they did not ask to go. Transient errors
-      // are constant while typing, and a tab that flees mid-keystroke is worse
-      // than one that explains itself.
-      if (reason !== null && state.tab === 'truth') {
+      // are constant while typing, and a view that flees mid-keystroke is
+      // worse than one that explains itself.
+      if (reason !== null && state.view === 'truth') {
         tableEl.innerHTML = '';
         tableEl.textContent = reason;
       }
     }
 
-    function showTab(tab: Tab, opts: { persist?: boolean } = {}) {
-      state.tab = tab;
-      if (opts.persist !== false) store.update((draft) => { draft.view = viewOfTab(tab); });
-      for (const b of tabs) b.setAttribute('aria-selected', String(b.dataset.tab === tab));
-      for (const p of panels) p.hidden = p.dataset.panel !== tab;
-      // A tab switch re-uses the build stage's current sequence rather than
+    /** The hint line under each view (design file, board 2a). */
+    const HINTS: Record<StoredView, string> = {
+      schematic: '',
+      live: 'click a pin to toggle · hover a part to find it in the source',
+      truth: '',
+    };
+
+    function showView(view: StoredView, opts: { persist?: boolean } = {}) {
+      state.view = view;
+      if (opts.persist !== false) store.update((draft) => { draft.view = view; });
+      for (const b of viewTabs) {
+        const selected = b.dataset.view === view;
+        b.setAttribute('aria-selected', String(selected));
+        b.tabIndex = selected ? 0 : -1;
+      }
+      for (const p of viewPanels) p.hidden = p.dataset.viewPanel !== view;
+      hintEl.textContent = HINTS[view];
+      // A view switch re-uses the build stage's current sequence rather than
       // claiming a new one, so a compile already in flight stays current and
       // its artifact still lands.
-      if (tab === 'preview') void runPreview(buildStage.seq);
-      if (tab === 'truth') void runTruth(buildStage.seq);
-      if (tab === 'data') void showData();
+      if (view === 'schematic') void runPreview(buildStage.seq);
+      if (view === 'truth') void runTruth(buildStage.seq);
+      if (view === 'live') {
+        if (state.artifact && sim.renderedHash !== state.artifact.hash) {
+          sim.renderedHash = state.artifact.hash;
+          void buildCanvas();
+        } else if (!state.artifact && !sim.bytes) {
+          simNote.textContent = state.simulateEnabled ? 'Compile a circuit first.' : simNote.textContent;
+        }
+      }
     }
-    for (const b of tabs) {
+    for (const b of viewTabs) {
       b.addEventListener('click', () => {
-        const tab = b.dataset.tab as Tab;
-        // The gate lives here rather than in showTab: a restore from the
-        // envelope must still be able to land on a blocked tab, or a reader
-        // who left the page on the truth table would come back to a pane that
-        // silently moved. Refusing here also keeps the reason on screen.
-        if (tab === 'truth' && b.getAttribute('aria-disabled') === 'true') {
-          const reason = truthTip.textContent;
+        const view = b.dataset.view as StoredView;
+        // The gate lives here rather than in showView: a restore from the
+        // envelope must still be able to land on a blocked view, or a reader
+        // who left the page on the truth table would come back to a region
+        // that silently moved. Refusing here also keeps the reason on screen.
+        if (view === 'truth' && b.getAttribute('aria-disabled') === 'true') {
+          const reason = viewNote.textContent;
           if (reason) status.textContent = reason;
           return;
         }
-        showTab(tab);
+        showView(view);
       });
+    }
+    // The tablist's due: arrows move between the three, Home and End to the
+    // ends, and a blocked Truth view is skipped the way a click would refuse it.
+    viewSwitch.addEventListener('keydown', (e) => {
+      const order = viewTabs.map((b) => b.dataset.view as StoredView);
+      const at = order.indexOf(state.view);
+      const next =
+        e.key === 'ArrowLeft' ? Math.max(0, at - 1)
+        : e.key === 'ArrowRight' ? Math.min(order.length - 1, at + 1)
+        : e.key === 'Home' ? 0
+        : e.key === 'End' ? order.length - 1
+        : null;
+      if (next === null) return;
+      e.preventDefault();
+      viewTabs[next].click();
+      viewTabs[next].focus();
+    });
+
+    /** The Data card: open over whichever view, its rows the session's. */
+    function setDataOpen(open: boolean, opts: { persist?: boolean } = {}) {
+      state.dataOpen = open;
+      if (opts.persist !== false) store.update((draft) => { draft.dataOpen = open; });
+      dataCard.hidden = !open;
+      dataBtn.setAttribute('aria-pressed', String(open));
+      outputPane.dataset.dataOpen = String(open);
+      if (open) void showData();
+    }
+    dataBtn.addEventListener('click', () => setDataOpen(!state.dataOpen));
+
+    /** `N → M` on the Data button: the root's pins, from the last analysis. */
+    function renderDataCount() {
+      const a = state.analysis;
+      dataCount.textContent = a
+        ? pinCountLabel(a.symbols, rootFileId(a.files, rootPathFor(rootOf(state.tabs.files).name)))
+        : '';
     }
 
     // ---- the diagnostics footer ----
@@ -2584,7 +2647,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         // nothing the reader typed or loaded is touched.
         if (settings().valueFormat !== before) {
           sim.view?.view.setValueFormat(settings().valueFormat);
-          if (state.tab === 'data') renderData();
+          if (state.dataOpen) renderData();
         }
         schedule();
       },
@@ -2631,7 +2694,8 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         if (note) status.textContent = note;
       }
 
-      showTab(tabOfView(store.envelope.view), { persist: false });
+      showView(store.envelope.view, { persist: false });
+      setDataOpen(store.envelope.dataOpen, { persist: false });
       showFooterTab(store.envelope.footer.tab, { persist: false });
       setFooterOpen(store.envelope.footer.open, { persist: false });
       renderFooterBar();
@@ -3072,8 +3136,8 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       }
       setBusy(pipe.analyzing, false);
 
-      if (state.tab === 'preview') await runPreview(seq);
-      if (state.tab === 'truth') await runTruth(seq);
+      if (state.view === 'schematic') await runPreview(seq);
+      if (state.view === 'truth') await runTruth(seq);
     }
 
     async function runPreview(seq: number) {
@@ -3181,6 +3245,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       const { perTab, rows } = mapPerTab(state.tabs.files, analysis);
       state.mapped = rows;
       renderDiagnostics();
+      renderDataCount();
 
       // Phase 1's staleness guard, re-based per tab: a reply computed against
       // a body the reader has since edited must not be pushed, because the
@@ -3295,7 +3360,9 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
      *  which is the session's. `destroy` ends the canvas and not the runtime. */
     type View = Pick<CircView<PaletteKey>, 'view' | 'canvas' | 'destroy'>;
     const simMount = el.querySelector<HTMLElement>('.pg-sim-mount')!;
-    const simNoteBase = 'Click input pins to toggle them; hover one to find it in the source.';
+    // The hint line under the view carries the gesture now; the note is for
+    // what stops the picture.
+    const simNoteBase = '';
     const sim = {
       /** One session per artifact: the runtime, the pins and memories by name,
        *  the listeners. Every face drives and reads through it. */
@@ -3389,7 +3456,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           // follow. Only redrawn while on screen: each visible word costs a
           // call across the boundary.
           sim.view?.view.refreshState();
-          if (state.tab === 'data') renderData();
+          if (state.dataOpen) renderData();
           if (memVisible()) renderMemory();
           // The console is the record of every face: what another face did
           // is logged as the line that would have done it. The console's own
@@ -3399,7 +3466,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           // The protocol's reset: a new runtime, so a canvas over the old one
           // is rebuilt over the new, and the rows read the new.
           if (sim.view) void buildCanvas();
-          if (state.tab === 'data') renderData();
+          if (state.dataOpen) renderData();
           renderMemory();
           // The console says so after the reply that caused it, or at once
           // when another face reset the session.
@@ -3488,7 +3555,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     /** Open the Data tab on the session, building it on first need. */
     async function showData() {
       const session = await ensureSession();
-      if (state.tab !== 'data') return;
+      if (!state.dataOpen) return;
       if (!session) {
         if (!dataNote.textContent) dataNote.textContent = state.simulateEnabled ? 'Compile a circuit first.' : dataNote.textContent;
         dataHead.hidden = true;
@@ -3636,25 +3703,12 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         return;
       }
       simNote.textContent = '';
-      if (state.tab === 'data') void showData();
-      if (state.tab === 'simulate' && state.artifact && sim.renderedHash !== state.artifact.hash) {
+      if (state.dataOpen) void showData();
+      if (state.view === 'live' && state.artifact && sim.renderedHash !== state.artifact.hash) {
         sim.renderedHash = state.artifact.hash;
         void buildCanvas();
       }
     };
-    const showTabBase = showTab;
-    for (const b of tabs) {
-      if (b.dataset.tab !== 'simulate') continue;
-      b.addEventListener('click', () => {
-        if (state.artifact && sim.renderedHash !== state.artifact.hash) {
-          sim.renderedHash = state.artifact.hash;
-          void buildCanvas();
-        } else if (!state.artifact && !sim.bytes) {
-          simNote.textContent = state.simulateEnabled ? 'Compile a circuit first.' : simNote.textContent;
-        }
-      });
-    }
-    void showTabBase;
     // Theme flips: circ-renderer captures the theme at construction, so the
     // canvas is rebuilt; the editor reconfigures its theme compartment in place.
     new MutationObserver(() => {
