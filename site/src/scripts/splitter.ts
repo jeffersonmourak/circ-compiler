@@ -30,8 +30,12 @@ export interface SplitterOptions {
   /** What the property holds: a share of the container, or the first pane's
    *  width in pixels. `initial`, `onChange` and `onCommit` speak that unit. */
   unit?: 'ratio' | 'px';
+  /** In pixel mode, which pane the property sizes. */
+  pane?: 'first' | 'second';
+  /** Usable axis span when the container also carries fixed chrome. */
+  measure?: () => { start: number; size: number };
   /** Hard minimum for either pane, in px (the ratio unit). */
-  minPanePx?: number;
+  minPanePx?: number | [number, number];
   minRatio?: number;
   maxRatio?: number;
   step?: number;
@@ -67,6 +71,7 @@ const DEFAULTS = {
   property: '--pg-split-main',
   orientation: 'vertical' as const,
   unit: 'ratio' as const,
+  pane: 'first' as const,
   minPanePx: 240,
   minRatio: 0.2,
   maxRatio: 0.8,
@@ -105,8 +110,8 @@ export function pxBounds(sizePx: number, o: { minPx: number; maxReservePx: numbe
 }
 
 /** Where a pointer sits, in pixels from the container's near edge. */
-export function pxFromPointer(startPx: number, clientPx: number): number {
-  const raw = clientPx - startPx;
+export function pxFromPointer(startPx: number, clientPx: number, sizePx = 0, pane: 'first' | 'second' = 'first'): number {
+  const raw = pane === 'second' ? startPx + sizePx - clientPx : clientPx - startPx;
   return Number.isFinite(raw) ? Math.max(0, raw) : 0;
 }
 
@@ -120,15 +125,16 @@ export function stepPx(
     stepPx: number;
     coarseStepPx: number;
     bounds: SplitterBounds;
+    pane?: 'first' | 'second';
   },
 ): number | null {
-  const delta = ev.shiftKey ? o.coarseStepPx : o.stepPx;
+  const delta = (ev.shiftKey ? o.coarseStepPx : o.stepPx) * (o.pane === 'second' ? -1 : 1);
   const decrease = o.orientation === 'vertical' ? 'ArrowLeft' : 'ArrowUp';
   const increase = o.orientation === 'vertical' ? 'ArrowRight' : 'ArrowDown';
   if (ev.key === decrease) return clampPx(px - delta, o.bounds);
   if (ev.key === increase) return clampPx(px + delta, o.bounds);
-  if (ev.key === 'Home') return o.bounds.min;
-  if (ev.key === 'End') return o.bounds.max;
+  if (ev.key === 'Home') return o.pane === 'second' ? o.bounds.max : o.bounds.min;
+  if (ev.key === 'End') return o.pane === 'second' ? o.bounds.min : o.bounds.max;
   return null;
 }
 
@@ -145,13 +151,13 @@ export function clampRatio(ratio: number, bounds: SplitterBounds): number {
  */
 export function effectiveBounds(
   sizePx: number,
-  o: { minPanePx: number; minRatio: number; maxRatio: number },
+  o: { minPanePx: number | [number, number]; minRatio: number; maxRatio: number },
 ): SplitterBounds {
   if (!Number.isFinite(sizePx) || sizePx <= 0) return { min: o.minRatio, max: o.maxRatio };
-  if (sizePx < o.minPanePx * 2) return { min: 0.5, max: 0.5 };
-  const margin = o.minPanePx / sizePx;
-  const min = Math.max(o.minRatio, margin);
-  const max = Math.min(o.maxRatio, 1 - margin);
+  const [first, second] = Array.isArray(o.minPanePx) ? o.minPanePx : [o.minPanePx, o.minPanePx];
+  if (sizePx < first + second) return { min: 0.5, max: 0.5 };
+  const min = Math.max(o.minRatio, first / sizePx);
+  const max = Math.min(o.maxRatio, 1 - second / sizePx);
   return max < min ? { min: 0.5, max: 0.5 } : { min, max };
 }
 
@@ -210,15 +216,18 @@ export function createSplitter(options: SplitterOptions): SplitterHandle {
   const o = { ...DEFAULTS, ...options };
   const { container, separator } = o;
   const sizeOf = (): number => {
+    if (o.measure) return o.measure().size;
     const rect = container.getBoundingClientRect();
     return o.orientation === 'vertical' ? rect.width : rect.height;
   };
   const startOf = (): number => {
+    if (o.measure) return o.measure().start;
     const rect = container.getBoundingClientRect();
     return o.orientation === 'vertical' ? rect.left : rect.top;
   };
 
   const px = o.unit === 'px';
+  const labels: [string, string] = px && o.pane === 'second' ? [o.labels[1], o.labels[0]] : o.labels;
   const boundsAt = (size: number): SplitterBounds => (px ? pxBounds(size, o) : effectiveBounds(size, o));
   const clamp = (value: number, b: SplitterBounds): number => (px ? clampPx(value, b) : clampRatio(value, b));
 
@@ -236,8 +245,8 @@ export function createSplitter(options: SplitterOptions): SplitterHandle {
     // The accessible value is a share of the container in either unit, so a
     // screen reader hears the same sentence whatever the property holds.
     const aria = px && size > 0
-      ? ariaValues(rendered / size, { min: bounds.min / size, max: Math.min(1, bounds.max / size) }, o.labels)
-      : ariaValues(px ? 0 : rendered, px ? { min: 0, max: 1 } : bounds, o.labels);
+      ? ariaValues(rendered / size, { min: bounds.min / size, max: Math.min(1, bounds.max / size) }, labels)
+      : ariaValues(px ? 0 : rendered, px ? { min: 0, max: 1 } : bounds, labels);
     separator.setAttribute('aria-valuenow', String(aria.now));
     separator.setAttribute('aria-valuemin', String(aria.min));
     separator.setAttribute('aria-valuemax', String(aria.max));
@@ -258,13 +267,13 @@ export function createSplitter(options: SplitterOptions): SplitterHandle {
     pointerId = e.pointerId;
     // Capture keeps pointermove on the separator even over the canvas, so the
     // renderer's own pointer handling never sees a drag.
-    separator.setPointerCapture(e.pointerId);
+    try { separator.setPointerCapture(e.pointerId); } catch { /* Synthetic pointers have no capture. */ }
   };
 
   const onPointerMove = (e: PointerEvent) => {
     if (dragFrom === null || e.pointerId !== pointerId) return;
     const client = o.orientation === 'vertical' ? e.clientX : e.clientY;
-    const raw = px ? pxFromPointer(startOf(), client) : ratioFromPointer(startOf(), sizeOf(), client);
+    const raw = px ? pxFromPointer(startOf(), client, sizeOf(), o.pane) : ratioFromPointer(startOf(), sizeOf(), client);
     apply(clamp(raw, bounds), false);
   };
 
@@ -292,7 +301,7 @@ export function createSplitter(options: SplitterOptions): SplitterHandle {
       return;
     }
     const next = px
-      ? stepPx(rendered, e, { orientation: o.orientation, stepPx: o.stepPx, coarseStepPx: o.coarseStepPx, bounds })
+      ? stepPx(rendered, e, { orientation: o.orientation, pane: o.pane, stepPx: o.stepPx, coarseStepPx: o.coarseStepPx, bounds })
       : stepRatio(rendered, e, { orientation: o.orientation, step: o.step, coarseStep: o.coarseStep, bounds });
     if (next === null) return; // not ours: the key keeps its browser meaning
     e.preventDefault();

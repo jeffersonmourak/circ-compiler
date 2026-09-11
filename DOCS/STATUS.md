@@ -257,3 +257,11 @@ Rolling log of shipped slices. Newest at the bottom. The plan is `DOCS/PLANS_PRO
 **Tests:** No new tests in this documentation slice. The final code at `8c51ad5` passed all four gates: 596 tests, typecheck with no errors, fresh production build and bundle. `/playground` 128.3 KB raw / 44.7 KB gzip; Phase 4 ended at 124.2 / 43.4. The ceiling remains 360 KB raw / 120 KB gzip. Browser verification covered both themes, 1440/1024 desktop widths, the 700px stack, native drag/cancel and keyboard movement, reload and project restore, bus/toggle edits and console echoes; no runtime exceptions.
 **Next slice:** Phase 6 — the drawer (`DOCS/PLANS/PHASE_6_drawer.md`), on the human's word.
 **Notes:** Screenshots are under `/var/folders/91/0hwz8chx0d12hz5x00f53vrm0000gn/T/opencode/`: `bench-3d-{light,dark}-1440.png`, `bench-3d-toggle-dark-1440.png`, `bench-3d-dark-1024.png`, `bench-3d-{light,dark}-700.png`. The renderer's default zoom floor at 1024 and the Live hint/zoom overlap recorded in Phase 4 remain sweep follow-ups. `data-view.ts` and its tests remain unchanged; the renderer and compiler remain read-only.
+
+## 2026-09-11 — Phase 6 — The lower pane's pixel splitter
+
+**What shipped:** The existing pixel splitter can size the second pane, reversing pointer and keyboard direction. A measurement callback supplies the usable axis when a container also holds fixed chrome; ratio mode accepts separate pane minimums. Numeric callbacks keep speaking the configured unit.
+**Files touched:** `site/src/scripts/splitter.ts`, `site/test/splitter.test.ts`, `DOCS/STATUS.md`
+**Tests:** Added separate-minimum and DOM-backed lower-pane cases, including resize without commit and restored intent. All four gates pass: 598 tests; `/playground` 128.7 KB raw / 44.8 KB gzip.
+**Next slice:** Drawer height and open/close gestures.
+**Notes:** The phase spec predates Phase 0's `unit: 'px'` implementation. Extended that API with `pane` and `measure` instead of introducing the spec's parallel `pixels` mode or changing existing callback shapes. Existing ratio and source-column tests pass unchanged.

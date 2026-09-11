@@ -2,10 +2,12 @@
 // writes, which no headless runner can exercise; everything a wrong number
 // could break is here.
 import { describe, expect, test } from 'bun:test';
+import { Window } from 'happy-dom';
 import {
   ariaValues,
   clampPx,
   clampRatio,
+  createSplitter,
   effectiveBounds,
   pxBounds,
   pxFromPointer,
@@ -19,6 +21,31 @@ const opts = { minPanePx: 240, minRatio: 0.2, maxRatio: 0.8 };
 const wide: SplitterBounds = { min: 0.2, max: 0.8 };
 
 describe('splitter', () => {
+  test('each pane can have its own minimum', () => {
+    expect(effectiveBounds(600, { minPanePx: [200, 160], minRatio: 0, maxRatio: 1 })).toEqual({ min: 200 / 600, max: 1 - 160 / 600 });
+    expect(effectiveBounds(300, { minPanePx: [200, 160], minRatio: 0, maxRatio: 1 })).toEqual({ min: 0.5, max: 0.5 });
+  });
+  test('the lower pane grows when the divider moves up, and resize never commits', () => {
+    const window = new Window();
+    const container = window.document.createElement('div') as unknown as HTMLElement;
+    const separator = window.document.createElement('div') as unknown as HTMLElement;
+    let size = 800;
+    const commits: number[] = [];
+    const handle = createSplitter({ container, separator, property: '--height', unit: 'px', pane: 'second', orientation: 'horizontal', minPx: 160, maxReservePx: 200, initial: 320, measure: () => ({ start: 100, size }), labels: ['bench', 'drawer'], onCommit: (v) => commits.push(v) });
+    expect(container.style.getPropertyValue('--height')).toBe('320px');
+    expect(separator.getAttribute('aria-valuetext')).toBe('drawer 40%, bench 60%');
+    size = 400; handle.refresh();
+    expect(container.style.getPropertyValue('--height')).toBe('200px');
+    expect(handle.intent).toBe(320);
+    expect(commits).toEqual([]);
+    size = 800; handle.refresh();
+    separator.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'ArrowUp' }) as unknown as Event);
+    expect(handle.intent).toBe(336);
+    expect(commits).toEqual([336]);
+    expect(pxFromPointer(100, 580, 800, 'second')).toBe(320);
+    expect(pxFromPointer(100, 1000, 800, 'second')).toBe(0);
+    handle.destroy();
+  });
   test('clampRatio holds the bounds and is idempotent', () => {
     expect(clampRatio(0.5, wide)).toBe(0.5);
     expect(clampRatio(0, wide)).toBe(0.2);
