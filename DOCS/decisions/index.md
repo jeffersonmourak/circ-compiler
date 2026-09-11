@@ -101,6 +101,12 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - Wires are routed per gap, on tracks, under a constraint graph (`channels.zig`: nets, left-edge tracks, doglegs and spacer rows, return lanes, demand-sized gaps, a counted fallback search)
 - A macro port the topology cannot name is one port (collapse maps unnamed macro inputs onto `in`; I1/I2 exempt only where a port is multi-driven, I0/I3 asserted everywhere)
 
+### [canvas-theme.md](canvas-theme.md)
+- The renderer grows three hooks, and the site fills them (`fanOutMarker`, `TraceOptions.cornerRadius`, `LayoutOptions.rowGutter`; `grid` gone; one pin bump)
+- The theme is three modules, and the skins take their sprites by injection (`circ-palette.mjs`, `circ-skins.mjs` with `makeSkins(assets)`, `circ-theme.mjs` as the entry)
+- What a skin draws is pinned as an op log (`canvas-record.ts`, `circ-skins.test.ts`, one golden file per kind under `test/fixtures/skins/`)
+- The handoff is tracked beside the plan (`DOCS/design/`, moved under `DOCS/archive/design/` at archive time)
+
 ## Conventions
 
 - Decisions use `###` headings inside topic files.

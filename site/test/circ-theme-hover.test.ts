@@ -1,15 +1,17 @@
-// A source-text guard, not an import: `circ-theme.mjs` calls `loadAssets()` at
-// module scope and that needs `new Image()`, which `bun test` does not have.
+// A source-text guard over the site's skins and palettes.
 //
 // The property being guarded is easy to lose and invisible until someone
 // points at a gate: the ring around a hovered or highlighted component is
 // drawn by the canvas through one theme hook, for every kind, and no skin
-// draws its own — or a kind gets two rings, or none.
+// draws its own — or a kind gets two rings, or none. What the skins draw is
+// pinned by `circ-skins.test.ts`; this file guards how they are put together.
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const source = readFileSync(resolve(import.meta.dir, '..', 'src', 'utils', 'circ-theme.mjs'), 'utf8');
+const utils = resolve(import.meta.dir, '..', 'src', 'utils');
+const source = readFileSync(resolve(utils, 'circ-skins.mjs'), 'utf8');
+const palette = readFileSync(resolve(utils, 'circ-palette.mjs'), 'utf8');
 
 /** The body of a top-level `const <name> = (…) => {…}` function. */
 function skinBody(name: string): string {
@@ -22,7 +24,7 @@ function skinBody(name: string): string {
 
 /** The skins the site registers, from the object literal itself. */
 function registeredSkins(): string[] {
-  const start = source.indexOf('const skins = {');
+  const start = source.indexOf('export const skins = {');
   const end = source.indexOf('};', start);
   const block = source.slice(start, end);
   return [...block.matchAll(/:\s*(draw[A-Za-z]+)/g)].map((m) => m[1]);
@@ -43,41 +45,48 @@ describe('circ-theme hover', () => {
   });
 
   test('the ring is drawn once, by the canvas, through the highlight hook', () => {
-    // The theme hands the canvas its ring; no skin draws its own. Before
+    // The theme hands the canvas its mark; no skin draws its own. Before
     // this, five skins each drew a ring and four kinds drew none, and a
     // reader pointing at a rom in the editor saw nothing light up.
-    expect(source).toMatch(/highlight:\s*\(\{[^}]*\}\)\s*=>\s*drawHoverRing\(/);
+    expect(source).toMatch(/highlight:\s*drawHighlight,/);
     for (const name of registeredSkins()) {
-      expect(`${name}: ${skinBody(name).includes('drawHoverRing(')}`).toBe(`${name}: false`);
+      const body = skinBody(name);
+      expect(`${name}: ${body.includes('drawHighlight(') || body.includes('nsHoverRing(')}`).toBe(`${name}: false`);
     }
-    // Exactly one caller of the helper in the whole file: the hook.
-    expect([...source.matchAll(/drawHoverRing\(ctx/g)]).toHaveLength(1);
+    // Exactly one caller of the pin ring in the whole file: the hook.
+    expect([...source.matchAll(/(?<!function )nsHoverRing\(ctx/g)]).toHaveLength(1);
   });
 
-  test('a skin may still react to hovered on its own, and the input pin does', () => {
-    // The ring is uniform; a pin changing its own fill is an extra the canvas
-    // leaves open. Both paths stay, which is what kept this skin unchanged.
-    const body = skinBody('drawInputPin');
-    expect(body).toMatch(/if \(hovered\)/);
-    expect(body).toContain('theme.colors.inputHover');
+  test('no skin changes its own look on hover', () => {
+    // Hover used to swap an input pin's fill for yellow, which hid the value
+    // the reader was about to toggle. The mark is a ring outside the pin now,
+    // and the fill says the state whether or not the pointer is there.
+    for (const name of registeredSkins()) {
+      const body = skinBody(name);
+      expect(`${name}: ${/\bhovered\b/.test(body.slice(body.indexOf('=>')))}`).toBe(`${name}: false`);
+      expect(`${name}: ${body.includes('inputHover')}`).toBe(`${name}: false`);
+    }
   });
 
-  test('the ring helper uses the hover colour and restores the context', () => {
-    const helper = skinBody('drawHoverRing');
-    expect(helper).toContain('theme.colors.inputHover');
-    // A skin that leaves stroke state behind corrupts everything drawn after.
+  test('the highlight hook uses the hover colour and restores the context', () => {
+    const helper = skinBody('drawHighlight');
+    expect(helper).toContain('t.inputHover');
+    // A hook that leaves stroke state behind corrupts everything drawn after.
     expect(helper).toContain('ctx.save()');
     expect(helper).toContain('ctx.restore()');
   });
 
   test('both palettes define the hover colour the ring reads', () => {
     // One per theme; the guard is that neither is missing.
-    expect([...source.matchAll(/inputHover:/g)]).toHaveLength(2);
+    expect([...palette.matchAll(/inputHover:/g)]).toHaveLength(2);
   });
 
-  test('a memory is labelled by the renderer, so the canvas and the preview agree', () => {
-    // `rom code[8,4]` comes from one function in one place.
-    expect(source).toMatch(/^import \{[^}]*\bmemoryLabel\b[^}]*\} from 'circ-renderer';$/m);
-    expect(skinBody('drawMemory')).toContain('memoryLabel(');
+  test('a memory names its declaration in its header, not the preview label', () => {
+    // The chip's header is MODE and W×2^A; the `rom code[8,4]` string the
+    // preview prints is no longer drawn, so the renderer's memoryLabel is
+    // not imported.
+    expect(source).not.toMatch(/\bmemoryLabel\b/);
+    expect(skinBody('drawMemory')).toContain('nsChipPart(');
   });
+
 });
