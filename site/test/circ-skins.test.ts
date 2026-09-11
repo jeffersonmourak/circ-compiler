@@ -17,8 +17,8 @@ import { ComponentKind, widthMask } from 'circ-renderer/topology';
 import type { BitValue } from 'circ-renderer/topology';
 import type { CircTheme, PlacedComponent, RoutedWire } from 'circ-renderer';
 import { colorsDark, colorsLight, type PaletteKey } from '../src/utils/circ-palette.mjs';
-import { makeSkins } from '../src/utils/circ-skins.mjs';
-import { recordingContext, stubAssets, type Op } from './canvas-record.ts';
+import { makeSkins, spriteArt } from '../src/utils/circ-skins.mjs';
+import { STUB_BOUNDS, recordingContext, stubAssets, type Op } from './canvas-record.ts';
 
 const GOLDENS = resolve(import.meta.dir, 'fixtures', 'skins');
 const UPDATE = process.env.UPDATE_GOLDENS === '1';
@@ -148,6 +148,56 @@ describe('circ-palette', () => {
     };
     expect(lum(colorsDark.wireIdle)).toBeLessThan(lum(colorsDark.label));
     expect(colorsDark.wireIdle).toBe('#4c3a6b');
+  });
+});
+
+describe('sprite art', () => {
+  test('a tint, a halo and the bounds are each built once per name and colour', () => {
+    const assets = stubAssets(true);
+    makeSkins(assets);
+    const ink = colorsDark.spriteInk;
+    const a = spriteArt.tinted('AND', ink, 0.94);
+    const b = spriteArt.tinted('AND', ink, 0.94);
+    expect(a).toBe(b);
+    expect(assets.calls.offscreen).toBe(1);
+    // Another colour or alpha is another tint.
+    spriteArt.tinted('AND', colorsDark.inputOn, 0.92);
+    expect(assets.calls.offscreen).toBe(2);
+    // A halo builds its own canvas over a tint at alpha 1.
+    const h1 = spriteArt.halo('AND', colorsDark.inputOn);
+    const h2 = spriteArt.halo('AND', colorsDark.inputOn);
+    expect(h1).toBe(h2);
+    expect(assets.calls.offscreen).toBe(4); // + tint at alpha 1, + the halo
+    // Bounds are asked of the page once per name.
+    expect(spriteArt.bounds('AND')).toEqual(STUB_BOUNDS);
+    spriteArt.bounds('AND');
+    expect(assets.calls.bounds).toBe(1);
+    // The halo is padded by 0.14 of the sprite on every side.
+    const halo = assets.offscreens[assets.offscreens.length - 1];
+    expect([halo.width, halo.height]).toEqual([128, 128]);
+    // The blur runs at build time, on the offscreen canvas, never on the page.
+    expect(halo.recording.ops.some((op) => op[0] === 'set' && op[1] === 'shadowBlur')).toBe(true);
+  });
+
+  test('before the sprites decode nothing is built, and nothing is cached as missing', () => {
+    const cold = stubAssets(false);
+    makeSkins(cold);
+    expect(spriteArt.tinted('AND', colorsDark.spriteInk, 0.94)).toBeNull();
+    expect(spriteArt.halo('AND', colorsDark.inputOn)).toBeNull();
+    expect(spriteArt.bounds('AND')).toEqual({ l: 0.2, r: 0.84, t: 0.2, b: 0.8, apex: 0.2 });
+    expect(cold.calls.offscreen).toBe(0);
+    // Rebinding to decoded sprites — the sprite-ready retheme — starts clean.
+    const warm = stubAssets(true);
+    makeSkins(warm);
+    expect(spriteArt.tinted('AND', colorsDark.spriteInk, 0.94)).not.toBeNull();
+    expect(spriteArt.bounds('AND')).toEqual(STUB_BOUNDS);
+    expect(warm.calls.offscreen).toBe(1);
+  });
+
+  test('the sprite module still exports what the page decodes', () => {
+    const assets = readFileSync(resolve(import.meta.dir, '..', 'src', 'utils', 'circ-assets.mjs'), 'utf8');
+    const exported = [...assets.matchAll(/^export const (\w+)/gm)].map((m) => m[1]).sort();
+    expect(exported).toEqual(['AND', 'NAND', 'NOT', 'OR', 'XOR']);
   });
 });
 

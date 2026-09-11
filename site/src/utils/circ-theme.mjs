@@ -67,6 +67,43 @@ const pageAssets = {
     c.height = height;
     return c;
   },
+  // Painted bounds of a sprite, as fractions of its square in the rotation
+  // the skins draw it (the PNGs point up; the canvas turns them a quarter
+  // clockwise). One 128×128 getImageData per name, on the decoded image,
+  // never on a tinted copy: a tint must not move the bounds. The data-URI
+  // images are same-origin, so the read does not taint.
+  bounds: (name) => {
+    const img = sprites?.[name];
+    if (!img) return null;
+    const N = 128;
+    const c = document.createElement('canvas');
+    c.width = N;
+    c.height = N;
+    const g = c.getContext('2d');
+    g.translate(N / 2, N / 2);
+    g.rotate(Math.PI / 2);
+    g.drawImage(img, -N / 2, -N / 2, N, N);
+    const d = g.getImageData(0, 0, N, N).data;
+    let l = N, r = -1, top = N, bottom = -1;
+    for (let y = 0; y < N; y++) {
+      for (let x = 0; x < N; x++) {
+        if (d[(y * N + x) * 4 + 3] > 16) {
+          if (x < l) l = x;
+          if (x > r) r = x;
+          if (y < top) top = y;
+          if (y > bottom) bottom = y;
+        }
+      }
+    }
+    if (r < 0) return null;
+    // Back apex: how far in the concave input edge reaches on the centre row.
+    let apex = l;
+    const mid = Math.floor(N / 2);
+    for (let x = 0; x < N; x++) {
+      if (d[(mid * N + x) * 4 + 3] > 16) { apex = x; break; }
+    }
+    return { l: l / N, r: (r + 1) / N, t: top / N, b: (bottom + 1) / N, apex: apex / N };
+  },
 };
 
 const sharedRenderers = makeSkins(pageAssets);

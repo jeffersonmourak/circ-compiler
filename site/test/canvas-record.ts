@@ -22,6 +22,10 @@ function round(v: unknown): OpArg {
   if (typeof v === 'string' || typeof v === 'boolean' || v === null) return v;
   if (Array.isArray(v)) return `[${v.map(round).join(',')}]`;
   if (v && typeof v === 'object' && 'name' in v) return `sprite:${String((v as { name: unknown }).name)}`;
+  if (v && typeof v === 'object' && 'getContext' in v) {
+    const c = v as unknown as { width: number; height: number };
+    return `canvas:${c.width}x${c.height}`;
+  }
   return String(v);
 }
 
@@ -55,26 +59,42 @@ export function recordingContext(cell: number): Recording {
 
 export const SPRITE_NAMES = ['AND', 'NAND', 'OR', 'XOR', 'NOT'] as const;
 
+export interface Bounds { l: number; r: number; t: number; b: number; apex: number }
+
+/** What a real sprite measures to, near enough: the OR's back apex is in from its left edge. */
+export const STUB_BOUNDS: Bounds = { l: 0.2, r: 0.84, t: 0.2, b: 0.8, apex: 0.28 };
+
 export interface StubAssets {
   sprite(name: string): CanvasImageSource | null;
+  bounds(name: string): Bounds | null;
   offscreen(width: number, height: number): HTMLCanvasElement;
   /** Every offscreen canvas handed out, with its own recording. */
   offscreens: { width: number; height: number; recording: Recording }[];
+  /** How many times each stub method was asked. */
+  calls: { sprite: number; bounds: number; offscreen: number };
 }
 
 /**
  * Assets as the skins see them, without a page. With `loaded` false every
  * sprite is null, the way the site draws before its PNGs decode; with it true
- * each of the five names answers with a tagged stand-in.
+ * each of the five names answers with a tagged stand-in and fixed bounds.
  */
 export function stubAssets(loaded: boolean): StubAssets {
   const offscreens: StubAssets['offscreens'] = [];
+  const calls = { sprite: 0, bounds: 0, offscreen: 0 };
+  const known = (name: string) => loaded && (SPRITE_NAMES as readonly string[]).includes(name);
   return {
-    sprite: (name) =>
-      loaded && (SPRITE_NAMES as readonly string[]).includes(name)
-        ? ({ width: 100, height: 100, name } as unknown as CanvasImageSource)
-        : null,
+    calls,
+    sprite: (name) => {
+      calls.sprite++;
+      return known(name) ? ({ width: 100, height: 100, name } as unknown as CanvasImageSource) : null;
+    },
+    bounds: (name) => {
+      calls.bounds++;
+      return known(name) ? { ...STUB_BOUNDS } : null;
+    },
     offscreen: (width, height) => {
+      calls.offscreen++;
       const recording = recordingContext(1);
       const c = { width, height, getContext: () => recording.ctx } as unknown as HTMLCanvasElement;
       offscreens.push({ width, height, recording });

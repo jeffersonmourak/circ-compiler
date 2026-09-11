@@ -15,9 +15,15 @@ import { ComponentKind, memoryLabel, traceWire, wireColorKey, wireStyleOf } from
 
 /**
  * What the skins need from the page: the decoded sprites (null until they
- * are), and a place to render offscreen.
+ * are), their painted bounds, and a place to render offscreen.
+ *
+ * `bounds` is the page's because measuring needs `getImageData`, which a
+ * test's recording context cannot answer; tinting and halos need only a
+ * canvas to draw into, so they are built here from `offscreen`.
+ * @typedef {{ l: number, r: number, t: number, b: number, apex: number }} Bounds
  * @typedef {{
  *   sprite(name: string): CanvasImageSource | null,
+ *   bounds(name: string): Bounds | null,
  *   offscreen(width: number, height: number): HTMLCanvasElement,
  * }} Assets
  */
@@ -29,14 +35,145 @@ let assets = null;
 const sprite = (name) => assets?.sprite(name) ?? null;
 
 /**
- * Bind the page's assets and return the theme pieces. Called once per palette
- * by `circ-theme.mjs`; a test calls it with a stub. The pieces are the same
- * objects on every call — binding is the only state.
+ * Bind the page's assets and return the theme pieces. Called once by
+ * `circ-theme.mjs`; a test calls it with a stub. The pieces are the same
+ * objects on every call — binding is the only state, and every cache keyed
+ * on a sprite name empties with it, since the names now mean other bytes.
  * @param {Assets} a
  */
 export function makeSkins(a) {
   assets = a;
+  tintCache.clear();
+  haloCache.clear();
+  boundsCache.clear();
+  vecHaloCache.clear();
   return sharedRenderers;
+}
+
+/* ───── sprite art: tint, halo, bounds ─────────────────────────────── */
+
+/**
+ * The gate PNGs are dark-interior art drawn the same in both palettes. They
+ * are never drawn raw now: a sprite is tinted inside its own alpha to the
+ * palette's ink (LOW), the HIGH orange, or the muted label colour
+ * (undefined), and a HIGH sprite gets a blurred copy of itself underneath.
+ * Every one of those is rendered once per (sprite, colour) into an offscreen
+ * canvas and kept, so a frame is one `drawImage` per gate; `shadowBlur` runs
+ * only when a halo is first built.
+ *
+ * Caches key on the sprite NAME the site passes, never on `img.src`.
+ */
+const HALO_PAD = 0.14;
+const tintCache = new Map();
+const haloCache = new Map();
+const boundsCache = new Map();
+const vecHaloCache = new Map();
+
+/** Recolour a sprite by compositing a flat fill inside its own alpha. */
+function tintedSprite(name, colour, alpha) {
+  const key = `${name}|${colour}|${alpha}`;
+  const hit = tintCache.get(key);
+  if (hit) return hit;
+  const img = sprite(name);
+  if (!img) return null;
+  const c = assets.offscreen(img.width, img.height);
+  const g = c.getContext('2d');
+  g.drawImage(img, 0, 0);
+  g.globalCompositeOperation = 'source-atop';
+  g.globalAlpha = alpha;
+  g.fillStyle = colour;
+  g.fillRect(0, 0, c.width, c.height);
+  tintCache.set(key, c);
+  return c;
+}
+
+/**
+ * Halo for sprite art: the tinted sprite blurred ONCE at build time on an
+ * oversized canvas, its crisp core knocked out so only the soft field around
+ * the silhouette remains. Padded by `HALO_PAD` of the sprite on every side;
+ * `nsSpriteRect` maps it back with the same ratio.
+ */
+function haloSprite(name, colour) {
+  const key = `${name}|${colour}`;
+  const hit = haloCache.get(key);
+  if (hit) return hit;
+  const img = sprite(name);
+  const art = tintedSprite(name, colour, 1);
+  if (!img || !art) return null;
+  const pad = Math.round(img.width * HALO_PAD);
+  const c = assets.offscreen(img.width + pad * 2, img.height + pad * 2);
+  const g = c.getContext('2d');
+  g.shadowColor = colour;
+  g.shadowBlur = pad * 0.8;
+  g.drawImage(art, pad, pad);
+  g.drawImage(art, pad, pad);
+  g.shadowBlur = 0;
+  g.globalCompositeOperation = 'destination-out';
+  const shrink = Math.max(1, Math.round(img.width * 0.012));
+  g.drawImage(art, pad + shrink, pad + shrink, img.width - shrink * 2, img.height - shrink * 2);
+  haloCache.set(key, c);
+  return c;
+}
+
+/**
+ * Painted bounds of a sprite as fractions of its square, in the rotation
+ * the canvas draws it. The PNGs carry transparent padding, so the art is
+ * smaller than the square; sizing must use these, not the square, for the
+ * lobes to land on the port rows. Measured by the page once per name.
+ */
+const TRIANGLE_BOUNDS = { l: 0.2, r: 0.84, t: 0.2, b: 0.8, apex: 0.2 };
+function spriteBounds(name) {
+  const hit = boundsCache.get(name);
+  if (hit) return hit;
+  const b = assets?.bounds(name) ?? null;
+  if (b) boundsCache.set(name, b);
+  return b ?? TRIANGLE_BOUNDS;
+}
+
+/**
+ * The sprite art producers, exported for the test that counts their cache
+ * hits; the skins reach them by name.
+ */
+export const spriteArt = { tinted: tintedSprite, halo: haloSprite, bounds: spriteBounds };
+
+/**
+ * Halo for a vector shape: the same recipe as the sprite halo, per shape, on
+ * a small offscreen canvas — blur the shape once, knock its core out, keep
+ * the soft field — cached by shape signature so a frame is one `drawImage`.
+ * `pathFn(g)` traces the shape into `g` in the box's local coordinates.
+ */
+function nsVecHalo(ctx, key, x, y, w, h, colour, spread, pathFn) {
+  const dpr = 2;
+  const cacheKey = `${key}|${Math.round(w)}x${Math.round(h)}|${colour}|${Math.round(spread)}`;
+  let c = vecHaloCache.get(cacheKey);
+  if (!c) {
+    c = assets.offscreen(Math.ceil((w + spread * 2) * dpr), Math.ceil((h + spread * 2) * dpr));
+    const g = c.getContext('2d');
+    g.scale(dpr, dpr);
+    g.translate(spread, spread);
+    g.shadowColor = colour;
+    g.shadowBlur = spread * 0.9;
+    g.fillStyle = colour;
+    g.strokeStyle = colour;
+    pathFn(g);
+    g.fill();
+    pathFn(g);
+    g.fill();
+    g.shadowBlur = 0;
+    g.globalCompositeOperation = 'destination-out';
+    g.save();
+    g.translate(w / 2, h / 2);
+    g.scale(1 - 1.2 / Math.max(w, h), 1 - 1.2 / Math.max(w, h));
+    g.translate(-w / 2, -h / 2);
+    pathFn(g);
+    g.fill();
+    g.restore();
+    vecHaloCache.set(cacheKey, c);
+  }
+  ctx.save();
+  ctx.globalAlpha = 0.55;
+  ctx.drawImage(c, x - spread, y - spread, w + spread * 2, h + spread * 2);
+  ctx.restore();
 }
 
 /* ───── helpers ────────────────────────────────────────────────────── */
