@@ -185,3 +185,43 @@ One entry per shipped slice, newest last. The plan is `DOCS/PLANS_PROMPT.md`; th
 **Tests:** none (review)
 **Next slice:** Phase 4 slice 1: slice ruler and range bar.
 **Notes:** none.
+
+## 2026-09-10 — Phase 4 — slice ruler and range bar
+
+**What shipped:** `nsShell`, `nsSliceAsset` (ruler to 16 bits, range bar above), `nsBitPart`, `drawSlice` on them. Commit `9209292`.
+**Files touched:** `site/src/utils/circ-skins.mjs`, `site/test/circ-skins.test.ts`, `site/test/fixtures/skins/slice.json`
+**Tests:** added `a slice is a ruler of the incoming word, MSB left, the tapped bits filled` (widths 4, 8, 16), `a slice of a word wider than sixteen bits is a range bar` (32); ran `bun test` (458 pass), typecheck (0 errors), result pass
+**Next slice:** concat bands.
+**Notes:** none.
+
+## 2026-09-10 — Phase 4 — concat bands
+
+**What shipped:** `nsConcatAsset`, `drawConcat` on `nsBitPart`. Commit `a2800be`.
+**Files touched:** `site/src/utils/circ-skins.mjs`, `site/test/circ-skins.test.ts`, `site/test/fixtures/skins/concat.json`
+**Tests:** added `a concat is one band and one numbered lane per operand, fading down the stack` (2, 3, 4 operands); ran `bun test` (459 pass), typecheck (0 errors), result pass
+**Next slice:** user-subcircuit chip.
+**Notes:** none.
+
+## 2026-09-10 — Phase 4 — user-subcircuit chip
+
+**What shipped:** `nsChip`, `nsChipPart`, `nsUserSubcircuit`; `drawSubcircuit`'s non-builtin branch on them; the labelled box gone. Commit `e70e5fc`.
+**Files touched:** `site/src/utils/circ-skins.mjs`, `site/test/circ-skins.test.ts`, `site/test/fixtures/skins/subcircuit_user.json`
+**Tests:** replaced the labelled-box case with `a user subcircuit is a chip: purple shell, tinted header with its name in capitals, the instance in the body`; ran `bun test` (459 pass), typecheck (0 errors), result pass
+**Next slice:** ROM and RAM chips.
+**Notes:** none.
+
+## 2026-09-10 — Phase 4 — ROM and RAM chips
+
+**What shipped:** `nsHex` (bigint), `nsMemory` (header, port labels, `addr → word`, unlit `wr` dot), `drawMemory` on `nsChipPart`; `drawBox` and the `memoryLabel` import gone; the hover guard's "labelled by the renderer" case replaced by one that asserts the import is gone. Commit `834ffad`.
+**Files touched:** `site/src/utils/circ-skins.mjs`, `site/test/circ-skins.test.ts`, `site/test/circ-theme-hover.test.ts`, `site/test/fixtures/skins/{rom,ram}.json`
+**Tests:** added `a memory chip shows its declaration in the header and addr → word in the body` (ROM loaded, ROM unloaded, RAM); ran `bun test` (460 pass), typecheck (0 errors), result pass
+**Next slice:** the write indicator.
+**Notes:** the first cut of this slice deleted the bit-part functions along with `drawBox` (they sat between it and the theme objects); the load error showed it at once and the block was restored byte for byte from the previous commit — the slice and concat goldens did not move, which is the proof. `nsHex`, which the Phase 1 spec placed in Phase 1, lands here with its first caller. `renderer-pin.test.ts` still asserts the renderer exports `memoryLabel`; that is the package's surface, not the site's use of it, and stays.
+
+## 2026-09-10 — Phase 4 — the write indicator
+
+**What shipped:** `ramWriting` with `ramEdgeState` keyed on `ctx.canvas`, the engine's predicate over `addr`, `we`, `clk`. Commit (see `git log`, "the RAM write indicator lights…").
+**Files touched:** `site/src/utils/circ-skins.mjs`, `site/test/circ-skins.test.ts`
+**Tests:** added `the RAM write indicator lights on the engine's edge, and only then` (eleven draws on one canvas: first defined-high clock, a real edge, a held high, we low, a partly unknown address, a second edge); ran `bun test` (461 pass), typecheck (0 errors), `bun --bun run build`, `bun run bundle` (every route ok; theme chunk 27.3 KB raw / 12.8 KB gzip), result pass
+**Next slice:** gallery review (the human): `rom-lookup`, `ram-write-read`, `demux-1to2`, `slice-and-concat`, `two-bit-adder`, both modes; then Phase 5.
+**Notes:** the test drives one component through a proxy that answers `canvas` with one stable object across fresh recorders, which is what a live canvas does. Decisions 10, 12 and 13 recorded, with decision 11 (the runtime stamp) named as the follow-up if the review finds the indicator misleading.

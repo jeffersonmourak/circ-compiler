@@ -113,3 +113,27 @@ The entries below record the decisions of the canvas-theme initiative: the site'
 **Rationale.** With the slots always reserved, the symbol is the same size at the same x across the family, and the box, ports and tails never move; NOT and NAND stop relying on a bubble baked into their own PNG at a spacing that differed from NOR and XNOR. A geometry the tests can read is what lets the op-log goldens stay the drawing's contract while the layout is asserted directly.
 
 **Alternatives.** Per-gate hand placement (the spacing drift the handoff named); sizing by the PNG square (the ~28% transparent padding misaligns the lobes).
+
+### Slice and concat draw the bit field, not a box around a label
+
+**Decision.** A slice is a ruler of the incoming word, MSB left so it reads like the hex chip above it, the tapped bits `[lo, hi)` filled in `wireBus` (alpha 1, 0.7 or 0.4 for HIGH, LOW, undefined output) and the discarded bits in `labelMuted` at 0.38, with `[lo:hi]` or `[n]` under it; above `RULER_MAX_BITS = 16` bits it is one muted bar with the tapped span filled at `(inWidth − hi) / inWidth` from the left, `(hi − lo) / inWidth` wide. A concat is one band per operand stacked on the output side with a numbered lane from each port, operand 0 on top, alpha `max(0.45, 1 − 0.2 i)` down the stack. Both sit in `nsShell`, a `wireBus`-stroked shell on `surface`, with the gates' tail and dot rule. Footprints are unchanged.
+
+**Rationale.** A labelled box says a slice exists; it does not say which bits it takes, and `[0:4]` had to be decoded. With the picture, the low nibble is visible at a glance and the concat's operand order is drawn rather than implied. The handoff left the wide case undesigned; a bar with the span filled is the smallest thing that keeps the direction and the proportion.
+
+**Alternatives.** Keeping the label-only box (the state before); a ruler at any width (33 ticks in a 5-cell box at cell 10 are 1px each).
+
+### A user subcircuit and a memory share one chip
+
+**Decision.** `nsChip` draws a `macro`-stroked shell on `surface` inset `NS_INSET` from the box, a one-cell header band in `macro` at alpha 0.18 clipped to the shell, and a rule at 0.5; `nsChipPart` puts the gates' tails and dots around it. A user subcircuit carries its name in capitals in the header (`macro`, 700) and the instance name in the body (`label`, 500). A memory carries its declaration in the header, `MODE` left and `W×2^A` right, and `addr → word` in the body from `inputValues[0]` and `outputValue` through `nsHex` (bigint masks; `?` when not fully defined); a RAM labels its four ports inside the left edge on their rows and puts the instance name under the word, a ROM below the box. The renderer's `memoryLabel` is no longer imported.
+
+**Rationale.** The header is what separates "a box I wrote" from the gate family at a glance, and a memory is a box the reader wrote whose one interesting fact mid-simulation is the word at the address. Contents are runtime configuration, so the declaration is all the source knows and all the header claims. Reads are asynchronous, so the word is the output already.
+
+**Alternatives.** The preview's `rom code[8,4]` label on a box (says nothing a reader wants while clocking); reading the word through the runtime from the skin (a skin has no runtime handle, and the output is the same value).
+
+### The RAM write indicator mirrors the engine's edge rule on the canvas
+
+**Decision.** `ramWriting` keeps the last `clk` value per canvas element (a `WeakMap` on `ctx.canvas`) and per component id, and lights the `wr` dot for the draw in which `clk` is high and was low, `we` is high, and `addr` is fully defined — the predicate of `lib/circuit.zig`'s memory arm, whose initial `prev_clk` is undefined so the first defined-high clock is not an edge. A `we` that settles low in the same step the clock rises can differ from the engine; the runtime stamp of decision 11 stays the follow-up.
+
+**Rationale.** The moment a RAM does something a ROM cannot is the one worth a mark, and the port values the canvas already hands the skin are the values the engine reads. Keying on the canvas element keeps the state across a theme flip (the element survives `setTheme`) and drops it with a rebuild.
+
+**Alternatives.** A runtime export for the last write (four layers for one dot; deferred, not refused); diffing the addressed word between draws (a write of the same value is invisible).
