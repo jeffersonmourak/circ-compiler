@@ -1,10 +1,10 @@
 # Semantic Validation
 
-The compiler validates `.circ` source semantically before emission. Any hard error prevents the artifact from being generated; warnings allow emission but surface to the user.
+The compiler validates `.circ` source semantically before emission. Any hard error prevents emission; warnings allow it but surface to the user.
 
 ### Hard errors block emission
 
-**Decision.** When the compiler detects a hard error, it reports the error to stderr and exits non-zero without producing any output `.wasm`. Partial or "best-effort" artifacts are never emitted.
+**Decision.** When the compiler detects a hard error, it reports the error to stderr and exits non-zero without producing any output `.wasm`. The compiler never emits partial or "best-effort" artifacts.
 
 **Rationale.** A circuit that fails semantic checks cannot be trusted to behave as the source describes. Emitting an artifact anyway would let broken circuits ship and fail at runtime in obscure ways. Refusing to emit forces the failure into the build step where it's loudest and easiest to fix.
 
@@ -26,21 +26,23 @@ The compiler validates `.circ` source semantically before emission. Any hard err
 - Circular import chain
 - Combinational loop (a feedback path with no delay element)
 
+Seven categories arrived later: unknown sub-circuit port (`E012`), missing sub-circuit input (`E013`), width mismatch (`E014`), call-widths on a non-parametric sub-circuit (`E015`), parameter-count mismatch (`E016`), malformed memory parameter list (`E017`), memory width out of range (`E018`).
+
 **Rationale.** Each of these makes the circuit either ill-defined (undeclared references, missing connections), ambiguous (name collisions, multi-driven ports), or non-terminating (combinational loops, import cycles). None of them have a defensible default interpretation.
 
 **Alternatives.** Treating multi-driver as wired-OR by default. Plausible but surprising; deferred until a syntax for explicit bus semantics exists.
 
 ### Combinational loops are hard errors
 
-**Decision.** A feedback path with no delay element (e.g. `not a (in = a.out)`) is rejected at compile time via a graph cycle check on the connection topology, ignoring delay-bearing components.
+**Decision.** A graph cycle check over the connection topology (`lib/validator/passes/combinational_loop.zig`) rejects, as `E008`, a component driving itself (e.g. `not a (in = a.out)`) and any cycle that runs only through *transparent* components (`wire`, `led`, `output`, `slice`, `concat`, `rom`, and sub-circuit boundaries). `and`, `not`, and `ram` are *cycle-breaking*: the check drops every edge touching one, so a ring through gates (a cross-coupled pair, an SR latch) passes as sequential logic.
 
-**Rationale.** The runtime engine processes such loops by oscillating events forever — `propagate()` never terminates. A compile-time check is the only place this can be caught without leaving a settle-only runtime hanging on a malformed circuit. Detection is cheap (DFS over the connection graph).
+**Rationale.** A loop of pure wires has no delay element and would oscillate events forever — `propagate()` never terminates — so compile time is the only place to catch it. Gate rings are the building block of every latch and must compile; the gate delay is what lets them settle. A ring that never settles (an odd number of inverters) still compiles today. Detection is cheap (DFS over the connection graph).
 
 **Alternatives.** Runtime detection with a max-iterations cap. Catches the bug later, leaks into runtime API, and arbitrary cap values mean some legitimate-but-slow circuits get aborted.
 
 ### Warning categories (default: emit + warn)
 
-**Decision.** The following emit warnings but allow the artifact to be produced:
+**Decision.** The following emit warnings but let the compiler produce the artifact:
 
 - An `input` pin declared but never connected to anything
 - An imported sub-circuit never instantiated
@@ -52,7 +54,7 @@ The compiler validates `.circ` source semantically before emission. Any hard err
 
 ### `--warnings-as-errors` flag
 
-**Decision.** The CLI accepts a `--warnings-as-errors` (also `-Werror`) flag. When set, any warning is promoted to a hard error and blocks emission. Default behaviour is warn-and-emit with exit code 0.
+**Decision.** The CLI accepts a `--warnings-as-errors` (also `-Werror`) flag. When set, the flag promotes any warning to a hard error and blocks emission. Default behaviour is warn-and-emit with exit code 0.
 
 **Rationale.** Standard compiler convention (gcc, rustc, tsc). Lets CI pipelines opt into strict builds without forcing the same friction on local development. The default exits 0 on warnings so simple `circ-compile` invocations succeed during iterative work.
 

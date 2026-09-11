@@ -28,75 +28,68 @@ output out(in=n.out)
   {
     title: 'AND of two inputs',
     prose:
-      "Two inputs, named `a` and `b`, feed an AND gate. The gate has two input ports — " +
-      "`a` and `b` — that you bind by name in the parenthesised list. The output of the " +
-      "gate goes to a single output pin named `out`.",
+      "Two inputs, named `a` and `b`, feed an AND gate. The gate has two input ports, " +
+      "`a` and `b`, that you bind by name in the parenthesised list. The gate's output " +
+      "goes to a single output pin named `out`.",
     source: `input a, b
 and g(a=a, b=b)
 output out(in=g.out)
 `,
-    preview: `╭───╮     ╭───╮     ╭─────╮
-│ a ├○───▶┤   │ ╭──▶┤ out │
-╰───╯     │AND├○╯   ╰─────╯
-       ╭─▶┤   │
-       │  ╰───╯
-       │
-╭───╮  │
-│ b ├○─╯
-╰───╯                      `,
+    preview: `╭───╮     ╭───╮
+│ a ├○───▶┤   │     ╭─────╮
+╰───╯     │AND├○───▶┤ out │
+      ╭──▶┤   │     ╰─────╯
+╭───╮ │   ╰───╯
+│ b ├○╯
+╰───╯`,
   },
   {
     title: 'Naming an intermediate signal',
     prose:
-      "A `wire` is a one-port pass-through: the value on `in` is, after evaluation, " +
+      "A `wire` is a one-port pass-through: after evaluation, the value on `in` is " +
       "exactly the value on `out`. It exists so you can give a derived signal a name. " +
-      "Without `clock_buf` here, `gate.a` would be wired directly to `clk` — same logic, " +
+      "Without `clock_buf` here, you would wire `gate.a` straight to `clk` — same logic, " +
       "less self-documenting.",
     source: `input clk, data
 wire clock_buf(in=clk)
 and gate(a=clock_buf.out, b=data)
 output out(in=gate.out)
 `,
-    preview: `╭─────╮      ╭───╮     ╭─────╮
-│ clk ├○────▶┤   │ ╭──▶┤ out │
-╰─────╯      │AND├○╯   ╰─────╯
-         ╭──▶┤   │
-         │   ╰───╯
-         │
-╭──────╮ │
+    preview: `╭─────╮      ╭───╮
+│ clk ├○────▶┤   │     ╭─────╮
+╰─────╯      │AND├○───▶┤ out │
+         ╭──▶┤   │     ╰─────╯
+╭──────╮ │   ╰───╯
 │ data ├○╯
-╰──────╯                    `,
+╰──────╯`,
   },
   {
     title: 'Anonymous nested components',
     prose:
-      "A component can be instantiated inline as the value of a port. The inverter " +
-      "here has no instance name; its `.out` is wired immediately into `gate1`'s `b` " +
-      "port. The same wiring rules apply — anonymous nesting is just syntactic sugar " +
+      "You can instantiate a component inline as the value of a port. The inverter " +
+      "here has no instance name; its `.out` wires straight into `gate1`'s `b` " +
+      "port. The same wiring rules apply: anonymous nesting is syntactic sugar " +
       "for declaring an unnamed component.",
     source: `input a
 input b
-not inv(in=b)
-and gate1(a=a, b=inv.out)
+and gate1(a=a, b=not(in=b).out)
 output out(in=gate1.out)
 `,
-    preview: `╭───╮     ╭───╮     ╭───╮     ╭─────╮
-│ a ├○┬──▶┤NOT├○╮ ╭▶┤   │ ╭──▶┤ out │
-╰───╯ │   ╰───╯ │ │ │AND├○╯   ╰─────╯
-      ├─────────┴─┴▶┤   │
-      │             ╰───╯
-      │
-╭───╮ │
-│ b ├○╯
-╰───╯                                `,
+    preview: `╭───╮               ╭───╮
+│ a ├○─────────────▶┤   │     ╭─────╮
+╰───╯               │AND├○───▶┤ out │
+                ╭──▶┤   │     ╰─────╯
+╭───╮     ╭───╮ │   ╰───╯
+│ b ├○───▶┤NOT├○╯
+╰───╯     ╰───╯`,
   },
   {
     title: 'A half-adder',
     prose:
       "Two single-bit numbers `a` and `b` sum to `(carry, sum)` where `sum = a XOR b` " +
       "and `carry = a AND b`. The `xor` keyword is a built-in macro that expands to " +
-      "primitives at compile time. In a single-file program you import macros explicitly; " +
-      "this is the classic Nand2Tetris milestone, eight lines of source.",
+      "primitives at compile time. A single file needs no `import` line to use a macro; " +
+      "the explicit form shown here still works. This is the classic Nand2Tetris milestone.",
     source: `// half_adder.circ
 import xor "<builtin>/xor.circ"
 input a, b
@@ -105,16 +98,16 @@ and c(a=a, b=b)
 output sum(in=s.out)
 output carry(in=c.out)
 `,
-    preview: `╭───╮     ╭───╮         ╭───────╮
-│ a ├○─●─▶┤   │ ╭──────▶┤ carry │
-╰───╯  │  │AND├○╯       ╰───────╯
-      ╭┼─▶┤   │
-      ││  ╰───╯
-      ││
-╭───╮ ││  ╭───────╮     ╭─────╮
-│ b ├○●╰─▶┤       │ ╭──▶┤ sum │
-╰───╯ │   │[xor:s]├○╯   ╰─────╯
-      ╰──▶┤       │
+    preview: `╭───╮     ╭───╮
+│ a ├○●──▶┤   │         ╭───────╮
+╰───╯ │   │AND├○───────▶┤ carry │
+      │╭─▶┤   │         ╰───────╯
+╭───╮ ││  ╰───╯
+│ b ├○┼╯
+╰───╯ ││  ╭───────╮
+      ╰┼─▶┤       │     ╭─────╮
+       │  │[xor:s]├○───▶┤ sum │
+       ╰─▶┤       │     ╰─────╯
           ╰───────╯`,
   },
   {
@@ -143,27 +136,26 @@ or cout_or(a=ha1.carry, b=ha2.carry)
 output sum(in=ha2.sum)
 output cout(in=cout_or.out)
 `,
-    preview: `╭───╮       ╭────────────────╮     ╭────────────────╮     ╭────────────╮     ╭─────╮
-│ a ├○─────▶┤                │ ╭──▶┤                │   ╭▶┤            │   ╭▶┤ sum │
-╰───╯       │[half_adder:ha1]├○●   │[half_adder:ha2]├○● │ │[or:cout_or]├○╮ │ ╰─────╯
-       ╭───▶┤                │ │ ╭▶┤                │ ●─┼▶┤            │ │ │
-       │    ╰────────────────╯ │ │ ╰────────────────╯ │ │ ╰────────────╯ │ │
-       │                       ╰─┼────────────────────┼─╯                │ │
-╭───╮  │                         │                    │                  │ │ ╭──────╮
-│ b ├○─╯                         │                    ╰──────────────────┴─┴▶┤ cout │
-╰───╯                            │                                           ╰──────╯
-                                 │
-╭─────╮                          │
-│ cin ├○─────────────────────────╯
-╰─────╯                                                                              `,
+    preview: `╭───╮       ╭────────────────╮
+│ a ├○─────▶┤                │                            ╭────────────╮
+╰───╯       │[half_adder:ha1]├○●─────────────────────────▶┤            │     ╭──────╮
+        ╭──▶┤                │ │   ╭────────────────╮     │[or:cout_or]├○───▶┤ cout │
+╭───╮   │   ╰────────────────╯ ╰──▶┤                │ ╭──▶┤            │     ╰──────╯
+│ b ├○──╯                          │[half_adder:ha2]├○╮   ╰────────────╯
+╰───╯                          ╭──▶┤                │ │                      ╭─────╮
+                               │   ╰────────────────╯ ╰─────────────────────▶┤ sum │
+╭─────╮                        │                                             ╰─────╯
+│ cin ├○───────────────────────╯
+╰─────╯`,
   },
   {
     title: 'Stable feedback through wires',
     prose:
-      "Combinational feedback is rejected at compile time — a chain of gates whose " +
-      "output drives its own input is a hard error (`E008`). But the validator looks at " +
-      "the signal graph, not the textual order. Here two `not` gates connect end to end " +
-      "through two `wire` pass-throughs; the chain has length four and no cycle, so it " +
+      "The validator rejects combinational feedback at compile time: a chain of gates " +
+      "whose output drives its own input is a hard error (`E008`). But it looks at " +
+      "the signal graph, not the textual order, and a loop that passes through a gate is " +
+      "sequential logic, not a combinational loop. Here two `not` gates connect end to end " +
+      "through two `wire` pass-throughs: the ring closes, but the NOT gates break it, so it " +
       "compiles cleanly. This is the substrate the language gives you for building " +
       "latches and other feedback structures.",
     source: `not n1(in=w2.out)
@@ -171,9 +163,9 @@ wire w1(in=n1.out)
 not n2(in=w1.out)
 wire w2(in=n2.out)
 `,
-    preview: `     ╭───╮     ╭───╮
-   ╭▶┤NOT├○───▶┤NOT├○╮
-   │ ╰───╯     ╰───╯ │
-   ╰─────────────────╯`,
+    preview: `      ╭───╮     ╭───╮
+  ╭──▶┤NOT├○───▶┤NOT├○╮
+  │   ╰───╯     ╰───╯ │
+  ╰───────────────────╯`,
   },
 ];

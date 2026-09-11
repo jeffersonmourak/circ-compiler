@@ -195,7 +195,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
                 </select>
                 <label for="pg-set-cap">Input-bit cap</label>
                 <input id="pg-set-cap" type="number" min="1" max="24" step="1" data-setting="truthTableCap" />
-                <span class="pg-settings-hint">2^cap rows; the enumeration cannot be stopped once started.</span>
+                <span class="pg-settings-hint">2^cap rows; once the enumeration starts, it runs to the end.</span>
               </fieldset>
               <fieldset class="pg-settings-group">
                 <legend>Compile</legend>
@@ -2186,7 +2186,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
 
     function armOrDelete(index: number) {
       if (!canDelete(state.tabs)) {
-        status.textContent = 'The last file cannot be deleted.';
+        status.textContent = 'You cannot delete the last file.';
         return;
       }
       if (confirmIndex !== index) {
@@ -2248,7 +2248,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           if (next !== state.tabs) {
             state.tabs = next;
             status.textContent =
-              `Renamed to ${input.value}. Imports are not rewritten — update them yourself if this file is imported.`;
+              `Renamed to ${input.value}. Imports keep the old name; update them yourself if another file imports this one.`;
             renderTree();
             focusFileTab(index);
             schedule();
@@ -2395,7 +2395,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       renderStatus();
       if (!supported.includes(state.version.full_version)) {
         banner.textContent =
-          `libcirc.wasm emits topology v${state.version.full_version} but the bundled circ-renderer reads v${supported.join('/')}; ` +
+          `libcirc.wasm emits topology v${state.version.full_version}, but the bundled circ-renderer reads v${supported.join('/')}; ` +
           'Simulate is disabled until the site is rebuilt from one compiler revision.';
         banner.hidden = false;
         state.simulateEnabled = false;

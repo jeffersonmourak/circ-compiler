@@ -1,34 +1,34 @@
 # Language Semantics
 
-The surface syntax of `.circ` is documented in [../circuit-format.md](../circuit-format.md). This file captures the semantic decisions that shape how the compiler interprets and lowers that syntax.
+[../circuit-format.md](../circuit-format.md) documents the surface syntax of `.circ`. This file captures the semantic decisions that shape how the compiler interprets and lowers that syntax.
 
-### Sub-circuits compile to Zig functions
+### Sub-circuits emit a flat topology binary at serialize time
 
-**Decision.** Each `.circ` file emits one Zig function (`buildXxx(circuit, inputs...) → outputs`) that constructs its internal components and connections by calling the engine API. Each instantiation of a sub-circuit in a parent file becomes a call site of that function, with parent components passed as arguments.
+**Decision.** The topology serializer flattens each sub-circuit instantiation into primitive `createComponent` / `connect` records with fresh global ids; the runtime never sees a sub-circuit boundary. The function-per-file form this decision originally described — one Zig function `buildXxx(circuit, inputs...) → outputs` per `.circ` file, one call site per instantiation — survives only in the experimental `--emit-zig` path (see [compiler-pipeline.md](compiler-pipeline.md) "IR shape").
 
 **Rationale.** A function-per-file IR is the smallest unit that maps cleanly onto the source — one source file, one emitted symbol. Calls flatten at runtime so the engine only ever sees primitives, which keeps the engine simple and lets the Zig compiler decide whether to inline. Component IDs are fresh per call, so multiple instances of the same sub-circuit don't collide.
 
-**Alternatives.** One function per *instance* (specialised emission). Bigger artifact, no semantic gain — Zig's inliner achieves the same end result from the function-per-file form when it pays off.
+**Alternatives.** One function per *instance* (specialised emission). Bigger artifact, no semantic gain — Zig's inliner achieves the same result from the function-per-file form when it pays off.
 
 ### Source-path debug info lives outside the engine
 
-**Decision.** The hierarchical source path of each component (e.g. `["full_adder", "h1", "s"]`) is stored in a parallel debug-info table emitted by the compiler, exposed via `getTopology()`. The engine's `Component` struct carries no source-path field.
+**Decision.** The compiler stores the hierarchical source path of each component (e.g. `["full_adder", "h1", "s"]`) in a parallel debug-info table: the origin chain of every record in the `circ.topology.v0.full` custom section. The engine's `Component` struct carries no source-path field.
 
-**Rationale.** Hierarchy is a property of the source language, not the simulation. Putting source paths on every `Component` would force the dynamic API in `lib/wasm.zig` (and any future engine consumer) to carry a field they have no information for. Keeping it parallel means the engine stays clean and only compiled artifacts pay for hierarchy debug info.
+**Rationale.** Hierarchy is a property of the source language, not the simulation. Putting source paths on every `Component` would have forced the original dynamic API prototype (`lib/wasm.zig`, since deleted) and any future engine consumer to carry a field they have no information for. Keeping it parallel means the engine stays clean and only compiled artifacts pay for hierarchy debug info.
 
 **Alternatives.** Embedding source paths in `Component`. Slightly faster lookup during introspection at the cost of polluting the engine's data model and burdening every engine user with a field most don't populate.
 
 ### Built-in primitives kept minimal
 
-**Decision.** The engine implements only the primitives it needs: `input_pin`, `output_pin`, `not`, `and`, `led`, `wire`. Standard logic gates beyond this set (`or`, `nand`, `nor`, `xor`, `xnor`) are provided by the compiler as built-in macro sub-circuits, expanded at compile time using the existing primitives (e.g. `nand = not(and(a, b))`).
+**Decision.** The engine implements only the primitives it needs: `input_pin`, `output_pin`, `not`, `and`, `led`, `wire`, plus the bit-shape kinds `slice` and `concat` (multi-bit wires) and `memory` (`rom`/`ram`) added by later initiatives. The compiler provides standard logic gates beyond this set (`or`, `nand`, `nor`, `xor`, `xnor`) as built-in macro sub-circuits, expanded at compile time using the existing primitives (e.g. `nand = not(and(a, b))`).
 
-**Rationale.** The smaller the primitive set, the less the engine has to maintain and verify. Any gate expressible in terms of `and`/`not` doesn't need to live in the engine. Users still get the full standard library on day one because the compiler ships these expansions as built-ins. If profiling shows a particular composite is hot enough to deserve a primitive, it can be promoted later without changing user-facing semantics.
+**Rationale.** The smaller the primitive set, the less the engine has to maintain and verify. Any gate expressible with `and`/`not` doesn't need to live in the engine. Users still get the full standard library on day one because the compiler ships these expansions as built-ins. If profiling shows a particular composite is hot enough to deserve a primitive, it can be promoted later without changing user-facing semantics.
 
 **Alternatives.** Implementing the full standard set as engine primitives. Higher engine surface, more test obligations, and circuit-equivalent results. Or restricting the surface language to engine primitives only — leaks the implementation detail into user code.
 
 ### Import statement: `import name "path"`
 
-**Decision.** Sub-circuit imports use the form `import <alias> "<path>"`. The alias becomes the gate-kind identifier in the importing file. Paths are resolved relative to the importing file. Built-in gates (`and`, `not`, `wire`, `led`, `output`, `input`) require no import and live in a global namespace; the auto-imported macro family (`or`, `nand`, `nor`, `xor`, `xnor`) is materialised under the virtual `<builtin>/<name>.circ` path and is treated as if `import <name> "<builtin>/<name>.circ"` were written when the file participates in a project.
+**Decision.** Sub-circuit imports use the form `import <alias> "<path>"`. The alias becomes the gate-kind identifier in the importing file. The compiler resolves paths relative to the importing file. Built-in gates (`and`, `not`, `wire`, `led`, `output`, `input`; since native memories also `rom`, `ram`, `input_pin`, `output_pin`) require no import and live in a global namespace; the auto-imported macro family (`or`, `nand`, `nor`, `xor`, `xnor`) is materialised under the virtual `<builtin>/<name>.circ` path and is treated as if `import <name> "<builtin>/<name>.circ"` were written when the file participates in a project.
 
 **Rationale.** The explicit-alias form gives users a way to rename on import to resolve collisions. Relative paths make `.circ` files portable as a directory tree. A built-in global namespace means simple circuits don't pay an import-statement tax for `and` and `not`. The earlier draft of this decision included a `from` keyword (`import name from "path"`); the keyword was dropped from the grammar because the trailing string already unambiguously identifies the import path, and shaving a keyword keeps the surface lean.
 
@@ -40,7 +40,7 @@ The surface syntax of `.circ` is documented in [../circuit-format.md](../circuit
 
 **Rationale.** A cycle in module imports has no defined semantics in this language — sub-circuits expand into their parents at instantiation, which can't terminate if the chain loops. Detecting it at compile time is cheap (a topological sort during resolution) and avoids any runtime mystery.
 
-**Alternatives.** Allowing cycles with some tie-breaking rule. No use case justifies the complexity, and any meaningful "feedback" between modules belongs inside a single sub-circuit using actual feedback connections, not import cycles.
+**Alternatives.** Allowing cycles with some tie-breaking rule. No use case justifies the complexity, and any real "feedback" between modules belongs inside a single sub-circuit using actual feedback connections, not import cycles.
 
 ### LEDs and `output` declarations are different concepts
 
@@ -60,7 +60,7 @@ The 17 decisions below were locked during the multi-bit wires initiative (stages
 
 **Decision.** A width is declared with `[N]` after the type keyword: `input[4] a, b`, `and[4] g(...)`, `output[4] r(in=...)`. A missing `[N]` means width 1.
 
-**Rationale.** Postfix annotation keeps existing scalar `.circ` files legal as-is, which is the load-bearing property — the validator's job becomes a single equality check per connection and no caller has to be touched when a sub-circuit goes multi-bit.
+**Rationale.** Postfix annotation keeps existing scalar `.circ` files legal as-is, which is the load-bearing property — the validator's job becomes a single equality check per connection, and no caller needs an edit when a sub-circuit goes multi-bit.
 
 ### 2. Bit numbering
 
@@ -88,7 +88,7 @@ The 17 decisions below were locked during the multi-bit wires initiative (stages
 
 **Decision.** Angle brackets are the *introduction* form (declares a parameter). Square brackets are the *reference* form (an integer literal or a previously-introduced parameter name).
 
-**Rationale.** Visually different brackets make it immediately obvious whether you're looking at a declaration or a use. The compiler can also produce better diagnostics: `[W]` without a corresponding `<W>` triggers `E015`, and the suggestion can point at the exact spelling change.
+**Rationale.** Visually different brackets make it immediately obvious whether you're looking at a declaration or a use. The compiler can also produce better diagnostics: passing call-widths to a sub-circuit that introduces no parameter triggers `E015` at the call site, and the suggestion can point at the exact spelling change. (A `[W]` in a file whose `input<…>` never introduced `W` fails hard in the front end today, as `error.UnboundParameter` with no diagnostic code.)
 
 ### 7. Where parameters can appear
 
@@ -138,7 +138,7 @@ The 17 decisions below were locked during the multi-bit wires initiative (stages
 - `getOutputValue(id: i32) -> i64`
 - `getOutputDefined(id: i32) -> i64`
 
-The two i64 fields are read by JS as `BigInt`. The full rationale (paired exports vs. a single out-pointer call) lives in `DOCS/wasm-api.md`.
+JS reads the two i64 fields as `BigInt`. The full rationale (paired exports vs. a single out-pointer call) lives in `DOCS/wasm-api.md`.
 
 ### 15. Macro migration
 
@@ -159,7 +159,7 @@ The two i64 fields are read by JS as `BigInt`. The full rationale (paired export
 
 ### 17. Topology format version
 
-**Decision.** Bumped from `0x01` (pre-multibit) to `0x02`. Both `ComponentRecord` (min) and `FullComponentRecord` (full) carry a `width: u8` byte per component. Slice records carry auxiliary `(lo, hi)` bytes in the min section. Concat records carry their operand list in the full section's auxiliary slot.
+**Decision.** Bumped from `0x01` (pre-multibit) to `0x02` (and to `0x03` with native memories; see `circuit-format.md`). Both `ComponentRecord` (min) and `FullComponentRecord` (full) carry a `width: u8` byte per component. Slice records carry auxiliary `(lo, hi)` bytes in the min section. Concat records carry no aux bytes: their operand order rides the connection records, whose port byte is the operand index.
 
 See `DOCS/circuit-format.md` for the exact byte layout.
 
@@ -181,7 +181,7 @@ The entries below record the language-facing half of the native-memory initiativ
 
 **Decision.** A declaration carries only the memory's shape. Contents are supplied at run time: by the host through the WASM memory exports, by `--sim`/`--truth-table` through `--mem=<name>=<path>`, or interactively through `--sim`'s `load`/`poke`. Unloaded and unwritten cells read undefined. No `.circ` syntax embeds an initial image, and the topology sections never carry cell contents.
 
-**Rationale.** This is the principle behind decisions 2, 3, 4 and 7. A compiled artifact is then a *machine*, not a machine plus one program: the same `cpu.wasm` runs every program a host loads into it, a teaching deck can swap the ROM between slides without recompiling, and a `.circ` file stays a readable description of wiring rather than a hex dump. It also keeps the wire format small and the `.wasm` reproducible from source alone.
+**Rationale.** This is the principle behind decisions 2, 3, 4, and 7. A compiled artifact is then a *machine*, not a machine plus one program: the same `cpu.wasm` runs every program a host loads into it, a teaching deck can swap the ROM between slides without recompiling, and a `.circ` file stays a readable description of wiring rather than a hex dump. It also keeps the wire format small and the `.wasm` reproducible from source alone.
 
 **Alternatives.** An in-source image (`rom code[8, 4] = "prog.hex"` or an inline hex literal) was the first draft and was superseded: it couples a circuit to one program, needs a file-resolution rule in the resolver, and would have to travel in the topology. An optional in-source default image on top of runtime loading was rejected as two mechanisms for one job.
 

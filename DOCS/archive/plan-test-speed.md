@@ -1,14 +1,14 @@
 # Archived plan: test-speed
 
-**Canonical commit:** `06fdc4f6b13b3d0df68ff596e9fae2ad968eddda` (`06fdc4f Document completion of Phase 2 of the test suite speed-up initiative in \`DOCS/STATUS.md\`. Confirmed significant performance improvements with final warm run time of 25.33s, achieving a speedup factor of ~3.8× compared to the baseline. No new tests added; initiative is now complete.`)
+**Canonical commit:** `06fdc4f6b13b3d0df68ff596e9fae2ad968eddda` (`06fdc4f Document completion of Phase 2 of the test suite speed-up initiative in \`DOCS/STATUS.md\`. Confirmed significant performance improvements with final warm run time of 25.33s, achieving a speedup factor of ~3.8× compared to the baseline. No new tests added; initiative is now complete.`). Absent from this repository's history: the work landed squashed as `acad4f7`.
 **Archived on:** 2026-05-04
 **Plan duration:** 2026-05-04 → 2026-05-04
 
-> This file is a highlight view. The full plan prompt, every phase plan, and every STATUS entry are preserved in the commit referenced above. Check that commit out (`git show 06fdc4f6b13b3d0df68ff596e9fae2ad968eddda:DOCS/PLANS_PROMPT.md`, etc.) when you need the unabridged source.
+> This file is a highlight view. The plan bundle (plan prompt, phase plans, STATUS log) lived on a branch that the squash merge `acad4f7` (`Plan: speed up test suite (~3 min → <60 s) (#2)`) replaced, so the commit named above is absent from this repository's history and the unabridged source is lost.
 
 ## Goal & scope
 
-`zig build test` was taking ~96 s (warm) because `compileAndRun` in `tests/helpers/wasm_run.zig` created a fresh `std.testing.TmpDir` for every behavior-test fixture call. Each new directory had an empty `.zig-cache`, so Zig recompiled all engine sources (`circuit.zig`, `memory.zig`, `transport.zig`, `log.zig`) from scratch ~32 times per run even though those files never change between fixtures. The fix replaced the per-call `TmpDir` with a persistent workspace under `.zig-cache/` so Zig's content-addressed cache accumulated compiled objects across calls.
+`zig build test` was taking ~96 s (warm) because `compileAndRun` in `tests/helpers/wasm_run.zig` created a fresh `std.testing.TmpDir` for every behavior-test fixture call. Each new directory had an empty `.zig-cache`, so Zig recompiled all engine sources (`circuit.zig`, `memory.zig`, `transport.zig`, `log.zig`) from scratch ~32 times per run even though those files never change between fixtures. The fix replaced the per-call `TmpDir` with a persistent workspace under `.zig-cache/`, so Zig's content-addressed cache accumulated compiled objects across calls.
 
 Architectural constraints that shaped the implementation: no mocking of WASM builds (all 32 behavior fixtures must compile and execute real WASM via `zig build wasm` + Node.js); no new runtime or build-time dependencies; each fixture still compiles its own `compiled.zig` (no sharing of compiled WASM artifacts); the `zig build test` interface and per-test output are unchanged; the workspace lives inside `.zig-cache/` (already gitignored).
 
@@ -26,7 +26,7 @@ Recorded a timing baseline for `zig build test` before any code changes.
 Rewrote `compileAndRun` in `tests/helpers/wasm_run.zig` to use a persistent workspace instead of `std.testing.TmpDir`.
 
 - Workspace path is `.zig-cache/test-wasm-workspace-<pid>` (PID suffix, not a fixed basename). A single fixed basename caused cross-process clobbering of `compiled.zig` / `compiled.wasm` when the two test executables (`emit_behavior_tests`, `project_behavior_test`) ran in parallel.
-- Engine sources (`circuit.zig`, `memory.zig`, `transport.zig`, `log.zig`) and `tests/harness/build.zig` are still copied into the workspace on every `compileAndRun` call to keep the workspace in sync with source changes.
+- Every `compileAndRun` call still copies the engine sources (`circuit.zig`, `memory.zig`, `transport.zig`, `log.zig`) and `tests/harness/build.zig` into the workspace, keeping it in sync with source changes.
 - `copyTextFile` helper signature changed from `*std.testing.TmpDir` to `std.fs.Dir`; `compileAndRun` public signature is unchanged.
 - Warm full-suite wall time after the change: **26.36 s**.
 

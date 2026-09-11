@@ -7,9 +7,9 @@ self-contained `.wasm` (`circ_compile`), the `--preview` text
 `--analyze` JSON (`circ_analyze`). The CLI is itself a client of the same
 Zig API (`lib/libcirc.zig`), so the two cannot drift: the driver tests
 prove the library equals the in-process CLI byte for byte across the
-render, table and compile fixtures.
+render, table, and compile fixtures.
 
-There are two surfaces:
+The library has three surfaces:
 
 - **Zig** — `lib/libcirc.zig`: `analyze`, `compile`, `preview`, `truthTable`
   take an allocator and a `Request` and return an `Outcome{ status, body }`.
@@ -35,11 +35,12 @@ One JSON object. Only `root` is required.
 
 - `root` — the file to compile. A key of `files`, or (native builds only) a
   path on disk.
-- `files` — the in-memory project: absolute path → source text. Keys are
-  normalised (`.`/`..` folded) and consulted **before** disk, so imports
-  between `files` entries resolve without any filesystem access. An import
-  that is not in `files` falls back to disk on native and is `E009` in the
-  wasm build. A relative key is rejected (status 2).
+- `files` — the in-memory project: absolute path → source text. The
+  library normalises the keys (`.`/`..` folded) and consults them
+  **before** disk, so imports between `files` entries resolve without any
+  filesystem access. An import missing from `files` falls back to disk on
+  native and is `E009` in the wasm build. The library rejects a relative
+  key (status 2).
 - `options` — all optional; an unknown or mistyped key is status 2, never a
   silent default:
 
@@ -47,7 +48,7 @@ One JSON object. Only `root` is required.
 | --- | --- | --- | --- |
 | `expand_macros` | bool | `false` | preview |
 | `expand_display` | bool | `false` | preview |
-| `color` | `"never"` \| `"always"` | `"never"` | preview (there is no `"auto"`: the library has no TTY) |
+| `color` | `"never"` \| `"always"` | `"never"` | preview (no `"auto"`: the library has no TTY) |
 | `format` | `"markdown"` \| `"csv"` \| `"json"` | `"markdown"` | truth table |
 | `value_format` | `"binary"` \| `"hex"` \| `"decimal"` | `"binary"` | truth table |
 | `truth_table_cap` | integer 1..24 | `16` | truth table: hard cap on the sum of input widths |
@@ -70,16 +71,16 @@ keeps parsing it itself and calls the same Zig API.
 | 5 | internal | `{"error":"analyze: <ErrName>"}` | `{"error":"<stage>: <ErrName>"}` | same | same |
 
 Status 1 bodies use the analyze-api shape, so one decoder serves both
-`circ_analyze` and a failed compile. A root that does not parse at all is
+`circ_analyze` and a failed compile. A root that fails to parse at all is
 status 1 with a single `"syntax"` diagnostic at `1:1-1:2` whose message is
 `parse failed: <ErrName>`. A root that is neither a `files` key nor a
 readable path is status 2, `{"error":"failed reading input file: FileNotFound"}`.
-Warnings are not returned on status 0 — call `circ_analyze` for them.
+Status 0 omits warnings; call `circ_analyze` for them.
 
 `circ_version` is always status 0 with:
 
 ```json
-{"version":"0.0.2","revision":"<git short sha>","topology_version":2,"full_version":2,
+{"version":"0.0.2","revision":"<git short sha>","topology_version":3,"full_version":3,
  "parser":"langlang go/v0.0.12 abi=1",
  "parser_runtime_sha256":"<sha256 of the runtime pasted into lib/parser/parser.zig>",
  "grammar_sha256":"<sha256 of lib/grammar/proto-circ.peg at build time>"}
@@ -110,12 +111,12 @@ Pointers and lengths are pointer-sized (`uint8_t*`/`size_t`), which is
 **Memory model.** The request bytes belong to the caller: fill a buffer from
 `circ_alloc`, pass it, free it with `circ_free` afterwards (the library
 never keeps a pointer to it). Every allocation a call makes comes from a
-per-call arena that is rewound at the start of the next call, and the
-result is copied into one library-owned buffer that `circ_result_ptr`/
+per-call arena that the next call rewinds at its start. The library
+copies the result into a single buffer of its own that `circ_result_ptr`/
 `circ_result_len` expose until the next `circ_*` call replaces it. The
 simulation engine (used by the truth table) allocates from its own global
 arena, which `circ_truth_table` releases after rendering. `circ_reset`
-drops the result buffer, the call arena and the engine arena. Nothing is
+drops the result buffer, the call arena, and the engine arena. Nothing is
 thread-safe: all of that state is process-global, so serialise calls.
 
 **Logging.** The library root installs a `std_options.logFn` that discards
@@ -135,10 +136,10 @@ of the CLI's `-Doptimize`; `-Dwasm-optimize=Debug` keeps names and DWARF for
 bisecting.
 
 `examples/c/analyze.c` is the smallest complete client: it prints the
-version JSON, then the analysis JSON and the preview for the inverter
+version JSON, then the analysis JSON, and the preview for the inverter
 request shown above, and exits non-zero on any status other than 0. Its
 request literal is the one in this document; `tests/libcirc/c_api_test.zig`
-parses the same bytes so the two cannot drift.
+parses the same bytes, so the two cannot drift.
 
 ## The wasm module
 
@@ -146,7 +147,7 @@ parses the same bytes so the two cannot drift.
 end, the simulation engine (for truth tables), and the embedded runtime
 bytes the compiled artifacts carry. It reads no files and has no clock; a
 request must supply every file it needs (`files` is the only source), and
-an import that is not in `files` is `E009`.
+an import missing from `files` is `E009`.
 
 **Exports** — exactly `memory` plus the ten `circ_*` functions of the C
 ABI. On wasm32 every pointer and length is an `i32`:
@@ -159,7 +160,7 @@ ABI. On wasm32 every pointer and length is an `i32`:
 | `circ_analyze` / `circ_compile` / `circ_preview` / `circ_truth_table` | `(req: i32, len: i32) -> i32` | Status code; result in the buffer. |
 | `circ_result_ptr` | `() -> i32` | Library-owned; valid until the next `circ_*` call. |
 | `circ_result_len` | `() -> i32` | |
-| `circ_reset` | `() -> i32` | Drops the result buffer, the call arena and the engine arena. Returns 0. |
+| `circ_reset` | `() -> i32` | Drops the result buffer, the call arena, and the engine arena. Returns 0. |
 
 **Host imports** — only the two engine log hooks, both in the `env`
 namespace: `debugEnabled(): i32` (return 0 to keep engine logging off,
@@ -171,8 +172,8 @@ len: i32, level: i32)`. A minimal import object is
 (`circ_alloc` → copy in → call → `circ_free`), the result is the library's
 until the next call, every call's own allocations die when it returns, and
 `circ_truth_table` releases the engine arena after rendering. Linear memory
-grows on demand and never shrinks; after a warm-up it is flat — fifty
-repeated compiles, previews or truth tables leave `memory.buffer.byteLength`
+grows on demand and never shrinks; after a warm-up it is flat: fifty
+repeated compiles, previews, or truth tables leave `memory.buffer.byteLength`
 exactly where the fifth call left it (`tests/e2e/libcirc_wasm_test.zig`).
 `WebAssembly.Memory.buffer` **detaches on every grow**, so never keep a
 `Uint8Array` view across a `circ_*` call: re-read `exports.memory.buffer`
@@ -181,9 +182,9 @@ a page that must not block instantiates it inside a Web Worker.
 
 **Loading from Node.** The helper below is the protocol; the test harness
 (`tests/harness/libcirc_loader.js`) and the site's worker implement it
-verbatim. The example is executed by `tests/e2e/libcirc_wasm_test.zig`
-(`doc example loads and compiles the inverter`), so it cannot drift from
-the module.
+verbatim. `tests/e2e/libcirc_wasm_test.zig` runs the example
+(`doc example loads and compiles the inverter`), so the example cannot
+drift from the module.
 
 ```js
 // libcirc-api.md: Node example
@@ -230,7 +231,7 @@ identify the exact parser and grammar the module was built from.
 
 **Size.** Measure with `stat -f%z zig-out/lib/libcirc.wasm` and
 `gzip -9 -c zig-out/lib/libcirc.wasm | wc -c`. Budget 600 KB raw / 200 KB
-gzip; the test suite fails above 3 MiB. On 2026-09-08 (pre-memories):
-383,324 B raw, 146,549 B gzip.
+gzip; the test suite fails above 3 MiB. On 2026-09-10 (the layout
+rewrite): 437,566 B raw, 167,036 B gzip.
 
-**Not exported.** `--inspect`, `--sim` and `--emit-zig` stay CLI-only.
+**Not exported.** `--inspect`, `--sim`, and `--emit-zig` stay CLI-only.

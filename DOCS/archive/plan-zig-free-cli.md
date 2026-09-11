@@ -1,16 +1,16 @@
 # Archived plan: zig-free-cli
 
-**Canonical commit:** `f2f43c7f496407f9ee601f02377baca0eed3c53c` (`f2f43c7 Make linux-docker e2e Zig-free in the runtime image`)
+**Canonical commit:** `f2f43c7f496407f9ee601f02377baca0eed3c53c` (`f2f43c7 Make linux-docker e2e Zig-free in the runtime image`). Absent from this repository's history: the work landed squashed as `3752502`.
 **Archived on:** 2026-05-06
 **Plan duration:** 2026-05-05 → 2026-05-06
 
-> This file is a highlight view. The full plan prompt, every phase plan, and every STATUS entry are preserved in the commit referenced above. Check that commit out (`git show <full-sha>:DOCS/PLANS_PROMPT.md`, etc.) when you need the unabridged source.
+> This file is a highlight view. The plan bundle (plan prompt, phase plans, STATUS log) lived on a branch that the squash merge `3752502` (`Self-contained compiler: remove Zig dependency at user runtime (#4)`) replaced, so the commit named above is absent from this repository's history and the unabridged source is lost.
 
 ## Goal & scope
 
 Remove Zig as a runtime dependency of `circ-compile`. The previous pipeline shelled out to `zig build` as a subprocess against a temp workspace containing emitted Zig sources plus a vendored runtime template — every end user needed Zig 0.15.x installed. The new pipeline pre-compiles the runtime (engine + circuit interpreter) to a `wasm32-freestanding` blob exactly **once**, at `zig build circ-compile` time, and embeds it via `@embedFile`. At circuit-compile time the CLI serializes the resolved IR into a `circ.topology` binary payload and appends it as a WASM custom section to the embedded blob. No `zig` subprocess, no temp directory, no `--build-dir`.
 
-Architectural anchors that constrained the work: the `circ.topology` format is locked at end of Phase 0 and treated as a wire protocol; sub-circuit hierarchy is fully flattened by the serializer (interpreter has no concept of scope or function calls); custom section append always happens at the tail of the WASM binary (no standard sections rewritten, no function index fixup); `--emit-zig` and `--inspect` modes are untouched (preserved verbatim, including the legacy `tests/helpers/wasm_run.zig` + `tests/harness/loader.js` harness that drives them).
+Architectural anchors that constrained the work: the `circ.topology` format is locked at end of Phase 0 and treated as a wire protocol; the serializer fully flattens sub-circuit hierarchy (interpreter has no concept of scope or function calls); custom section append always happens at the tail of the WASM binary (no standard sections rewritten, no function index fixup); `--emit-zig` and `--inspect` modes are untouched (preserved verbatim, including the legacy `tests/helpers/wasm_run.zig` + `tests/harness/loader.js` harness that drives them).
 
 ## Phase-by-phase highlights
 
@@ -20,7 +20,7 @@ Pre-built runtime WASM with a circuit interpreter, embedded in `circ-compile`; p
 
 - Locked the `circ.topology` binary format in `lib/topology/format.zig`: `MAGIC = "CIRC"`, `VERSION = 0x01`, `ComponentKind` enum (`input_pin`, `not_gate`, `and_gate`, `wire`, `led`, `output_pin`), `PortName` enum (`in`, `a`, `b`, `out`), `ComponentRecord` (5 bytes), `ConnectionRecord` (9 bytes), all little-endian.
 - Implemented `templates/interpreter.zig`: validates magic/version/length, decodes records, calls `createComponent` / `connect` on `circuit.zig`. Errors surface as `error.InvalidMagic`, `error.UnsupportedVersion`, `error.TruncatedPayload`.
-- Added `topology_alloc(len: i32) -> i32` export and `topo_ptr` / `topo_len` globals to `templates/main.zig`; `init()` calls the interpreter when topology was loaded. Conditionally added the generic WASM API (`init`, `run`, `setPin`, `getOutputState`) on the pre-built path; old orchestrator path unchanged.
+- Added `topology_alloc(len: i32) -> i32` export and `topo_ptr` / `topo_len` globals to `templates/main.zig`; `init()` calls the interpreter when topology is loaded. Conditionally added the generic WASM API (`init`, `run`, `setPin`, `getOutputState`) on the pre-built path; old orchestrator path unchanged.
 - New `build.zig` step compiles the runtime template to `zig-out/lib/circ-runtime.wasm`; `lib/topology/runtime_embed.zig` exposes `pub const runtime_wasm: []const u8` via `@embedFile`.
 - `tests/e2e/topology_protocol_test.zig` (originally `phase0_node_test.zig`) hand-crafts an inverter payload, appends it as a custom section, drives via Node using the host protocol, asserts `setPin(0,0); run(); getOutputState(1) == 1` and inverse.
 
@@ -29,7 +29,7 @@ Pre-built runtime WASM with a circuit interpreter, embedded in `circ-compile`; p
 Zig module that translates resolved IR (single-file or project) into `circ.topology` bytes, proven against every fixture.
 
 - `lib/topology/serializer.zig` exposes `serializeModule`, `serializeProject`, and `serializeProjectFull` (the last returns `ProjectTopology { payload, input_ids, output_ids }` with root-pin name → global ID mappings; needed by tests to drive `setPin`/`getOutputState` without hard-coding IDs).
-- Recursive expander flattens sub-circuit hierarchy: `next_global_id` is a single monotonic counter; each recursive call uses `local_to_global` (`u32 → u32`) and `sub_output_map` (`u32 → StringHashMap(u32)`) for boundary rewiring. Input boundary: parent connection feeding a sub-circuit instance is rewired to the child's `input_pin` component (`port = .in`). Output boundary: parent connections sourcing from a sub-circuit output port resolve through `sub_output_map` to the child's driver component.
+- Recursive expander flattens sub-circuit hierarchy: `next_global_id` is a single monotonic counter; each recursive call uses `local_to_global` (`u32 → u32`) and `sub_output_map` (`u32 → StringHashMap(u32)`) for boundary rewiring. Input boundary: the expander rewires a parent connection feeding a sub-circuit instance to the child's `input_pin` component (`port = .in`). Output boundary: parent connections sourcing from a sub-circuit output port resolve through `sub_output_map` to the child's driver component.
 - `tests/e2e/serializer_fixtures_test.zig` runs the full pipeline (`scan_imports → analyzeImports → resolveBodies → validator_run_project → serializeProjectFull → buildCombinedWasm → Node`) for 20 circuit fixtures and 12 project fixtures (including stress fixtures: `stress_chain_100.circ`, `stress_grid_10x10.circ`, `stress_deep_subcircuit/`).
 - **Load-bearing bug fix in `lib/circuit.zig`**: `State.flip(.undefined)` was returning Zig's `undefined` keyword (uninitialized memory) instead of the `.undefined` enum variant; the AND gate treated both-undefined inputs as HIGH instead of `.undefined`. Both bugs were silent until nested builtins (XOR = AND(OR, NAND), with OR/NAND themselves built on AND/NOT) were exercised — sequential `setPin` calls during multi-step tests produced wrong intermediate states that persisted. `regression_led_out_drives_gate.circ` and `full_adder_from_builtins.circ` exercise the path.
 
@@ -39,7 +39,7 @@ Zig module that translates resolved IR (single-file or project) into `circ.topol
 
 - `combine(allocator, runtime_wasm, topology_payload) ![]u8` validates the WASM magic + version on `runtime_wasm[0..8]`, requires `topology_payload.len >= 9` (minimum valid header), allocates one buffer, writes the section ID byte (`0x00`), the LEB128-encoded section body length, the name length byte (`0x0D = 13`), the literal `"circ.topology"`, then the payload. Errors: `error.InvalidRuntimeMagic`, `error.TopologyTooShort`.
 - Internal `writeLeb128(buf: *[5]u8, value: u32) u3` returns bytes written; supports values up to 2^28 (a stack-allocated `[5]u8` is the upper bound for any value the section length will ever encode).
-- `tests/e2e/section_writer_fixtures_test.zig` runs `WebAssembly.validate()` on the combined output for all 32 fixtures and replays the full behavioral suite via `section_writer.combine` instead of an inline helper. `WebAssembly.validate()` is invoked synchronously at the top of every Node script — catches section-framing regressions independently of circuit logic.
+- `tests/e2e/section_writer_fixtures_test.zig` runs `WebAssembly.validate()` on the combined output for all 32 fixtures and replays the full behavioral suite via `section_writer.combine` instead of an inline helper. Every Node script invokes `WebAssembly.validate()` synchronously at the top, which catches section-framing regressions independently of circuit logic.
 
 ### Phase 3 — CLI Wiring
 
@@ -90,10 +90,10 @@ All orchestrator dead code deleted; docs updated; flag surface tightened.
 
 ## Known papercuts carried forward
 
-- **`emit_main` is still imported in `cmd/circ-compile/main.zig`** for the `.emit_zig` branch only. Zig's `@import` is not conditional, so the import stays at the top. If `--emit-zig` is ever removed, `emit_main` and the entire `tests/helpers/wasm_run.zig` + `tests/harness/loader.js` harness can be deleted in lockstep.
-- **Two test harnesses coexist.** `loader.js` calls `init()` directly (correct for `--emit-zig`-derived WASMs). New-pipeline WASMs require the `topology_alloc` + `init()` host protocol. There is no shared loader. If `--emit-zig` goes away, consolidate.
-- **No programmatic root-pin ID helper from the CLI side.** The IDs are stable per circuit (assigned monotonically during expansion) but discovery is currently manual (via `--inspect` output or scanning `getOutputState(i)` for non-`undefined` returns). `serializer.serializeProjectFull` exposes the mapping in-tree; surface it as a CLI dump or a separate file alongside the `.wasm` if v1 needs it.
-- **`circuit.zig` undefined-state semantics** are now load-bearing. AND gate returns `.undefined` only when neither input is `.low` and at least one is `.undefined`; `State.flip(.undefined) = .undefined`. Future gate primitives (XOR, NAND, NOR, XOR, XNOR if ever inlined into the runtime) must follow the same convention or the nested-builtin tests regress.
+- **`emit_main` is still imported in `cmd/circ-compile/main.zig`** for the `.emit_zig` branch only. Zig's `@import` is unconditional, so the import stays at the top. If `--emit-zig` is ever removed, `emit_main` and the entire `tests/helpers/wasm_run.zig` + `tests/harness/loader.js` harness can be deleted in lockstep.
+- **Two test harnesses coexist.** `loader.js` calls `init()` directly (correct for `--emit-zig`-derived WASMs). New-pipeline WASMs require the `topology_alloc` + `init()` host protocol. No shared loader exists. If `--emit-zig` goes away, consolidate.
+- **No programmatic root-pin ID helper from the CLI side.** The IDs are stable per circuit (assigned monotonically during expansion), but discovery is manual (via `--inspect` output or scanning `getOutputState(i)` for non-`undefined` returns). `serializer.serializeProjectFull` exposes the mapping in-tree; surface it as a CLI dump or a separate file alongside the `.wasm` if v1 needs it.
+- **`circuit.zig` undefined-state semantics** are now load-bearing. AND gate returns `.undefined` only when neither input is `.low` and at least one is `.undefined`; `State.flip(.undefined) = .undefined`. Future gate primitives (XOR, NAND, NOR, XOR, XNOR if ever inlined into the runtime) must follow the same convention, or the nested-builtin tests regress.
 - **Custom section append assumes the runtime blob is unmodified.** `section_writer.combine` never rewrites or merges standard sections — appending only. If the runtime ever needs a second custom section, append it after `circ.topology`; never insert between standard sections.
 
 ## Decisions & specs that survived the plan

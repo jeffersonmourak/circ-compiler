@@ -6,7 +6,7 @@ description: "The export and import contract for every compiled .wasm artifact."
 
 Each `.wasm` produced by `circ-compile <input>.circ -o <out>.wasm` is a self-contained module: it embeds a prebuilt simulation runtime plus this circuit's topology as a custom section. The host loads the module, copies the topology bytes into linear memory, calls `init()`, and then drives the circuit through the small fixed export surface below.
 
-This document is the contract for the **default compile path** (the artifact actually shipped to hosts). The optional `--emit-zig` path generates a standalone Zig source with a richer experimental export surface; that surface is not stable and not described here.
+This document is the contract for the **default compile path** (the artifact shipped to hosts). The optional `--emit-zig` path generates a standalone Zig source with a richer experimental export surface; that surface is unstable, and this document does not describe it.
 
 ## Imports (host → WASM)
 
@@ -15,9 +15,9 @@ The host must supply two functions in the `env` namespace at instantiation time:
 | Import        | Signature                                  | Purpose                                                          |
 |---------------|--------------------------------------------|------------------------------------------------------------------|
 | `debugEnabled`| `() => i32`                                | Return `1` to receive log callbacks, `0` to suppress them.       |
-| `onDebugLog`  | `(ptr: i32, len: i32, logType: i32) => void` | Receives a UTF-8 log message in linear memory. `logType`: `0` debug, `1` info, `2` warn, `3` error. The buffer is owned by the runtime — do not call back into the runtime to free it. |
+| `onDebugLog`  | `(ptr: i32, len: i32, logType: i32) => void` | Receives a UTF-8 log message in linear memory. `logType`: `0` debug, `1` info, `2` warn, `3` error. The runtime owns the buffer; do not call back into the runtime to free it. |
 
-If `debugEnabled` returns `0`, `onDebugLog` is never called, but **both imports must be present** or instantiation will fail. Provide no-op stubs when you don't care about logs.
+If `debugEnabled` returns `0`, the runtime never calls `onDebugLog`, but **both imports must be present** or instantiation will fail. Provide no-op stubs when you don't care about logs.
 
 ## Exports (WASM → host)
 
@@ -49,22 +49,22 @@ The i64 fields cross the JS↔WASM boundary as `BigInt`. A component's state is 
 | `1`           | `1`         | high           |
 | `0`           | (ignored)   | undefined      |
 
-For a width-`W` component, only the low `W` bits of each i64 are meaningful; bits beyond `W` are zero on read and silently dropped on write.
+For a width-`W` component, only the low `W` bits of each i64 are meaningful; bits beyond `W` read as zero, and the runtime silently drops them on write.
 
 ### `topology_alloc(len)` and `init()`
 
-The compiled `.wasm` carries the circuit topology as a `circ.topology.v0.min` custom section, **not** in linear memory. The host is responsible for copying those bytes into the runtime's linear memory before `init()` runs. The protocol is:
+The compiled `.wasm` carries the circuit topology as a `circ.topology.v0.min` custom section, **not** in linear memory. The host must copy those bytes into the runtime's linear memory before `init()` runs. The protocol is:
 
 1. Read the section: `WebAssembly.Module.customSections(module, "circ.topology.v0.min")`.
 2. Call `topology_alloc(byteLength)`. The runtime allocates a buffer in linear memory and returns its pointer (or `-1` on allocation failure).
 3. Copy the section bytes to that pointer in `memory.buffer`.
 4. Call `init()`. The runtime parses the buffer, builds the circuit graph, and marks itself initialised.
 
-`init()` is idempotent: calling it after the runtime is initialised is a no-op. It silently bails out if no topology was loaded or the topology fails to parse, so always copy the section before calling `init`.
+`init()` is idempotent: calling it after the runtime is initialised is a no-op. With no topology loaded, it initialises an *empty* circuit and latches, so the runtime ignores a later `topology_alloc` + `init()`; only a topology that fails to parse leaves the runtime uninitialised and `init()` retryable. Always copy the section before the first `init`.
 
 ### `run()`
 
-Drains the engine's event queue until empty. Settling delays are `5` time-units per gate and `1` per wire/output_pin (see `lib/circuit.zig`); a single `run()` call is enough to settle any cascade — there is no "tick" semantics to worry about.
+Drains the engine's event queue until empty. Settling delays are `5` time-units per gate (memories included) and `1` per `wire`/`output_pin`/`led`/`slice`/`concat` (see `lib/circuit.zig`); a single `run()` call is enough to settle any cascade, with no "tick" semantics to worry about.
 
 `run()` is a no-op if `init()` has not run successfully.
 
@@ -72,13 +72,13 @@ Drains the engine's event queue until empty. Settling delays are `5` time-units 
 
 Drives a top-level input pin to the BitVecState `(value, defined)`. `component_id` is the global integer ID of an `input_pin_gate`; passing the ID of a non-input or out-of-range component is a silent no-op (it does not throw or trap).
 
-For width-1 inputs the usual encodings are `setPin(id, 0n, 1n)` for low, `setPin(id, 1n, 1n)` for high, and `setPin(id, 0n, 0n)` for undefined. For wider inputs each bit of `value` and `defined` corresponds to a bit position; bits set beyond the component's declared width are masked silently.
+For width-1 inputs, the usual encodings are `setPin(id, 0n, 1n)` for low, `setPin(id, 1n, 1n)` for high, and `setPin(id, 0n, 0n)` for undefined. For wider inputs, each bit of `value` and `defined` corresponds to a bit position; bits set beyond the component's declared width are masked silently.
 
-`setPin` settles the circuit before returning (it enqueues the change and drains the event queue itself), so outputs can be read immediately. Calling `run()` afterwards is a harmless no-op; the examples below keep it to make the drive/settle/read rhythm explicit.
+`setPin` settles the circuit before returning (it enqueues the change and drains the event queue itself), so you can read outputs immediately. Calling `run()` afterwards is a harmless no-op; the examples below keep it to make the drive/settle/read rhythm explicit.
 
 ### `getOutputValue(component_id)` and `getOutputDefined(component_id)`
 
-Paired exports. Each call returns one of the two `BitVecState` fields of the component's current output. Returns `0n` for both if the runtime is not initialised or the ID is out of range — the host distinguishes "definitely low" from "undefined" by checking `getOutputDefined` first. The argument is the **driver component ID**, not an output-pin index — for an `output out(in=inv.out)` declaration, you pass `inv`'s component ID, not `out`'s pin ID. The `--inspect` output of the compiler prints this mapping under its `Outputs (...)` block.
+Paired exports. Each call returns one of the two `BitVecState` fields of the component's current output. Returns `0n` for both if the runtime is not initialised or the ID is out of range; the host distinguishes "definitely low" from "undefined" by checking `getOutputDefined` first. The argument is the **driver component ID**, not an output-pin index. For an `output out(in=inv.out)` declaration, you pass `inv`'s component ID, not `out`'s pin ID. `--inspect` prints resolver-local ids (`driver=<id>.<port>` under `Outputs (...)`) that equal the artifact's ids only for a single-file circuit without sub-circuits; for a project, read the `circ.topology.v0.full` section, whose records carry each component's name and kind.
 
 #### Why paired exports instead of one out-pointer call
 
@@ -91,7 +91,7 @@ A previous draft considered a single-call shape: `getOutputState(id, out_ptr: i3
 
 A memory declares only its shape in source (`rom code[8, 4](addr = pc.out)`, `ram data[8, 4](addr = …, din = …, we = …, clk = …)`); its contents are runtime state that the host loads and reads back through the eight `mem*`/`getMem*` exports. Ids are the same positional component ids `setPin` uses. A memory's id is the id of its record in the `circ.topology.v0.full` section (kind `8` for `rom`, `9` for `ram`, matched by `name`); `getMemInfo` confirms the id and returns the widths, so a host can validate its mapping once up front.
 
-A memory's `out` is its asynchronous read port — `getOutputValue(mem_id)` / `getOutputDefined(mem_id)` return the word at the currently presented address, exactly like any other component's output. Cells that were never loaded or written read as undefined (`defined = 0`). A `ram` additionally writes `din` into the addressed cell on a *defined low → defined high* transition of `clk` while `we` is high; the clock is an ordinary input pin the host pulses with `setPin` (`setPin(clk, 0n, 1n)` then `setPin(clk, 1n, 1n)`).
+A memory's `out` is its asynchronous read port: `getOutputValue(mem_id)` / `getOutputDefined(mem_id)` return the word at the currently presented address, exactly like any other component's output. Cells that were never loaded or written read as undefined (`defined = 0`). A `ram` additionally writes `din` into the addressed cell on a *defined low → defined high* transition of `clk` while `we` is high; the clock is an ordinary input pin the host pulses with `setPin` (`setPin(clk, 0n, 1n)` then `setPin(clk, 1n, 1n)`).
 
 ### Image format
 
@@ -99,7 +99,7 @@ Contents cross the boundary as a **headerless raw image**: word `i` occupies byt
 
 ### Staging protocol
 
-`memBuffer(id)` returns a pointer to a per-memory staging buffer sized for one full image (`bpw << A` bytes). It is allocated once and reused for every later call; the allocation may grow linear memory, so **re-take your `Uint8Array` view of `memory.buffer` after each `memBuffer` call**.
+`memBuffer(id)` returns a pointer to a per-memory staging buffer sized for one full image (`bpw << A` bytes). The runtime allocates it once and reuses it for every later call; the allocation may grow linear memory, so **re-take your `Uint8Array` view of `memory.buffer` after each `memBuffer` call**.
 
 - **Load:** `ptr = memBuffer(id)`; copy the image bytes to `ptr`; `rc = memLoad(id, bytes.length)`; treat any `rc !== 0` as a failure (codes below). The whole memory is replaced.
 - **Export:** `n = memStore(id)`; the image is `memory.buffer[memBuffer(id) .. +n]`.
@@ -122,7 +122,7 @@ Every mutator re-presents the memory's `out` before returning: after `memLoad`, 
 | `-6` | `memBuffer` was never called for this memory |
 | `-7` | `addr` is negative or `>= 2^A` |
 
-`memStore` returns the number of bytes written (`bpw << A`) on success. `getMemInfo` returns `-1` for anything that is not a memory. `-4` cannot occur through `memLoad` — the staging buffer is exactly one full image, so an oversize `len` is reported as `-5` before the image is parsed — but the same image rules apply to file-backed loading in `--sim`, where it is reported as an `E_MEMFMT` reason. These codes matter because `init()` swallows its own errors: a mutator's status is the host's one diagnostic.
+`memStore` returns the number of bytes written (`bpw << A`) on success. `getMemInfo` returns `-1` for anything that is not a memory. `-4` cannot occur through `memLoad`: the staging buffer is exactly one full image, so an oversize `len` is reported as `-5` before the image is parsed. The same image rules still apply to file-backed loading in `--sim`, where an oversize image is reported as an `E_MEMFMT` reason. These codes matter because `init()` swallows its own errors: a mutator's status is the host's one diagnostic.
 
 ### Node example
 
@@ -152,8 +152,9 @@ const dump = new Uint8Array(w.memory.buffer, w.memBuffer(mem), n).slice();
 | Section name              | Contents                                                            |
 |---------------------------|---------------------------------------------------------------------|
 | `circ.topology.v0.min`    | Compact topology consumed by `init()`. Required.                    |
-| `circ.topology.v0.full`   | Verbose topology used by tooling (`circ-compile --inspect`, preview rendering). The runtime never reads it. |
-| `name`                    | Standard Zig-emitted name section. Useful for debuggers, ignored at runtime. |
+| `circ.topology.v0.full`   | Verbose topology for external tooling (names, origin chains, per-port labels); decode it with `lib/topology/full_decoder.zig`. The runtime never reads it, and the in-tree modes (`--preview`, `--sim`, `--truth-table`) build the same payload in process rather than reading it back. |
+
+`-Dwasm-optimize` defaults to ReleaseSmall and strips the runtime, so a shipped artifact carries no `name` section; only a `-Dwasm-optimize=Debug` build keeps one.
 
 The `.full` section is not required for execution. Hosts that only run circuits can ignore it; tools that need names, hierarchy, or per-port labels should read `.full`.
 
@@ -210,4 +211,4 @@ const readScalar = (id) =>
 
 ## Things that are *not* exports today
 
-Earlier drafts of this project anticipated additional exports — `deinit`, `reset`, `stop`, `getStateSnapshot`, `getTopology`, `getPendingEvents`, `getFileInfo`, `freeBuffer` — and a separate `onStateChange` import. None of these are present in the artifact produced by `circ-compile … -o out.wasm` today. The extra exports survive only in `lib/emit/runtime.zig`, the experimental `--emit-zig` pipeline; the `onStateChange` import was never wired into any pipeline and exists nowhere in the codebase. Either may appear in a future runtime version. If your host needs change-notifications, poll `getOutputValue` / `getOutputDefined` after each `run()`.
+Earlier drafts of this project anticipated additional exports — `deinit`, `reset`, `stop`, `getStateSnapshot`, `getTopology`, `getPendingEvents`, `getFileInfo`, `freeBuffer` — and a separate `onStateChange` import. None of these appear in the artifact that `circ-compile … -o out.wasm` produces today. The extra exports survive only in `lib/emit/runtime.zig`, the experimental `--emit-zig` pipeline; the `onStateChange` import was never wired into any pipeline and exists nowhere in the codebase. Either may appear in a future runtime version. If your host needs change-notifications, poll `getOutputValue` / `getOutputDefined` after each `run()`.

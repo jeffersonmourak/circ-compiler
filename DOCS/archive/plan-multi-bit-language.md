@@ -1,7 +1,15 @@
+# Archived plan: multi-bit-language
+
+**Canonical commit:** `bdaf0ee6cb2c808c417af4c26758ef109afc9dd4` (`bdaf0ee docs: bring DOCS into line with multi-bit wires and topology v02 (#70)`)
+**Archived on:** 2026-05-25
+**Plan duration:** 2026-05-21 → 2026-05-25
+
+> This file is the plan document as it was written before implementation, kept verbatim. The work shipped across stages S1–S12; `DOCS/decisions/language.md` records its seventeen decisions ("Multi-bit wires", §1–§17), and `DOCS/circuit-format.md` records the format. It predates `DOCS/prompts/ARCHIVE.md`, so it has no phase-by-phase highlights section.
+
 # Multi-bit Wires in the circ Language
 
-**Status:** Planned (not yet implemented).
-**Last updated:** 2026-05-21.
+**Status:** Shipped (see the header above).
+**Last updated:** 2026-05-21 (plan text); archived 2026-05-25.
 **Scope:** Extend the `circ` language surface to express multi-bit wires, leveraging the engine's existing width-agnostic `BitVecState` and width-tiered pool design.
 
 ---

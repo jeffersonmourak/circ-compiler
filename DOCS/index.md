@@ -25,13 +25,15 @@ output out(in=inv.out)
 | [analyze-api.md](analyze-api.md)             | `circ-compile --analyze` JSON contract for editor tooling (the circ-lsp server) |
 | [sim-protocol.md](sim-protocol.md)           | `circ-compile --sim` stdio drive protocol for testing and tooling               |
 | [libcirc-api.md](libcirc-api.md)             | The compiler front end as a library: request/response, status codes, the C ABI  |
-| [circuit-format.md](circuit-format.md)       | `.circ` DSL syntax, grammar, file examples                              |
+| [language.md](language.md)                   | The `.circ` language reference: grammar, primitives, macros, multi-bit, memories, validation rules |
+| [circuit-format.md](circuit-format.md)       | `.circ` syntax overview, the topology format version, the diagnostic-code catalogue |
 | [preview.md](preview.md)                     | `circ-compile --preview`: ASCII circuit schematic rendering             |
 | [logisim-import.md](logisim-import.md)       | Mapping Logisim `ROM`/`RAM` components onto `rom`/`ram`                 |
 | [benchmark.md](benchmark.md)                 | `zig build bench`: engine regression gate, counters, golden workflow    |
 | [decisions/](decisions/index.md)             | Architectural decisions for the `.circ` compiler                        |
 | [archive/](archive/index.md)                 | Archived implementation plans                                           |
 | [prompts/ARCHIVE.md](prompts/ARCHIVE.md)     | How to archive a finished plan into `DOCS/archive/`                     |
+| [prompts/](prompts/PHASE_MACRO_PLANNER.md)   | The planner prompts that write a plan prompt and its per-phase specs    |
 
 ## Quick start
 
@@ -77,7 +79,7 @@ See [wasm-api.md](wasm-api.md) for the full export contract.
 
 ```text
 cmd/
-  circ-compile/main.zig    CLI entry point (parser → resolver → validator → topology → emit)
+  circ-compile/main.zig    CLI entry point and mode dispatch; a client of lib/libcirc.zig
 
 lib/
   circuit.zig              Pure Zig simulation engine (gates, events, propagation)
@@ -87,7 +89,7 @@ lib/
   parser/parser.zig        langlang-generated Zig parser (VM runtime + bytecode tables), vendored
   grammar/proto-circ.peg   Source grammar for the .circ language
   syntax/                  Parse tree (parser.runtime.Tree) → AST translation
-  resolver/                scan_imports, import_cycle, resolve_bodies, builtins
+  resolver/                scan_imports, import_cycle, file_loader, resolve_bodies, builtins
   ir/                      Resolved IR (types, single-module resolver)
   validator/               Diagnostic codes (E001–E018, W001–W003) and passes
   topology/                Compact + full topology serializers, custom-section writer
@@ -95,6 +97,10 @@ lib/
   preview/                 ASCII schematic layout + renderer for --preview
   cli/                     Argument parsing, --inspect dump
   analyze/                 --analyze JSON for editor tooling (the circ-lsp server)
+  sim/                     --sim stdio protocol and drive loop over the native engine
+  truth_table/             --truth-table enumeration (markdown / csv / json)
+  engine_session.zig       One engine instance built from a topology, shared by --sim and --truth-table
+  memimage.zig             Raw memory image codec (--mem preloads, load/save)
   libcirc.zig, libcirc/    The compiler as a library: frontend, modes, json, c_api, wasm_root
 
 build/
@@ -105,6 +111,11 @@ templates/                 The prebuilt runtime template — compiled once into
   interpreter.zig          via @embedFile so end users never need Zig at runtime.
 
 tests/                     Integration + e2e tests, golden fixtures
+
+tools/bench/               The engine benchmark harness (zig build bench)
+
+include/libcirc.h          The C header installed by zig build libcirc
+examples/c/analyze.c       The C example zig build libcirc-smoke compiles and runs
 
 site/                      The docs site; public/wasm/libcirc.wasm powers /playground
 ```

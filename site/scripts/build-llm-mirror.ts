@@ -108,16 +108,16 @@ output sum(in=s.out)
 output carry(in=c.out)
 `;
 
-const HERO_PREVIEW = `╭───╮     ╭───╮         ╭───────╮
-│ a ├○─●─▶┤   │ ╭──────▶┤ carry │
-╰───╯  │  │AND├○╯       ╰───────╯
-      ╭┼─▶┤   │
-      ││  ╰───╯
-      ││
-╭───╮ ││  ╭───────╮     ╭─────╮
-│ b ├○●╰─▶┤       │ ╭──▶┤ sum │
-╰───╯ │   │[xor:s]├○╯   ╰─────╯
-      ╰──▶┤       │
+const HERO_PREVIEW = `╭───╮     ╭───╮
+│ a ├○●──▶┤   │         ╭───────╮
+╰───╯ │   │AND├○───────▶┤ carry │
+      │╭─▶┤   │         ╰───────╯
+╭───╮ ││  ╰───╯
+│ b ├○┼╯
+╰───╯ ││  ╭───────╮
+      ╰┼─▶┤       │     ╭─────╮
+       │  │[xor:s]├○───▶┤ sum │
+       ╰─▶┤       │     ╰─────╯
           ╰───────╯`;
 
 function emitLandingTwin(): void {
@@ -147,15 +147,15 @@ function emitLandingTwin(): void {
     '',
     '## What it is',
     '',
-    '`circ` is a declarative language. Programs are flat lists of declarations: name an input pin, instantiate a gate, wire its ports to signals from other components. The primitives are `and`, `not`, `led`, and `wire`; macros for `or`, `nand`, `nor`, `xor`, and `xnor` expand to those primitives at compile time. Larger circuits live in their own `.circ` file and get pulled in with `import`.',
+    '`circ` is a declarative language. Programs are flat lists of declarations: name an input pin, instantiate a gate, wire its ports to signals from other components. The primitives are `and`, `not`, `led`, and `wire`, plus the `rom`/`ram` memories; macros for `or`, `nand`, `nor`, `xor`, and `xnor` expand to those primitives at compile time. Larger circuits live in their own `.circ` file, and an `import` line pulls them in.',
     '',
     "## What it isn't",
     '',
-    '`circ` is a v0. There are no multi-bit buses, no clocked registers, no analog signals, no tri-state lines. A `wire` is a single-bit pass-through, not a let-binding for a vector. The language deliberately stops at the same boundary as the early Nand2Tetris hardware chapters.',
+    '`circ` is a v0. Signals are up to 64 bits wide (`input[4] a`, slices, concatenation); `ram` is the only clocked element, and the language has no other registers, no analog signals, and no tri-state lines. A `wire` is a pass-through that names a signal, not a let-binding. The language deliberately stops at the same boundary as the early Nand2Tetris hardware chapters.',
     '',
     '## Where it runs',
     '',
-    '`circ-compile` produces a self-contained WebAssembly module: drive its input pins from JavaScript, read its outputs back, run it from Node or a browser. There is also a `--preview` flag that prints an ASCII schematic to your terminal — handy for sanity-checking the wiring before you simulate.',
+    '`circ-compile` produces a self-contained WebAssembly module: drive its input pins from JavaScript, read its outputs back, run it from Node or a browser. A `--preview` flag also prints an ASCII schematic to your terminal — handy for sanity-checking the wiring before you simulate.',
     '',
     "If you've enjoyed Nand2Tetris or building NANDs from scratch in Petzold's *Code*, this is a language for doing more of that.",
     '',
@@ -206,7 +206,7 @@ function emitDownloadTwin(): void {
     '',
     '## Alpha warning',
     '',
-    "`circ-compile` is under active development. Expect rough edges, cryptic error messages, and breaking changes between builds. Don't use it for anything you care about preserving. Reports of what doesn't work are welcome — but for now, assume nothing here is stable.",
+    "`circ-compile` is under active development. Expect rough edges, cryptic error messages, and breaking changes between builds. Don't use it for anything you care about preserving. Reports of what doesn't work are welcome, but for now assume nothing here is stable.",
     '',
     '## Pre-built binaries',
     '',
@@ -231,7 +231,7 @@ function emitDownloadTwin(): void {
       './zig-out/bin/circ-compile --help',
       '```',
       '',
-      `The full walkthrough — including writing your first \`.circ\` file and driving the compiled WASM from Node — lives in [getting started](${SITE_URL}/reference/getting-started.md).`,
+      `The full walkthrough, including writing your first \`.circ\` file and driving the compiled WASM from Node, lives in [getting started](${SITE_URL}/reference/getting-started.md).`,
       '',
     );
   }
@@ -255,9 +255,9 @@ function emitLlmsTxt(): void {
     '',
     'Important notes:',
     '',
-    '- `circ` is a v0 — single-bit signals only, no clocked registers, no multi-bit buses.',
-    '- Primitives are `and`, `not`, `led`, and `wire`; macros for `or`, `nand`, `nor`, `xor`, and `xnor` expand to those primitives at compile time.',
-    '- Sub-circuits live in their own `.circ` files and are pulled in with `import`.',
+    '- `circ` is a v0 — signals up to 64 bits wide, `ram` as the only clocked element, no other registers, no analog or tri-state.',
+    '- Primitives are `and`, `not`, `led`, and `wire`, plus the `rom`/`ram` memories; macros for `or`, `nand`, `nor`, `xor`, and `xnor` expand to those primitives at compile time.',
+    '- Sub-circuits live in their own `.circ` files, and an `import` line pulls them in.',
     '',
     '## Docs',
     '',
