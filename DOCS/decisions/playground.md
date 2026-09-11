@@ -284,3 +284,35 @@ The entries below record the decisions of the playground-v2 initiative (the site
 **Rationale.** A console that accepted `1e3` or refused `+10` would answer a CLI script differently from the CLI, and the goldens are the test. The Data tab is a form on the site, so it spells values the way the canvas does; the console is the protocol, so it spells them the way the protocol does.
 
 **Alternatives.** One parser for both (either the canvas accepts `0o17` and underscores, or the console loses them); approximating `parseInt` with a regular expression (the underscore and prefix rules are where an approximation differs).
+
+### `reset` rebuilds the canvas, and a new artifact replays the pins
+
+**Decision.** The protocol's `reset` builds a new runtime from the same bytes, leaves every pin undefined, re-applies the Memory tab's images and emits `rebuilt`; the island builds a fresh `CircCanvas` over the new runtime without replaying the reader's pins, the Data tab re-reads, the console prints `# reset` and the handshake. A new artifact builds a new session, and that one *does* replay the reader's pins by name, as the page always has. `quit` prints `ok bye` and is otherwise `reset`. The page boots each new session low (`SessionInit.bootLow`), never a reset one.
+
+**Rationale.** A reader who typed `reset` asked for the protocol's state, which is every pin unknown; a reader who edited the source asked for the same circuit with the same pins. One gesture, two meanings, and the session tells them apart by which method ran. There is no process for `quit` to end, and the nearest true thing is the state a fresh process would have.
+
+**Alternatives.** Replaying the pins after `reset` too (the transcripts would not replay); ending the session on `quit` (a dead prompt with nothing to bring it back).
+
+### The handshake prints when the session is built
+
+**Decision.** `handshake(session, fileName)` prints `ready proto=1 pins=<N> warnings=<W>`, a `pin` line per root pin and a `diag warning` line per warning from the current analysis, with the root file's name as the CLI's argument, the moment `ensureSession` has a session, before the reader's pins are replayed. `pins` re-prints the pin table on demand. A session with errors never exists, so `error diags=…` is never printed.
+
+**Rationale.** A reader who opens the console expects to see what `--sim` shows first, and the pin table is what they need to type a `set`. Printing it at build rather than at the first prompt keeps the log in the CLI's order.
+
+**Alternatives.** Printing the handshake on the drawer's first open (a log that starts mid-session); the diagnostic's own file name per line (not what the CLI prints).
+
+### The drawer is one element under two tabs, with two tabs of its own
+
+**Decision.** One `.pg-drawer` under the output panels, hidden unless the output tab is Simulate or Data, holds a strip — Console and Memory — over one body; its height is a second `createSplitter`, horizontal, whose ratio persists as `layout.ratios.drawer`; it collapses to its strip with the dock's gesture. Which tab is selected and whether it is open are island fields. The Console keeps one transcript and one history whichever output tab is open, because it drives one session.
+
+**Rationale.** The console and the memory panel are faces on the session, and the session is one; two drawers would be two logs of one conversation. Under Preview and Truth table there is nothing to drive, so the drawer leaves with them.
+
+**Alternatives.** A console per output tab (two histories for one session); a drawer on every tab (a dead prompt under a truth table); persisting the drawer's tab (a reload that lands on a memory tab for a circuit without one).
+
+### The Memory panel reads the session and lives in the drawer
+
+**Decision.** The memory panel moved from the editor's dock to the drawer's Memory tab, shown while the circuit declares a rom or a ram, as its dock tab was; `DockTab` is `'diagnostics' | 'settings'` and a stored `memory` falls back. The panel's grid, hex box, file load and clear are unchanged; it gains a `Save image` button that downloads `<mem>.bin` from `session.storeImage`, enabled while the circuit runs. `memVisible` reads the drawer, so a session event redraws the grid only while it is on screen.
+
+**Rationale.** A memory's contents are runtime state, not source, so the panel belongs beside the console that drives the runtime, not beside the diagnostics that read the text. Moving it is what lets `load` and `save` point at one place.
+
+**Alternatives.** A file surface on the console (a second way to load an image); leaving the panel in the dock and linking to it (a pointer across the page).

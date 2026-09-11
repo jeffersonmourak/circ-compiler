@@ -129,3 +129,11 @@ One entry per shipped slice, newest last. The plan is `DOCS/PLANS_PROMPT.md`; th
 **Tests:** smoke asserts the scrollback and the prompt exist, the prompt is disabled and the note shows `Compile a circuit first.` with an empty log; ran `bun test` (524 pass), `bun --bun run typecheck` (0 errors), `bun --bun run build`, `bun run bundle` (`/playground` 104.9 KB raw / 37.3 KB gzip, ok), result pass
 **Next slice:** the document.
 **Notes:** the `rebuilt` ordering is the one thing the console adds to the executor's stream: a `# reset` that landed between `> reset` and its `ok` would break the "paste the log into a script" promise, so the listener only flags it while a line runs and the submit prints it after the reply. The human's check for this slice: `eval a=3 b=5 => sum cout` on `four-bit-adder`, `load code x.bin` and the pointer to the Memory tab, `quit`, and the Data tab's Reset printing `# reset` in the console.
+
+## 2026-09-11 — Phase 3 — the document
+
+**What shipped:** `DOCS/sim-protocol.md` gains "The protocol in the browser": the handshake at session build and after `# reset`, the page's low boot before the first `reset`, `quit` as `reset`, `load`/`save` refused toward the Memory tab with the two replies, preloads from the Memory tab, the browser-only `help`, no line-length cap, and the log as a transcript. `DOCS/decisions/playground.md` gains the entries for decisions 3, 5, 6 and 8.
+**Files touched:** `DOCS/sim-protocol.md`, `DOCS/decisions/playground.md`, `DOCS/STATUS.md`
+**Tests:** none (documents)
+**Next slice:** the human's review of Phase 3, then Phase 4 (the sweep).
+**Notes:** `sim-protocol.md` is not among the documents `site/scripts/lib/site-config.ts` syncs into the site's reference pages, so the spec's `bun run sync` step has nothing to regenerate; the section is read from the repository, where the getting-started page already points readers.
