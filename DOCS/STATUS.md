@@ -81,3 +81,11 @@ One entry per shipped slice, newest last. The plan is `DOCS/PLANS_PROMPT.md`; th
 **Tests:** ran `bun --bun run build`, `bun test` (532 pass), `bun --bun run typecheck` (0 errors), result pass
 **Next slice:** the human's review of Phase 1.
 **Notes:** the project id, not the file set, is the trigger: renaming or adding a file inside a project is the same project's session, and only opening another card or scratch project is a new terminal.
+
+## 2026-09-11 — Phase 1 — review
+
+**What shipped:** the human reviewed the terminal in both themes and approved ("great go for phase 2"). Phase 1 complete.
+**Files touched:** `DOCS/STATUS.md`
+**Tests:** none (review)
+**Next slice:** Phase 2 slice 1: the walk.
+**Notes:** none.
