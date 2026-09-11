@@ -449,6 +449,61 @@ describe('circ-skins', () => {
     expect(ops.some((op) => op[0] === 'fillText' && op[1] === 'adder')).toBe(true);
   });
 
+  test('a slice is a ruler of the incoming word, MSB left, the tapped bits filled', () => {
+    const theme = themeWith(true);
+    const run = (inWidth: number, lo: number, hi: number, sig: Signal = 1) => {
+      const c: PlacedComponent = { ...component('slice', hi - lo), slice: { lo, hi } };
+      const { ctx, ops } = recordingContext(10);
+      skinFor(theme, c)({
+        ctx, theme, cell: 10, component: c, inputSignals: [sig], outputSignal: sig,
+        inputValues: [valueOf(sig, inWidth)], outputValue: valueOf(sig, hi - lo), hovered: false,
+      });
+      return ops;
+    };
+    // The shell is one roundRect; every tick after it is a bit, left to right.
+    const ticks = (ops: Op[]) => {
+      const rects = ops.filter((op) => op[0] === 'roundRect').slice(1);
+      // Each tick's fill colour is the next fillStyle set after it.
+      return rects.map((r) => {
+        const i = ops.indexOf(r);
+        const fill = ops.slice(i).find((op) => op[0] === 'set' && op[1] === 'fillStyle')!;
+        return fill[2] === colorsDark.wireBus ? 'x' : '.';
+      }).join('');
+    };
+    expect(ticks(run(8, 0, 4))).toBe('....xxxx');
+    expect(ticks(run(8, 4, 8))).toBe('xxxx....');
+    expect(ticks(run(8, 3, 4))).toBe('....x...');
+    expect(ticks(run(4, 1, 3))).toBe('.xx.');
+    expect(ticks(run(16, 0, 1))).toBe('...............x');
+    // The label under the ruler, in the compiler's own spelling.
+    expect(run(8, 0, 4).some((op) => op[0] === 'fillText' && op[1] === '[0:4]')).toBe(true);
+    expect(run(8, 3, 4).some((op) => op[0] === 'fillText' && op[1] === '[3]')).toBe(true);
+    // Undefined and LOW dim the taken bits; the tails are in the bus colour.
+    const alphas = (ops: Op[]) => new Set(ops.filter((op) => op[0] === 'set' && op[1] === 'globalAlpha').map((op) => op[2]));
+    expect(alphas(run(8, 0, 4, 2)).has(0.4)).toBe(true);
+    expect(alphas(run(8, 0, 4, 0)).has(0.7)).toBe(true);
+    expect(run(8, 0, 4).find((op) => op[0] === 'set' && op[1] === 'strokeStyle')![2]).toBe(colorsDark.wireBus);
+  });
+
+  test('a slice of a word wider than sixteen bits is a range bar', () => {
+    const theme = themeWith(true);
+    const c: PlacedComponent = { ...component('slice', 8), slice: { lo: 8, hi: 16 } };
+    const { ctx, ops } = recordingContext(10);
+    skinFor(theme, c)({
+      ctx, theme, cell: 10, component: c, inputSignals: [1], outputSignal: 1,
+      inputValues: [valueOf(1, 32)], outputValue: valueOf(1, 8), hovered: false,
+    });
+    const rects = ops.filter((op) => op[0] === 'roundRect');
+    // Shell, the whole-word bar, the tapped span: three, not thirty-four.
+    expect(rects).toHaveLength(3);
+    const [, bar, span] = rects;
+    const rulerW = Number(bar[3]);
+    // [8:16) of 32, MSB left: starts 16/32 in, spans 8/32.
+    expect(Number(span[1]) - Number(bar[1])).toBeCloseTo(rulerW * 0.5, 6);
+    expect(Number(span[3])).toBeCloseTo(rulerW * 0.25, 6);
+    expect(ops.some((op) => op[0] === 'fillText' && op[1] === '[8:16]')).toBe(true);
+  });
+
   test('the NOT gate names itself below its box, like every other part', () => {
     // Before: yOffset = -cell * 15 put the name 0.7 cells above the bottom
     // edge, inside the sprite.

@@ -64,35 +64,137 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   20.8,
-   20.8,
-   48.4,
-   28.4,
-   2.5
+   23.5,
+   20,
+   43,
+   30,
+   1.6
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   26.7,
+   26,
+   8.4,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   36.1,
+   26,
+   8.4,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   45.5,
+   26,
+   8.4,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   54.9,
+   26,
+   8.4,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -102,7 +204,7 @@
   [
    "set",
    "font",
-   "600 8px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -118,7 +220,7 @@
    "fillText",
    "[0:4]",
    45,
-   35
+   42.2
   ],
   [
    "set",
@@ -224,35 +326,137 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   29.12,
-   29.12,
-   67.76,
-   39.76,
-   3.5
+   32.9,
+   28,
+   60.2,
+   42,
+   2.24
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   37.38,
+   36.4,
+   12.06,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   50.44,
+   36.4,
+   12.06,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   63.5,
+   36.4,
+   12.06,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   76.56,
+   36.4,
+   12.06,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -262,7 +466,7 @@
   [
    "set",
    "font",
-   "600 11px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -278,7 +482,7 @@
    "fillText",
    "[0:4]",
    63,
-   49
+   59.08
   ],
   [
    "set",
@@ -384,35 +588,137 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2.88
+   2.4
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   49.92,
-   49.92,
-   116.16,
-   68.16,
-   6
+   56.4,
+   48,
+   103.2,
+   72,
+   3.84
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   64.08,
+   62.4,
+   21.06,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   86.34,
+   62.4,
+   21.06,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   108.6,
+   62.4,
+   21.06,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   130.86,
+   62.4,
+   21.06,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -422,7 +728,7 @@
   [
    "set",
    "font",
-   "600 18px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -438,7 +744,7 @@
    "fillText",
    "[0:4]",
    108,
-   84
+   101.28
   ],
   [
    "set",
@@ -544,35 +850,233 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   20.8,
-   20.8,
-   48.4,
-   28.4,
-   2.5
+   23.5,
+   20,
+   43,
+   30,
+   1.6
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   26.7,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   31.4,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   36.1,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   40.8,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   45.5,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   50.2,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   54.9,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   59.6,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -582,7 +1086,7 @@
   [
    "set",
    "font",
-   "600 8px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -598,7 +1102,7 @@
    "fillText",
    "[0:4]",
    45,
-   35
+   42.2
   ],
   [
    "set",
@@ -704,35 +1208,233 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   29.12,
-   29.12,
-   67.76,
-   39.76,
-   3.5
+   32.9,
+   28,
+   60.2,
+   42,
+   2.24
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   37.38,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   43.91,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   50.44,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   56.97,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   63.5,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   70.03,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   76.56,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   83.09,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -742,7 +1444,7 @@
   [
    "set",
    "font",
-   "600 11px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -758,7 +1460,7 @@
    "fillText",
    "[0:4]",
    63,
-   49
+   59.08
   ],
   [
    "set",
@@ -864,35 +1566,233 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2.88
+   2.4
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   49.92,
-   49.92,
-   116.16,
-   68.16,
-   6
+   56.4,
+   48,
+   103.2,
+   72,
+   3.84
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   64.08,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   75.21,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   86.34,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   97.47,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   108.6,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   119.73,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   130.86,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   141.99,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -902,7 +1802,7 @@
   [
    "set",
    "font",
-   "600 18px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -918,7 +1818,7 @@
    "fillText",
    "[0:4]",
    108,
-   84
+   101.28
   ],
   [
    "set",
@@ -1024,35 +1924,137 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   20.8,
-   20.8,
-   48.4,
-   28.4,
-   2.5
+   23.5,
+   20,
+   43,
+   30,
+   1.6
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   26.7,
+   26,
+   8.4,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   36.1,
+   26,
+   8.4,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   45.5,
+   26,
+   8.4,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   54.9,
+   26,
+   8.4,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -1062,7 +2064,7 @@
   [
    "set",
    "font",
-   "600 8px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -1078,7 +2080,7 @@
    "fillText",
    "[0:4]",
    45,
-   35
+   42.2
   ],
   [
    "set",
@@ -1184,35 +2186,137 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   29.12,
-   29.12,
-   67.76,
-   39.76,
-   3.5
+   32.9,
+   28,
+   60.2,
+   42,
+   2.24
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   37.38,
+   36.4,
+   12.06,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   50.44,
+   36.4,
+   12.06,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   63.5,
+   36.4,
+   12.06,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   76.56,
+   36.4,
+   12.06,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -1222,7 +2326,7 @@
   [
    "set",
    "font",
-   "600 11px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -1238,7 +2342,7 @@
    "fillText",
    "[0:4]",
    63,
-   49
+   59.08
   ],
   [
    "set",
@@ -1344,35 +2448,137 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2.88
+   2.4
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   49.92,
-   49.92,
-   116.16,
-   68.16,
-   6
+   56.4,
+   48,
+   103.2,
+   72,
+   3.84
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   64.08,
+   62.4,
+   21.06,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   86.34,
+   62.4,
+   21.06,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   108.6,
+   62.4,
+   21.06,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   130.86,
+   62.4,
+   21.06,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -1382,7 +2588,7 @@
   [
    "set",
    "font",
-   "600 18px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -1398,7 +2604,7 @@
    "fillText",
    "[0:4]",
    108,
-   84
+   101.28
   ],
   [
    "set",
@@ -1504,35 +2710,233 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   20.8,
-   20.8,
-   48.4,
-   28.4,
-   2.5
+   23.5,
+   20,
+   43,
+   30,
+   1.6
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   26.7,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   31.4,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   36.1,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   40.8,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   45.5,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   50.2,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   54.9,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   59.6,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -1542,7 +2946,7 @@
   [
    "set",
    "font",
-   "600 8px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -1558,7 +2962,7 @@
    "fillText",
    "[0:4]",
    45,
-   35
+   42.2
   ],
   [
    "set",
@@ -1664,35 +3068,233 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   29.12,
-   29.12,
-   67.76,
-   39.76,
-   3.5
+   32.9,
+   28,
+   60.2,
+   42,
+   2.24
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   37.38,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   43.91,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   50.44,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   56.97,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   63.5,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   70.03,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   76.56,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   83.09,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -1702,7 +3304,7 @@
   [
    "set",
    "font",
-   "600 11px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -1718,7 +3320,7 @@
    "fillText",
    "[0:4]",
    63,
-   49
+   59.08
   ],
   [
    "set",
@@ -1824,35 +3426,233 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2.88
+   2.4
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   49.92,
-   49.92,
-   116.16,
-   68.16,
-   6
+   56.4,
+   48,
+   103.2,
+   72,
+   3.84
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   64.08,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   75.21,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   86.34,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   97.47,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   108.6,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   119.73,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   130.86,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   141.99,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -1862,7 +3662,7 @@
   [
    "set",
    "font",
-   "600 18px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -1878,7 +3678,7 @@
    "fillText",
    "[0:4]",
    108,
-   84
+   101.28
   ],
   [
    "set",
@@ -1984,35 +3784,137 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   20.8,
-   20.8,
-   48.4,
-   28.4,
-   2.5
+   23.5,
+   20,
+   43,
+   30,
+   1.6
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   26.7,
+   26,
+   8.4,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   36.1,
+   26,
+   8.4,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   45.5,
+   26,
+   8.4,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   54.9,
+   26,
+   8.4,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -2022,7 +3924,7 @@
   [
    "set",
    "font",
-   "600 8px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -2038,7 +3940,7 @@
    "fillText",
    "[0:4]",
    45,
-   35
+   42.2
   ],
   [
    "set",
@@ -2144,35 +4046,137 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   29.12,
-   29.12,
-   67.76,
-   39.76,
-   3.5
+   32.9,
+   28,
+   60.2,
+   42,
+   2.24
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   37.38,
+   36.4,
+   12.06,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   50.44,
+   36.4,
+   12.06,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   63.5,
+   36.4,
+   12.06,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   76.56,
+   36.4,
+   12.06,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -2182,7 +4186,7 @@
   [
    "set",
    "font",
-   "600 11px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -2198,7 +4202,7 @@
    "fillText",
    "[0:4]",
    63,
-   49
+   59.08
   ],
   [
    "set",
@@ -2304,35 +4308,137 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2.88
+   2.4
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   49.92,
-   49.92,
-   116.16,
-   68.16,
-   6
+   56.4,
+   48,
+   103.2,
+   72,
+   3.84
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   64.08,
+   62.4,
+   21.06,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   86.34,
+   62.4,
+   21.06,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   108.6,
+   62.4,
+   21.06,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   130.86,
+   62.4,
+   21.06,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -2342,7 +4448,7 @@
   [
    "set",
    "font",
-   "600 18px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -2358,7 +4464,7 @@
    "fillText",
    "[0:4]",
    108,
-   84
+   101.28
   ],
   [
    "set",
@@ -2464,35 +4570,233 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   20.8,
-   20.8,
-   48.4,
-   28.4,
-   2.5
+   23.5,
+   20,
+   43,
+   30,
+   1.6
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   26.7,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   31.4,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   36.1,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   40.8,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   45.5,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   50.2,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   54.9,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   59.6,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -2502,7 +4806,7 @@
   [
    "set",
    "font",
-   "600 8px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -2518,7 +4822,7 @@
    "fillText",
    "[0:4]",
    45,
-   35
+   42.2
   ],
   [
    "set",
@@ -2624,35 +4928,233 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   29.12,
-   29.12,
-   67.76,
-   39.76,
-   3.5
+   32.9,
+   28,
+   60.2,
+   42,
+   2.24
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   37.38,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   43.91,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   50.44,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   56.97,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   63.5,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   70.03,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   76.56,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   83.09,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -2662,7 +5164,7 @@
   [
    "set",
    "font",
-   "600 11px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -2678,7 +5180,7 @@
    "fillText",
    "[0:4]",
    63,
-   49
+   59.08
   ],
   [
    "set",
@@ -2784,35 +5286,233 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2.88
+   2.4
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   49.92,
-   49.92,
-   116.16,
-   68.16,
-   6
+   56.4,
+   48,
+   103.2,
+   72,
+   3.84
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   64.08,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   75.21,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   86.34,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   97.47,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   108.6,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   119.73,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   130.86,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   141.99,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -2822,7 +5522,7 @@
   [
    "set",
    "font",
-   "600 18px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -2838,7 +5538,7 @@
    "fillText",
    "[0:4]",
    108,
-   84
+   101.28
   ],
   [
    "set",
@@ -2944,35 +5644,137 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   20.8,
-   20.8,
-   48.4,
-   28.4,
-   2.5
+   23.5,
+   20,
+   43,
+   30,
+   1.6
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   26.7,
+   26,
+   8.4,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   36.1,
+   26,
+   8.4,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   45.5,
+   26,
+   8.4,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   54.9,
+   26,
+   8.4,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -2982,7 +5784,7 @@
   [
    "set",
    "font",
-   "600 8px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -2998,7 +5800,7 @@
    "fillText",
    "[0:4]",
    45,
-   35
+   42.2
   ],
   [
    "set",
@@ -3104,35 +5906,137 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   29.12,
-   29.12,
-   67.76,
-   39.76,
-   3.5
+   32.9,
+   28,
+   60.2,
+   42,
+   2.24
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   37.38,
+   36.4,
+   12.06,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   50.44,
+   36.4,
+   12.06,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   63.5,
+   36.4,
+   12.06,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   76.56,
+   36.4,
+   12.06,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -3142,7 +6046,7 @@
   [
    "set",
    "font",
-   "600 11px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -3158,7 +6062,7 @@
    "fillText",
    "[0:4]",
    63,
-   49
+   59.08
   ],
   [
    "set",
@@ -3264,35 +6168,137 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2.88
+   2.4
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   49.92,
-   49.92,
-   116.16,
-   68.16,
-   6
+   56.4,
+   48,
+   103.2,
+   72,
+   3.84
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   64.08,
+   62.4,
+   21.06,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   86.34,
+   62.4,
+   21.06,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   108.6,
+   62.4,
+   21.06,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   130.86,
+   62.4,
+   21.06,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -3302,7 +6308,7 @@
   [
    "set",
    "font",
-   "600 18px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -3318,7 +6324,7 @@
    "fillText",
    "[0:4]",
    108,
-   84
+   101.28
   ],
   [
    "set",
@@ -3424,35 +6430,233 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   20.8,
-   20.8,
-   48.4,
-   28.4,
-   2.5
+   23.5,
+   20,
+   43,
+   30,
+   1.6
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   26.7,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   31.4,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   36.1,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   40.8,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   45.5,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   50.2,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   54.9,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   59.6,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -3462,7 +6666,7 @@
   [
    "set",
    "font",
-   "600 8px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -3478,7 +6682,7 @@
    "fillText",
    "[0:4]",
    45,
-   35
+   42.2
   ],
   [
    "set",
@@ -3584,35 +6788,233 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   29.12,
-   29.12,
-   67.76,
-   39.76,
-   3.5
+   32.9,
+   28,
+   60.2,
+   42,
+   2.24
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   37.38,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   43.91,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   50.44,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   56.97,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   63.5,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   70.03,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   76.56,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   83.09,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -3622,7 +7024,7 @@
   [
    "set",
    "font",
-   "600 11px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -3638,7 +7040,7 @@
    "fillText",
    "[0:4]",
    63,
-   49
+   59.08
   ],
   [
    "set",
@@ -3744,35 +7146,233 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2.88
+   2.4
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   49.92,
-   49.92,
-   116.16,
-   68.16,
-   6
+   56.4,
+   48,
+   103.2,
+   72,
+   3.84
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   64.08,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   75.21,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   86.34,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   97.47,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   108.6,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   119.73,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   130.86,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   141.99,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -3782,7 +7382,7 @@
   [
    "set",
    "font",
-   "600 18px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -3798,7 +7398,7 @@
    "fillText",
    "[0:4]",
    108,
-   84
+   101.28
   ],
   [
    "set",
@@ -3904,35 +7504,137 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   20.8,
-   20.8,
-   48.4,
-   28.4,
-   2.5
+   23.5,
+   20,
+   43,
+   30,
+   1.6
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   26.7,
+   26,
+   8.4,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   36.1,
+   26,
+   8.4,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   45.5,
+   26,
+   8.4,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   54.9,
+   26,
+   8.4,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -3942,7 +7644,7 @@
   [
    "set",
    "font",
-   "600 8px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -3958,7 +7660,7 @@
    "fillText",
    "[0:4]",
    45,
-   35
+   42.2
   ],
   [
    "set",
@@ -4064,35 +7766,137 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   29.12,
-   29.12,
-   67.76,
-   39.76,
-   3.5
+   32.9,
+   28,
+   60.2,
+   42,
+   2.24
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   37.38,
+   36.4,
+   12.06,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   50.44,
+   36.4,
+   12.06,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   63.5,
+   36.4,
+   12.06,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   76.56,
+   36.4,
+   12.06,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -4102,7 +7906,7 @@
   [
    "set",
    "font",
-   "600 11px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -4118,7 +7922,7 @@
    "fillText",
    "[0:4]",
    63,
-   49
+   59.08
   ],
   [
    "set",
@@ -4224,35 +8028,137 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2.88
+   2.4
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   49.92,
-   49.92,
-   116.16,
-   68.16,
-   6
+   56.4,
+   48,
+   103.2,
+   72,
+   3.84
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   64.08,
+   62.4,
+   21.06,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   86.34,
+   62.4,
+   21.06,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   108.6,
+   62.4,
+   21.06,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   130.86,
+   62.4,
+   21.06,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -4262,7 +8168,7 @@
   [
    "set",
    "font",
-   "600 18px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -4278,7 +8184,7 @@
    "fillText",
    "[0:4]",
    108,
-   84
+   101.28
   ],
   [
    "set",
@@ -4384,35 +8290,233 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   20.8,
-   20.8,
-   48.4,
-   28.4,
-   2.5
+   23.5,
+   20,
+   43,
+   30,
+   1.6
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   26.7,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   31.4,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   36.1,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   40.8,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   45.5,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   50.2,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   54.9,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   59.6,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -4422,7 +8526,7 @@
   [
    "set",
    "font",
-   "600 8px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -4438,7 +8542,7 @@
    "fillText",
    "[0:4]",
    45,
-   35
+   42.2
   ],
   [
    "set",
@@ -4544,35 +8648,233 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   29.12,
-   29.12,
-   67.76,
-   39.76,
-   3.5
+   32.9,
+   28,
+   60.2,
+   42,
+   2.24
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   37.38,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   43.91,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   50.44,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   56.97,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   63.5,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   70.03,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   76.56,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   83.09,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -4582,7 +8884,7 @@
   [
    "set",
    "font",
-   "600 11px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -4598,7 +8900,7 @@
    "fillText",
    "[0:4]",
    63,
-   49
+   59.08
   ],
   [
    "set",
@@ -4704,35 +9006,233 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2.88
+   2.4
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   49.92,
-   49.92,
-   116.16,
-   68.16,
-   6
+   56.4,
+   48,
+   103.2,
+   72,
+   3.84
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   64.08,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   75.21,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   86.34,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   97.47,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   108.6,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   119.73,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   130.86,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   141.99,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -4742,7 +9242,7 @@
   [
    "set",
    "font",
-   "600 18px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -4758,7 +9258,7 @@
    "fillText",
    "[0:4]",
    108,
-   84
+   101.28
   ],
   [
    "set",
@@ -4864,35 +9364,137 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   20.8,
-   20.8,
-   48.4,
-   28.4,
-   2.5
+   23.5,
+   20,
+   43,
+   30,
+   1.6
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   26.7,
+   26,
+   8.4,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   36.1,
+   26,
+   8.4,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   45.5,
+   26,
+   8.4,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   54.9,
+   26,
+   8.4,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -4902,7 +9504,7 @@
   [
    "set",
    "font",
-   "600 8px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -4918,7 +9520,7 @@
    "fillText",
    "[0:4]",
    45,
-   35
+   42.2
   ],
   [
    "set",
@@ -5024,35 +9626,137 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   29.12,
-   29.12,
-   67.76,
-   39.76,
-   3.5
+   32.9,
+   28,
+   60.2,
+   42,
+   2.24
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   37.38,
+   36.4,
+   12.06,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   50.44,
+   36.4,
+   12.06,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   63.5,
+   36.4,
+   12.06,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   76.56,
+   36.4,
+   12.06,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -5062,7 +9766,7 @@
   [
    "set",
    "font",
-   "600 11px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -5078,7 +9782,7 @@
    "fillText",
    "[0:4]",
    63,
-   49
+   59.08
   ],
   [
    "set",
@@ -5184,35 +9888,137 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2.88
+   2.4
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   49.92,
-   49.92,
-   116.16,
-   68.16,
-   6
+   56.4,
+   48,
+   103.2,
+   72,
+   3.84
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   64.08,
+   62.4,
+   21.06,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   86.34,
+   62.4,
+   21.06,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   108.6,
+   62.4,
+   21.06,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   130.86,
+   62.4,
+   21.06,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -5222,7 +10028,7 @@
   [
    "set",
    "font",
-   "600 18px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -5238,7 +10044,7 @@
    "fillText",
    "[0:4]",
    108,
-   84
+   101.28
   ],
   [
    "set",
@@ -5344,35 +10150,233 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   20.8,
-   20.8,
-   48.4,
-   28.4,
-   2.5
+   23.5,
+   20,
+   43,
+   30,
+   1.6
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   26.7,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   31.4,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   36.1,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   40.8,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   45.5,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   50.2,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   54.9,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   59.6,
+   26,
+   3.7,
+   9.6,
+   0.7
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -5382,7 +10386,7 @@
   [
    "set",
    "font",
-   "600 8px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -5398,7 +10402,7 @@
    "fillText",
    "[0:4]",
    45,
-   35
+   42.2
   ],
   [
    "set",
@@ -5504,35 +10508,233 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   29.12,
-   29.12,
-   67.76,
-   39.76,
-   3.5
+   32.9,
+   28,
+   60.2,
+   42,
+   2.24
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   37.38,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   43.91,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   50.44,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   56.97,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   63.5,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   70.03,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   76.56,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   83.09,
+   36.4,
+   5.53,
+   13.44,
+   0.98
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -5542,7 +10744,7 @@
   [
    "set",
    "font",
-   "600 11px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -5558,7 +10760,7 @@
    "fillText",
    "[0:4]",
    63,
-   49
+   59.08
   ],
   [
    "set",
@@ -5664,35 +10866,233 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2.88
+   2.4
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   49.92,
-   49.92,
-   116.16,
-   68.16,
-   6
+   56.4,
+   48,
+   103.2,
+   72,
+   3.84
   ],
   [
    "fill"
   ],
   [
    "stroke"
+  ],
+  [
+   "save"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   64.08,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   75.21,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   86.34,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   97.47,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.38
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   108.6,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   119.73,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   130.86,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   141.99,
+   62.4,
+   9.93,
+   23.04,
+   1.68
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.4
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -5702,7 +11102,7 @@
   [
    "set",
    "font",
-   "600 18px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -5718,7 +11118,7 @@
    "fillText",
    "[0:4]",
    108,
-   84
+   101.28
   ],
   [
    "set",

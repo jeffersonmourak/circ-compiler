@@ -906,9 +906,110 @@ const drawBox = ({ ctx, cell, component, inputSignals, inputValues, outputSignal
 };
 
 /** `[i]` or `[lo:hi]`, the way the compiler's own preview writes a slice. */
+/* ───── bit parts: slice and concat ────────────────────────────────
+ * A labelled box tells you a slice exists; it does not tell you which bits
+ * it takes. These draw the bit field itself: a slice is a ruler of the
+ * incoming word with the tapped range picked out, a concat is the
+ * assembled word with a lane per operand in order.
+ */
+
+/** Shared shell: inset rounded rect in the bus colour on the surface. */
+function nsShell(ctx, t, cell, c) {
+  const x0 = c.x * cell, y0 = c.y * cell, w = c.width * cell, h = c.height * cell;
+  const inset = cell * 0.35;
+  const bx = x0 + inset, bw = w - inset * 2;
+  ctx.fillStyle = t.surface;
+  ctx.strokeStyle = t.wireBus;
+  ctx.lineWidth = Math.max(1.75, cell * 0.1);
+  ctx.beginPath();
+  ctx.roundRect(bx, y0, bw, h, cell * 0.16);
+  ctx.fill();
+  ctx.stroke();
+  return { x0, y0, w, h, bx, bw, inset };
+}
+
+/** Bits a slice's ruler will show one by one; wider words get a range bar. */
+const RULER_MAX_BITS = 16;
+
+/**
+ * SLICE — a ruler of the incoming word, MSB left so it reads like the hex
+ * chip above it, the tapped range filled in the bus colour and the
+ * discarded bits muted. Above sixteen bits the ruler collapses to one bar
+ * with the tapped span filled. The `[lo:hi]` label sits under it so the
+ * notation and the picture agree.
+ */
+function nsSliceAsset(ctx, t, cell, c, inputValues, outSig) {
+  const { y0, h, bx, bw } = nsShell(ctx, t, cell, c);
+  const sl = c.slice ?? { lo: 0, hi: 1 };
+  const inWidth = Math.max(inputValues[0]?.width ?? 0, sl.hi, 1);
+  const padX = cell * 0.32;
+  const rulerW = bw - padX * 2;
+  const rulerH = h * 0.32;
+  const ry = y0 + h * 0.2;
+  const takenAlpha = outSig === 2 ? 0.4 : outSig === 0 ? 0.7 : 1;
+  ctx.save();
+  if (inWidth <= RULER_MAX_BITS) {
+    const gap = Math.max(1, cell * 0.05);
+    const tickW = (rulerW - gap * (inWidth - 1)) / inWidth;
+    for (let i = 0; i < inWidth; i++) {
+      const bit = inWidth - 1 - i;
+      const taken = bit >= sl.lo && bit < sl.hi;
+      const tx = bx + padX + i * (tickW + gap);
+      ctx.beginPath();
+      ctx.roundRect(tx, ry, tickW, rulerH, Math.min(tickW / 2, cell * 0.07));
+      ctx.fillStyle = taken ? t.wireBus : t.labelMuted;
+      ctx.globalAlpha = taken ? takenAlpha : 0.38;
+      ctx.fill();
+    }
+  } else {
+    // The whole word as one muted bar, the tapped span filled over it. MSB
+    // left: bit `hi − 1` is `inWidth − hi` bits in from the left edge.
+    ctx.beginPath();
+    ctx.roundRect(bx + padX, ry, rulerW, rulerH, cell * 0.07);
+    ctx.fillStyle = t.labelMuted;
+    ctx.globalAlpha = 0.38;
+    ctx.fill();
+    const sx = bx + padX + rulerW * ((inWidth - sl.hi) / inWidth);
+    const sw = rulerW * ((sl.hi - sl.lo) / inWidth);
+    ctx.beginPath();
+    ctx.roundRect(sx, ry, sw, rulerH, cell * 0.07);
+    ctx.fillStyle = t.wireBus;
+    ctx.globalAlpha = takenAlpha;
+    ctx.fill();
+  }
+  ctx.restore();
+  ctx.fillStyle = t.label;
+  ctx.font = nsFont(cell, 700);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(sl.hi - sl.lo <= 1 ? `[${sl.lo}]` : `[${sl.lo}:${sl.hi}]`, bx + bw / 2, y0 + h * 0.74);
+}
+
+/** Tails, dots and bus leads around a bit-field asset. */
+function nsBitPart({ ctx, cell, component: c, inputSignals: inSigs, inputValues, outputSignal: outSig, theme }, body) {
+  const t = theme.colors;
+  const x0 = c.x * cell, y0 = c.y * cell, w = c.width * cell;
+  const inset = cell * 0.35;
+  const gap = cell * 0.4;
+  const leftEdge = x0 + inset - gap;
+  const rightEdge = x0 + w - inset + gap;
+  const inDotYs = [];
+  for (let i = 0; i < c.inPorts.length; i++) {
+    const slot = c.inPorts[i];
+    const portY = slot.coord.y * cell + cell / 2;
+    inDotYs.push(portY);
+    nsTail(ctx, cell, leftEdge, slot.coord.x * cell + cell / 2, portY, inSigs[i] ?? 2, t, (inputValues[i]?.width ?? 1) > 1);
+  }
+  const outDotY = c.outPort.y * cell + cell / 2;
+  nsTail(ctx, cell, rightEdge, c.outPort.x * cell + cell / 2, outDotY, outSig, t, (c.bitWidth ?? 1) > 1);
+  body(ctx, t, cell, c, inputValues, outSig);
+  for (let i = 0; i < c.inPorts.length; i++) nsDot(ctx, cell, leftEdge, inDotYs[i], inSigs[i] ?? 2, t);
+  nsDot(ctx, cell, rightEdge, outDotY, outSig, t);
+  void y0;
+}
+
 const drawSlice = (args) => {
-  const { lo, hi } = args.component.slice ?? { lo: 0, hi: 1 };
-  drawBox(args, hi - lo <= 1 ? `[${lo}]` : `[${lo}:${hi}]`, args.theme.colors.stroke);
+  nsBitPart(args, nsSliceAsset);
 };
 
 const drawConcat = (args) => {
