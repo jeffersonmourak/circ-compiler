@@ -353,7 +353,7 @@ const groups = displayGroups(catalogue, []);
   // pulls their one shared dependency, so they ride in the eager bundle.
   import { execute, handshake } from '../scripts/sim-executor.ts';
   import { HELP_VERB, HistoryRing, MemoryTabFiles, Transcript, commandFor, helpLines, promptEcho, scriptOf } from '../scripts/console.ts';
-  import { summaryOf } from '../scripts/terminal-line.ts';
+  import { summaryOf, memoryHeader } from '../scripts/terminal-line.ts';
   import { summarize, summaryLabels } from '../scripts/footer-summary.ts';
   import { pinCountLabel } from '../scripts/pin-count.ts';
   import { formatZoom } from '../scripts/zoom-label.ts';
@@ -2347,7 +2347,7 @@ const groups = displayGroups(catalogue, []);
           read: () => ({ value: 0n, defined: 0n }),
           live: false,
           editable: false,
-          note: 'A ram holds nothing until the circuit runs. Open the Simulate tab to fill it.',
+          note: 'A ram holds nothing until the circuit runs. Open Live to fill it.',
         };
       }
       const cells = imageCells(romImages.get(mem.name) ?? '', mem);
@@ -2362,7 +2362,7 @@ const groups = displayGroups(catalogue, []);
         },
         live: false,
         editable: true,
-        note: 'Not running: this is the image that will be loaded. Open the Simulate tab to watch it live.',
+        note: 'Not running: this is the image that will be loaded. Open Live to watch it.',
       };
     }
 
@@ -2375,48 +2375,58 @@ const groups = displayGroups(catalogue, []);
 
       const head = document.createElement('div');
       head.className = 'pg-mem-head';
+      const label = document.createElement('span');
+      label.className = 'pg-mem-tab';
+      label.textContent = 'Memory';
+      head.appendChild(label);
       const title = document.createElement('h3');
       title.className = 'pg-mem-name';
       title.textContent = mem.name;
       head.appendChild(title);
       const shape = document.createElement('span');
       shape.className = 'pg-mem-shape';
-      shape.textContent = `${mem.kind} [${mem.width}, ${mem.addrWidth}] · ${total} word${total === 1 ? '' : 's'}`;
+      shape.textContent = memoryHeader(mem, total);
       head.appendChild(shape);
       const live = document.createElement('span');
       live.className = 'pg-mem-live';
       live.dataset.live = String(source.live);
-      live.textContent = source.live ? 'running' : 'not running';
+      live.textContent = source.live ? 'live' : 'not running';
       head.appendChild(live);
+      const base = document.createElement('div');
+      base.className = 'pg-mem-base';
+      base.setAttribute('role', 'radiogroup');
+      base.setAttribute('aria-label', `${mem.name} value base`);
+      for (const [value, text] of [['hex', 'hex'], ['binary', 'bin'], ['decimal', 'dec']]) {
+        const label = document.createElement('label');
+        const input = document.createElement('input');
+        input.type = 'radio'; input.name = `pg-mem-base-${mem.name}`;
+        input.dataset.setting = 'valueFormat'; input.value = value;
+        input.checked = settings().valueFormat === value;
+        input.setAttribute('aria-label', value);
+        const span = document.createElement('span'); span.textContent = text;
+        label.append(input, span); base.appendChild(label);
+      }
+      head.appendChild(base);
       wrap.appendChild(head);
 
       // --- the grid, which is now the editor as well as the view
       const win = clampWindow(memWindows.get(mem.name) ?? 0, MEM_PAGE, total);
-      const pages = pageCount(MEM_PAGE, total);
-      if (pages > 1) wrap.appendChild(pageNav(mem, win, total));
-      wrap.appendChild(gridTable(mem, source, win));
       const gridError = document.createElement('p');
       gridError.className = 'pg-mem-error';
       gridError.id = memErrorId(mem);
       gridError.setAttribute('role', 'alert');
-      wrap.appendChild(gridError);
-
-      if (source.note) {
-        const note = document.createElement('p');
-        note.className = 'pg-mem-idle';
-        note.textContent = source.note;
-        wrap.appendChild(note);
-      }
 
       // --- controls
       const controls = document.createElement('div');
-      controls.className = 'pg-mem-controls';
+      controls.className = 'pg-mem-tools';
+      controls.appendChild(pageNav(mem, win, total));
 
       const buttons = document.createElement('div');
       buttons.className = 'pg-mem-buttons';
       const clear = document.createElement('button');
       clear.type = 'button';
       clear.className = 'pg-mem-btn';
+      clear.dataset.mem = 'clear';
       clear.textContent = 'Clear';
       clear.title = mem.kind === 'rom'
         ? 'Empty the image, so every word is unknown again'
@@ -2425,14 +2435,16 @@ const groups = displayGroups(catalogue, []);
       clear.addEventListener('click', () => clearMemory(mem));
       buttons.appendChild(clear);
 
-      if (source.live) {
+      {
         const refresh = document.createElement('button');
         refresh.type = 'button';
         refresh.className = 'pg-mem-btn';
+        refresh.dataset.mem = 'refresh';
+        refresh.disabled = !source.live;
         refresh.textContent = 'Refresh';
         refresh.title = 'Read the contents again';
         refresh.addEventListener('click', () => renderMemory({ force: true }));
-        buttons.appendChild(refresh);
+        buttons.prepend(refresh);
       }
 
       // The image the running circuit holds, as the raw file `--sim`'s `save`
@@ -2440,42 +2452,45 @@ const groups = displayGroups(catalogue, []);
       const save = document.createElement('button');
       save.type = 'button';
       save.className = 'pg-mem-btn pg-mem-save';
-      save.textContent = 'Save image';
+      save.dataset.mem = 'save';
+      save.textContent = 'Save';
       save.title = source.live
         ? `Download ${mem.name}.bin, every word as the circuit holds it`
-        : 'Open the Simulate or Data tab to save what the circuit holds';
+        : 'Open Live or Data to save what the circuit holds';
       save.disabled = !source.live;
       save.addEventListener('click', () => saveMemoryImage(mem));
-      buttons.appendChild(save);
 
       if (mem.kind === 'rom') {
-        // The hex is behind a checkbox: it is the escape hatch for pasting a
-        // blob or loading a file, not the thing a reader should have to use.
-        const toggle = document.createElement('label');
-        toggle.className = 'pg-mem-hextoggle';
-        const box = document.createElement('input');
-        box.type = 'checkbox';
-        box.checked = hexOpen.has(mem.name);
-        box.addEventListener('change', () => {
-          if (box.checked) hexOpen.add(mem.name);
-          else hexOpen.delete(mem.name);
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'pg-mem-btn pg-mem-load';
+        toggle.dataset.mem = 'load';
+        toggle.textContent = 'Load image…';
+        toggle.setAttribute('aria-expanded', String(hexOpen.has(mem.name)));
+        toggle.addEventListener('click', () => {
+          if (!hexOpen.delete(mem.name)) hexOpen.add(mem.name);
           renderMemory({ force: true });
+          memPanel.querySelector<HTMLButtonElement>(`.pg-mem-item[data-name="${CSS.escape(mem.name)}"] .pg-mem-load`)?.focus();
         });
-        toggle.appendChild(box);
-        toggle.appendChild(document.createTextNode(' Load image'));
         buttons.appendChild(toggle);
       }
+      buttons.appendChild(save);
       controls.appendChild(buttons);
-
-      if (mem.kind === 'rom' && hexOpen.has(mem.name)) controls.appendChild(hexEditor(mem));
+      wrap.appendChild(controls);
+      wrap.appendChild(gridTable(mem, source, win));
+      wrap.appendChild(gridError);
+      if (source.note) {
+        const note = document.createElement('p');
+        note.className = 'pg-mem-idle'; note.textContent = source.note; wrap.appendChild(note);
+      }
+      if (mem.kind === 'rom' && hexOpen.has(mem.name)) wrap.appendChild(hexEditor(mem));
 
       const meta = document.createElement('div');
       meta.className = 'pg-rom-meta';
-      controls.appendChild(meta);
+      wrap.appendChild(meta);
       const err = document.createElement('div');
       err.className = 'pg-rom-error';
-      controls.appendChild(err);
-      wrap.appendChild(controls);
+      wrap.appendChild(err);
 
       if (mem.kind === 'rom') updateRomStatus(mem, wrap);
       return wrap;
@@ -2536,7 +2551,7 @@ const groups = displayGroups(catalogue, []);
       const back = document.createElement('button');
       back.type = 'button';
       back.className = 'pg-mem-btn';
-      back.textContent = '◀';
+      back.textContent = '◂';
       back.setAttribute('aria-label', 'Previous page');
       back.disabled = win.start === 0;
       back.addEventListener('click', () => {
@@ -2548,13 +2563,13 @@ const groups = displayGroups(catalogue, []);
       const range = document.createElement('span');
       range.className = 'pg-mem-range';
       range.textContent =
-        `${formatAddress(win.start, mem.addrWidth)}–${formatAddress(win.start + win.count - 1, mem.addrWidth)}`;
+        `0x${formatAddress(win.start, mem.addrWidth)} – 0x${formatAddress(win.start + win.count - 1, mem.addrWidth)}`;
       nav.appendChild(range);
 
       const fwd = document.createElement('button');
       fwd.type = 'button';
       fwd.className = 'pg-mem-btn';
-      fwd.textContent = '▶';
+      fwd.textContent = '▸';
       fwd.setAttribute('aria-label', 'Next page');
       fwd.disabled = win.start + win.count >= total;
       fwd.addEventListener('click', () => {
@@ -2566,7 +2581,7 @@ const groups = displayGroups(catalogue, []);
       const jump = document.createElement('input');
       jump.className = 'pg-mem-jump';
       jump.setAttribute('aria-label', `Go to an address in ${mem.name}`);
-      jump.placeholder = 'addr';
+      jump.placeholder = '0x__';
       jump.addEventListener('keydown', (e) => {
         e.stopPropagation();
         if (e.key !== 'Enter') return;
@@ -2577,9 +2592,10 @@ const groups = displayGroups(catalogue, []);
           return;
         }
         memWindows.set(mem.name, pageContaining(addr, MEM_PAGE, total).start);
-        renderMemory();
+        renderMemory({ force: true });
       });
-      nav.appendChild(jump);
+      const label = document.createElement('label');
+      label.textContent = 'jump '; label.appendChild(jump); nav.appendChild(label);
       return nav;
     }
 
@@ -2871,6 +2887,7 @@ const groups = displayGroups(catalogue, []);
         if (settings().valueFormat !== before) {
           sim.view?.view.setValueFormat(settings().valueFormat);
           if (state.dataOpen) renderData();
+          renderMemory({ force: true });
         }
         schedule();
       },

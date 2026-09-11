@@ -1237,15 +1237,16 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     // nothing before: a checkbox is an INPUT, and the panel's own guard against
     // redrawing a field being typed into swallowed the redraw.
     expect(doc.querySelector('.pg-mem-hex')).toBeNull();
-    const toggle = doc.querySelector('.pg-mem-hextoggle input') as unknown as
-      { checked: boolean; focus(): void; click(): void };
-    expect(doc.querySelector('.pg-mem-hextoggle')?.textContent).toContain('Load image');
+    const toggle = doc.querySelector('.pg-mem-load') as unknown as HTMLButtonElement;
+    expect(toggle.textContent).toBe('Load image…');
+    expect(doc.querySelector('.pg-mem-shape')?.textContent).toBe('rom[8,4] · 16 words');
+    expect(Array.from(doc.querySelectorAll('.pg-mem-tools [data-mem]'), (b) => b.getAttribute('data-mem'))).toEqual(['refresh', 'clear', 'load', 'save']);
     // Focused and clicked, not just `checked = true`: a real click focuses the
     // box, and the focus is the whole bug. Setting the property from outside
     // leaves the document focused elsewhere and the defect cannot reproduce.
     toggle.focus();
     toggle.click();
-    expect(toggle.checked).toBe(true);
+    expect(doc.querySelector('.pg-mem-load')?.getAttribute('aria-expanded')).toBe('true');
     expect(doc.querySelector('.pg-mem-hex')).not.toBeNull();
     expect(doc.querySelector('.pg-rom-box')).not.toBeNull();
     expect(doc.querySelector('.pg-mem-file')?.getAttribute('type')).toBe('file');
@@ -1253,9 +1254,16 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect((doc.querySelector('.pg-rom-box') as unknown as { value: string }).value).toBe('ff');
 
     // Unticking closes it again.
-    (doc.querySelector('.pg-mem-hextoggle input') as unknown as { focus(): void; click(): void }).focus();
-    (doc.querySelector('.pg-mem-hextoggle input') as unknown as { click(): void }).click();
+    (doc.querySelector('.pg-mem-load') as unknown as HTMLButtonElement).focus();
+    (doc.querySelector('.pg-mem-load') as unknown as HTMLButtonElement).click();
     expect(doc.querySelector('.pg-mem-hex')).toBeNull();
+    (doc.querySelector('.pg-mem-base input[value="hex"]') as unknown as HTMLInputElement).click();
+    expect(cells()[0].textContent).toBe('ff');
+    expect((doc.querySelector('#pg-set-values') as unknown as HTMLSelectElement).value).toBe('hex');
+    expect((doc.querySelector('.pg-data-base input[value="hex"]') as unknown as HTMLInputElement).checked).toBe(true);
+    const select = doc.querySelector('#pg-set-values') as unknown as HTMLSelectElement;
+    select.value = 'binary'; select.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(cells()[0].textContent).toBe('11111111');
   }));
 
   test('Download follows the artifact, and saves it under the project\'s name', async () => {

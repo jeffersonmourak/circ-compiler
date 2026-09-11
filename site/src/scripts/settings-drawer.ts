@@ -144,12 +144,11 @@ type ChoiceKey = 'format' | 'valueFormat';
  * change; nothing here validates, because the store already clamps and falls
  * back key by key, and a second validator is a second thing to disagree with.
  */
-export function mountSettingsDrawer(root: ParentNode, deps: SettingsDeps): void {
-  const controls = root.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-setting]');
+export function mountSettingsDrawer(root: ParentNode & EventTarget, deps: SettingsDeps): void {
 
   const paint = () => {
     const s = deps.get();
-    for (const el of controls) {
+    for (const el of root.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-setting]')) {
       const key = el.dataset.setting as keyof PlaygroundSettings;
       if (el instanceof HTMLInputElement && el.type === 'radio') {
         el.checked = el.value === s[key as ChoiceKey];
@@ -163,8 +162,9 @@ export function mountSettingsDrawer(root: ParentNode, deps: SettingsDeps): void 
     }
   };
 
-  for (const el of controls) {
-    el.addEventListener('change', () => {
+  root.addEventListener('change', (event) => {
+      const el = event.target;
+      if (!(el instanceof HTMLInputElement || el instanceof HTMLSelectElement) || !el.matches('[data-setting]')) return;
       if (el instanceof HTMLInputElement && el.type === 'radio' && !el.checked) return;
       const key = el.dataset.setting as keyof PlaygroundSettings;
       deps.set((draft) => {
@@ -181,8 +181,7 @@ export function mountSettingsDrawer(root: ParentNode, deps: SettingsDeps): void 
       // Repaint from the store, so a clamped value is shown as stored rather
       // than as typed.
       paint();
-    });
-  }
+  });
 
   paint();
 }

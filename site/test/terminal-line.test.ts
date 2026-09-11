@@ -1,9 +1,13 @@
 // The closed terminal line's summary, read off the console's transcript.
 import { describe, expect, test } from 'bun:test';
-import { summaryOf } from '../src/scripts/terminal-line.ts';
+import { summaryOf, memoryHeader } from '../src/scripts/terminal-line.ts';
 import { Transcript, promptEcho } from '../src/scripts/console.ts';
 
 describe('terminal line', () => {
+  test('the memory header names the declared shape and capacity', () => {
+    expect(memoryHeader({ kind: 'rom', width: 8, addrWidth: 4 }, 16)).toBe('rom[8,4] · 16 words');
+    expect(memoryHeader({ kind: 'ram', width: 64, addrWidth: 8 }, 256)).toBe('ram[64,8] · 256 words');
+  });
   test('no echo yields nulls', () => {
     expect(summaryOf([])).toEqual({ command: null, reply: null });
     expect(summaryOf(['# circ-compile --sim', '# proto=1'])).toEqual({ command: null, reply: null });

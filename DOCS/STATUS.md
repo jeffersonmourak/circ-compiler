@@ -281,3 +281,11 @@ Rolling log of shipped slices. Newest at the bottom. The plan is `DOCS/PLANS_PRO
 **Tests:** Rewrote the drawer walk for the header and column; every existing console and transcript test passes. All four gates pass: 600 tests; `/playground` 128.8 KB raw / 44.9 KB gzip.
 **Next slice:** The memory header and toolbar.
 **Notes:** The column's structural move and `updateMemColumn` landed here because removing the tab wrappers needed a replacement home for memory immediately. Its existing contents remain until the next slice. The memory smoke now opens the drawer before expecting cells, matching the deferred-read contract.
+
+## 2026-09-11 — Phase 6 — The memory header and toolbar
+
+**What shipped:** Memory headers show the name, `rom[W,A]`/`ram[W,A]` capacity, live state and base radios. The toolbar always shows paging and jump, plus Refresh, Clear, ROM Load image and Save. Load image is a button over the existing hex/file editor. The base radios, Data radios and settings select stay synchronized through delegated settings events, and changing base redraws the memory grid.
+**Files touched:** `site/src/components/Playground.astro`, `site/src/scripts/{settings-drawer,terminal-line}.ts`, `site/src/styles/global.css`, `site/test/{terminal-line,island-smoke}.test.ts`, `DOCS/STATUS.md`
+**Tests:** Added memory-header spelling and extended the smoke for toolbar actions, Load image and bidirectional base changes. All four gates pass: 601 tests; `/playground` 129.7 KB raw / 45.1 KB gzip.
+**Next slice:** Grid, addressed word, legend and image line.
+**Notes:** Memory radios are rebuilt with the grid, so settings binding now delegates change events from the island rather than retaining a boot-time control list. Jump forces a redraw because its own focused text field would otherwise trigger the typing guard. ROM-only image loading and live-only RAM editing retain their existing scope.

@@ -1070,13 +1070,20 @@ span.pg-diag-pos { color: var(--muted); cursor: default; }
 /* ---------- the memory panel ----------
    A rom or ram keeps its contents as runtime state, so this panel is a live
    window onto a running circuit rather than a view of the artifact. */
-.pg-mem { display: flex; flex-direction: column; gap: 1rem; }
-.pg-mem-item { display: flex; flex-direction: column; gap: 0.4rem; }
-.pg-mem-item + .pg-mem-item { border-top: 1px solid var(--border); padding-top: 0.8rem; }
-.pg-mem-head { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
-.pg-mem-name { margin: 0; font-family: var(--font-mono); font-size: 0.85rem; }
-.pg-mem-shape { color: var(--muted); font-family: var(--font-mono); font-size: 0.7rem; }
-.pg-mem-controls { display: flex; flex-direction: column; gap: 0.4rem; }
+[data-layout='app'] .pg-mem { display: flex; flex-direction: column; gap: 0; }
+[data-layout='app'] .pg-mem-item { display: flex; flex-direction: column; gap: 0; min-width: 0; }
+[data-layout='app'] .pg-mem-item + .pg-mem-item { border-top: 1px solid var(--border); }
+[data-layout='app'] .pg-mem-head { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 12px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+[data-layout='app'] .pg-mem-tab { font: 11px var(--font-mono); color: var(--muted); }
+[data-layout='app'] .pg-mem-name { margin: 0; font: 11px var(--font-mono); color: var(--fg); }
+[data-layout='app'] .pg-mem-shape { color: var(--muted); font: 10px var(--font-mono); }
+[data-layout='app'] .pg-mem-tools { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding: 6px 12px; border-bottom: 1px solid var(--border); font: 10px var(--font-mono); }
+[data-layout='app'] .pg-mem-base { display: flex; padding: 1px; margin-left: auto; border: 1px solid var(--border); border-radius: 4px; }
+[data-layout='app'] .pg-mem-base label { position: relative; cursor: pointer; }
+[data-layout='app'] .pg-mem-base input { position: absolute; inset: 0; opacity: 0; margin: 0; width: 100%; height: 100%; cursor: pointer; }
+[data-layout='app'] .pg-mem-base span { display: block; padding: 1px 4px; border-radius: 2px; font: 10px var(--font-mono); color: var(--muted); }
+[data-layout='app'] .pg-mem-base input:checked + span { color: var(--bg); background: var(--accent); }
+[data-layout='app'] .pg-mem-base input:focus-visible + span { outline: 2px solid var(--accent); }
 /* Whether a circuit is behind the grid or only an image is. */
 .pg-mem-live {
   font-family: var(--font-mono);
@@ -1089,19 +1096,8 @@ span.pg-diag-pos { color: var(--muted); cursor: default; }
   padding: 0 0.35rem;
 }
 .pg-mem-live[data-live='true'] { color: var(--accent); border-color: var(--accent); }
-/* The hex escape hatch, behind its checkbox. */
-.pg-mem-hextoggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  color: var(--muted);
-  cursor: pointer;
-  margin-left: auto;
-}
-.pg-mem-hextoggle:hover { color: var(--fg); }
-.pg-mem-hex { display: flex; flex-direction: column; gap: 0.3rem; }
+[data-layout='app'] .pg-mem-load { color: var(--accent); }
+[data-layout='app'] .pg-mem-hex { display: flex; flex-direction: column; gap: 6px; padding: 8px 12px; }
 .pg-mem-file { font-size: 0.7rem; color: var(--muted); }
 .pg-mem-imglabel {
   font-family: var(--font-mono);
@@ -1120,31 +1116,30 @@ span.pg-diag-pos { color: var(--muted); cursor: default; }
   color: var(--fg);
   width: 100%;
 }
-.pg-mem-buttons { display: flex; align-items: center; gap: 0.35rem; }
-.pg-mem-btn {
+[data-layout='app'] .pg-mem-buttons { display: flex; align-items: center; gap: 10px; }
+[data-layout='app'] .pg-mem-btn {
   font: inherit;
   font-family: var(--font-mono);
-  font-size: 0.7rem;
+  font-size: 10px;
   color: var(--muted);
   background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 0.15rem 0.45rem;
+  border: 0;
+  padding: 0;
   cursor: pointer;
 }
 .pg-mem-btn:hover:not(:disabled) { color: var(--fg); border-color: var(--accent); }
 .pg-mem-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.pg-mem-idle { color: var(--muted); font-size: 0.75rem; margin: 0; }
+[data-layout='app'] .pg-mem-idle { color: var(--muted); font: 11px var(--font-mono); margin: 0; padding: 6px 12px; }
 /* The refusal line, directly under the grid so it sits beside the cell that
    was refused rather than in the status bar at the bottom of the page. */
 .pg-mem-error { color: var(--danger); font-size: 0.72rem; margin: 0; }
 .pg-mem-error:empty { display: none; }
-.pg-mem-nav { display: flex; align-items: center; gap: 0.35rem; }
-.pg-mem-range { font-family: var(--font-mono); font-size: 0.7rem; color: var(--muted); }
-.pg-mem-jump {
-  width: 5rem;
+[data-layout='app'] .pg-mem-nav { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+[data-layout='app'] .pg-mem-range { font: 10px var(--font-mono); color: var(--fg); white-space: nowrap; }
+[data-layout='app'] .pg-mem-jump {
+  width: 52px;
   font-family: var(--font-mono);
-  font-size: 0.7rem;
+  font-size: 10px;
   border: 1px solid var(--border);
   background: var(--bg);
   color: var(--fg);

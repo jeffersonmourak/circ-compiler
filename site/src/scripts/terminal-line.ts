@@ -7,6 +7,12 @@
 // summary is read off it rather than tracked beside it: one source, and a
 // clear or a new session empties both at once.
 
+import type { MemorySymbol } from '../utils/rom-image.ts';
+
+export function memoryHeader(mem: Pick<MemorySymbol, 'kind' | 'width' | 'addrWidth'>, total: number): string {
+  return `${mem.kind}[${mem.width},${mem.addrWidth}] · ${total} word${total === 1 ? '' : 's'}`;
+}
+
 export interface TermSummary {
   /** The last line typed, without its `> ` echo prefix; null with no echo. */
   command: string | null;
