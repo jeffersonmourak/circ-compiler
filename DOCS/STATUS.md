@@ -73,3 +73,11 @@ One entry per shipped slice, newest last. The plan is `DOCS/PLANS_PROMPT.md`; th
 **Tests:** none (review)
 **Next slice:** Phase 2 slice 1: the grammar.
 **Notes:** none.
+
+## 2026-09-11 — Phase 2 — the grammar
+
+**What shipped:** `site/src/scripts/sim-protocol.ts`: `parseValue` (`std.fmt.parseInt(u64, text, 0)` over `bigint`, the standard library's rules copied: sign, prefix only past two characters, no underscore at either end, interior underscores skipped, sixty-four bits), `parseLine` (every verb's argument checks in `protocol.zig`'s order, so a bad literal wins over a later shape error exactly where the CLI's does), `writeHex`, the `Command` union and `ParseOutcome`.
+**Files touched:** `site/src/scripts/sim-protocol.ts`, `site/test/sim-protocol.test.ts`, `DOCS/STATUS.md`
+**Tests:** added thirteen (radixes and case, underscores, signs, prefixes without digits, the 64-bit edge, `writeHex`; blank and comment lines, the four bare verbs and `mems`, `set`, `get`/`dump`/`clear`, `eval`, the memory verbs, unknown verbs and tabs); ran `bun test test/sim-protocol.test.ts` (13 pass), `bun --bun run typecheck` (0 errors), result pass
+**Next slice:** the executor.
+**Notes:** one correction to the spec, from the standard library: `parseInt` accepts a leading `+` or `-` (a negative literal overflows an unsigned type, except `-0`), so the console accepts `+10` and `-0` as the CLI does; the spec's "no sign" does not hold. The spec's `ErrorCode` is not a second type: the session's `SimError['code']` already names the ten codes and the executor spells them.
