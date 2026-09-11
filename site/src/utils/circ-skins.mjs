@@ -361,47 +361,73 @@ const drawOutputPin = ({ ctx, cell, component, inputSignals, inputValues, theme 
   if (slot) nsDot(ctx, cell, tailEdge, dotY, sig, t);
 };
 
-const drawLed = ({ ctx, cell, component, inputSignals, inputValues, theme, hovered }) => {
+const drawLed = ({ ctx, cell, component, inputSignals, inputValues, theme }) => {
+  const t = theme.colors;
   const cx = (component.x + component.width / 2) * cell;
   const cy = (component.y + component.height / 2) * cell;
   const r = Math.min(component.width, component.height) * cell * 0.4;
   const sig = inputSignals[0] ?? 2;
-  const isOn = sig === 1;
+  const on = sig === 1;
 
-  const tailEdge = cx - r - cell * 0.45;
+  const tailEdge = cx - r - cell * 0.4;
   const slot = component.inPorts[0];
   let dotY = 0;
   if (slot) {
-    const portX = slot.coord.x * cell + cell / 2;
     dotY = slot.coord.y * cell + cell / 2;
-    nsTail(ctx, cell, tailEdge, portX, dotY, sig, theme.colors, (inputValues[0]?.width ?? 1) > 1);
+    nsTail(ctx, cell, tailEdge, slot.coord.x * cell + cell / 2, dotY, sig, t, (inputValues[0]?.width ?? 1) > 1);
   }
 
-  ctx.fillStyle = isOn ? theme.colors.outputOn : theme.colors.outputOff;
-  ctx.strokeStyle = isOn ? theme.colors.outputBorderOn : theme.colors.outputBorderOff;
-  ctx.lineWidth = Math.max(2, cell * 0.28);
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-
-  if (isOn) {
-    ctx.globalAlpha = 0.4;
+  const lw = Math.max(2, cell * 0.16);
+  if (on) {
+    // Lit: a halo under a solid disc, and a glint of the pane's colour high
+    // on the left, so the LED reads as a light and not a filled dot.
+    nsHalo(ctx, t.outputOn, cx, cy, r, cell * 1.3);
+    ctx.fillStyle = t.outputOn;
     ctx.beginPath();
-    ctx.arc(cx, cy, r * 1.45, 0, Math.PI * 2);
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = t.outputBorderOn;
+    ctx.lineWidth = lw;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.globalAlpha = 1;
+    ctx.save();
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = t.background;
+    ctx.beginPath();
+    ctx.arc(cx - r * 0.3, cy - r * 0.32, r * 0.24, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  } else {
+    // Unlit: a hollow ring on the surface with a small core; undefined is
+    // the same ring dashed and muted.
+    ctx.fillStyle = t.surface;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.save();
+    ctx.strokeStyle = sig === 2 ? t.labelMuted : t.outputBorderOff;
+    ctx.lineWidth = lw;
+    if (sig === 2) ctx.setLineDash([cell * 0.28, cell * 0.24]);
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+    ctx.fillStyle = t.outputOff;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 0.3, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   nsName(
     ctx, cell, component.name,
     component.x * cell, component.y * cell,
     component.width * cell, component.height * cell,
-    theme.colors.labelMuted
+    t.labelMuted
   );
 
-  if (slot) nsDot(ctx, cell, tailEdge, dotY, sig, theme.colors);
-
+  if (slot) nsDot(ctx, cell, tailEdge, dotY, sig, t);
 };
 
 const drawNot = ({ ctx, cell, component, inputSignals, inputValues, outputSignal, theme, hovered }) => {

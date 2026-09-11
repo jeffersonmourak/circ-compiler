@@ -430,6 +430,40 @@ describe('circ-skins', () => {
     }
   });
 
+  test('an LED lit is a disc under a halo, unlit a hollow ring, unknown a dashed one', () => {
+    const theme = themeWith(true);
+    const run = (sig: Signal, cell = 10) => {
+      const c = component('led', 1);
+      const { ctx, ops } = recordingContext(cell);
+      const v = valueOf(sig, 1);
+      skinFor(theme, c)({
+        ctx, theme, cell, component: c, inputSignals: [sig], outputSignal: sig,
+        inputValues: [v], outputValue: v, hovered: false,
+      });
+      return ops;
+    };
+    const sets = (ops: Op[], prop: string) => ops.filter((op) => op[0] === 'set' && op[1] === prop).map((op) => op[2]);
+    const r = 3 * 10 * 0.4; // min(5,3) × cell × 0.4
+    const r3 = (n: number) => Math.round(n * 1000) / 1000;
+    const lit = run(1);
+    const litArcs = lit.filter((op) => op[0] === 'arc').map((op) => op[3]);
+    // Halo (r + 0.65 cell), disc, border, glint, then the terminal dot.
+    expect(litArcs).toEqual([r + 6.5, r, r, r3(r * 0.24), 2.4]);
+    expect(sets(lit, 'globalAlpha')).toEqual([0.22, 0.5]);
+    expect(sets(lit, 'fillStyle')).toContain(colorsDark.outputOn);
+    expect(sets(lit, 'fillStyle')).toContain(colorsDark.background);
+
+    const unlit = run(0);
+    expect(sets(unlit, 'fillStyle')).toContain(colorsDark.surface);
+    expect(sets(unlit, 'strokeStyle')).toContain(colorsDark.outputBorderOff);
+    expect(unlit.filter((op) => op[0] === 'arc').map((op) => op[3])).toEqual([r, r, r3(r * 0.3), 2.4]);
+    expect(unlit.some((op) => op[0] === 'setLineDash' && op[1] !== '[]')).toBe(false);
+
+    const unknown = run(2);
+    expect(sets(unknown, 'strokeStyle')).toContain(colorsDark.labelMuted);
+    expect(unknown.filter((op) => op[0] === 'setLineDash').map((op) => op[1])).toEqual(['[2.8,2.4]', '[]']);
+  });
+
   test('busValue: the chip for every multi-bit kind draws as the golden says, and a memory gets none', () => {
     const theme = themeWith(true);
     for (const kind of KINDS) for (const cell of CELLS) {
