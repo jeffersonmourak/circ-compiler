@@ -10,6 +10,7 @@
 
 import type { DecodeResult, HashIntent, ShareKey } from './share-link.ts';
 import { normalizeEditorPreferences, type EditorPreferences } from './editor-preferences.ts';
+import { normalizeSourceImages, type SourceImages } from './source-images.ts';
 /** The content owns the tier vocabulary; this module only maps it to a
  *  heading. A type import is erased, so the store still pulls no content
  *  into the playground bundle. */
@@ -92,6 +93,7 @@ export interface PlaygroundSettings {
 export interface PanelPos { x: number; y: number }
 
 export interface PlaygroundEnvelope {
+  sourceImages: SourceImages;
   version: number;
   scratch: ScratchProject[];
   activeId: PickId | null;
@@ -112,6 +114,7 @@ export interface PlaygroundEnvelope {
 }
 
 export type StoreNote =
+  | { kind: 'images-skipped' }
   | { kind: 'reset'; reason: 'version' | 'corrupt' }
   | { kind: 'evicted'; names: string[] }
   /** Sources over `MAX_SOURCE_BYTES`: kept in memory so the reader keeps
@@ -163,6 +166,7 @@ export function normalizeTruthTableCap(value: unknown): number {
 
 export function defaultEnvelope(): PlaygroundEnvelope {
   return {
+    sourceImages: {},
     version: STORE_VERSION,
     scratch: [],
     activeId: null,
@@ -336,6 +340,7 @@ export function normalize(raw: unknown): { envelope: PlaygroundEnvelope; note: S
 
   return {
     envelope: {
+      sourceImages: normalizeSourceImages(body.sourceImages),
       version: STORE_VERSION,
       scratch,
       activeId,
@@ -428,24 +433,32 @@ export function writeEnvelope(
   // typing and only loses persistence for that one project.
   const skipped = env.scratch.filter((p) => utf8Bytes(p.source) > MAX_SOURCE_BYTES);
   const skippedIds = new Set(skipped.map((p) => p.id));
-  const serialize = () =>
-    JSON.stringify({ ...env, scratch: env.scratch.filter((p) => !skippedIds.has(p.id)) });
+  // Images must never evict source projects. Fit them only after the source
+  // envelope is within its existing budget; oversized images stay in memory.
+  let imagesSkipped = false;
+  const serialize = (includeImages = true) => {
+    const base = { ...env, sourceImages: {}, scratch: env.scratch.filter((p) => !skippedIds.has(p.id)) };
+    const text = JSON.stringify({ ...base, sourceImages: includeImages ? env.sourceImages : {} });
+    imagesSkipped = includeImages && utf8Bytes(text) > MAX_ENVELOPE_BYTES && Object.keys(env.sourceImages).length > 0;
+    return imagesSkipped ? JSON.stringify(base) : text;
+  };
 
   const evicted: string[] = [];
-  let text = serialize();
+  let text = serialize(false);
   while (utf8Bytes(text) > MAX_ENVELOPE_BYTES) {
     const name = evictOldest(env, keep);
     if (name === null) break;
     evicted.push(name);
-    text = serialize();
+    text = serialize(false);
   }
+  text = serialize();
 
   const evictedNote = (): StoreNote | null =>
     evicted.length > 0 ? { kind: 'evicted', names: [...evicted] } : null;
 
   try {
     storage.setItem(STORE_KEY, text);
-    return { ok: true, note: evictedNote(), skipped };
+    return { ok: true, note: evictedNote() ?? (imagesSkipped ? { kind: 'images-skipped' } : null), skipped };
   } catch (err) {
     if (!isQuotaError(err)) {
       return { ok: false, note: { kind: 'disabled', reason: 'unavailable' }, skipped };
@@ -480,6 +493,8 @@ export function browserStorage(): StorageLike | null {
 
 export function describeNote(note: StoreNote, context: 'save' | 'import' = 'save'): string {
   switch (note.kind) {
+    case 'images-skipped':
+      return 'Memory images are too large to save. They stay available until you reload.';
     case 'reset':
       return note.reason === 'version'
         ? 'Saved playground settings were from an older version and have been reset.'

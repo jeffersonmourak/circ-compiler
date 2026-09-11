@@ -1573,6 +1573,77 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(declarationsOf("[data-layout='app'] .pg-editor .pg-cm .cm-scroller {")).toContain('overflow: auto');
   }));
 
+  test('ROM images follow their source file into imports and back', async () => driveAsync(async (doc) => {
+    const island = (doc.querySelector('.pg') as unknown as { __playground: {
+      state: { version: LibcircVersion | null; artifact: unknown };
+      compiler: LibcircClient;
+      hooks: { onArtifact(bytes: Uint8Array | null, reason: string): void; copySource(what: string): Promise<string> | null };
+      flushPipeline(): Promise<void>; getSession(): Promise<SimSession | null>;
+    } }).__playground;
+    const wasm = await instantiateLibcirc(readFileSync(resolve(SITE, 'public/wasm/libcirc.wasm')));
+    const decoder = new TextDecoder();
+    const oldInit = island.compiler.init, oldCall = island.compiler.call, oldVersion = island.state.version;
+    const previous = doc.querySelector('.pg-switch-project[aria-current="true"]')!.getAttribute('data-pick')!;
+    const click = (selector: string) => (doc.querySelector(selector) as unknown as HTMLElement).click();
+    const open = () => { if (doc.querySelector('.pg-switch')!.hasAttribute('hidden')) click('.pg-crumb'); };
+    island.compiler.init = async () => JSON.parse(decoder.decode(callVersion(wasm).bytes));
+    island.compiler.call = async (op, request) => {
+      const result = callOp(wasm, op, request);
+      return op === 'compile' && result.status === 0
+        ? { id: 1, op, status: 0, bytes: result.bytes }
+        : { id: 1, op, status: result.status, text: decoder.decode(result.bytes) };
+    };
+    island.state.version = null;
+    let added = '';
+    try {
+      open();
+      const picker = doc.querySelector('.pg-switch-picker') as unknown as HTMLInputElement;
+      const source = '// test.circ\ninput[4] pc\nrom code[8, 4](addr=pc.out)\noutput[8] out(in=code.out)\n\n// main.circ\nimport mem "test.circ"\ninput[4] pc\nmem a(pc=pc)\noutput[8] out(in=a)\n';
+      const DiskFile = lastWindow!.File;
+      Object.defineProperty(picker, 'files', { configurable: true, value: [new DiskFile([source], 'rom-project.circ')] });
+      picker.dispatchEvent(new Event('change', { bubbles: true }));
+      for (let i = 0; i < 100 && picker.disabled; i++) await new Promise((r) => setTimeout(r, 1));
+      added = doc.querySelector('.pg-switch-project[aria-current="true"]')!.getAttribute('data-pick')!;
+      await island.flushPipeline();
+      click('.pg-file[data-file="0"]');
+      // Truth builds a session without needing a canvas in this harness.
+      click('.pg-view-tab[data-view="truth"]');
+      await island.flushPipeline();
+      const child = await island.getSession();
+      click('.pg-term-mem');
+      click('.pg-mem-load');
+      const image = doc.querySelector('.pg-rom-box') as unknown as HTMLTextAreaElement;
+      image.value = 'ab cd';
+      image.dispatchEvent(new Event('input', { bubbles: true }));
+      expect(child!.get('out')).toMatchObject({ ok: true, value: { value: 0xabn, defined: 255n } });
+      click('.pg-file[data-file="1"]');
+      await island.flushPipeline();
+      const parent = await island.getSession();
+      expect(parent!.get('out')).toMatchObject({ ok: true, value: { value: 0xabn, defined: 255n } });
+      expect(doc.querySelectorAll('.pg-table tbody tr')).toHaveLength(16);
+      expect(doc.querySelector('.pg-truth-chip')!.textContent).not.toContain('filtered');
+      const csv = await island.hooks.copySource('csv');
+      expect(csv).toContain('10101011');
+      expect(csv).toContain('11001101');
+      await parent!.reset(); parent!.set('pc', 1n);
+      expect(parent!.get('out')).toMatchObject({ ok: true, value: { value: 0xcdn, defined: 255n } });
+      click('.pg-file[data-file="0"]');
+      await island.flushPipeline();
+      expect((await island.getSession())!.peek('code', 1n)).toMatchObject({ ok: true, value: { value: 0xcdn } });
+      click('.pg-mem-load');
+      expect((doc.querySelector('.pg-rom-box') as unknown as HTMLTextAreaElement).value).toBe('ab cd');
+      window.dispatchEvent(new Event('pagehide'));
+      expect(JSON.parse(localStorage.getItem(STORE_KEY)!).sourceImages[JSON.stringify([added, 'test.circ'])]).toEqual({ code: 'ab cd' });
+    } finally {
+      click('.pg-view-tab[data-view="schematic"]');
+      open(); click(`.pg-switch-project[data-pick="${previous}"]`);
+      await island.flushPipeline();
+      island.hooks.onArtifact(null, 'files-changed');
+      island.state.artifact = null; island.state.version = oldVersion;
+      island.compiler.init = oldInit; island.compiler.call = oldCall;
+    }
+  }));
+
   test('file selection rebuilds the active circuit and rejects late parent replies', async () => driveAsync(async (doc) => {
     const island = (doc.querySelector('.pg') as unknown as { __playground: {
       state: { tabs: FileTabsState; version: LibcircVersion | null; artifact: { hash: number; bytes: Uint8Array } | null; analysis: { symbols: { name: string }[] } | null };

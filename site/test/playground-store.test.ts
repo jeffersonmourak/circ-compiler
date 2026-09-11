@@ -89,7 +89,7 @@ describe('playground store', () => {
   test('defaults and round-trip', () => {
     const env = defaultEnvelope();
     expect(Object.keys(env).sort()).toEqual(
-      ['activeFile', 'activeId', 'dataOpen', 'dataPanel', 'drawerHeight', 'editor', 'footer', 'layout', 'scratch', 'settings', 'version', 'view', 'ws'].sort(),
+      ['activeFile', 'activeId', 'dataOpen', 'dataPanel', 'drawerHeight', 'editor', 'footer', 'layout', 'scratch', 'settings', 'sourceImages', 'version', 'view', 'ws'].sort(),
     );
     expect(env.version).toBe(2);
     expect(env.settings.truthTableCap).toBe(12);

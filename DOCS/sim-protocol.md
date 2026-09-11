@@ -287,5 +287,9 @@ restores its previous open/closed state and height.
 
 Selecting another source file starts a fresh circuit and console for that
 file. Its sibling files remain available for imports, so an imported circuit
-can be exercised on its own. Pin and memory-image state are reset on this
-switch; changing only the output view keeps the same session.
+can be exercised on its own. Pin state resets on this switch; ROM images stay
+with their source file and initialize each imported instance at build and
+reset. Changing only the output view keeps the same session. Images are saved
+with the project when they fit the saved-state budget; the page reports when
+they are too large to survive a reload. Console memory commands still address
+only memories declared in the selected root file.

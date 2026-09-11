@@ -375,6 +375,7 @@ const groups = displayGroups(catalogue, []);
     romSymbols,
     type MemorySymbol,
   } from '../utils/rom-image.ts';
+  import { sourceImageKey, type ImportedImages } from '../utils/source-images.ts';
   import {
     UNKNOWN,
     cellWidth,
@@ -591,7 +592,7 @@ const groups = displayGroups(catalogue, []);
       /** `state.diagnostics` mapped onto absolute offsets in the combined
        *  document. Refreshed by BOTH producers in the pipeline. */
       mapped: [] as MappedRow[],
-      artifact: null as { bytes: Uint8Array; hash: number; size: number } | null,
+      artifact: null as { bytes: Uint8Array; hash: number; size: number; importedImages: ImportedImages } | null,
       view: 'schematic' as StoredView,
       /** The Data card: open over whichever view; its rows are the session's. */
       dataOpen: false,
@@ -1402,9 +1403,14 @@ const groups = displayGroups(catalogue, []);
         draft.scratch = r.list;
         draft.activeId = r.created.id;
         draft.activeFile = fileName;
+        for (const file of state.tabs.files) {
+          const images = draft.sourceImages[sourceImageKey(id, file.name)];
+          if (images) draft.sourceImages[sourceImageKey(r.created.id, file.name)] = { ...images };
+        }
         created = r.created.id;
       });
       if (created) {
+        state.circuitFile = null;
         status.textContent = `Copied into your own project so the example stays as it shipped.`;
         renderWorkspace();
       }
@@ -1948,6 +1954,10 @@ const groups = displayGroups(catalogue, []);
         const r = duplicateScratch(draft.scratch, id, { now: nowMs() });
         if (!r || !r.created) return;
         draft.scratch = r.list;
+        for (const file of splitFiles(r.created.source)) {
+          const images = draft.sourceImages[sourceImageKey(id, file.name)];
+          if (images) draft.sourceImages[sourceImageKey(r.created.id, file.name)] = { ...images };
+        }
         created = r.created.id;
       });
       if (created) loadProject(created);
@@ -1966,6 +1976,11 @@ const groups = displayGroups(catalogue, []);
       const wasActive = store.envelope.activeId === id;
       remembered.delete(id);
       store.update((draft) => {
+        const source = draft.scratch.find((p) => p.id === id)?.source ?? '';
+        for (const file of splitFiles(source)) {
+          const key = sourceImageKey(id, file.name);
+          delete draft.sourceImages[key]; imageContexts.delete(key);
+        }
         draft.scratch = deleteScratch(draft.scratch, id);
         if (wasActive) draft.activeId = null;
       });
@@ -2238,9 +2253,32 @@ const groups = displayGroups(catalogue, []);
 
     // ---- settings ----
     const settings = () => store.envelope.settings;
-    /** The reader's ROM text, per memory. Session state: an image can be
-     *  megabytes once hex-encoded, far past what the envelope may hold. */
-    const romImages = new Map<string, string>();
+    /** Each file retains its declaration-owned images across runtime rebuilds. */
+    let romImages = new Map<string, string>();
+    const imageContexts = new Map<string, {
+      images: Map<string, string>; implied: Map<string, Set<number>>;
+      files: Map<string, { text: string; file: string }>;
+    }>();
+    function selectImages() {
+      const key = sourceImageKey(store.envelope.activeId, activeFile(state.tabs).name);
+      let context = imageContexts.get(key);
+      if (!context) {
+        context = { images: new Map(Object.entries(store.envelope.sourceImages[key] ?? {})), implied: new Map(), files: new Map() };
+        imageContexts.set(key, context);
+      }
+      romImages = context.images; romImplied = context.implied; imageFiles = context.files;
+    }
+    function importedImagesFor(analysis: Analysis | null): ImportedImages {
+      return {
+        files: new Map(analysis?.files.map((f) => [f.file_id, f.path]) ?? []),
+        images: new Map(state.tabs.files.map((f) => {
+          const key = sourceImageKey(store.envelope.activeId, f.name);
+          return [rootPathFor(f.name), imageContexts.get(key)?.images ?? new Map(Object.entries(store.envelope.sourceImages[key] ?? {}))];
+        })),
+      };
+    }
+    const hasImportedImages = () => state.tabs.files.some((f) => f.name !== activeFile(state.tabs).name &&
+      Object.keys(store.envelope.sourceImages[sourceImageKey(store.envelope.activeId, f.name)] ?? {}).length > 0);
     const currentRoms = (): MemorySymbol[] => {
       const a = state.analysis;
       if (!a) return [];
@@ -2263,10 +2301,10 @@ const groups = displayGroups(catalogue, []);
     /** Addresses holding a zero the reader never typed, per rom. The image
      *  cannot tell a chosen zero from a gap it had to fill, so the distinction
      *  is carried beside it. */
-    const romImplied = new Map<string, Set<number>>();
+    let romImplied = new Map<string, Set<number>>();
     /** Roms whose hex escape hatch is showing. */
     const hexOpen = new Set<string>();
-    const imageFiles = new Map<string, { text: string; file: string }>();
+    let imageFiles = new Map<string, { text: string; file: string }>();
 
     /** The running circuit's runtime, or null when nothing is simulating or
      *  the artifact predates memories. Contents can be read whenever a
@@ -2560,7 +2598,9 @@ const groups = displayGroups(catalogue, []);
       file.addEventListener('change', () => {
         const chosen = file.files?.[0];
         if (!chosen) return;
+        const owner = romImages;
         void chosen.arrayBuffer().then((buffer) => {
+          if (romImages !== owner) return;
           const result = imageFromBytes(new Uint8Array(buffer), mem);
           if (!result.ok) {
             status.textContent = result.message;
@@ -2707,6 +2747,8 @@ const groups = displayGroups(catalogue, []);
     ) {
       if (imageFiles.get(mem.name)?.text !== text) imageFiles.delete(mem.name);
       romImages.set(mem.name, text);
+      const key = sourceImageKey(store.envelope.activeId, activeFile(state.tabs).name);
+      store.update((draft) => { draft.sourceImages[key] = Object.fromEntries(romImages); });
       romImplied.set(mem.name, new Set(implied));
       applyToView();
       void runTruth(buildStage.seq);
@@ -3099,6 +3141,9 @@ const groups = displayGroups(catalogue, []);
       }
       const name = state.tabs.files[index].name;
       const wasRoot = index === rootIndex(state.tabs);
+      const imageKey = sourceImageKey(store.envelope.activeId, name);
+      imageContexts.delete(imageKey);
+      store.update((draft) => { delete draft.sourceImages[imageKey]; });
       confirmIndex = null;
       if (confirmTimer !== null) window.clearTimeout(confirmTimer);
       confirmTimer = null;
@@ -3146,6 +3191,15 @@ const groups = displayGroups(catalogue, []);
         if (commit) {
           const next = renameFile(state.tabs, index, input.value);
           if (next !== state.tabs) {
+            const oldKey = sourceImageKey(store.envelope.activeId, state.tabs.files[index].name);
+            const newKey = sourceImageKey(store.envelope.activeId, next.files[index].name);
+            const context = imageContexts.get(oldKey);
+            if (context) { imageContexts.set(newKey, context); imageContexts.delete(oldKey); }
+            store.update((draft) => {
+              const images = draft.sourceImages[oldKey];
+              if (images) draft.sourceImages[newKey] = images;
+              delete draft.sourceImages[oldKey];
+            });
             state.tabs = next;
             status.textContent =
               `Renamed to ${input.value}. Imports keep the old name; update them yourself if another file imports this one.`;
@@ -3232,7 +3286,7 @@ const groups = displayGroups(catalogue, []);
         if (changedCircuit) {
           consoleNewSession();
           hooks.onCircuitChanged?.();
-          romImages.clear(); romImplied.clear(); imageFiles.clear();
+          selectImages();
           memWindows.clear(); hexOpen.clear();
         }
         state.analysis = null;
@@ -3414,6 +3468,18 @@ const groups = displayGroups(catalogue, []);
       renderStatus();
     }
 
+    const pendingAnalyses = new Map<string, Promise<WorkerReply>>();
+    function analysisFor(request: ReturnType<typeof activeRequest>) {
+      const key = JSON.stringify(request);
+      const pending = pendingAnalyses.get(key);
+      if (pending) return pending;
+      const promise = client.call('analyze', request);
+      pendingAnalyses.set(key, promise);
+      const clear = () => { if (pendingAnalyses.get(key) === promise) pendingAnalyses.delete(key); };
+      void promise.then(clear, clear);
+      return promise;
+    }
+
     async function runAnalyze(seq: number) {
       const doc = state.doc;
       if (!(await ensureReady())) return;
@@ -3421,7 +3487,7 @@ const groups = displayGroups(catalogue, []);
       const snapshot = snapshotBodies();
       setBusy(true, pipe.building);
 
-      const an = await client.call('analyze', activeRequest());
+      const an = await analysisFor(activeRequest());
       if (!analyzeStage.isCurrent(seq)) return;
       if (an.status !== 0) {
         pipe.failure = `analyze failed: ${an.error ?? an.status}`;
@@ -3464,7 +3530,13 @@ const groups = displayGroups(catalogue, []);
 
       const snapshot = snapshotBodies();
       setBusy(pipe.analyzing, true);
-      const c = await client.call('compile', activeRequest());
+      const request = activeRequest();
+      // File IDs are local to this exact request. Never pair topology with a
+      // later editor analysis, including while a last-good artifact is shown.
+      const [c, metadata] = await Promise.all([
+        client.call('compile', request),
+        state.tabs.files.length > 1 ? analysisFor(request) : Promise.resolve(null),
+      ]);
       if (!buildStage.isCurrent(seq)) return;
 
       if (c.status === 0 && c.bytes) {
@@ -3472,8 +3544,11 @@ const groups = displayGroups(catalogue, []);
         // reports 0.
         const size = c.bytes.length;
         const hash = fnv1a(c.bytes);
-        if (!state.artifact || state.artifact.hash !== hash) {
-          state.artifact = { bytes: c.bytes, hash, size };
+        const analysis = metadata?.status === 0 && metadata.text ? JSON.parse(metadata.text) as Analysis : null;
+        const importedImages = importedImagesFor(analysis);
+        if (!state.artifact || state.artifact.hash !== hash ||
+          JSON.stringify([...(state.artifact.importedImages?.files ?? [])]) !== JSON.stringify([...importedImages.files])) {
+          state.artifact = { bytes: c.bytes, hash, size, importedImages };
           hooks.onArtifact?.(c.bytes, 'built');
           hooks.refreshActions?.();
         }
@@ -3687,8 +3762,9 @@ const groups = displayGroups(catalogue, []);
         showTruthNote(refusal);
         return;
       }
-      if (capRefusal(rootInputBits(), settings()) !== null) {
-        await runTruthOverCap(seq);
+      const overCap = capRefusal(rootInputBits(), settings()) !== null;
+      if (overCap || hasImportedImages()) {
+        await runScratchTruth(seq, overCap);
         return;
       }
       const r = await client.call('truth_table', activeRequest(optionsFor('truth_table', settings(), preloads())));
@@ -3711,17 +3787,18 @@ const groups = displayGroups(catalogue, []);
      * Decision 10: over the cap the compiler would enumerate every input bit,
      * so the site enumerates only the unknown ones. The known pins are held
      * at the live session's values on a scratch session built from the same
-     * artifact (same roms and images; no boot low, so a pin the reader never
-     * set is unknown and enumerated), the rows are read, and the scratch is
-     * destroyed. The live session is read and never written.
+     * artifact. Imported images also need this runtime path below the cap:
+     * the compiler only preloads root memories. In that case all scratch
+     * inputs start floating and every combination is enumerated. The live
+     * session is read and never written.
      */
-    async function runTruthOverCap(seq: number) {
+    async function runScratchTruth(seq: number, filtered = true) {
       const cap = settings().truthTableCap;
       const live = await ensureSession();
       if (!buildStage.isCurrent(seq)) return;
       if (!live) {
         truth.filtered = false;
-        showTruthNote(state.simulateEnabled ? 'Compile a circuit first.' : 'Simulate is disabled, and the table over the cap needs it.');
+        showTruthNote(state.simulateEnabled ? 'Compile a circuit first.' : 'Simulate is disabled, and this table needs it.');
         return;
       }
       const bytes = sim.bytes;
@@ -3733,16 +3810,17 @@ const groups = displayGroups(catalogue, []);
         load: (b) => Runtime.loadFromBytes(b, { noInitialPinDrive: true }),
         roms: currentRoms(),
         images: romImages,
+        importedImages: state.artifact?.importedImages,
       });
       if (!buildStage.isCurrent(seq) || sim.bytes !== bytes || sim.session !== live) {
         scratch.destroy();
         return;
       }
       const t0 = performance.now();
-      const outcome = rowsForPins(scratch, live, cap);
+      const outcome = rowsForPins(scratch, filtered ? live : scratch, cap);
       truth.lastMs = performance.now() - t0;
       scratch.destroy();
-      truth.unknownBits = outcome.unknownBits;
+      truth.unknownBits = filtered ? outcome.unknownBits : undefined;
       if (!outcome.ok) {
         truth.filtered = false;
         showTruthNote(
@@ -3752,7 +3830,7 @@ const groups = displayGroups(catalogue, []);
         );
         return;
       }
-      truth.filtered = true;
+      truth.filtered = filtered;
       await renderTruth(outcome.table);
     }
 
@@ -3762,7 +3840,7 @@ const groups = displayGroups(catalogue, []);
       if (what !== 'markdown' && what !== 'csv') return null;
       const table = truth.table;
       if (!table) return Promise.resolve('');
-      if (truth.filtered) {
+      if (truth.filtered || hasImportedImages()) {
         return loadTruthView().then((m) => (what === 'markdown' ? m.toMarkdown : m.toCsv)(table, settings().valueFormat));
       }
       return client
@@ -4087,6 +4165,7 @@ const groups = displayGroups(catalogue, []);
         load: (b) => Runtime.loadFromBytes(b, { noInitialPinDrive: true }),
         roms: currentRoms(),
         images: romImages,
+        importedImages: state.artifact?.importedImages,
         // The handshake's `diag warning` lines, from the analysis this
         // artifact was built beside; `--sim` prints its own the same way.
         warnings: state.mapped

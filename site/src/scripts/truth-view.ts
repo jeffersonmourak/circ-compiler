@@ -181,14 +181,14 @@ export type ScratchOutcome =
  * truth table of a stateful circuit is not one).
  */
 export function rowsForPins(
-  scratch: SessionLike & { mems: readonly { kind: 'rom' | 'ram' }[] },
+  scratch: SessionLike & { mems: readonly { kind: 'rom' | 'ram' }[]; hasRam?: boolean },
   live: SessionLike,
   cap: number,
 ): ScratchOutcome {
   const unknown = unknownInputs(live);
   const unknownBits = unknown.reduce((n, p) => n + p.width, 0);
   if (unknownBits > cap) return { ok: false, reason: 'over-cap', unknownBits };
-  if (scratch.mems.some((m) => m.kind === 'ram')) return { ok: false, reason: 'stateful', unknownBits };
+  if (scratch.hasRam || scratch.mems.some((m) => m.kind === 'ram')) return { ok: false, reason: 'stateful', unknownBits };
 
   const inputs = live.pins.filter((p) => p.kind === 'in');
   const outputs = live.pins.filter((p) => p.kind === 'out');
