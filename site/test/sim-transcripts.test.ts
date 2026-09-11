@@ -71,4 +71,21 @@ describe.skipIf(skip)('the four --sim transcripts replay byte for byte', () => {
   test('sim_and_gate', async () => {
     expect(await transcript({ name: 'sim_and_gate', root: 'tests/fixtures/circuits/and_gate.circ' })).toBe(golden('sim_and_gate'));
   });
+
+  test('sim_rom_pc_walk, with its --mem preload', async () => {
+    const fx: Fixture = {
+      name: 'sim_rom_pc_walk',
+      root: 'tests/fixtures/circuits/sim_rom_pc_walk.circ',
+      preloads: [{ mem: 'code', width: 8, addrWidth: 4, path: 'tests/fixtures/mem/rom_pc_walk.bin' }],
+    };
+    expect(await transcript(fx)).toBe(golden('sim_rom_pc_walk'));
+  });
+
+  test('sim_ram_write_read', async () => {
+    expect(await transcript({ name: 'sim_ram_write_read', root: 'tests/fixtures/circuits/sim_ram_write_read.circ' })).toBe(golden('sim_ram_write_read'));
+  });
+
+  test('sim_mem_errors', async () => {
+    expect(await transcript({ name: 'sim_mem_errors', root: 'tests/fixtures/circuits/sim_ram_write_read.circ' })).toBe(golden('sim_mem_errors'));
+  });
 });
