@@ -118,6 +118,8 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - The file strip is a switch, over the tree's state (36px, `role="tab"`, `+ file`; rename, delete and reorder stay in the tree)
 - The view switch is three views and one panel (`view` and `dataOpen`; the Truth gate's reason in the toolbar note)
 - The Live view adopts the renderer's zoom and pan (`viewport: 'parent'`, the modifier wheel, `cell 14 · 100% · fit`, a refit only when the reader has not navigated)
+- Over the cap, the Truth view shows the rows the pins select (a scratch `SimSession` over the unknown pins; the live session read, never written; the gate blocks for errors only)
+- A truth row drives the pins through the session (one `set` per column; the tint follows the session; every cell spelled by `formatPinValue`)
 
 ## Conventions
 

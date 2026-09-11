@@ -145,3 +145,43 @@ Rolling log of shipped slices. Newest at the bottom. The plan is `DOCS/PLANS_PRO
 **Tests:** the padding guard reads `BENCH_INSET`; the flip guard accepts `setTheme(benchTheme(pickTheme()))`; 561 pass
 **Next slice:** Phase 3, on the human's word.
 **Notes:** Reported by the human from their walk: "the grid dot in the background of the canvas do not move or zoom with the contents, it feels weird". A CSS layer on the region cannot follow the view; the renderer's `background` hook receives `view` and `viewport` for exactly this. Decision 9's entry should be read with this: the canvas theme's "the canvas stays transparent" holds (the hook still clears, it fills nothing), and the dots are marks, not a fill. The site's own `background` cleared only the grid's rectangle, which under a zoom-out is smaller than the element; the wrapper clears the whole visible world. The gallery keeps the plain theme.
+
+## 2026-09-11 — Phase 3 — truth-view.ts: parse, spell, match
+
+**What shipped:** `site/src/scripts/truth-view.ts` (`parseTruthTable`, `columnOf`, `cellText`, `liveRowIndex`, `compilerCell`, `toMarkdown`, `toCsv`, `driveRow`, `unknownInputs`, `rowsForPins`); `optionsFor('truth_table', s, preloads, format = 'json')`; the `format` select removed from the settings form. Commit `ff08903`.
+**Files touched:** `site/src/scripts/truth-view.ts`, `site/test/truth-view.test.ts`, `site/src/scripts/settings-drawer.ts`, `site/test/settings-drawer.test.ts`, `site/src/components/Playground.astro`
+**Tests:** added `truth view › parseTruthTable reads numbers and hex strings into bigints`, `› cellText spells in the reader's base`, `› liveRowIndex matches the compiler's row order`, `› liveRowIndex on a bus`, `› chipText composes the parts`, `› toMarkdown and toCsv match the compiler's shape` (byte-equal to three goldens), `› a row click drives every input column through the session`, `› unknownInputs lists the pins with an undefined bit`, `› rowsForPins enumerates only the unknown bits`, `› rowsForPins refuses over the cap and on a ram`, `› the scratch never writes the live session`, `› toMarkdown of the parsed json equals the compiler's markdown` (through `libcirc.wasm`, `and_gate.circ` and `and_2bit.circ` in all three bases); `settings-drawer › truth_table asks for json unless told the copy format`
+**Next slice:** the Schematic view.
+**Notes:** `cellText` spells a one-bit column as its digit, whatever the base: the renderer's `formatPinValue` gives `0b1` for a bit, and a truth table of `0b1`s is not one. The spec's `1010` for a 4-bit binary cell is the renderer's `0b1010`; the renderer won.
+
+## 2026-09-11 — Phase 3 — The Schematic view
+
+**What shipped:** Each view's tools in the bar and its own bottom-right line, shown by the region's `data-view`: the Schematic's two toggles (`expandMacros`, `expandDisplay`, bound by the footer's own `mountSettingsDrawer` call), `Copy`, the `rows × cols chars` size line; the region on `--code-bg` without the grid; `.pg-preview` at `--font-mono-strict 20px / 1.35` centred by a grid's `margin: auto`; the Truth chip replacing the view note; the copy buttons' handler on `copyText` and `flash`, with `hooks.copySource` for the Truth view. Commit `7bb1437`.
+**Files touched:** `site/src/components/Playground.astro`, `site/src/styles/global.css`, `site/test/island-smoke.test.ts`
+**Tests:** the mount walk's region assertions (`data-view`, the size line, the two toggles as the region's only settings); 574 pass
+**Next slice:** the Truth view under the cap.
+**Notes:** Board 3e captured on the two-bit adder: `23 × 65 chars`.
+
+## 2026-09-11 — Phase 3 — The Truth view under the cap
+
+**What shipped:** `truth-chip.ts` (eager; `chipText`, re-exported by `truth-view.ts`); the table in `.pg-truth-card` on the dot grid, headers lighting the schematic and the editor, cells classed `pg-truth-high | low | unknown` and spelled by `cellText` in the reader's base, a left rule on the first output column, rows with `tabindex` that drive through `driveTruthRow` (`ensureSession` → `driveRow` → the page's pin memory), the tint moved by `refreshTruthTint` on every `drive` event, the chip from `applyTruthGate` with the counts, the two copies (the compiler's markdown or CSV through `optionsFor(…, what)`; the module's over the cap); `renderTruth` on the seam. Commit `25f27e2`.
+**Files touched:** `site/src/components/Playground.astro`, `site/src/styles/global.css`, `site/src/scripts/truth-chip.ts`, `site/src/scripts/truth-view.ts`, `site/test/island-smoke.test.ts`
+**Tests:** added `island-smoke › the truth table renders as a card of rows that drive`; 575 pass
+**Next slice:** over the cap.
+**Notes:** Two harness lessons. The gate reads the Truth record at boot, so the record is declared beside the island's state (the third boot-order slip of this plan; the rule in Phase 2's note stands). happy-dom's table sections have no `insertRow`/`insertCell`, so the rows are built with `createElement`, which is the same DOM. A dynamic import's preload helper reads `document`, so a smoke test that awaits one runs inside `driveAsync`. Board 3f captured on the two-bit adder after a row click: the row tinted, the terminal line reading `set b 0x1 · ok`.
+
+## 2026-09-11 — Phase 3 — Over the cap
+
+**What shipped:** `runTruthOverCap`: the live session ensured, a scratch `SimSession` over the same bytes, roms and images (no boot-low), `rowsForPins`, the scratch destroyed, the filtered table or the card's note (`K unknown input bits are over the cap of C…`, `A truth table needs a circuit without ram.`); `truthBlock` blocks for errors only; a `drive` re-enumerates a filtered table; `truth.lastMs` and `truth` on the seam. Commit `95d2cb4`.
+**Files touched:** `site/src/components/Playground.astro`
+**Tests:** none added (the module's cases cover the enumeration; no harness builds a session); 575 pass
+**Next slice:** the record.
+**Notes:** The walk on the four-bit adder (8 input bits) at cap 7 through the console: with the session as it boots (low), every pin is known and the filtered table is the single live row; after `reset` and `set a 0x3`, `b`'s 4 unknown bits give 16 rows in 1.9 ms; `set a 0x1 0x1` (half-known) counts `a` whole, 8 unknown over 7, and the card says so. Extrapolated, 4,096 rows at the default cap of 12 would take about 0.5 s on the main thread, over the spec's 100 ms; the sweep (Phase 7) decides between chunking the loop through `requestIdleCallback` and a lower cap for the site path. Not enumerating the unknown *bits* of a half-known bus is a papercut of the same size.
+
+## 2026-09-11 — Phase 3 — The record
+
+**What shipped:** `DOCS/decisions/playground-bench.md`: decision 7 amended (the Schematic toolbar, the `format` finding), decisions 10 and 11; the index; this log. `DOCS/sim-protocol.md` reread: it names `--truth-table` twice as the CLI mode and never the tab, so nothing changed.
+**Files touched:** `DOCS/decisions/playground-bench.md`, `DOCS/decisions/index.md`, `DOCS/STATUS.md`
+**Tests:** none added; the four gates green at `95d2cb4`
+**Next slice:** Phase 4 — the project switcher (`DOCS/PLANS/PHASE_4_switcher.md`), on the human's word.
+**Notes:** `bun run bundle`, `/playground`: after Phase 2 115.3 KB raw / 40.5 KB gzip; after Phase 3 120.1 KB raw / 42.1 KB gzip (ceiling 120.0 KB gzip). The eager growth is the chip module and the view's wiring; `truth-view.ts` rides behind the renderer's dynamic import beside `data-view.ts`.
