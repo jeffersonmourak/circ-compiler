@@ -153,14 +153,17 @@ const groups = displayGroups(catalogue, []);
           <div class="pg-settings" data-footer-panel="settings" hidden>
           <fieldset class="pg-settings-group">
             <legend>Compile</legend>
-            <label><input type="checkbox" data-setting="warningsAsErrors" /> Treat warnings as errors</label>
+            <div><input id="pg-compiler-warn-as-error" type="checkbox" data-setting="warningsAsErrors" /></div>
+            <label for="pg-compiler-warn-as-error">Treat warnings as errors</label>
           </fieldset>
           <fieldset class="pg-settings-group">
             <legend>Editor</legend>
-            <label>Wrap lines <input type="checkbox" data-editor-setting="wrapLines" /></label>
-            <label>Font size (px)<input id="pg-editor-font-size" type="number" min="10" max="24" step="1" data-editor-setting="fontSize" /></label>
-
-            <label for="pg-editor-tab-size">Tab size <input id="pg-editor-tab-size" type="number" min="1" max="8" step="1" data-editor-setting="tabSize" /></label>
+            <div><input id="pg-editor-wrap-lines" type="checkbox" data-editor-setting="wrapLines" /></div>
+            <label for="pg-editor-wrap-lines">Wrap lines</label>
+            <input id="pg-editor-font-size" type="number" min="10" max="24" step="1" data-editor-setting="fontSize" />
+            <label for="pg-editor-font-size">Font size (px)</label>
+            <input id="pg-editor-tab-size" type="number" min="1" max="8" step="1" data-editor-setting="tabSize" />
+            <label for="pg-editor-tab-size">Tab size</label>
             <span class="pg-settings-hint">Tab indents with this many spaces.</span>
           </fieldset>
         </div>
