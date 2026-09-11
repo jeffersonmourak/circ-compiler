@@ -99,3 +99,5 @@ The entries below record the decisions of the playground-bench initiative: the s
 **Rationale.** A truth table is a map from inputs to outputs; a row is the shortest way to say "show me this case", and the session is the one place every face drives through, so the click cannot bypass the console's record. The tint that follows the session rather than the click is what keeps it honest when a `set` is refused or another face moves a pin.
 
 **Alternatives.** The tint set by the click (lies after a refusal); driving the runtime directly (bypasses the console and the Data panel); the compiler's own spelling in the cells (decimal under a setting that says binary).
+
+**Amended after the walk.** Board 3f draws the card on the dot grid; the human preferred the Truth view without it, so the grid is the Live view's alone: the region's static dots show only under Live before its canvas exists, and the canvas draws its own after. The Schematic and Truth views sit on plain surfaces.
