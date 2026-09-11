@@ -15,6 +15,7 @@ import {
   defaultColors,
   defaultArcRadius,
   drawLabel,
+  junctionCells,
   memoryLabel,
   traceWire,
   wirePath,
@@ -103,6 +104,17 @@ describe('renderer pin', () => {
     expect(typeof buildLayout).toBe('function');
     expect('grid' in defaultColors).toBe(false);
     expect(({ fanOutMarker: () => {} } satisfies Partial<CircTheme>).fanOutMarker).toBeDefined();
+    // The Phase 4 review's finding: a junction is where the net branches, not
+    // every cell of a trunk several wires share. Four wires down one trunk
+    // with a tap every other cell mark the three taps, and nothing else.
+    const seg = (x0: number, y0: number, x1: number, y1: number) => ({ from: { x: x0, y: y0 }, to: { x: x1, y: y1 } });
+    const wireOf = (segments: ReturnType<typeof seg>[]) => ({ srcId: 1, srcPort: 3, dstId: 2, dstPort: 0, realSrcId: 1, segments, crossings: [] });
+    expect(junctionCells([
+      wireOf([seg(0, 0, 4, 0), seg(4, 0, 4, 6), seg(4, 6, 8, 6)]),
+      wireOf([seg(0, 0, 4, 0), seg(4, 0, 4, 4), seg(4, 4, 8, 4)]),
+      wireOf([seg(0, 0, 4, 0), seg(4, 0, 4, 2), seg(4, 2, 8, 2)]),
+      wireOf([seg(0, 0, 4, 0), seg(4, 0, 8, 0)]),
+    ])).toEqual(['4,0', '4,2', '4,4']);
     const pkg = JSON.parse(
       readFileSync(resolve(import.meta.dir, '..', 'node_modules', 'circ-renderer', 'package.json'), 'utf8'),
     ) as { exports: Record<string, string> };
