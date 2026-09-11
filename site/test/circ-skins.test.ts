@@ -16,7 +16,7 @@ import { resolve } from 'node:path';
 import { ComponentKind, widthMask } from 'circ-renderer/topology';
 import type { BitValue } from 'circ-renderer/topology';
 import type { CircTheme, PlacedComponent, RoutedWire } from 'circ-renderer';
-import { colorsDark, type PaletteKey } from '../src/utils/circ-palette.mjs';
+import { colorsDark, colorsLight, type PaletteKey } from '../src/utils/circ-palette.mjs';
 import { makeSkins } from '../src/utils/circ-skins.mjs';
 import { recordingContext, stubAssets, type Op } from './canvas-record.ts';
 
@@ -118,6 +118,38 @@ const balanced = (ops: Op[]) => {
   const count = (name: string) => ops.filter((op) => op[0] === name).length;
   return count('save') === count('restore');
 };
+
+describe('circ-palette', () => {
+  test('both palettes define the same keys, and none of them is grid', () => {
+    // The handoff's 28 keys: the site's 24 plus surface, spriteInk, wireBus
+    // and busLabel, minus grid, which canvas.ts never read.
+    const dark = Object.keys(colorsDark).sort();
+    const light = Object.keys(colorsLight).sort();
+    expect(light).toEqual(dark);
+    expect(dark).toHaveLength(27);
+    expect(dark).not.toContain('grid');
+    for (const key of ['surface', 'spriteInk', 'wireBus', 'busLabel', 'labelOnComponent', 'inputHover']) {
+      expect(dark).toContain(key);
+    }
+    for (const palette of [colorsDark, colorsLight]) {
+      for (const [key, value] of Object.entries(palette)) {
+        expect(`${key}: ${typeof value}`).toBe(`${key}: string`);
+        expect(`${key}: ${/^(#[0-9a-f]{6}|hsl\([^)]*\))$/.test(value)}`).toBe(`${key}: true`);
+      }
+    }
+  });
+
+  test('idle wires are quieter than active ones in dark mode', () => {
+    // The gap the handoff named: dark wireIdle was #dee2e6, the brightest
+    // thing on the pane. Luminance of idle must sit below active.
+    const lum = (hex: string) => {
+      const n = parseInt(hex.slice(1), 16);
+      return ((n >> 16) & 255) * 0.2126 + ((n >> 8) & 255) * 0.7152 + (n & 255) * 0.0722;
+    };
+    expect(lum(colorsDark.wireIdle)).toBeLessThan(lum(colorsDark.label));
+    expect(colorsDark.wireIdle).toBe('#4c3a6b');
+  });
+});
 
 describe('circ-skins', () => {
   const store = new Map<string, Record<string, Op[]>>();

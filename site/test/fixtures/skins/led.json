@@ -3,7 +3,7 @@
   [
    "set",
    "strokeStyle",
-   "#dee2e6"
+   "#4c3a6b"
   ],
   [
    "set",
@@ -34,12 +34,12 @@
   [
    "set",
    "fillStyle",
-   "#bee3ff"
+   "#2c4a6b"
   ],
   [
    "set",
    "strokeStyle",
-   "#24b4ff"
+   "#4a6e93"
   ],
   [
    "set",
@@ -66,7 +66,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -92,7 +92,7 @@
   [
    "set",
    "fillStyle",
-   "#634e0d"
+   "#5a4a70"
   ],
   [
    "beginPath"
@@ -113,7 +113,7 @@
   [
    "set",
    "strokeStyle",
-   "#dee2e6"
+   "#4c3a6b"
   ],
   [
    "set",
@@ -144,12 +144,12 @@
   [
    "set",
    "fillStyle",
-   "#bee3ff"
+   "#2c4a6b"
   ],
   [
    "set",
    "strokeStyle",
-   "#24b4ff"
+   "#4a6e93"
   ],
   [
    "set",
@@ -176,7 +176,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -202,7 +202,7 @@
   [
    "set",
    "fillStyle",
-   "#634e0d"
+   "#5a4a70"
   ],
   [
    "beginPath"
@@ -223,7 +223,7 @@
   [
    "set",
    "strokeStyle",
-   "#dee2e6"
+   "#4c3a6b"
   ],
   [
    "set",
@@ -254,12 +254,12 @@
   [
    "set",
    "fillStyle",
-   "#bee3ff"
+   "#2c4a6b"
   ],
   [
    "set",
    "strokeStyle",
-   "#24b4ff"
+   "#4a6e93"
   ],
   [
    "set",
@@ -286,7 +286,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -312,7 +312,7 @@
   [
    "set",
    "fillStyle",
-   "#634e0d"
+   "#5a4a70"
   ],
   [
    "beginPath"
@@ -333,7 +333,7 @@
   [
    "set",
    "strokeStyle",
-   "#dee2e6"
+   "#4c3a6b"
   ],
   [
    "set",
@@ -364,12 +364,12 @@
   [
    "set",
    "fillStyle",
-   "#bee3ff"
+   "#2c4a6b"
   ],
   [
    "set",
    "strokeStyle",
-   "#24b4ff"
+   "#4a6e93"
   ],
   [
    "set",
@@ -396,7 +396,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -422,7 +422,7 @@
   [
    "set",
    "fillStyle",
-   "#634e0d"
+   "#5a4a70"
   ],
   [
    "beginPath"
@@ -443,7 +443,7 @@
   [
    "set",
    "strokeStyle",
-   "#dee2e6"
+   "#4c3a6b"
   ],
   [
    "set",
@@ -474,12 +474,12 @@
   [
    "set",
    "fillStyle",
-   "#bee3ff"
+   "#2c4a6b"
   ],
   [
    "set",
    "strokeStyle",
-   "#24b4ff"
+   "#4a6e93"
   ],
   [
    "set",
@@ -506,7 +506,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -532,7 +532,7 @@
   [
    "set",
    "fillStyle",
-   "#634e0d"
+   "#5a4a70"
   ],
   [
    "beginPath"
@@ -553,7 +553,7 @@
   [
    "set",
    "strokeStyle",
-   "#dee2e6"
+   "#4c3a6b"
   ],
   [
    "set",
@@ -584,12 +584,12 @@
   [
    "set",
    "fillStyle",
-   "#bee3ff"
+   "#2c4a6b"
   ],
   [
    "set",
    "strokeStyle",
-   "#24b4ff"
+   "#4a6e93"
   ],
   [
    "set",
@@ -616,7 +616,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -642,7 +642,7 @@
   [
    "set",
    "fillStyle",
-   "#634e0d"
+   "#5a4a70"
   ],
   [
    "beginPath"
@@ -663,7 +663,7 @@
   [
    "set",
    "strokeStyle",
-   "hsl(134 61% 41% / 1)"
+   "hsl(134 61% 52%)"
   ],
   [
    "set",
@@ -699,7 +699,7 @@
   [
    "set",
    "strokeStyle",
-   "#0059b9"
+   "#7cc8ff"
   ],
   [
    "set",
@@ -750,7 +750,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -797,7 +797,7 @@
   [
    "set",
    "strokeStyle",
-   "hsl(134 61% 41% / 1)"
+   "hsl(134 61% 52%)"
   ],
   [
    "set",
@@ -833,7 +833,7 @@
   [
    "set",
    "strokeStyle",
-   "#0059b9"
+   "#7cc8ff"
   ],
   [
    "set",
@@ -884,7 +884,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -931,7 +931,7 @@
   [
    "set",
    "strokeStyle",
-   "hsl(134 61% 41% / 1)"
+   "hsl(134 61% 52%)"
   ],
   [
    "set",
@@ -967,7 +967,7 @@
   [
    "set",
    "strokeStyle",
-   "#0059b9"
+   "#7cc8ff"
   ],
   [
    "set",
@@ -1018,7 +1018,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -1065,7 +1065,7 @@
   [
    "set",
    "strokeStyle",
-   "hsl(134 61% 41% / 1)"
+   "hsl(134 61% 52%)"
   ],
   [
    "set",
@@ -1101,7 +1101,7 @@
   [
    "set",
    "strokeStyle",
-   "#0059b9"
+   "#7cc8ff"
   ],
   [
    "set",
@@ -1152,7 +1152,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -1199,7 +1199,7 @@
   [
    "set",
    "strokeStyle",
-   "hsl(134 61% 41% / 1)"
+   "hsl(134 61% 52%)"
   ],
   [
    "set",
@@ -1235,7 +1235,7 @@
   [
    "set",
    "strokeStyle",
-   "#0059b9"
+   "#7cc8ff"
   ],
   [
    "set",
@@ -1286,7 +1286,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -1333,7 +1333,7 @@
   [
    "set",
    "strokeStyle",
-   "hsl(134 61% 41% / 1)"
+   "hsl(134 61% 52%)"
   ],
   [
    "set",
@@ -1369,7 +1369,7 @@
   [
    "set",
    "strokeStyle",
-   "#0059b9"
+   "#7cc8ff"
   ],
   [
    "set",
@@ -1420,7 +1420,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -1467,7 +1467,7 @@
   [
    "set",
    "strokeStyle",
-   "#3a2752"
+   "#33244d"
   ],
   [
    "set",
@@ -1498,12 +1498,12 @@
   [
    "set",
    "fillStyle",
-   "#bee3ff"
+   "#2c4a6b"
   ],
   [
    "set",
    "strokeStyle",
-   "#24b4ff"
+   "#4a6e93"
   ],
   [
    "set",
@@ -1530,7 +1530,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -1556,7 +1556,7 @@
   [
    "set",
    "fillStyle",
-   "#634e0d"
+   "#5a4a70"
   ],
   [
    "beginPath"
@@ -1577,7 +1577,7 @@
   [
    "set",
    "strokeStyle",
-   "#3a2752"
+   "#33244d"
   ],
   [
    "set",
@@ -1608,12 +1608,12 @@
   [
    "set",
    "fillStyle",
-   "#bee3ff"
+   "#2c4a6b"
   ],
   [
    "set",
    "strokeStyle",
-   "#24b4ff"
+   "#4a6e93"
   ],
   [
    "set",
@@ -1640,7 +1640,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -1666,7 +1666,7 @@
   [
    "set",
    "fillStyle",
-   "#634e0d"
+   "#5a4a70"
   ],
   [
    "beginPath"
@@ -1687,7 +1687,7 @@
   [
    "set",
    "strokeStyle",
-   "#3a2752"
+   "#33244d"
   ],
   [
    "set",
@@ -1718,12 +1718,12 @@
   [
    "set",
    "fillStyle",
-   "#bee3ff"
+   "#2c4a6b"
   ],
   [
    "set",
    "strokeStyle",
-   "#24b4ff"
+   "#4a6e93"
   ],
   [
    "set",
@@ -1750,7 +1750,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -1776,7 +1776,7 @@
   [
    "set",
    "fillStyle",
-   "#634e0d"
+   "#5a4a70"
   ],
   [
    "beginPath"
@@ -1797,7 +1797,7 @@
   [
    "set",
    "strokeStyle",
-   "#3a2752"
+   "#33244d"
   ],
   [
    "set",
@@ -1828,12 +1828,12 @@
   [
    "set",
    "fillStyle",
-   "#bee3ff"
+   "#2c4a6b"
   ],
   [
    "set",
    "strokeStyle",
-   "#24b4ff"
+   "#4a6e93"
   ],
   [
    "set",
@@ -1860,7 +1860,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -1886,7 +1886,7 @@
   [
    "set",
    "fillStyle",
-   "#634e0d"
+   "#5a4a70"
   ],
   [
    "beginPath"
@@ -1907,7 +1907,7 @@
   [
    "set",
    "strokeStyle",
-   "#3a2752"
+   "#33244d"
   ],
   [
    "set",
@@ -1938,12 +1938,12 @@
   [
    "set",
    "fillStyle",
-   "#bee3ff"
+   "#2c4a6b"
   ],
   [
    "set",
    "strokeStyle",
-   "#24b4ff"
+   "#4a6e93"
   ],
   [
    "set",
@@ -1970,7 +1970,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -1996,7 +1996,7 @@
   [
    "set",
    "fillStyle",
-   "#634e0d"
+   "#5a4a70"
   ],
   [
    "beginPath"
@@ -2017,7 +2017,7 @@
   [
    "set",
    "strokeStyle",
-   "#3a2752"
+   "#33244d"
   ],
   [
    "set",
@@ -2048,12 +2048,12 @@
   [
    "set",
    "fillStyle",
-   "#bee3ff"
+   "#2c4a6b"
   ],
   [
    "set",
    "strokeStyle",
-   "#24b4ff"
+   "#4a6e93"
   ],
   [
    "set",
@@ -2080,7 +2080,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -2106,7 +2106,7 @@
   [
    "set",
    "fillStyle",
-   "#634e0d"
+   "#5a4a70"
   ],
   [
    "beginPath"
@@ -2127,7 +2127,7 @@
   [
    "set",
    "strokeStyle",
-   "#dee2e6"
+   "#4c3a6b"
   ],
   [
    "set",
@@ -2158,12 +2158,12 @@
   [
    "set",
    "fillStyle",
-   "#bee3ff"
+   "#2c4a6b"
   ],
   [
    "set",
    "strokeStyle",
-   "#24b4ff"
+   "#4a6e93"
   ],
   [
    "set",
@@ -2190,7 +2190,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -2216,7 +2216,7 @@
   [
    "set",
    "fillStyle",
-   "#634e0d"
+   "#5a4a70"
   ],
   [
    "beginPath"
@@ -2237,7 +2237,7 @@
   [
    "set",
    "strokeStyle",
-   "#dee2e6"
+   "#4c3a6b"
   ],
   [
    "set",
@@ -2268,12 +2268,12 @@
   [
    "set",
    "fillStyle",
-   "#bee3ff"
+   "#2c4a6b"
   ],
   [
    "set",
    "strokeStyle",
-   "#24b4ff"
+   "#4a6e93"
   ],
   [
    "set",
@@ -2300,7 +2300,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -2326,7 +2326,7 @@
   [
    "set",
    "fillStyle",
-   "#634e0d"
+   "#5a4a70"
   ],
   [
    "beginPath"
@@ -2347,7 +2347,7 @@
   [
    "set",
    "strokeStyle",
-   "#dee2e6"
+   "#4c3a6b"
   ],
   [
    "set",
@@ -2378,12 +2378,12 @@
   [
    "set",
    "fillStyle",
-   "#bee3ff"
+   "#2c4a6b"
   ],
   [
    "set",
    "strokeStyle",
-   "#24b4ff"
+   "#4a6e93"
   ],
   [
    "set",
@@ -2410,7 +2410,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -2436,7 +2436,7 @@
   [
    "set",
    "fillStyle",
-   "#634e0d"
+   "#5a4a70"
   ],
   [
    "beginPath"
@@ -2457,7 +2457,7 @@
   [
    "set",
    "strokeStyle",
-   "#dee2e6"
+   "#4c3a6b"
   ],
   [
    "set",
@@ -2488,12 +2488,12 @@
   [
    "set",
    "fillStyle",
-   "#bee3ff"
+   "#2c4a6b"
   ],
   [
    "set",
    "strokeStyle",
-   "#24b4ff"
+   "#4a6e93"
   ],
   [
    "set",
@@ -2520,7 +2520,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -2546,7 +2546,7 @@
   [
    "set",
    "fillStyle",
-   "#634e0d"
+   "#5a4a70"
   ],
   [
    "beginPath"
@@ -2567,7 +2567,7 @@
   [
    "set",
    "strokeStyle",
-   "#dee2e6"
+   "#4c3a6b"
   ],
   [
    "set",
@@ -2598,12 +2598,12 @@
   [
    "set",
    "fillStyle",
-   "#bee3ff"
+   "#2c4a6b"
   ],
   [
    "set",
    "strokeStyle",
-   "#24b4ff"
+   "#4a6e93"
   ],
   [
    "set",
@@ -2630,7 +2630,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -2656,7 +2656,7 @@
   [
    "set",
    "fillStyle",
-   "#634e0d"
+   "#5a4a70"
   ],
   [
    "beginPath"
@@ -2677,7 +2677,7 @@
   [
    "set",
    "strokeStyle",
-   "#dee2e6"
+   "#4c3a6b"
   ],
   [
    "set",
@@ -2708,12 +2708,12 @@
   [
    "set",
    "fillStyle",
-   "#bee3ff"
+   "#2c4a6b"
   ],
   [
    "set",
    "strokeStyle",
-   "#24b4ff"
+   "#4a6e93"
   ],
   [
    "set",
@@ -2740,7 +2740,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -2766,7 +2766,7 @@
   [
    "set",
    "fillStyle",
-   "#634e0d"
+   "#5a4a70"
   ],
   [
    "beginPath"
@@ -2787,7 +2787,7 @@
   [
    "set",
    "strokeStyle",
-   "hsl(134 61% 41% / 1)"
+   "hsl(134 61% 52%)"
   ],
   [
    "set",
@@ -2823,7 +2823,7 @@
   [
    "set",
    "strokeStyle",
-   "#0059b9"
+   "#7cc8ff"
   ],
   [
    "set",
@@ -2874,7 +2874,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -2921,7 +2921,7 @@
   [
    "set",
    "strokeStyle",
-   "hsl(134 61% 41% / 1)"
+   "hsl(134 61% 52%)"
   ],
   [
    "set",
@@ -2957,7 +2957,7 @@
   [
    "set",
    "strokeStyle",
-   "#0059b9"
+   "#7cc8ff"
   ],
   [
    "set",
@@ -3008,7 +3008,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -3055,7 +3055,7 @@
   [
    "set",
    "strokeStyle",
-   "hsl(134 61% 41% / 1)"
+   "hsl(134 61% 52%)"
   ],
   [
    "set",
@@ -3091,7 +3091,7 @@
   [
    "set",
    "strokeStyle",
-   "#0059b9"
+   "#7cc8ff"
   ],
   [
    "set",
@@ -3142,7 +3142,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -3189,7 +3189,7 @@
   [
    "set",
    "strokeStyle",
-   "hsl(134 61% 41% / 1)"
+   "hsl(134 61% 52%)"
   ],
   [
    "set",
@@ -3225,7 +3225,7 @@
   [
    "set",
    "strokeStyle",
-   "#0059b9"
+   "#7cc8ff"
   ],
   [
    "set",
@@ -3276,7 +3276,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -3323,7 +3323,7 @@
   [
    "set",
    "strokeStyle",
-   "hsl(134 61% 41% / 1)"
+   "hsl(134 61% 52%)"
   ],
   [
    "set",
@@ -3359,7 +3359,7 @@
   [
    "set",
    "strokeStyle",
-   "#0059b9"
+   "#7cc8ff"
   ],
   [
    "set",
@@ -3410,7 +3410,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -3457,7 +3457,7 @@
   [
    "set",
    "strokeStyle",
-   "hsl(134 61% 41% / 1)"
+   "hsl(134 61% 52%)"
   ],
   [
    "set",
@@ -3493,7 +3493,7 @@
   [
    "set",
    "strokeStyle",
-   "#0059b9"
+   "#7cc8ff"
   ],
   [
    "set",
@@ -3544,7 +3544,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -3591,7 +3591,7 @@
   [
    "set",
    "strokeStyle",
-   "#3a2752"
+   "#33244d"
   ],
   [
    "set",
@@ -3622,12 +3622,12 @@
   [
    "set",
    "fillStyle",
-   "#bee3ff"
+   "#2c4a6b"
   ],
   [
    "set",
    "strokeStyle",
-   "#24b4ff"
+   "#4a6e93"
   ],
   [
    "set",
@@ -3654,7 +3654,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -3680,7 +3680,7 @@
   [
    "set",
    "fillStyle",
-   "#634e0d"
+   "#5a4a70"
   ],
   [
    "beginPath"
@@ -3701,7 +3701,7 @@
   [
    "set",
    "strokeStyle",
-   "#3a2752"
+   "#33244d"
   ],
   [
    "set",
@@ -3732,12 +3732,12 @@
   [
    "set",
    "fillStyle",
-   "#bee3ff"
+   "#2c4a6b"
   ],
   [
    "set",
    "strokeStyle",
-   "#24b4ff"
+   "#4a6e93"
   ],
   [
    "set",
@@ -3764,7 +3764,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -3790,7 +3790,7 @@
   [
    "set",
    "fillStyle",
-   "#634e0d"
+   "#5a4a70"
   ],
   [
    "beginPath"
@@ -3811,7 +3811,7 @@
   [
    "set",
    "strokeStyle",
-   "#3a2752"
+   "#33244d"
   ],
   [
    "set",
@@ -3842,12 +3842,12 @@
   [
    "set",
    "fillStyle",
-   "#bee3ff"
+   "#2c4a6b"
   ],
   [
    "set",
    "strokeStyle",
-   "#24b4ff"
+   "#4a6e93"
   ],
   [
    "set",
@@ -3874,7 +3874,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -3900,7 +3900,7 @@
   [
    "set",
    "fillStyle",
-   "#634e0d"
+   "#5a4a70"
   ],
   [
    "beginPath"
@@ -3921,7 +3921,7 @@
   [
    "set",
    "strokeStyle",
-   "#3a2752"
+   "#33244d"
   ],
   [
    "set",
@@ -3952,12 +3952,12 @@
   [
    "set",
    "fillStyle",
-   "#bee3ff"
+   "#2c4a6b"
   ],
   [
    "set",
    "strokeStyle",
-   "#24b4ff"
+   "#4a6e93"
   ],
   [
    "set",
@@ -3984,7 +3984,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -4010,7 +4010,7 @@
   [
    "set",
    "fillStyle",
-   "#634e0d"
+   "#5a4a70"
   ],
   [
    "beginPath"
@@ -4031,7 +4031,7 @@
   [
    "set",
    "strokeStyle",
-   "#3a2752"
+   "#33244d"
   ],
   [
    "set",
@@ -4062,12 +4062,12 @@
   [
    "set",
    "fillStyle",
-   "#bee3ff"
+   "#2c4a6b"
   ],
   [
    "set",
    "strokeStyle",
-   "#24b4ff"
+   "#4a6e93"
   ],
   [
    "set",
@@ -4094,7 +4094,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -4120,7 +4120,7 @@
   [
    "set",
    "fillStyle",
-   "#634e0d"
+   "#5a4a70"
   ],
   [
    "beginPath"
@@ -4141,7 +4141,7 @@
   [
    "set",
    "strokeStyle",
-   "#3a2752"
+   "#33244d"
   ],
   [
    "set",
@@ -4172,12 +4172,12 @@
   [
    "set",
    "fillStyle",
-   "#bee3ff"
+   "#2c4a6b"
   ],
   [
    "set",
    "strokeStyle",
-   "#24b4ff"
+   "#4a6e93"
   ],
   [
    "set",
@@ -4204,7 +4204,7 @@
   [
    "set",
    "fillStyle",
-   "#aaa"
+   "#8f7fb0"
   ],
   [
    "set",
@@ -4230,7 +4230,7 @@
   [
    "set",
    "fillStyle",
-   "#634e0d"
+   "#5a4a70"
   ],
   [
    "beginPath"
