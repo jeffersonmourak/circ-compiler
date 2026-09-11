@@ -14,9 +14,11 @@ type Props = {
   mdTwin?: string | null;
   /**
    * `'app'` turns the page into a viewport-locked workbench: the body becomes
-   * a `100dvh` grid and `main` stops being a centred article column. Every
-   * other page keeps `'default'`, and its markup is byte-identical to before
-   * this prop existed — `data-layout` is only stamped for `'app'`.
+   * a `100dvh` grid, `main` stops being a centred article column, and the
+   * page brings its own chrome — the site nav and footer are not rendered,
+   * so the workbench owns every row of the viewport. Every other page keeps
+   * `'default'`, and its markup is byte-identical to before this prop
+   * existed — `data-layout` is only stamped for `'app'`.
    */
   layout?: 'default' | 'app';
 };
@@ -81,10 +83,10 @@ const isLanding = twin === `${stripTrailingSlash(base)}/index.md`;
     </script>
   </head>
   <body data-layout={layout === 'app' ? 'app' : undefined}>
-    <Nav />
+    {layout !== 'app' && <Nav />}
     <main>
       <slot />
     </main>
-    <Footer />
+    {layout !== 'app' && <Footer />}
   </body>
 </html>

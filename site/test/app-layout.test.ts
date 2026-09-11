@@ -123,6 +123,28 @@ describe('app layout', () => {
     }
   });
 
+  test('Base renders the site chrome for the default layout only', () => {
+    // The app page brings its own chrome (the bench nav and status line), so
+    // the site nav and footer would be a second wordmark and a second row of
+    // links above and below it. Every other page keeps both.
+    expect(base).toMatch(/\{layout !== 'app' && <Nav \/>\}/);
+    expect(base).toMatch(/\{layout !== 'app' && <Footer \/>\}/);
+    const block = stripComments(css).slice(stripComments(css).indexOf("[data-layout='app'] {"));
+    const rows = block.slice(0, block.indexOf('}'));
+    // One viewport row, fallback first, for the same reason as the height.
+    const vh = rows.indexOf('grid-template-rows: 100vh');
+    const dvh = rows.indexOf('grid-template-rows: 100dvh');
+    expect(vh).toBeGreaterThanOrEqual(0);
+    expect(dvh).toBeGreaterThan(vh);
+    const main = block.slice(block.indexOf("[data-layout='app'] main {"));
+    expect(main.slice(0, main.indexOf('}'))).toContain('padding: 0;');
+    // And nothing in the app block styles chrome that is no longer rendered.
+    for (const selector of selectorsOf(css).filter((s) => s.includes("data-layout='app'"))) {
+      expect(selector).not.toContain('.site-footer');
+      expect(selector).not.toContain('.site-nav');
+    }
+  });
+
   test('the viewport lock has a 100vh fallback before 100dvh', () => {
     const block = stripComments(css).slice(stripComments(css).indexOf("[data-layout='app'] {"));
     const vh = block.indexOf('height: 100vh');

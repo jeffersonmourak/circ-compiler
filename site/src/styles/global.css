@@ -1679,22 +1679,25 @@ a.install-line:hover {
    <body>. Every rule here is scoped to that attribute, so no other page — and
    no live editor outside the playground — is ever matched. Nothing here
    touches a .lc-mount selector: that block is shared with LiveCanvas.astro,
-   which / and /gallery render. */
+   which / and /gallery render.
+   The app page brings its own chrome: Base.astro renders neither the site nav
+   nor the footer for it, so the body is one viewport row and the workbench
+   owns every pixel of it. */
 [data-layout='app'] {
   height: 100vh; /* fallback first */
   height: 100dvh;
-  /*overflow: hidden;*/
+  overflow: hidden;
   display: grid;
   /* Same fallback-first pair as the height above, and for a worse reason: an
      engine that does not know `dvh` drops the WHOLE declaration rather than
-     one track, which leaves the rows implicit and lands the workbench in an
+     one track, which leaves the row implicit and lands the workbench in an
      auto row — the exact failure that made the editor size to its own content
      twice before. */
-  grid-template-rows: 4.0625rem calc(100vh - 4.0625rem) auto;
-  grid-template-rows: 4.0625rem calc(100dvh - 4.0625rem) auto;
+  grid-template-rows: 100vh;
+  grid-template-rows: 100dvh;
 }
 [data-layout='app'] main {
-  padding: 0 1rem 0.5rem;
+  padding: 0;
   max-width: none;
   margin: 0;
   /* A grid item defaults to min-height: auto, which lets this row grow past
@@ -1711,10 +1714,6 @@ a.install-line:hover {
   display: flex;
   flex-direction: column;
 }
-[data-layout='app'] .site-footer { padding: 0.4rem 1rem; margin-top: 0; font-size: 0.75rem; }
-[data-layout='app'] .site-footer-row { margin: 0; }
-
-
 [data-layout='app'] .pg {
   margin: 0;
   /* The workbench is the one child that takes the leftover height; anything
