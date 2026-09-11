@@ -68,6 +68,8 @@ The entries below record the decisions of the playground-bench initiative: the s
 
 **Alternatives.** Rename and delete on the strip too (two places to arm a delete, and the tree's keyboard model duplicated); the tree as the only file surface (a card the reader has to open to see which file is showing).
 
+**Surface correction after the drawer walk.** The bench's CodeMirror base uses `--pane-bg`, matching the file strip and diagnostics/status bar beneath it. An app-scoped rule sets that surface; syntax and interaction colors remain the editor theme's. The theme's code-block background had painted over the intended source-pane surface.
+
 ### The view switch is three views and one panel
 
 **Decision.** The output pane's four tabs are a segmented switch of three views, `Schematic · Live · Truth` (`role="tablist"`, one tab stop, arrows and Home/End between them), persisted as `view: 'schematic' | 'live' | 'truth'`; the Data face is a panel, `dataOpen`, that can be open over any view and whose rows are still `data-view.ts`'s over the one session. The Truth view keeps its gate (`truthTableRefusal`) and shows the reason in the toolbar's note beside the switch, where the tab tooltip used to hold it; a blocked Truth view is refused on click and still restorable from the envelope. The region's hint line under the view and the zoom line at its bottom right are part of the switch's furniture: the hint is the view's own sentence, empty for a view that has none yet.

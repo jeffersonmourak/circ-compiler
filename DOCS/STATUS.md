@@ -305,3 +305,11 @@ Rolling log of shipped slices. Newest at the bottom. The plan is `DOCS/PLANS_PRO
 **Tests:** All four final gates pass: 603 tests, typecheck with no errors, fresh production build and bundle within the unchanged ceiling. `/playground` 131.1 KB raw / 45.6 KB gzip, versus 128.3 / 44.7 after Phase 5. CLI transcript goldens remain byte-identical; only the browser's panel-naming strings changed.
 **Next slice:** Phase 7 — sweep and record (`DOCS/PLANS/PHASE_7_sweep.md`), on the human's word.
 **Notes:** Chrome verified board 3c in both themes at 1440 and 1024, live ROM/RAM edits and console echoes, binary load/save bytes, no memory-word reads while closed, addressed and unknown addresses, native 320→384px resize, a temporary 328px clamp in a short viewport, restored height after resize/reload, the 700px stack, and 64-bit scrolling plus paging to 0x80. No runtime exceptions. Screenshots live in `/var/folders/91/0hwz8chx0d12hz5x00f53vrm0000gn/T/opencode/` as `bench-3c-{light,dark}-{1440,1024}.png`, `bench-3c-ram-dark-1440.png`, `bench-3c-dark-700.png`, and `bench-3c-wide-dark-1440.png`. Existing Truth-enumeration and canvas-fit follow-ups remain for the sweep. The compiler and renderer were not changed.
+
+## 2026-09-11 — Phase 6 — The editor shares the source surface
+
+**What shipped:** The bench editor's base background is `--pane-bg`, matching the diagnostics/status strip between the editor and terminal. The app-scoped rule overrides CodeMirror's code-block background.
+**Files touched:** `site/src/styles/global.css`, `DOCS/decisions/playground-bench.md`, `DOCS/STATUS.md`
+**Tests:** All four gates pass: 603 tests, typecheck, build and bundle; `/playground` remains 131.1 KB raw / 45.6 KB gzip. Chrome confirmed identical effective backgrounds for the editor, gutter and bar: rgb(244, 238, 251) in light mode and rgb(12, 5, 23) in dark mode. Captured `bench-editor-{light,dark}.png` under `/T/opencode/` and reviewed dark mode.
+**Next slice:** Phase 7, on the human's word.
+**Notes:** Requested by the human after the drawer review: the editor should use the same background as the strip beneath it. The source pane already had the correct token; CodeMirror's theme was covering it.
