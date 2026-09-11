@@ -11,7 +11,7 @@
         "@codemirror/view": "6.43.11",
         "@lezer/highlight": "1.2.3",
         "astro": "^5.0.0",
-        "circ-renderer": "github:jeffersonmourak/circ-renderer#0889785",
+        "circ-renderer": "github:jeffersonmourak/circ-renderer#f882353",
       },
       "devDependencies": {
         "@astrojs/check": "0.9.4",
@@ -342,7 +342,7 @@
 
     "ci-info": ["ci-info@4.4.0", "", {}, "sha512-77PSwercCZU2Fc4sX94eF8k8Pxte6JAwL4/ICZLFjJLqegs7kCuAsqqj/70NQF6TvDpgFjkubQB2FW2ZZddvQg=="],
 
-    "circ-renderer": ["circ-renderer@github:jeffersonmourak/circ-renderer#0889785", { "peerDependencies": { "typescript": "^5" } }, "jeffersonmourak-circ-renderer-0889785"],
+    "circ-renderer": ["circ-renderer@github:jeffersonmourak/circ-renderer#f882353", { "peerDependencies": { "typescript": "^5" } }, "jeffersonmourak-circ-renderer-f882353"],
 
     "cli-boxes": ["cli-boxes@3.0.0", "", {}, "sha512-/lzGpEWL/8PfI0BmBOPRwp0c/wFNX1RdUML3jK/RcSBA9T8mZDdQpqYBKtCFTOfQbwPqWEOpjqW+Fnayc0969g=="],
 

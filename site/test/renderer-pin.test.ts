@@ -11,12 +11,15 @@ import {
   CircCanvas,
   CircRuntime,
   boxOutline,
+  buildLayout,
   defaultColors,
   defaultArcRadius,
   drawLabel,
   memoryLabel,
   traceWire,
   wirePath,
+  type CircTheme,
+  type LayoutOptions,
 } from 'circ-renderer';
 import { ComponentKind as TopologyKind } from 'circ-renderer/topology';
 import { examples } from '../src/content/examples.ts';
@@ -77,6 +80,29 @@ describe('renderer pin', () => {
     // entry point the eager bundle names its kind bytes from.
     for (const fn of [traceWire, wirePath, defaultArcRadius]) expect(typeof fn).toBe('function');
     expect(TopologyKind).toBe(ComponentKind);
+    // Canvas theme, Phase 0: the tracer takes an options object and rounds
+    // corners from it, the layout takes a row gutter, and the fan-out hook
+    // reaches the canvas. Each is what a later phase of the theme draws
+    // through; a renderer pinned before them would draw hard corners, a
+    // clipped value chip and a dot under the site's ring.
+    const traced: string[] = [];
+    const recorder = {
+      moveTo: () => traced.push('moveTo'),
+      lineTo: () => traced.push('lineTo'),
+      arc: () => traced.push('arc'),
+      arcTo: () => traced.push('arcTo'),
+    } as unknown as CanvasPath;
+    const jog = {
+      srcId: 0, srcPort: 3, dstId: 1, dstPort: 0, realSrcId: 0,
+      segments: [{ from: { x: 0, y: 0 }, to: { x: 4, y: 0 } }, { from: { x: 4, y: 0 }, to: { x: 4, y: 4 } }],
+      crossings: [],
+    };
+    traceWire(recorder, jog, 10, { cornerRadius: 4 });
+    expect(traced).toEqual(['moveTo', 'arcTo', 'lineTo']);
+    expect('rowGutter' in ({ rowGutter: 2 } satisfies LayoutOptions)).toBe(true);
+    expect(typeof buildLayout).toBe('function');
+    expect('grid' in defaultColors).toBe(false);
+    expect(({ fanOutMarker: () => {} } satisfies Partial<CircTheme>).fanOutMarker).toBeDefined();
     const pkg = JSON.parse(
       readFileSync(resolve(import.meta.dir, '..', 'node_modules', 'circ-renderer', 'package.json'), 'utf8'),
     ) as { exports: Record<string, string> };
