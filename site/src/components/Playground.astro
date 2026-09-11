@@ -390,6 +390,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
   import { summaryOf } from '../scripts/terminal-line.ts';
   import { summarize, summaryLabels } from '../scripts/footer-summary.ts';
   import { pinCountLabel } from '../scripts/pin-count.ts';
+  import { formatZoom } from '../scripts/zoom-label.ts';
   import { joinConflicts, requestFor, rootOf, PLAYGROUND_DIR } from '../utils/split-files.ts';
   import { createSplitter } from '../scripts/splitter.ts';
   import { fnv1a } from '../utils/artifact-hash.ts';
@@ -3380,7 +3381,51 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       rendererPromise: null as Promise<typeof import('circ-renderer')> | null,
       themesPromise: null as Promise<typeof import('../utils/circ-theme.mjs')> | null,
       assetsHooked: false,
+      /** The one cell size, so the zoom line and the canvas agree. */
+      cell: 14,
+      /** The reader zoomed or panned this canvas. Set by `onViewChange`,
+       *  cleared by `fit`, `100%` and a new canvas; gates the refit when the
+       *  inset changes, so a view the reader chose is never taken from them. */
+      navigated: false,
     };
+
+    // ---- the zoom line ----
+    /** The percentage follows the canvas; the two buttons need one. */
+    function syncZoom() {
+      const view = sim.view?.view ?? null;
+      zoomPct.textContent = formatZoom(view ? view.getView().scale : 1);
+      zoomPct.setAttribute('aria-disabled', String(view === null));
+      zoomFit.setAttribute('aria-disabled', String(view === null));
+    }
+    zoomPct.addEventListener('click', () => {
+      if (!sim.view) return;
+      sim.view.view.resetView();
+      sim.navigated = false;
+      syncZoom();
+    });
+    zoomFit.addEventListener('click', () => {
+      if (!sim.view) return;
+      sim.view.view.fit();
+      sim.navigated = false;
+      syncZoom();
+    });
+    /**
+     * The inset changed (the Data card opened or closed, the drawer grew): a
+     * canvas the reader has not navigated refits to it; one they zoomed or
+     * panned keeps their view. Deferred by one frame: ResizeObserver delivers
+     * shallowest-first, so this mount's callback runs before the renderer's
+     * own on the canvas in the same pass, and a synchronous `fit()` here would
+     * measure the old size. The site never calls `fit()` synchronously from a
+     * layout change.
+     */
+    function refitIfIdle() {
+      requestAnimationFrame(() => {
+        if (!sim.view || sim.navigated) return;
+        sim.view.view.fit();
+        syncZoom();
+      });
+    }
+    if (typeof ResizeObserver === 'function') new ResizeObserver(() => refitIfIdle()).observe(simMount);
     const loadRenderer = () => (sim.rendererPromise ??= import('circ-renderer'));
     const loadThemes = () => (sim.themesPromise ??= import('../utils/circ-theme.mjs'));
     // The Data tab's module reaches the renderer's index for its two value
@@ -3407,6 +3452,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       sim.session?.destroy();
       sim.session = null;
       sim.sessionBytes = null;
+      syncZoom();
     }
 
     /**
@@ -3497,14 +3543,30 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       simMount.innerHTML = '';
       try {
         const canvas = new Canvas<PaletteKey>(session.runtime as CircRuntime, {
-          cell: 14,
+          cell: sim.cell,
           // Two cells: the value chip above a top-row pin reaches 1.42 cells
           // over its box, and it wants air, not a fit to the pixel.
-          padding: Math.ceil(14 * 2),
+          padding: Math.ceil(sim.cell * 2),
           interactive: true,
           theme: pickTheme(),
           // Two free rows between stacked boxes, for the same chip.
           layoutOptions: { rowGutter: 2 },
+          // The canvas is the inset's size and the renderer fits the circuit
+          // into it on its first measurement; a change of inset is the
+          // site's to refit (`refitIfIdle`). Zoom on the modifier wheel (a
+          // trackpad pinch arrives as one), pan by drag; the page keeps the
+          // plain wheel. One finger is the canvas's own above the breakpoint
+          // and the page's below it, where the page scrolls (decision 15).
+          // Read at construction: a resize across the breakpoint keeps the
+          // gesture until the next artifact.
+          viewport: 'parent',
+          navigation: { wheel: 'modifier', drag: true, touch: narrow.matches ? 'page' : 'own' },
+          // Never for the view a canvas is built with, so `syncZoom` below
+          // writes the first percentage itself.
+          onViewChange: (view) => {
+            sim.navigated = true;
+            zoomPct.textContent = formatZoom(view.scale);
+          },
           // onPinChange, not onPinToggle: the older callback collapses any
           // mixed bus to High, so a reader who typed 0x2A and then flipped the
           // theme would get 0xFF back on the rebuilt canvas. The canvas drove
@@ -3530,12 +3592,14 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         });
         const view: View = { view: canvas, canvas: canvas.canvas, destroy: () => canvas.destroy() };
         sim.view = view;
+        sim.navigated = false;
         // The layout is the only place a collapsed macro box exists, so the
         // join is built from it rather than from the topology.
         link.table = linkLayout(link.decls, canvas.getLayout());
         simMount.appendChild(canvas.canvas);
         simMount.hidden = false;
         simNote.textContent = simNoteBase;
+        syncZoom();
         if (!sim.assetsHooked) {
           sim.assetsHooked = true;
           // The theme's sprite sheet finished decoding: the same theme now
