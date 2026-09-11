@@ -129,3 +129,11 @@ Rolling log of shipped slices. Newest at the bottom. The plan is `DOCS/PLANS_PRO
 **Tests:** none added; the four gates green
 **Next slice:** Phase 3 — Schematic and Truth (`DOCS/PLANS/PHASE_3_schematic_truth.md`), on the human's word.
 **Notes:** `bun run bundle`, `/playground`: after Phase 1 113.3 KB raw / 40.0 KB gzip; after Phase 2 115.3 KB raw / 40.5 KB gzip (ceiling 120.0 KB gzip). Not walked by hand: the modifier wheel, the drag, a pinch, and a pin click after a zoom; the smoke test cannot build a canvas, so those are the human's. `touch: 'own'` is read at construction, so a resize across 800px keeps the old gesture until the next artifact (the spec's TODO, left as a papercut).
+
+## 2026-09-11 — Phase 2 — A restore onto Live no longer reaches the simulator early
+
+**What shipped:** `showView('live')` goes through `hooks.onLive`, assigned beside `hooks.onArtifact` after the simulator's record exists; the restore from the envelope at boot therefore never touches `sim`. The smoke's mount test now boots from a seeded envelope saved on the Live view (`runIsland(page, chunk, seed)` writes `STORE_KEY` before the chunk runs), which is the path that failed.
+**Files touched:** `site/src/components/Playground.astro`, `site/test/island-smoke.test.ts`
+**Tests:** the mount walk restores onto Live with no error and switches back; 561 pass
+**Next slice:** Phase 3, on the human's word.
+**Notes:** Reported by the human from their browser: `Uncaught (in promise) ReferenceError: Cannot access 'sim' before initialization at showView … at bootstrap`, and the editor's highlighting gone with it — the CodeMirror mount is scheduled after the restore in `bootstrap`, so the throw left the plain textarea on screen. Phase 2's `showView` had folded the Simulate tab's click-time build into the restore path; the harness's fresh envelope restores Schematic and never reached it. The same class as Phase 0's `renderTermLine` note: anything a restore can call must not read a record declared later in `init`.

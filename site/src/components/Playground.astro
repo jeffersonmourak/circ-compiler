@@ -623,6 +623,10 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     // Slice 8 attaches the simulator here.
     const hooks = {
       onArtifact: null as null | ((bytes: Uint8Array | null, reason: 'built' | 'files-changed') => void),
+      /** The Live view was shown: build or note. Set once the simulator is
+       *  wired, which is after the restore from the envelope runs — a restore
+       *  onto Live must not reach the simulator's record before it exists. */
+      onLive: null as null | (() => void),
       /** Re-read the artifact into the Download button; set once the status
        *  actions are wired, called from every place the artifact changes. */
       refreshActions: null as null | (() => void),
@@ -717,14 +721,9 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       // its artifact still lands.
       if (view === 'schematic') void runPreview(buildStage.seq);
       if (view === 'truth') void runTruth(buildStage.seq);
-      if (view === 'live') {
-        if (state.artifact && sim.renderedHash !== state.artifact.hash) {
-          sim.renderedHash = state.artifact.hash;
-          void buildCanvas();
-        } else if (!state.artifact && !sim.bytes) {
-          simNote.textContent = state.simulateEnabled ? 'Compile a circuit first.' : simNote.textContent;
-        }
-      }
+      // Through the hook: `sim` is declared after the restore that calls this
+      // at boot, and the artifact that lands later builds the canvas itself.
+      if (view === 'live') hooks.onLive?.();
     }
     for (const b of viewTabs) {
       b.addEventListener('click', () => {
@@ -3756,6 +3755,14 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       void session.reset().finally(() => { dataReset.disabled = false; });
     });
 
+    hooks.onLive = () => {
+      if (state.artifact && sim.renderedHash !== state.artifact.hash) {
+        sim.renderedHash = state.artifact.hash;
+        void buildCanvas();
+      } else if (!state.artifact && !sim.bytes) {
+        simNote.textContent = state.simulateEnabled ? 'Compile a circuit first.' : simNote.textContent;
+      }
+    };
     hooks.onArtifact = (bytes, reason) => {
       sim.bytes = bytes;
       // A new artifact is a new session; the reader's pins are replayed onto it

@@ -10,7 +10,7 @@
 // `bun --bun run build` first; the standing gate order already does.
 import { afterEach, describe, expect, test } from 'bun:test';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { CATALOGUE_GROUPS, buildCatalogue } from '../src/utils/playground-store.ts';
+import { CATALOGUE_GROUPS, STORE_KEY, buildCatalogue, defaultEnvelope } from '../src/utils/playground-store.ts';
 import { examples } from '../src/content/examples.ts';
 import { tour } from '../src/content/tour.ts';
 import { resolve } from 'node:path';
@@ -136,9 +136,13 @@ afterEach(() => {
 
 /** A module is imported once per process, so each page's island is run once
  *  and every assertion about it lives in that one test. */
-async function runIsland(page: string, chunkPrefix: string) {
+async function runIsland(page: string, chunkPrefix: string, seed?: Record<string, unknown>) {
   const html = readFileSync(resolve(DIST, page, 'index.html'), 'utf8');
   const window = installDom(html);
+  // An envelope the island finds at boot, the way a returning reader's
+  // browser holds one. Written before the chunk runs, since the store is
+  // read once, in `init`.
+  if (seed) (window as unknown as { localStorage: Storage }).localStorage.setItem(STORE_KEY, JSON.stringify(seed));
   const errors: string[] = [];
   (window as unknown as { addEventListener(t: string, f: (e: { message: string }) => void): void })
     .addEventListener('error', (e) => errors.push(e.message));
@@ -157,8 +161,16 @@ async function runIsland(page: string, chunkPrefix: string) {
 
 describe.skipIf(!hasBuild)('the built islands run', () => {
   test('the playground mounts its editor, tabs and workbench', async () => {
-    const { doc, errors } = await runIsland('playground', 'Playground.astro');
+    // Restored onto the Live view, as a reader who left the page there comes
+    // back to it. This is the boot path that once reached the simulator's
+    // record before it was declared ("Cannot access 'sim' before
+    // initialization"), and it aborted the rest of the boot with it.
+    const { doc, errors } = await runIsland('playground', 'Playground.astro', { ...defaultEnvelope(), view: 'live' });
     expect(errors).toEqual([]);
+    expect(doc.querySelector('.pg-view-tab[data-view="live"]')?.getAttribute('aria-selected')).toBe('true');
+    expect(doc.querySelector('[data-view-panel="live"]')?.hasAttribute('hidden')).toBe(false);
+    // Back to the default view for the rest of the walk.
+    (doc.querySelector('.pg-view-tab[data-view="schematic"]') as unknown as { click(): void }).click();
 
 
     // The editor took over from the fallback.
