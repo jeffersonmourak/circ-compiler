@@ -65,3 +65,27 @@ The entries below record the decisions of the canvas-theme initiative: the site'
 **Rationale.** The renderer's tracer is the one place a jump or a corner is decided; a copy of that loop on the site is what the playground carried before and what silently drifted. The glow as two explicit strokes, not the design harness's patched `ctx.fill`, keeps every context change inside a `save`/`restore` the op-log test can see. The knock-out rather than a background fill is what a transparent canvas needs.
 
 **Alternatives.** Porting `drawWireNextSite` as written (a second tracer); `shadowBlur` per frame for the glow (the design's own performance note rules it out).
+
+### A pin's shape carries its state, and its name owns the centre
+
+**Decision.** `nsPinCircle` draws HIGH as a solid disc under a halo (a translucent disc 0.7 cells wider, alpha 0.22), LOW as a hollow ring on `surface` with the border at 1.2× the line weight, and undefined as a dashed outline in `labelMuted`; the name is always in the centre in `labelOnComponent` (HIGH) or `label`. The old rule that a short name goes below and the circle shows `0`/`1` is gone. An LED follows the same rule: lit is a disc under a 1.3-cell halo with a glint of `background`, unlit a hollow ring with a small `outputOff` core, undefined dashed.
+
+**Rationale.** A HIGH and a LOW pin used to differ by colour alone, which a greyscale screenshot and a colourblind reader both lose. With the state in the silhouette and the name fixed, a diagram reads the same at every width.
+
+**Alternatives.** Keeping the `0`/`1` inside and the name below for short names (two layouts for one part); a colour-only design with a stronger contrast (still colour-only).
+
+### The value pill is one shape, drawn by whoever knows the text
+
+**Decision.** `nsValuePill` is a 0.92-cell chip, solid for HIGH or a bus, outlined for LOW, dashed for undefined, seated with its bottom 0.5 cells above a pin's circle or 0.5 cells above a box's top edge. A single-bit pin draws its own `0`/`1`/`?` pill; every multi-bit component's pill is drawn by the `busValue` hook with the canvas's `text`, solid in `wireBus` with `busLabel` ink; `rom` and `ram` get none. The pill's top is 1.34 cells above a 3-row pin box, so both islands pass `layoutOptions: { rowGutter: 2 }` and pad by `Math.ceil(cell * 1.5)`; `island-canvas-options.test.ts` guards both.
+
+**Rationale.** The canvas spells a bus in the reader's chosen base (`setValueFormat`), and only the hook is handed that text; a pill drawn from a skin would ignore the setting. The renderer's default badge was the library's blue text, off-palette on both panes. The gutter and padding follow from the pill's geometry, measured, not chosen.
+
+**Alternatives.** Drawing every pill from the skins (loses the base setting); shrinking the pill to fit one row (the design seats it clear of the hover ring, and the ring needs the room); changing `ROW_GUTTER` in the compiler (every layout golden moves for a site-only need).
+
+### Hover is a ring outside the pin, through the highlight hook
+
+**Decision.** `drawHighlight` is the `highlight` hook: for `input_pin` and `output_pin` a circle 0.38 cells outside the pin's own, in `inputHover`; for every other kind the rounded box the site drew before. No skin reads `hovered` or `inputHover`; `circ-theme-hover.test.ts` guards both, and that `nsHoverRing` has exactly one caller.
+
+**Rationale.** Hover used to swap the input pin's fill and border for yellow and so hid the value the reader was about to toggle; the design keeps the state visible under the mark. Drawing it from the hook keeps the playground's decision that one hook marks every kind, so an editor cursor on a `rom` still lights it.
+
+**Alternatives.** The design's own placement, a ring drawn from the pin skin (two rings for a hovered pin, or none for a highlighted rom); a fill change with the state kept in the border (a colour-only cue again).

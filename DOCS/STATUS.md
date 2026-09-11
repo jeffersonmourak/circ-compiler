@@ -89,3 +89,43 @@ One entry per shipped slice, newest last. The plan is `DOCS/PLANS_PROMPT.md`; th
 **Tests:** none (review)
 **Next slice:** Phase 2 slice 1: pin circle and single-bit pill.
 **Notes:** none.
+
+## 2026-09-10 — Phase 2 — pin circle and single-bit pill
+
+**What shipped:** `nsHalo`, `nsPinCircle`, `nsValuePill`, `pinRadius`; `drawInputPin`/`drawOutputPin` rewritten on them (state by shape, name in the centre, `0`/`1`/`?` pill at width 1, no pill at width > 1); `nameFitsInside` and `drawPinCircle` gone. Commit `776790b`.
+**Files touched:** `site/src/utils/circ-skins.mjs`, `site/test/circ-skins.test.ts`, `site/test/fixtures/skins/{input_pin,output_pin}.json`
+**Tests:** added `a pin's shape says its state, and its name owns the centre`, `the single-bit pill sits above the circle, clear of the ring`, `a bus pin draws no pill of its own`; ran `bun test` (439 pass), typecheck (0 errors), result pass
+**Next slice:** the bus pill through `busValue`.
+**Notes:** the design's `nsGlow` under a HIGH pin (a patched `ctx.fill`) is ported as `nsHalo`, one translucent disc a spread wider inside `save`/`restore`. The input pin kept its hover fill swap for this slice so the hover guard stayed green; slice 3 removed it.
+
+## 2026-09-10 — Phase 2 — the bus pill through `busValue`
+
+**What shipped:** `drawBusValue` as the `busValue` hook: `nsValuePill` solid in `wireBus`/`busLabel` with the canvas's `text`, above a pin's circle or a box's edge, nothing for `rom`/`ram`. Commit `0e0a76b`.
+**Files touched:** `site/src/utils/circ-skins.mjs`, `site/test/circ-skins.test.ts`, `site/test/fixtures/skins/busvalue.json`
+**Tests:** added `busValue: the chip for every multi-bit kind draws as the golden says, and a memory gets none` (text verbatim, colours, seat per kind); ran `bun test` (440 pass), typecheck (0 errors), result pass
+**Next slice:** the ring policy.
+**Notes:** none.
+
+## 2026-09-10 — Phase 2 — the ring policy
+
+**What shipped:** `drawHighlight` (circle for pins via `nsHoverRing` at `r + 0.38 cell`, rounded box otherwise) as the `highlight` hook; the input pin's hover fill swap removed; `circ-theme-hover.test.ts` rewritten (no skin reads `hovered` or `inputHover`; one caller of the pin ring). Commit `7b9b830`.
+**Files touched:** `site/src/utils/circ-skins.mjs`, `site/test/circ-skins.test.ts`, `site/test/circ-theme-hover.test.ts`, `site/test/fixtures/skins/highlight.json`
+**Tests:** rewrote three hover guards, extended `highlight: a circle for a pin, a rounded box for every other kind, as the golden says`; ran `bun test` (440 pass), typecheck (0 errors), result pass
+**Next slice:** the LED.
+**Notes:** the Phase 2 spec's `TODO(phase2)` on a highlighted memory is covered by the golden test: `rom` and `ram` draw the rounded box through the same hook.
+
+## 2026-09-10 — Phase 2 — the LED
+
+**What shipped:** `drawLed` rewritten: lit is a disc under `nsHalo` (spread 1.3 cell) with a `background` glint, unlit a hollow `surface` ring with an `outputOff` core, undefined dashed in `labelMuted`. Commit (see `git log`, "an LED lit glows…").
+**Files touched:** `site/src/utils/circ-skins.mjs`, `site/test/circ-skins.test.ts`, `site/test/fixtures/skins/led.json`
+**Tests:** added `an LED lit is a disc under a halo, unlit a hollow ring, unknown a dashed one`; ran `bun test` (443 pass), typecheck (0 errors), result pass
+**Next slice:** islands: gutter and padding.
+**Notes:** deviation from the Phase 2 spec, per decision 1: the spec named `nsVecHalo` (an offscreen, cached blur) for the LED, but the design file's `led` skin uses `nsGlow`, the translucent pass; the code wins, so the LED shares `nsHalo` with the pins and `assets.offscreen` stays unused until Phase 3. `vecHaloCache` therefore does not exist yet.
+
+## 2026-09-10 — Phase 2 — islands: gutter and padding
+
+**What shipped:** `LiveCanvas.astro` defaults `padding` to `Math.ceil(cell * 1.5)` (prop and script fallback) and passes `layoutOptions: { rowGutter: 2 }`; `Playground.astro` the same at cell 14 (padding 21); `island-canvas-options.test.ts` guards both. Commit (see `git log`, "two rows between boxes…").
+**Files touched:** `site/src/components/LiveCanvas.astro`, `site/src/components/Playground.astro`, `site/test/island-canvas-options.test.ts`
+**Tests:** added `both islands lay out with a row gutter of two`, `both islands pad the canvas by 1.5 cells`; ran `bun test` (443 pass), typecheck (0 errors), `bun --bun run build`, `bun run bundle` (every route ok; theme chunk 31.7 KB raw / 18.3 KB gzip), result pass
+**Next slice:** gallery review (the human): `hero-half-adder`, `wide-not`, `two-bit-adder`, and a memory highlighted from the playground editor, both modes, `cell` 10, 14, 24.
+**Notes:** no gallery card passes an explicit `padding` (grep over `src/pages` and `src/content`), so the new default reaches every card. Decisions 7, 8 and 9 recorded.
