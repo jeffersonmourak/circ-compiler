@@ -1159,12 +1159,33 @@ function nsMemory(ctx, t, cell, c, inDotYs, { inputValues, outputValue }, mode) 
 }
 
 /**
- * Whether this draw is the one on which a RAM commits a write. Decided in
- * the next slice; until then a RAM never shows as writing.
+ * Whether this draw is the one on which a RAM commits a write.
+ *
+ * The engine writes on a rising clk with we high and addr fully defined,
+ * and its initial prev_clk is undefined so the first defined-high clock is
+ * not an edge (lib/circuit.zig, the memory arm of recalculate). The same
+ * predicate over the port values, with the last clk kept per canvas and
+ * per component — a theme flip keeps the canvas element, a rebuild makes a
+ * new one. This is an indicator, not the engine's word: a we that settles
+ * low in the same step the clock rises can differ. The exact runtime stamp
+ * is the deferred follow-up (decision 11).
  */
+const ramEdgeState = new WeakMap();
+const NO_BIT = { value: 0n, defined: 0n, width: 1 };
+const bit0High = (v) => (v.defined & 1n) === 1n && (v.value & 1n) === 1n;
+const bit0Low = (v) => (v.defined & 1n) === 1n && (v.value & 1n) === 0n;
+const fullyDefined = (v) => (v.defined & widthMask(v.width)) === widthMask(v.width);
 function ramWriting(ctx, c, inputValues) {
-  void ctx; void c; void inputValues;
-  return false;
+  const key = ctx.canvas ?? ctx;
+  let per = ramEdgeState.get(key);
+  if (!per) {
+    per = new Map();
+    ramEdgeState.set(key, per);
+  }
+  const [addr = NO_BIT, , we = NO_BIT, clk = NO_BIT] = inputValues;
+  const prev = per.get(c.id) ?? NO_BIT;
+  per.set(c.id, clk);
+  return bit0High(clk) && bit0Low(prev) && bit0High(we) && fullyDefined(addr);
 }
 
 const drawMemory = (args) => {

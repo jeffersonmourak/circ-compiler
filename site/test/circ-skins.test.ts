@@ -597,6 +597,45 @@ describe('circ-skins', () => {
     expect(balanced(ram.ops)).toBe(true);
   });
 
+  test("the RAM write indicator lights on the engine's edge, and only then", () => {
+    const theme = themeWith(true);
+    const c = component('ram', 8);
+    const { ctx } = recordingContext(10); // one canvas: the edge state lives on it
+    const bit = (b: 0 | 1 | 2): BitValue => (b === 2 ? { value: 0n, defined: 0n, width: 1 } : { value: BigInt(b), defined: 1n, width: 1 });
+    const addr = (known: boolean): BitValue => (known ? { value: 5n, defined: 0xfn, width: 4 } : { value: 5n, defined: 0x7n, width: 4 });
+    const draw = (a: BitValue, we: 0 | 1 | 2, clk: 0 | 1 | 2) => {
+      const rec = recordingContext(10);
+      // Same canvas identity across draws, as one live canvas has.
+      const sameCanvas = new Proxy(rec.ctx, { get: (t, p) => (p === 'canvas' ? ctx.canvas : Reflect.get(t, p)) });
+      const inputs = [a, valueOf(1, 8), bit(we), bit(clk)];
+      skinFor(theme, c)({
+        ctx: sameCanvas as CanvasRenderingContext2D, theme, cell: 10, component: c,
+        inputSignals: inputs.map((v) => (v.defined ? Number(v.value & 1n) as Signal : 2)), outputSignal: 1,
+        inputValues: inputs, outputValue: valueOf(1, 8), hovered: false,
+      });
+      const i = rec.ops.findIndex((op) => op[0] === 'fillText' && op[1] === 'wr');
+      const ink = [...rec.ops.slice(0, i)].reverse().find((op) => op[0] === 'set' && op[1] === 'fillStyle')![2];
+      return ink === colorsDark.inputOn;
+    };
+    // The first defined-high clock is not an edge.
+    expect(draw(addr(true), 1, 2)).toBe(false);
+    expect(draw(addr(true), 1, 1)).toBe(false);
+    // Low then high, we high, addr known: the write.
+    expect(draw(addr(true), 1, 0)).toBe(false);
+    expect(draw(addr(true), 1, 1)).toBe(true);
+    // Still high: no second edge; a redraw does not relight it.
+    expect(draw(addr(true), 1, 1)).toBe(false);
+    // Rising with we low: nothing.
+    expect(draw(addr(true), 0, 0)).toBe(false);
+    expect(draw(addr(true), 0, 1)).toBe(false);
+    // Rising with a partly unknown address: nothing.
+    expect(draw(addr(false), 1, 0)).toBe(false);
+    expect(draw(addr(false), 1, 1)).toBe(false);
+    // And a rising edge with everything set lights it again.
+    expect(draw(addr(true), 1, 0)).toBe(false);
+    expect(draw(addr(true), 1, 1)).toBe(true);
+  });
+
   test('the NOT gate names itself below its box, like every other part', () => {
     // Before: yOffset = -cell * 15 put the name 0.7 cells above the bottom
     // edge, inside the sprite.
