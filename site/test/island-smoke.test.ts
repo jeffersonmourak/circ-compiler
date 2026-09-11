@@ -10,7 +10,7 @@
 // `bun --bun run build` first; the standing gate order already does.
 import { afterEach, describe, expect, test } from 'bun:test';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { STORE_KEY, buildCatalogue, defaultEnvelope } from '../src/utils/playground-store.ts';
+import { MAX_SOURCE_BYTES, STORE_KEY, buildCatalogue, defaultEnvelope } from '../src/utils/playground-store.ts';
 import { examples } from '../src/content/examples.ts';
 import { tour } from '../src/content/tour.ts';
 import { resolve } from 'node:path';
@@ -897,6 +897,78 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     current().querySelector<HTMLButtonElement>('[aria-label^="Delete"]')!.click();
     click(`.pg-switch-project[data-pick="${previous}"]`);
     if (!doc.querySelector('.pg-switch')!.hasAttribute('hidden')) click('.pg-crumb');
+  }));
+
+  test('Import .circ keeps the source, numbers duplicate names and refuses failed reads', async () => driveAsync(async (doc) => {
+    const DiskFile = lastWindow!.File;
+    const popup = doc.querySelector('.pg-switch') as unknown as HTMLElement;
+    const picker = doc.querySelector('.pg-switch-picker') as unknown as HTMLInputElement;
+    const button = doc.querySelector('.pg-switch-import') as unknown as HTMLButtonElement;
+    const click = (selector: string) => (doc.querySelector(selector) as unknown as HTMLElement).click();
+    const open = () => { if (popup.hidden) click('.pg-crumb'); };
+    const activeId = () => doc.querySelector('.pg-switch-project[aria-current="true"]')!.getAttribute('data-pick')!;
+    const previous = activeId();
+    const added: string[] = [];
+    const source = '// blink from disk\ninput a\noutput out(in=a)\n';
+    const pick = (file: unknown) => {
+      open();
+      Object.defineProperty(picker, 'files', { configurable: true, value: file ? [file] : [] });
+      picker.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    const settled = async () => {
+      for (let i = 0; i < 100 && picker.disabled; i++) await new Promise((r) => setTimeout(r, 1));
+      expect(picker.disabled).toBe(false);
+      expect(button.disabled).toBe(false);
+      expect(picker.value).toBe('');
+    };
+    expect(picker.accept).toBe('.circ');
+    expect(picker.multiple).toBe(false);
+    for (const name of ['blink', 'blink 2']) {
+      pick(new DiskFile([source], 'blink.circ'));
+      expect(button.disabled).toBe(true);
+      await settled();
+      added.push(activeId());
+      expect(activeId().startsWith('scratch:')).toBe(true);
+      expect(doc.querySelector('.pg-crumb-group')?.textContent).toBe('Mine /');
+      expect(doc.querySelector('.pg-crumb-name')?.textContent).toBe(name);
+      expect(popup.hidden).toBe(true);
+      expect(doc.querySelector('.pg-status')?.textContent).toBe('Imported blink.circ.');
+      const island = (doc.querySelector('.pg') as unknown as { __playground: { state: { tabs: { files: { body: string }[] } } } }).__playground;
+      expect(island.state.tabs.files[0].body).toBe(source);
+    }
+    const beforeRefusal = activeId();
+    pick(new DiskFile(['é'.repeat(MAX_SOURCE_BYTES / 2) + 'x'], 'big.circ'));
+    await settled();
+    expect(activeId()).toBe(beforeRefusal);
+    expect(doc.querySelector('.pg-status')?.textContent).toBe('Could not import big: each circuit must fit in 32 KiB.');
+    const unreadable = new DiskFile([], 'lost.circ');
+    Object.defineProperty(unreadable, 'text', { value: async () => { throw new Error('read failed'); } });
+    pick(unreadable);
+    await settled();
+    expect(doc.querySelector('.pg-status')?.textContent).toBe('Could not read lost.circ.');
+    expect(activeId()).toBe(beforeRefusal);
+    pick(null);
+    expect(picker.disabled).toBe(false);
+    let release!: (value: string) => void;
+    const slow = new DiskFile([], 'slow.circ');
+    Object.defineProperty(slow, 'text', { value: () => new Promise<string>((resolve) => { release = resolve; }) });
+    pick(slow);
+    pick(new DiskFile([source], 'ignored.circ'));
+    release(source);
+    await settled();
+    added.push(activeId());
+    expect(doc.querySelector('.pg-crumb-name')?.textContent).toBe('slow');
+    await new Promise((r) => setTimeout(r, 550));
+    const saved = JSON.parse(lastWindow!.localStorage.getItem(STORE_KEY)!);
+    expect(saved.scratch.filter((p: { id: string }) => added.includes(p.id)).map((p: { source: string }) => p.source)).toEqual([source, source, source]);
+    expect(saved.scratch.some((p: { name: string }) => ['big', 'lost', 'ignored'].includes(p.name))).toBe(false);
+    open();
+    for (const id of added) {
+      const selector = `.pg-switch-project[data-pick="${id}"] .pg-switch-action[aria-label^="Delete"]`;
+      click(selector); click(selector);
+    }
+    click(`.pg-switch-project[data-pick="${previous}"]`);
+    if (!popup.hidden) click('.pg-crumb');
   }));
 
   test('the memory grid refuses a bad word without closing, and Load image opens', () => drive((doc) => {

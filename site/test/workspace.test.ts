@@ -161,6 +161,17 @@ describe('catalogue', () => {
 });
 
 describe('scratch CRUD', () => {
+  test('an imported circuit keeps its source and uses the first free stem', () => {
+    const source = '// A circuit from disk.\ninput a\noutput out(in=a)\n';
+    const first = createScratch([], { name: 'half-adder', source, now: 1 });
+    const second = createScratch(first.list, { name: 'half-adder', source, now: 2 });
+    expect(second.list.map((p) => p.name)).toEqual(['half-adder', 'half-adder 2']);
+    expect(second.created?.source).toBe(source);
+    const oversized = createScratch(second.list, { name: 'big', source: 'é'.repeat(MAX_SOURCE_BYTES / 2) + 'x', now: 3 });
+    expect(oversized.created).toBeNull();
+    expect(oversized.list).toEqual(second.list);
+    expect(describeNote({ kind: 'skipped', names: oversized.skipped.map((p) => p.name) }, 'import')).toBe('Could not import big: each circuit must fit in 32 KiB.');
+  });
   test('uniqueName appends the first free suffix', () => {
     expect(uniqueName('Half-adder', [])).toBe('Half-adder');
     expect(uniqueName('Half-adder', ['Half-adder'])).toBe('Half-adder 2');

@@ -2082,6 +2082,8 @@ a.install-line:hover {
   cursor: pointer;
 }
 [data-layout='app'] .pg-switch-footer button:hover { color: var(--fg); }
+[data-layout='app'] .pg-switch-footer .pg-switch-import { color: var(--muted); }
+[data-layout='app'] .pg-switch-footer button:disabled { opacity: 0.5; cursor: default; }
 [data-layout='app'] .pg-switch-input {
   flex: 1;
   min-width: 0;

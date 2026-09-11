@@ -120,6 +120,8 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - The Live view adopts the renderer's zoom and pan (`viewport: 'parent'`, the modifier wheel, `cell 14 · 100% · fit`, a refit only when the reader has not navigated)
 - Over the cap, the Truth view shows the rows the pins select (a scratch `SimSession` over the unknown pins; the live session read, never written; the gate blocks for errors only)
 - A truth row drives the pins through the session (one `set` per column; the tint follows the session; every cell spelled by `formatPinValue`)
+- The switcher is the tree, re-homed (Tour / Examples / Mine, name search, temporary search expansion, keyboard and focus contract, no reflow)
+- A file import creates a scratch project (one `.circ`, duplicate-name numbering, the store's 32 KiB cap and eviction, one read at a time)
 
 ## Conventions
 

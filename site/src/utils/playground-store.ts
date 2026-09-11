@@ -446,13 +446,14 @@ export function browserStorage(): StorageLike | null {
   }
 }
 
-export function describeNote(note: StoreNote): string {
+export function describeNote(note: StoreNote, context: 'save' | 'import' = 'save'): string {
   switch (note.kind) {
     case 'reset':
       return note.reason === 'version'
         ? 'Saved playground settings were from an older version and have been reset.'
         : 'Saved playground settings could not be read and have been reset.';
     case 'skipped':
+      if (context === 'import') return `Could not import ${note.names.join(', ')}: each circuit must fit in ${MAX_SOURCE_BYTES / 1024} KiB.`;
       return `${note.names.length === 1 ? 'One project is' : `${note.names.length} projects are`} too large to save (${note.names.join(', ')}); they stay open but will not survive a reload.`;
     case 'evicted':
       return `Storage was full, so ${note.names.length === 1 ? 'the oldest saved project' : 'the oldest saved projects'} (${note.names.join(', ')}) ${note.names.length === 1 ? 'was' : 'were'} removed.`;

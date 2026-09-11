@@ -126,6 +126,12 @@ Add an entry here during execution whenever a non-obvious constraint surfaces â€
 - The `hidden` attribute loses to any `display` rule of higher specificity; the bench's rules on popovers, panels and the drawer keep the `[hidden]` override idiom `global.css:632` uses.
 - `.lc-mount` is shared with `LiveCanvas.astro` on `/` and `/gallery`; the sized mount of decision 9 is `.pg-sim-mount`, never the shared class.
 
+**The switcher**
+
+- Early version-2 envelopes already contain the old catalogue tier ids. Map them in workspace normalization as well as on the v1 upgrade path; a v1-only change misses readers of the bench branch.
+- Search must see collapsed groups without persisting their temporary expansion. Filter the fully expanded data first, then apply the search-only expansion set, so collapsing a matching group leaves its heading available to reopen.
+- The store's save-time `skipped` note says a source stays open. A refused import creates nothing; use `describeNote(note, 'import')` for that context.
+
 **The canvas**
 
 - With `viewport: 'parent'` the renderer sizes to the mount; a mount with no height renders nothing and throws nothing. The mount's height comes from the region's grid, not from the canvas.

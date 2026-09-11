@@ -110,6 +110,8 @@ const groups = displayGroups(catalogue, []);
       </div>
       <div class="pg-switch-footer">
         <button type="button" class="pg-switch-new" aria-label="New circuit">+ New circuit</button>
+        <button type="button" class="pg-switch-import">Import .circ</button>
+        <input type="file" class="pg-switch-picker" accept=".circ" aria-label="Import a circuit" hidden />
       </div>
     </nav>
   <div class="pg-body">
@@ -562,6 +564,8 @@ const groups = displayGroups(catalogue, []);
     const crumb = el.querySelector<HTMLButtonElement>('.pg-crumb')!;
     const wsBody = el.querySelector<HTMLElement>('.pg-switch-body')!;
     const wsNew = el.querySelector<HTMLButtonElement>('.pg-switch-new')!;
+    const importButton = el.querySelector<HTMLButtonElement>('.pg-switch-import')!;
+    const importPicker = el.querySelector<HTMLInputElement>('.pg-switch-picker')!;
     const wsError = el.querySelector<HTMLElement>('.pg-switch-error')!;
     const shareBtn = el.querySelector<HTMLButtonElement>('.pg-share')!;
     const downloadBtn = el.querySelector<HTMLButtonElement>('.pg-download')!;
@@ -1348,7 +1352,43 @@ const groups = displayGroups(catalogue, []);
         draft.scratch = r.list;
         created = r.created.id;
       });
-      if (created) loadProject(created);
+      if (created) {
+        loadProject(created);
+        closeSwitcher();
+      }
+    }
+
+    /** Import one file through the same store limits as a new project. The
+     *  picker stays disabled until its read settles, including a failed read. */
+    async function importProject() {
+      const file = importPicker.files?.[0];
+      if (!file || importPicker.disabled) return;
+      importPicker.disabled = true;
+      importButton.disabled = true;
+      try {
+        const source = await file.text();
+        const result = createScratch(store.envelope.scratch, {
+          name: file.name.replace(/\.circ$/i, '').trim() || 'Untitled',
+          source,
+          now: nowMs(),
+          keep: store.envelope.activeId,
+        });
+        if (!result.created) {
+          status.textContent = describeNote({ kind: 'skipped', names: result.skipped.map((p) => p.name) }, 'import');
+          return;
+        }
+        store.update((draft) => { draft.scratch = result.list; });
+        loadProject(result.created.id);
+        closeSwitcher();
+        status.textContent = `Imported ${file.name}.` + (result.evicted.length
+          ? ` ${describeNote({ kind: 'evicted', names: result.evicted.map((p) => p.name) })}` : '');
+      } catch {
+        status.textContent = `Could not read ${file.name}.`;
+      } finally {
+        importPicker.value = '';
+        importPicker.disabled = false;
+        importButton.disabled = false;
+      }
     }
 
     // ---- the workspace explorer ----
@@ -1895,6 +1935,8 @@ const groups = displayGroups(catalogue, []);
     }
 
     wsNew.addEventListener('click', newProject);
+    importButton.addEventListener('click', () => importPicker.click());
+    importPicker.addEventListener('change', importProject);
     switchQuery.addEventListener('input', () => {
       query = switchQuery.value;
       const input = treeInput();

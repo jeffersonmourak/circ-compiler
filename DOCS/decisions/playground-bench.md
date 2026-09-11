@@ -101,3 +101,23 @@ The entries below record the decisions of the playground-bench initiative: the s
 **Alternatives.** The tint set by the click (lies after a refusal); driving the runtime directly (bypasses the console and the Data panel); the compiler's own spelling in the cells (decimal under a setting that says binary).
 
 **Amended after the walk.** Board 3f draws the card on the dot grid; the human preferred the Truth view without it, so the grid is the Live view's alone: the region's static dots show only under Live before its canvas exists, and the canvas draws its own after. The Schematic and Truth views sit on plain surfaces.
+
+### The switcher is the tree, re-homed
+
+**Decision.** The breadcrumb opens a 340px popover with search, the tree and two footer actions. The source column keeps its width: the card and scrim are absolutely positioned siblings of the bench's rows. The card follows the nav's measured height; below 800px it spans the page under the wrapping nav. Every new rule is scoped to the app layout and uses the site's tokens. Group chevrons occupy the right-hand slot; the open project's files keep their root marker, diagnostics and editing controls.
+
+`displayGroups` yields Tour, Examples and Mine. Examples merges the three catalogue tiers in tier order; Mine keeps the persisted id `yours` and sorts scratch projects newest first. Project metadata is a file count or an age from an injected clock; a diagnostic pill takes its place when needed. Workspace normalization maps old tier ids to `examples` for both v1 and early v2 envelopes, without another schema bump or a reset.
+
+`filterNodes` matches project and open-file names, case-insensitively, and retains their ancestors. Search reaches collapsed groups through a temporary expansion set; collapsing a result changes only that set, and clearing or closing restores the saved tree. Enter loads a sole project match; otherwise it enters the tree. Arrow keys retain `moveFor`'s contract. Tab reaches the focused row's buttons, which own Enter and Space. Both ⌘K and Ctrl+K open search from the editor; other text fields retain those keys. Escape, the scrim and a selection close the card and return focus to the breadcrumb. Tabbing out closes it without moving focus back.
+
+**Rationale.** The existing tree already owns project and file operations. Reusing its flat nodes and keyboard model keeps those operations together, while the popover returns their permanent column to the source and canvas. Search expansion must be separate from saved expansion or a query would rewrite the reader's workspace.
+
+**Alternatives.** A second project picker beside the tree (two keyboard models); filtering only expanded groups (hidden projects become unfindable); mapping tier ids only in `migrateV1` (early v2 envelopes already carry those ids).
+
+### A file import creates a scratch project
+
+**Decision.** `Import .circ` reads one file through `File.text()` and calls `createScratch` with its stem as the project name. The store numbers duplicate names, enforces the 32 KiB UTF-8 source cap and evicts the oldest scratch project when necessary, keeping the previously active project. Success opens the new project, closes the switcher and reports the import; refusals and read failures leave the current project intact. The picker and button remain disabled until the read settles, and the picker clears afterward so the same file can be chosen again. Source and selection persist through the existing envelope.
+
+**Rationale.** An import is another way to create a project, so it uses the same limits and persistence path. `describeNote` accepts an import context for a skipped source: its save-time sentence says the source stays open, which would be false for an import that created nothing. The import sentence names the refusal and the cap.
+
+**Alternatives.** A separate import store (two limits and two persistence paths); reusing the save refusal verbatim (promises an open project that does not exist); a multi-file picker (outside this handoff).
