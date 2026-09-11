@@ -41,3 +41,27 @@ The entries below record the decisions of the playground-bench initiative: the s
 **Rationale.** A literal hex in a `.pg-` rule is a colour that stops following the theme, and nothing in a build says so; `circ-skins.test.ts` holds the canvas the same way and caught the last drift. Reading the stylesheet is the only gate `bun test` can run without a browser.
 
 **Alternatives.** A stylelint rule (a dependency and a config for one file); a review habit (the thing the guard replaces).
+
+### The envelope moves to version 2 by migration, once
+
+**Decision.** `STORE_VERSION` is `2`. `normalize` runs a version-1 body through `migrateV1` before the version check: `scratch`, `activeId`, `activeFile`, `settings` and `ws` ride through untouched; the output tab becomes a view (`preview → schematic`, `simulate` and `data → live`, `truth → truth`); the dock's `{ open, tab }` becomes the footer's; `layout.ratios.main` is dropped for `layout.sourceWidth` (default 480, whole pixels in `[320, 8192]`); `tab` and `dock` are deleted. The reset note is reserved for corruption and for a version this code does not know. The migration is proved on `site/test/fixtures/store/envelope-v1.json`, a literal envelope as the version-1 writer produced it, never on one built from today's defaults. Later phases add fields with defaults under version 2, and `normalize` fills a missing field from `defaultEnvelope()`.
+
+**Rationale.** `normalize` resets the whole envelope on a version mismatch, scratch projects included; version 1 is the one schema a reader's browser can hold from before the bench, so bumping without a migrator would cost every reader their projects on their first visit. Moving once, with every rename in one function, keeps the schema readable: a field is either version 1's or version 2's, never a mix.
+
+**Alternatives.** Keeping version 1 and adding optional fields (`tab` and `dock` would keep their old meaning beside fields that replace them); a version byte per field (a decoder that must parse before it can reject).
+
+### Settings live in the diagnostics footer
+
+**Decision.** The editor's dock is gone. Under the editor sits a 30px footer whose bar says `N errors · N warnings` on the left (in `--fg` with a caret when either is non-zero, else `--muted`) and what the source is made of on the right — `N lines · N components · N <memories | chips | pins>`, the noun chosen by what the project declares, from `footer-summary.ts` over the tab bodies, the last analysis and the mapped diagnostics. The counts open the body on the diagnostics list, a grid of glyph · `file:line:col` · code · message on `14px 104px 52px 1fr`, where a position with a span is a button that jumps (switching files first) and lights the declaration on hover, and a placeless one (`<builtin>/…`) is a span. A gear at the right end opens the same body on the settings form, unchanged, bound through `mountSettingsDrawer` as before. The gestures are the dock's: a button on its own open panel closes the body, the other button while open switches panels, `Escape` in the body closes it and hands focus back to whichever button opened it. `footer: { open, tab }` persists both. The board's `unicode | ascii` control corresponds to no setting on the site and no option in the compiler (`--preview` has no charset), so nothing leaves the form; Phase 3 owns that control.
+
+**Rationale.** The README leaves settings undrawn between "a gear in the nav" and "a second footer tab"; the nav is drawn full, and the settings change what the source compiles to, so they belong beside the source. The bar replaces the dock's badge with the counts themselves, so a reader sees how many without opening anything, and the list's grid puts the position first, where a click goes. The analyze reply carries symbols and no nets, so the boards' `4 nets` has no source; the noun rule takes the boards' other three stats instead.
+
+**Alternatives.** A gear in the nav (crowds the drawn nav; settings far from what they change); keeping the dock's tab strip (a second strip under a strip, when the bar already says how many); a nets count from the renderer's topology (exists only once a session is built, and the footer is about the source).
+
+### The file strip is a switch, over the tree's state
+
+**Decision.** A 36px strip over the editor lists the open project's files as `role="tab"` buttons, in order, the active one selected under a 2px accent rule and the only tab stop; `ArrowLeft`/`ArrowRight`/`Home`/`End` move the selection, and `+ file` adds a file before the root and selects it. The strip is rebuilt from `state.tabs` whenever the tree renders, and the editor panel is labelled by its current tab. Rename, delete and reorder stay in the tree (the switcher, after Phase 4); the strip carries none of them. Focus follows the file into the tree's row while the card is open, else onto the strip's tab.
+
+**Rationale.** The board draws a strip of names and one `+ file`; today files are rows of the tree only, and the tree is a card that is shut most of the time. A switch is what a strip is for, and one state feeding both keeps them from disagreeing.
+
+**Alternatives.** Rename and delete on the strip too (two places to arm a delete, and the tree's keyboard model duplicated); the tree as the only file surface (a card the reader has to open to see which file is showing).

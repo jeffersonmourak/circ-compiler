@@ -49,3 +49,51 @@ Rolling log of shipped slices. Newest at the bottom. The plan is `DOCS/PLANS_PRO
 **Tests:** none added; the four gates green at `4a58e61`
 **Next slice:** Phase 1 — the source region (`DOCS/PLANS/PHASE_1_source_region.md`), on the human's word.
 **Notes:** `bun run bundle`, `/playground`: baseline at `59e884c` 4 files, 107.7 KB raw, 38.2 KB gzip; after Phase 0 4 files, 110.5 KB raw, 39.0 KB gzip (ceiling 120.0 KB gzip). The growth is the terminal line, the card handling and the splitter's second unit. Seen in the walk: with no session the line reads `Compile a circuit first.` even while the status cluster says Live, because the console note says the same until a Simulate or Data tab builds a session — consistent, and Phase 2's always-live canvas region will change when the first session is built.
+
+## 2026-09-11 — Phase 1 — The summary module
+
+**What shipped:** `site/src/scripts/footer-summary.ts`: `lineCount`, `projectSymbols`, `summarize(files, analysis, mapped)` and `summaryLabels`, with the boards' noun rule (memories, else chips, else pins) over the project's own symbols; nothing wired. Commit `6fe7c3f`.
+**Files touched:** `site/src/scripts/footer-summary.ts`, `site/test/footer-summary.test.ts`
+**Tests:** added `footer-summary › lines count a trailing newline once`, `› counts and words`, `› before an analysis`, `› the third slot`, `› a builtin file never counts`; `bun test test/footer-summary.test.ts`, 5 pass
+**Next slice:** the envelope at version 2.
+**Notes:** The analyze reply has no nets; the right-hand string is lines, components and the contextual noun.
+
+## 2026-09-11 — Phase 1 — The envelope at version 2
+
+**What shipped:** `STORE_VERSION = 2`; `View`/`VIEWS`, `FooterState`/`FooterTab`/`DEFAULT_FOOTER`, `LayoutState.sourceWidth` (`DEFAULT_SOURCE_WIDTH = 480`); `migrateV1` run by `normalize` before the version check; `normalizeFooter`, `normalizeSourceWidth`; `OutputTab`, `DockTab`, `DockState`, `DEFAULT_DOCK` gone. The island bridges the four output tabs to `view` (`viewOfTab`/`tabOfView`), the dock functions to `footer`, and the main splitter reads and commits `sourceWidth`. Commit `a79bfb1`.
+**Files touched:** `site/src/utils/playground-store.ts`, `site/src/components/Playground.astro`, `site/test/playground-store.test.ts`, `site/test/fixtures/store/envelope-v1.json`, `site/test/footer-summary.test.ts`
+**Tests:** added `playground store › a version-1 envelope migrates, and keeps every project`; the mismatch case moved to version 3; `view`, `footer` and `sourceWidth` normalisation cases; 553 pass
+**Next slice:** the file-tab strip.
+**Notes:** The island's own `type View` (the canvas face) clashed with the store's; the store's is imported as `StoredView`. Phase 0's in-memory width is now the envelope's.
+
+## 2026-09-11 — Phase 1 — The file-tab strip
+
+**What shipped:** `.pg-files` over the editor: one `role="tab"` per file, roving tabindex, arrows and Home/End through `showFile`, `+ file` through `addNewFile`; `renderFileTabs` runs with `renderTree`; the editor panel is labelled by the strip's current tab; `focusFileTab` prefers the tree's row while the card is open. Commits `d01b5ea`, `53dc91f` (a test's type).
+**Files touched:** `site/src/components/Playground.astro`, `site/src/styles/global.css`, `site/test/island-smoke.test.ts`
+**Tests:** added `island-smoke › the strip switches files and adds one`; the mount walk's strip and label assertions; 554 pass
+**Next slice:** editor metrics.
+**Notes:** The smoke tests share one window, so the strip test deletes the file it adds; the tree test after it expects one file. `d01b5ea` was committed with a type error in the new test (`string | undefined` into `toBe`), fixed in `53dc91f`; the gate order in the run command puts `bun test` before `typecheck`, and the error was in a test file `bun test` does not type.
+
+## 2026-09-11 — Phase 1 — Editor metrics
+
+**What shipped:** `.pg-cm .cm-scroller` at 14px / 1.7, `.cm-content` at `16px 0`; the gutter transparent in both palettes (`circ-editor-theme.ts`) with the theme's `opacity: 0.55` and a 32px minimum on the line-number cell (`circ-editor.ts`). Commit `b03f4a4`.
+**Files touched:** `site/src/styles/global.css`, `site/src/scripts/circ-editor.ts`, `site/src/utils/circ-editor-theme.ts`, `site/test/circ-editor-theme.test.ts`
+**Tests:** added `circ editor theme › the gutter is a band no more`; 555 pass
+**Next slice:** the diagnostics footer.
+**Notes:** None.
+
+## 2026-09-11 — Phase 1 — The diagnostics footer, settings behind its gear
+
+**What shipped:** `.pg-footer` replacing the dock: the 30px bar (`renderFooterBar` from `summarize`/`summaryLabels`, `data-severity` colouring the counts and showing the caret), the body on `--pane-label-bg` with the diagnostics grid (`.pg-diag` on `14px 104px 52px minmax(0, 1fr)`; a position button that jumps and highlights, a span for a placeless row, `No diagnostics.` when empty) and the settings form moved in unchanged; `showFooterTab`, `setFooterOpen`, `toggleFooter`, `Escape` with focus return; `footer` persisted; `renderDiagnostics` on the seam. Every `.pg-dock*` rule and function gone. Slices 5 and 6 of the spec shipped as one commit, `4504885`: the form needed a home the moment the dock went.
+**Files touched:** `site/src/components/Playground.astro`, `site/src/styles/global.css`, `site/test/island-smoke.test.ts`
+**Tests:** added `island-smoke › the footer opens on the counts and on the gear, and remembers which`, `› diagnostics render as grid rows` (replacing `the dock collapses and reopens…`); 556 pass
+**Next slice:** the record.
+**Notes:** The first markup edit's end marker matched the output pane's closing tag, so the splitter and the whole output pane were cut with the dock and the built island threw at boot (`null is not an object (evaluating 'i.setAttribute')` in `createSplitter`); the stretch was restored from `HEAD` before the commit. A `renderDockBadge()` call at bootstrap, outside the diagnostics block, was the one reference the first pass missed.
+
+## 2026-09-11 — Phase 1 — The record
+
+**What shipped:** `DOCS/decisions/playground-bench.md` gained the migration, the footer and the strip; `DOCS/decisions/index.md` the three rows; this log. Board 3b captured in light mode on the two-bit adder with the footer open (`bench-3b-light.png`, in the session's scratchpad and handed to the human; not committed).
+**Files touched:** `DOCS/decisions/playground-bench.md`, `DOCS/decisions/index.md`, `DOCS/STATUS.md`
+**Tests:** none added; the four gates green at `4504885`
+**Next slice:** Phase 2 — the canvas region and the Live view (`DOCS/PLANS/PHASE_2_canvas_live.md`), on the human's word.
+**Notes:** `bun run bundle`, `/playground`: after Phase 0 110.5 KB raw / 39.0 KB gzip; after Phase 1 113.3 KB raw / 40.0 KB gzip (ceiling 120.0 KB gzip). Seen in the walk: at a source column narrower than about 440px the right-hand stats truncate with an ellipsis (`4 ch…`); at the default 480 they fit. With no session the footer's stats show the lines, components and pins from the analysis while the terminal line still says `Compile a circuit first.`, as in Phase 0.

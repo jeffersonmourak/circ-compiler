@@ -113,6 +113,9 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - The three terminal tokens stay site-local, and all three already exist (`--term-ok`, `--term-echo`, `--danger`; `--pg-dot` beside them)
 - The source column is the splitter, in pixels (`--pg-source-w`, `unit: 'px'`, the hairline as the divider)
 - The token guard is a source-text test (`bench-tokens.test.ts`: every colour and face in a `.pg-` rule is a token)
+- The envelope moves to version 2 by migration, once (`migrateV1` on a literal version-1 fixture; `view`, `footer`, `layout.sourceWidth`)
+- Settings live in the diagnostics footer (a 30px bar with the counts and the stats, the list as a grid, the form behind the gear; no `unicode | ascii` setting exists)
+- The file strip is a switch, over the tree's state (36px, `role="tab"`, `+ file`; rename, delete and reorder stay in the tree)
 
 ## Conventions
 
