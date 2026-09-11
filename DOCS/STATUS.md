@@ -65,3 +65,11 @@ One entry per shipped slice, newest last. The plan is `DOCS/PLANS_PROMPT.md`; th
 **Tests:** ran `bun test` (485 pass), `bun --bun run typecheck` (0 errors), `bun --bun run build`, `bun run bundle` (`/playground` 93.5 KB raw / 33.6 KB gzip, ok; `data-view` a 1.6 KB lazy chunk), result pass
 **Next slice:** the dock on the tab (spec slice 4) needs no code — `memHost()` reads the session since Phase 0 — so it is the human's check alongside the review of this slice.
 **Notes:** `renderData` is synchronous over the loaded module handle; `showData` awaits the import once. The reset drops `sim.pins` so a recompile after a reset does not replay stale values, which is what a reader who pressed Reset would expect.
+
+## 2026-09-11 — Phase 1 — review
+
+**What shipped:** the human reviewed the Data tab and the dock on it and approved ("go"). Phase 1 complete.
+**Files touched:** `DOCS/STATUS.md`
+**Tests:** none (review)
+**Next slice:** Phase 2 slice 1: the grammar.
+**Notes:** none.
