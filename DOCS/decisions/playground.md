@@ -412,3 +412,11 @@ The entries below record the decisions of the playground-v2 initiative (the site
 **Rationale.** The section had claimed the echoes are ignored, and they are not; a reader who saved a log would have met an error the document said could not happen.
 
 **Alternatives.** None: a false sentence in a reference is a defect.
+
+### A new project is a new terminal
+
+**Decision.** Opening another project clears the console's log and history and skips the `# session ended` line the dropped session would have printed; the next handshake is the first line. Edits within a project keep the log, ending the old session and opening the new one in place.
+
+**Rationale.** A terminal under a different program is a different terminal; a log that carried one circuit's pins into another's would read as one session that never was. Within a project the reader is still working on the same circuit, and the log of their edits is worth keeping.
+
+**Alternatives.** Clearing on every recompile (the history of a debugging session gone with each keystroke); keeping everything (the human's review found it read as one long session).

@@ -73,3 +73,11 @@ One entry per shipped slice, newest last. The plan is `DOCS/PLANS_PROMPT.md`; th
 **Tests:** none (documents)
 **Next slice:** the human's review of Phase 1 on the page, in both themes, with a script copied from `ram-write-read` and replayed through `zig-out/bin/circ-compile tests/fixtures/circuits/sim_ram_write_read.circ --sim`.
 **Notes:** none.
+
+## 2026-09-11 — Phase 1 — a new project is a new terminal
+
+**What shipped:** the human's review asked that the console start over when the file changes. `loadProject` on a different project id calls `consoleNewSession`: the log and the history are cleared and the log is marked fresh, so the old session's `# session ended`, which the pipeline's file-set change would print into the new log, is skipped; the next handshake clears the mark. Edits to the same project keep the log, with `# session ended` and the new handshake as before.
+**Files touched:** `site/src/components/Playground.astro`, `DOCS/STATUS.md`, `DOCS/decisions/playground.md`
+**Tests:** ran `bun --bun run build`, `bun test` (532 pass), `bun --bun run typecheck` (0 errors), result pass
+**Next slice:** the human's review of Phase 1.
+**Notes:** the project id, not the file set, is the trigger: renaming or adding a file inside a project is the same project's session, and only opening another card or scratch project is a new terminal.

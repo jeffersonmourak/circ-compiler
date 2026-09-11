@@ -783,6 +783,9 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       busy: false,
       /** The session was rebuilt while a line ran; announce it after the reply. */
       rebuilt: false,
+      /** The log was cleared for a new project and nothing has been printed
+       *  since: the old session's end is not this log's news. */
+      fresh: true,
     };
 
     /** What kind of line this is, for the stylesheet only; the text is untouched. */
@@ -828,6 +831,17 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       consoleLog.innerHTML = '';
     }
 
+    /**
+     * Another project: a new terminal. The log and the history start over,
+     * as they would for a fresh process, and the session the last project
+     * had is dropped by the pipeline without a `# session ended` line here.
+     */
+    function consoleNewSession() {
+      consoleClear();
+      consoleState.history = new HistoryRing();
+      consoleState.fresh = true;
+    }
+
     /** The prompt follows the session: live with one, shut without. */
     function refreshConsoleGate() {
       const live = sim.session !== null && sim.session.isAlive;
@@ -839,6 +853,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     function consoleHandshake(session: SimSession) {
       const root = rootOf(state.tabs.files).name;
       consoleTitle.textContent = `circ-compile ${root} --sim`;
+      consoleState.fresh = false;
       consoleAppend(handshake(session, root), 'prompt', { force: true });
     }
 
@@ -1071,6 +1086,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       state.tabs = selectTab(state.tabs, index >= 0 ? index : rootIndex(state.tabs));
       source.value = toSource(state.tabs);
       editor?.setDocuments(state.tabs.files.map((f) => f.body), state.tabs.active);
+      if (store.envelope.activeId !== id) consoleNewSession();
       store.update((draft) => {
         draft.activeId = id;
         draft.activeFile = activeFile(state.tabs).name;
@@ -3241,7 +3257,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
             consoleHandshake(session);
           }
         } else if (event.kind === 'destroyed') {
-          consoleAppend(['# session ended']);
+          if (!consoleState.fresh) consoleAppend(['# session ended']);
           refreshConsoleGate();
         }
       });
