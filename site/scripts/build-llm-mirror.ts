@@ -178,9 +178,11 @@ function emitLandingTwin(): void {
     '',
     '## Install',
     '',
-    `Download \`circ-compile\` for Linux, macOS, or Windows: ${SITE_URL}/download.md`,
+    'Run it on your own machine.',
     '',
-    "If you've enjoyed Nand2Tetris or building NANDs from scratch in Petzold's *Code*, this is a language for doing more of that.",
+    'Linux · macOS · Windows · GPL v3',
+    '',
+    `Download \`circ-compile\` for Linux, macOS, or Windows: ${SITE_URL}/download.md`,
     '',
   ];
 

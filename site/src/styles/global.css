@@ -1691,17 +1691,19 @@ span.pg-diag-pos { color: var(--muted); cursor: default; }
 }
 
 .install-line {
-  display: block;
-  padding: 0.85rem 1rem;
-  background: var(--code-bg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 6px;
   font-family: var(--font-mono);
-  font-size: 0.9rem;
-  margin: 0 0 2.5rem;
-  max-width: var(--measure);
-  overflow-x: auto;
-  white-space: pre;
+  font-size: 17px;
+  margin: 0;
+  max-width: none;
+  white-space: normal;
   color: var(--fg);
   text-decoration: none;
   transition: border-color 0.15s, color 0.15s;
@@ -1786,6 +1788,17 @@ a.install-line:hover {
 .lc[data-circ-thumbnail] .lc-launch[hidden] { display: none; }
 @media (max-width: 800px) {
   .home-tiles { grid-template-columns: minmax(0, 1fr); }
+}
+
+.home-install { display: flex; flex-direction: column; gap: 18px; padding: 40px; background: var(--code-bg); }
+.home-install-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 24px; }
+.home-install-title { display: flex; flex-direction: column; gap: 6px; }
+.home-install-h2 { margin: 0; font-size: 26px; line-height: 1.15; font-weight: 600; }
+.home-install-platforms { font: 12.5px/1.65 var(--font-mono); color: var(--muted); }
+.home-install .install-line-target { flex: none; font-size: 14px; color: var(--muted); }
+@media (max-width: 800px) {
+  .home-install { padding: 40px 24px; }
+  .home-install .install-line { flex-direction: column; align-items: flex-start; gap: 6px; }
 }
 
 .lineage {

@@ -103,3 +103,28 @@
 **Tests:** Fresh build, 33 passing token/island tests, and bundle gate. Browser checks at 1100, 1440 and 700px in both themes confirm 13px source text and 12.5px schematic text in the strict monospace stack; both snippets fit at those widths. Captures: `preview-fixed-{light,dark}-{1100,1440,700}.png` in the session scratch directory.
 **Next slice:** Wait for the user's confirmation to commit and begin Phase 3.
 **Notes:** No commit or Phase 3 work was performed.
+
+## 2026-09-11 — Phase 3 — Install, lineage and responsive layout
+
+**What shipped:** Added the install heading, platform/license line and full-width download row. Gave lineage its final spacing while retaining its text. Completed the narrow install layout and added a guard for all home-page selector scopes.
+**Files touched:** `site/src/pages/index.astro`, `site/src/styles/global.css`, `site/scripts/build-llm-mirror.ts`, `site/test/island-smoke.test.ts`, `site/test/app-layout.test.ts`, `DOCS/STATUS.md`
+**Tests:** Fresh build; 629 site tests pass; typecheck reports 0 errors, 0 warnings and 21 existing hints; bundle check passes; `zig build test-all` passes.
+**Next slice:** Final browser pass and decision/archive record.
+**Notes:** The prior phase and preview fix were committed as `5259b05`. Most stacking rules shipped during earlier visual corrections, so the install and remaining responsive work were verified together. Route sizes stay 5,354 B raw / 2,660 B gzip for both `/` and `/gallery`.
+
+## 2026-09-11 — Phase 3 — Final browser pass
+
+**What shipped:** Verified the finished page and reconciled a concurrent removal of the lineage paragraph in both the page and its Markdown twin. This supersedes the prior entry's retained-lineage description.
+**Files touched:** `site/src/pages/index.astro`, `site/scripts/build-llm-mirror.ts`, `site/src/styles/global.css`, `site/test/island-smoke.test.ts`, `DOCS/STATUS.md`
+**Tests:** Fresh build, 51 relevant tests and bundle gate pass after lineage removal. Final Chrome run completed without runtime exceptions; input a toggles the settled values line in both themes. All thumbnails defer until near the viewport and retain native pixel widths. The install link fits its container and stacks below 800px.
+**Next slice:** Finish decisions and prepare the archive draft for review.
+**Notes:** Captures use the production build served locally, not the dev server. Files are `/var/folders/91/0hwz8chx0d12hz5x00f53vrm0000gn/T/opencode/home-4a-<mode>-<width>.png`. An earlier run timed out during an extra gallery navigation after its captures; the final run omitted that already-verified Phase 2 navigation and completed normally.
+
+| View | Mode | Width | Result |
+| --- | --- | --- | --- |
+| Hero, source, language, preview, tiles, install, footer | light | 1100 | ok; input a produces sum 1, carry 0 |
+| Hero, source, language, preview, tiles, install, footer | dark | 1100 | ok; second click restores all-low state |
+| Full page and native-size thumbnail crops | light | 1440 | ok; user's wider layout retained |
+| Full page and native-size thumbnail crops | dark | 1440 | ok |
+| Stacked page and install row | light | 700 | ok; install row uses column layout |
+| Stacked page and install row | dark | 700 | ok |

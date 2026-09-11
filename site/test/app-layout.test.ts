@@ -57,6 +57,16 @@ describe('app layout', () => {
     expect(optIn.map((f) => f.split('/').pop())).toEqual(['playground.astro']);
   });
 
+  test('the landing page rules stay in their scope', () => {
+    const home = selectorsOf(css).filter(selector => selector.includes('.home-'));
+    expect(home.length).toBeGreaterThan(30);
+    for (const selector of home) {
+      for (const branch of selector.split(',')) expect(branch.trim()).toStartWith('.home-');
+      expect(selector).not.toContain('data-layout');
+      if (selector.includes('.lc-mount')) expect(selector).toMatch(/data-circ-(fit|thumbnail)/);
+    }
+  });
+
   test('only LiveCanvas variants restyle .lc-mount', () => {
     // The frozen set. `.lc-mount` is LiveCanvas.astro's shared mount, so only
     // an explicit component variant may add to its base and mobile rules.

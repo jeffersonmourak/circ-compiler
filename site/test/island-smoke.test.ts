@@ -1515,8 +1515,13 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
       'A small language for building and simulating logic circuits, made for people learning how computers work.',
     );
     expect(Array.from(landingDoc.querySelectorAll('main > section')).map(el =>
-      el.classList.contains('home-hero') ? 'hero' : el.classList.contains('home-lang') ? 'language' : el.classList.contains('home-gallery') ? 'gallery' : 'preview',
-    )).toEqual(['hero', 'language', 'preview', 'gallery']);
+      el.classList.contains('home-hero') ? 'hero' : el.classList.contains('home-lang') ? 'language' : el.classList.contains('home-gallery') ? 'gallery' : el.classList.contains('home-install') ? 'install' : 'preview',
+    )).toEqual(['hero', 'language', 'preview', 'gallery', 'install']);
+    expect(landingDoc.querySelector('.home-install-h2')?.textContent).toBe('Run it on your own machine.');
+    expect(landingDoc.querySelector('.home-install-platforms')?.textContent).toBe('Linux · macOS · Windows · GPL v3');
+    expect(landingDoc.querySelector('.home-install .install-line')?.getAttribute('href')).toEndWith('/download');
+    expect(landingDoc.querySelector('.home-install .install-line')?.textContent).toStartWith('↓ Download circ-compile');
+    expect(landingDoc.querySelector('.lineage')).toBeNull();
     expect(landingDoc.querySelectorAll('.lc[data-circ-autorun]')).toHaveLength(4);
     const thumbnails = Array.from(landingDoc.querySelectorAll('[data-circ-thumbnail]'));
     expect(thumbnails).toHaveLength(3);
