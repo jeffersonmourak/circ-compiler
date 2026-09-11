@@ -9,6 +9,7 @@
 // version bump.
 
 import type { DecodeResult, HashIntent, ShareKey } from './share-link.ts';
+import { normalizeEditorPreferences, type EditorPreferences } from './editor-preferences.ts';
 /** The content owns the tier vocabulary; this module only maps it to a
  *  heading. A type import is erased, so the store still pulls no content
  *  into the playground bundle. */
@@ -98,6 +99,7 @@ export interface PlaygroundEnvelope {
   activeFile: string | null;
   layout: LayoutState;
   settings: PlaygroundSettings;
+  editor: EditorPreferences;
   view: View;
   /** The Data panel, open over whichever view; its rows are the session's. */
   dataOpen: boolean;
@@ -155,6 +157,10 @@ export function defaultSettings(): PlaygroundSettings {
   };
 }
 
+export function normalizeTruthTableCap(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(1, Math.min(24, Math.round(value))) : 12;
+}
+
 export function defaultEnvelope(): PlaygroundEnvelope {
   return {
     version: STORE_VERSION,
@@ -163,6 +169,7 @@ export function defaultEnvelope(): PlaygroundEnvelope {
     activeFile: null,
     layout: { sourceWidth: DEFAULT_SOURCE_WIDTH, ratios: {} },
     settings: defaultSettings(),
+    editor: normalizeEditorPreferences(undefined),
     view: 'schematic',
     dataOpen: false,
     dataPanel: {},
@@ -267,7 +274,7 @@ function normalizeSettings(raw: unknown): PlaygroundSettings {
     out.valueFormat = raw.valueFormat as PlaygroundSettings['valueFormat'];
   }
   if (typeof raw.truthTableCap === 'number' && Number.isFinite(raw.truthTableCap)) {
-    out.truthTableCap = Math.max(1, Math.min(24, Math.round(raw.truthTableCap)));
+    out.truthTableCap = normalizeTruthTableCap(raw.truthTableCap);
   }
   if (isObject(raw.romImages)) {
     for (const [name, hex] of Object.entries(raw.romImages)) {
@@ -338,6 +345,7 @@ export function normalize(raw: unknown): { envelope: PlaygroundEnvelope; note: S
         ratios: normalizeRatios(isObject(body.layout) ? body.layout.ratios : null),
       },
       settings: normalizeSettings(body.settings),
+      editor: normalizeEditorPreferences(body.editor),
       // A view this code does not have falls back like any other unrecognised
       // value rather than resetting anything.
       view: VIEWS.includes(body.view as View) ? (body.view as View) : 'schematic',

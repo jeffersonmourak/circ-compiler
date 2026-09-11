@@ -116,6 +116,9 @@ Add an entry here during execution whenever a non-obvious constraint surfaces â€
 
 **The island and its tests**
 
+- For small updates and minor fixes, the human asked to use the existing tests/build checks rather than restarting the Chrome setup. Reserve browser automation for visual checks that need it, such as the final sweep.
+- After the settings review, the footer holds Compile and Editor only. Schematic owns its preview controls, Truth owns the input-bit cap, and Data/memory own the value base. Editor preferences live in their own envelope field and never schedule a compile.
+
 - `island-smoke.test.ts` reaches 61 `.pg-*` selectors and ids by name. Every slice that renames or removes markup updates the walk in the same slice; a green `bun test` without a fresh `bun --bun run build` proves nothing about the island (the smoke skips without `dist/`).
 - `Playground.astro`'s `init` reads elements once by selector at the top (`el.querySelector`); an element moved out of the island's root (the nav, once `Base.astro` yields it) must still be inside the element `init` receives, or be handed in. Keep the bench's whole frame inside the island's root element.
 - The store's `normalize` resets everything on a version mismatch. Never bump `STORE_VERSION` without the migrator of decision 5 in the same slice, and test the migration on a literal recorded envelope, not one built from `defaultEnvelope()`.

@@ -191,7 +191,7 @@ describe('truthTableRefusal', () => {
     const onErrors = truthTableRefusal({ errors: 2, firstError: 'E001 x', bits: null }, settings())!;
     expect(onErrors).toMatch(/to fix first/i);
     const onCap = truthTableRefusal({ errors: 0, bits: 40 }, settings())!;
-    expect(onCap).toMatch(/raise the cap/i);
+    expect(onCap).toMatch(/raise the input-bit cap in Truth/i);
   });
 });
 

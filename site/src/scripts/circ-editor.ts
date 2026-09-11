@@ -58,6 +58,7 @@ import {
 } from '../utils/circ-tokens.mjs';
 import { themeFor, type EditorPalette, type TagSpec, type ThemeMode } from '../utils/circ-editor-theme.ts';
 import { activeAfter, insert, move, remove } from './doc-registry.ts';
+import { normalizeEditorPreferences, type EditorPreferences } from '../utils/editor-preferences.ts';
 
 export type { ThemeMode };
 
@@ -122,6 +123,7 @@ export const circLanguage: StreamLanguage<CircTokenState> =
 export interface EditorOptions {
   doc?: string;
   theme?: ThemeMode;
+  preferences?: EditorPreferences;
   readOnly?: boolean;
   /** Phase 7's <LiveEditor>: drops lineNumbers, both activeLine extensions
    *  and lintGutter. Nothing in Phase 1 passes it; it ships now so the module
@@ -149,6 +151,8 @@ export interface EditorHandle {
   /** Rewrites EVERY stored document's theme, not only the visible one, so a
    *  file shown after a theme flip is never left in the old palette. */
   setTheme(mode: ThemeMode): void;
+  /** Reconfigures every document without replacing its text or undo history. */
+  setPreferences(preferences: EditorPreferences): void;
   /** Selects [from, to) in the visible document and scrolls it into view. */
   select(from: number, to?: number): void;
   /** Marks a span without moving the caret, the selection or the scroll —
@@ -315,6 +319,13 @@ export function createEditor(parent: HTMLElement, options: EditorOptions = {}): 
   /** The compartment's current content, so a state created after a theme flip
    *  is born in the new palette rather than the old one. */
   let themeContent = themeExtension(theme);
+  const preferencesCompartment = new Compartment();
+  let preferences = normalizeEditorPreferences(options.preferences);
+  const preferenceExtensions = (): Extension => [
+    EditorState.tabSize.of(preferences.tabSize),
+    indentUnit.of(' '.repeat(preferences.tabSize)),
+    preferences.wrapLines ? EditorView.lineWrapping : [],
+  ];
 
   /** One entry per file. `scroll` is a saved scroll snapshot: scroll position
    *  is not part of an `EditorState`, so it is carried alongside. */
@@ -328,8 +339,8 @@ export function createEditor(parent: HTMLElement, options: EditorOptions = {}): 
    *  the span and re-applies it after a swap. */
   let linkSpan: { from: number; to: number } | null = null;
 
-  // Built once and shared by every state. Only the theme compartment is
-  // per-state, and it is seeded from `themeContent` at creation time.
+  // Built once and shared by every state. Theme and preference compartments
+  // are seeded with their current contents whenever a document is created.
   const staticExtensions: Extension[] = [];
   if (!compact) {
     staticExtensions.push(lineNumbers(), highlightActiveLine(), highlightActiveLineGutter(), lintGutter());
@@ -339,9 +350,6 @@ export function createEditor(parent: HTMLElement, options: EditorOptions = {}): 
     linkHighlightField,
     history(),
     keymap.of([...circKeymap]),
-    EditorState.tabSize.of(2),
-    indentUnit.of('  '),
-    EditorView.lineWrapping,
     EditorView.contentAttributes.of({ 'aria-label': ariaLabel }),
     EditorView.updateListener.of((update) => {
       // Keep the mirror fresh on EVERY update, not only document changes: a
@@ -361,10 +369,11 @@ export function createEditor(parent: HTMLElement, options: EditorOptions = {}): 
   if (readOnly) staticExtensions.push(EditorState.readOnly.of(true), EditorView.editable.of(false));
 
   const makeState = (text: string): EditorState =>
-    EditorState.create({ doc: text, extensions: [staticExtensions, themeCompartment.of(themeContent)] });
+    EditorState.create({ doc: text, extensions: [staticExtensions, themeCompartment.of(themeContent), preferencesCompartment.of(preferenceExtensions())] });
 
   const docs: Doc[] = [{ state: makeState(doc), scroll: null }];
   const view = new EditorView({ state: docs[0].state, parent });
+  view.scrollDOM.style.fontSize = `${preferences.fontSize}px`;
 
   const clampOffset = (n: number): number => Math.max(0, Math.min(n, view.state.doc.length));
   const clampIndex = (n: number): number => Math.max(0, Math.min(n, docs.length - 1));
@@ -412,6 +421,17 @@ export function createEditor(parent: HTMLElement, options: EditorOptions = {}): 
         if (i !== active) entry.state = entry.state.update({ effects }).state;
       });
       view.dispatch({ effects });
+    },
+    setPreferences(next: EditorPreferences) {
+      preferences = normalizeEditorPreferences(next);
+      const effects = preferencesCompartment.reconfigure(preferenceExtensions());
+      syncActive();
+      docs.forEach((entry, i) => {
+        if (i !== active) entry.state = entry.state.update({ effects }).state;
+      });
+      view.dispatch({ effects });
+      view.scrollDOM.style.fontSize = `${preferences.fontSize}px`;
+      view.requestMeasure();
     },
     select(from: number, to: number = from) {
       const a = clampOffset(from);

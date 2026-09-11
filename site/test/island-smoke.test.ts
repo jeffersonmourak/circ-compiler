@@ -291,7 +291,7 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(output.querySelectorAll('.pg-diag')).toHaveLength(0);
     // The Schematic's two toggles are the only settings in the region, on the
     // same attribute the footer's form binds, so one binding paints both.
-    expect(Array.from(output.querySelectorAll('.pg-view-tools [data-setting]'), (e) => e.getAttribute('data-setting'))).toEqual(['expandMacros', 'expandDisplay']);
+    expect(Array.from(output.querySelectorAll('.pg-view-tools[data-for="schematic"] [data-setting]'), (e) => e.getAttribute('data-setting'))).toEqual(['expandMacros', 'expandDisplay']);
     expect(doc.querySelectorAll('.pg-diag')).toHaveLength(1);
     const editorPane = doc.querySelector('.pg-editor')!;
     expect(editorPane.querySelectorAll('[data-setting]').length).toBeGreaterThan(0);
@@ -442,6 +442,46 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(region.dataset.dataOpen).toBe('false');
   }));
 
+  test('settings retain Compile and Editor while each view owns its controls', () => drive((doc) => {
+    expect(Array.from(doc.querySelectorAll('.pg-settings legend'), (e) => e.textContent)).toEqual(['Compile', 'Editor']);
+    expect(Array.from(doc.querySelectorAll('.pg-settings [data-setting]'), (e) => e.getAttribute('data-setting'))).toEqual(['warningsAsErrors']);
+    expect(doc.querySelectorAll('[data-setting="expandMacros"]')).toHaveLength(1);
+    expect(doc.querySelectorAll('[data-setting="expandDisplay"]')).toHaveLength(1);
+    expect(doc.querySelector('#pg-set-values')).toBeNull();
+    expect(doc.querySelectorAll('[data-setting="truthTableCap"]')).toHaveLength(1);
+    expect(doc.querySelector('.pg-truth-tools #pg-set-cap')).not.toBeNull();
+    const field = (key: string) => doc.querySelector(`[data-editor-setting="${key}"]`) as unknown as HTMLInputElement;
+    const number = (key: string, value: string) => { field(key).value = value; field(key).dispatchEvent(new Event('change', { bubbles: true })); };
+    const currentId = () => doc.querySelector('.pg-switch-project[aria-current="true"]')!.getAttribute('data-pick');
+    const beforeId = currentId();
+    const text = () => doc.querySelector('.cm-content')!.textContent;
+    const beforeText = text();
+    (doc.querySelector('.pg-footer-gear') as unknown as HTMLElement).click();
+    field('wrapLines').click();
+    number('fontSize', '18'); number('tabSize', '4');
+    expect(doc.querySelector('.cm-content')?.classList.contains('cm-lineWrapping')).toBe(false);
+    expect((doc.querySelector('.cm-scroller') as unknown as HTMLElement).style.fontSize).toBe('18px');
+    expect(currentId()).toBe(beforeId);
+    expect(text()).toBe(beforeText);
+    window.dispatchEvent(new Event('pagehide'));
+    expect(JSON.parse(localStorage.getItem(STORE_KEY)!).editor).toEqual({ wrapLines: false, fontSize: 18, tabSize: 4 });
+    number('fontSize', '99');
+    expect(field('fontSize').value).toBe('24');
+    number('fontSize', '');
+    expect(field('fontSize').value).toBe('24');
+    // Restore the defaults for the remaining island walk.
+    field('wrapLines').click(); number('fontSize', '14'); number('tabSize', '2');
+    (doc.querySelector('.pg-footer-gear') as unknown as HTMLElement).click();
+    (doc.querySelector('.pg-view-tab[data-view="truth"]') as unknown as HTMLElement).click();
+    const cap = doc.querySelector('#pg-set-cap') as unknown as HTMLInputElement;
+    cap.value = '99'; cap.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(cap.value).toBe('24');
+    window.dispatchEvent(new Event('pagehide'));
+    expect(JSON.parse(localStorage.getItem(STORE_KEY)!).settings.truthTableCap).toBe(24);
+    cap.value = '12'; cap.dispatchEvent(new Event('change', { bubbles: true }));
+    (doc.querySelector('.pg-view-tab[data-view="schematic"]') as unknown as HTMLElement).click();
+  }));
+
   test('the Data card edits a real session, shares its build and rebinds after a new artifact', async () => driveAsync(async (doc) => {
     const island = (doc.querySelector('.pg') as unknown as { __playground: {
       hooks: { onArtifact(bytes: Uint8Array | null, reason: string): void };
@@ -452,8 +492,8 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     const press = (target: HTMLElement, key: string) => target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
     const card = doc.querySelector('.pg-data-card') as unknown as HTMLElement;
     const field = () => doc.querySelector('.pg-data-row[data-name="a"] .pg-data-in') as unknown as HTMLInputElement;
-    const select = doc.querySelector('#pg-set-values') as unknown as HTMLSelectElement;
-    const originalBase = select.value;
+    const base = () => (doc.querySelector('.pg-data-base input:checked') as unknown as HTMLInputElement).value;
+    const originalBase = base();
     try {
       island.hooks.onArtifact(bytes, 'compiled');
       const [session, other] = await Promise.all([island.getSession(), island.getSession()]);
@@ -466,14 +506,13 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
       expect(doc.querySelector('.pg-data table')).toBeNull();
       expect(doc.querySelector('.pg-data-summary')?.textContent).toBe('2 in · 2 out');
       click('.pg-data-base input[value="hex"]');
-      expect(select.value).toBe('hex');
+      expect(base()).toBe('hex');
       field().value = '0x3';
       press(field(), 'Enter');
       expect(session!.get('a')).toMatchObject({ ok: true, value: { value: 3n } });
       expect(doc.querySelector('.pg-console-log')?.textContent).toContain('set a 0x3');
       expect(doc.querySelector('.pg-data-row[data-kind="out"] .pg-data-out')?.textContent).toBe('0x3');
-      select.value = 'decimal';
-      select.dispatchEvent(new Event('change', { bubbles: true }));
+      click('.pg-data-base input[value="decimal"]');
       expect((doc.querySelector('.pg-data-base input[value="decimal"]') as unknown as HTMLInputElement).checked).toBe(true);
       expect(field().value).toBe('3');
       field().value = '99';
@@ -510,8 +549,8 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     } finally {
       if (!card.hidden) click('.pg-data-close');
       island.hooks.onArtifact(null, 'files-changed');
-      select.value = originalBase;
-      select.dispatchEvent(new Event('change', { bubbles: true }));
+      const radio = doc.querySelector(`.pg-data-base input[value="${originalBase}"]`) as unknown as HTMLInputElement;
+      radio.checked = true; radio.dispatchEvent(new Event('change', { bubbles: true }));
     }
   }));
 
@@ -1290,11 +1329,12 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(doc.querySelector('.pg-mem-hex')).toBeNull();
     (doc.querySelector('.pg-mem-base input[value="hex"]') as unknown as HTMLInputElement).click();
     expect(cells()[0].textContent).toBe('ff');
-    expect((doc.querySelector('#pg-set-values') as unknown as HTMLSelectElement).value).toBe('hex');
     expect((doc.querySelector('.pg-data-base input[value="hex"]') as unknown as HTMLInputElement).checked).toBe(true);
-    const select = doc.querySelector('#pg-set-values') as unknown as HTMLSelectElement;
-    select.value = 'binary'; select.dispatchEvent(new Event('change', { bubbles: true }));
+    (doc.querySelector('.pg-data-btn') as unknown as HTMLButtonElement).click();
+    (doc.querySelector('.pg-data-base input[value="binary"]') as unknown as HTMLInputElement).click();
     expect(cells()[0].textContent).toBe('11111111');
+    expect((doc.querySelector('.pg-mem-base input[value="binary"]') as unknown as HTMLInputElement).checked).toBe(true);
+    (doc.querySelector('.pg-data-close') as unknown as HTMLButtonElement).click();
     (doc.querySelector('.pg-drawer-close') as unknown as HTMLElement).click();
     (doc.querySelector('.pg-view-tab[data-view="schematic"]') as unknown as HTMLElement).click();
   }));

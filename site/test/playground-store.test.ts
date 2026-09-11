@@ -89,7 +89,7 @@ describe('playground store', () => {
   test('defaults and round-trip', () => {
     const env = defaultEnvelope();
     expect(Object.keys(env).sort()).toEqual(
-      ['activeFile', 'activeId', 'dataOpen', 'dataPanel', 'drawerHeight', 'footer', 'layout', 'scratch', 'settings', 'version', 'view', 'ws'].sort(),
+      ['activeFile', 'activeId', 'dataOpen', 'dataPanel', 'drawerHeight', 'editor', 'footer', 'layout', 'scratch', 'settings', 'version', 'view', 'ws'].sort(),
     );
     expect(env.version).toBe(2);
     expect(env.settings.truthTableCap).toBe(12);
@@ -137,6 +137,18 @@ describe('playground store', () => {
     expect(migrated.envelope.drawerHeight).toBe(320);
     expect(migrated.envelope.layout.ratios).toEqual({});
     expect(migrated.note).toBeNull();
+  });
+
+  test('editor preferences survive storage and default without resetting projects', () => {
+    const env = { ...defaultEnvelope(), editor: { wrapLines: false, fontSize: 18, tabSize: 4 } };
+    const storage = fakeStorage();
+    writeEnvelope(env, storage, null);
+    expect(readEnvelope(storage).envelope.editor).toEqual(env.editor);
+    const old = { ...env } as Record<string, unknown>;
+    delete old.editor;
+    expect(normalize(old).envelope.editor).toEqual({ wrapLines: true, fontSize: 14, tabSize: 2 });
+    expect(normalize(old).note).toBeNull();
+    expect(normalize({ ...env, editor: { fontSize: 100, tabSize: NaN } }).envelope.editor).toEqual({ wrapLines: true, fontSize: 24, tabSize: 2 });
   });
 
   test('unknown keys are dropped', () => {

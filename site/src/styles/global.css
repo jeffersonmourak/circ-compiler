@@ -764,6 +764,8 @@ hr {
 }
 .pg-tool-toggle { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
 .pg-tool-toggle input { margin: 0; accent-color: var(--accent); }
+[data-layout='app'] .pg-truth-tools { flex: none; gap: 6px; }
+[data-layout='app'] .pg-truth-tools input { width: 3.4rem; padding: 2px 4px; font: inherit; color: var(--fg); background: var(--pane-bg); border: 1px solid var(--border); border-radius: 4px; }
 .pg-tool-toggle:hover { color: var(--fg); }
 .pg-tool-btn {
   font: inherit;
@@ -1010,6 +1012,8 @@ span.pg-diag-pos { color: var(--muted); cursor: default; }
 .pg-settings-group {
   border: 0;
   border-top: 1px solid var(--border);
+  flex-direction: column;
+  align-items: flex-start !important;
   margin: 0;
   padding: 0.5rem 0 0.35rem;
   display: flex;

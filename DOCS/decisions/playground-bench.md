@@ -60,6 +60,8 @@ The entries below record the decisions of the playground-bench initiative: the s
 
 **Amended in Phase 3.** The Schematic view's toolbar carries the two preview settings that exist, `Expand macros` and `Expand display`, as toggles on the same `data-setting` attribute the footer's form binds, so one binding paints both; a `Copy` beside them copies the schematic's text, and the bottom-right line says its `rows × cols chars`. The board's `unicode | ascii` control corresponds to no option in `--preview` (`lib/preview/render.zig` renders box-drawing glyphs only) and waits on a compiler slice. The `format` select (`table | markdown | csv`) left the form: it was sent on every truth-table request while the page always parsed the reply as JSON, so a stored `markdown` or `csv` threw at `JSON.parse`; the request is pinned to `json` (`optionsFor`'s fourth argument) and the two copy buttons name their own format. The field stays in the envelope, unread, until the sweep.
 
+**Consolidated after review.** The footer's Settings now contains Compile and Editor. Preview expansion controls live only in Schematic; the input-bit cap lives beside the Truth chip. The duplicate value-format select is gone; Data and memory retain their synchronized base controls. The cap uses the same 1–24 normalization before a UI request as when reading the envelope.
+
 ### The file strip is a switch, over the tree's state
 
 **Decision.** A 36px strip over the editor lists the open project's files as `role="tab"` buttons, in order, the active one selected under a 2px accent rule and the only tab stop; `ArrowLeft`/`ArrowRight`/`Home`/`End` move the selection, and `+ file` adds a file before the root and selects it. The strip is rebuilt from `state.tabs` whenever the tree renders, and the editor panel is labelled by its current tab. Rename, delete and reorder stay in the tree (the switcher, after Phase 4); the strip carries none of them. Focus follows the file into the tree's row while the card is open, else onto the strip's tab.
@@ -181,3 +183,13 @@ The console fills the drawer when no memory is declared. Otherwise a hairline se
 **Rationale.** Rebuilding a small memory view is inexpensive, but binding only the controls present at boot would leave every later radio inert. Keeping the session's existing write and image paths also keeps canvas values, memory values and the console record in agreement.
 
 **Alternatives.** A private base for memory (different faces would spell the same value differently); attaching another settings controller on every redraw (duplicate listeners); bypassing the session for grid writes (loses console echoes).
+
+### Editor preferences reconfigure every file
+
+**Decision.** The footer's Editor section offers Wrap lines, Font size (10–24px), and Tab size (1–8 spaces, also used for indentation). Defaults preserve the existing editor: wrapping on, 14px, two spaces. A separate `editor` field in the version-2 envelope stores these preferences; old envelopes receive defaults without resetting projects. The shared `editor-preferences.ts` normalizer serves the store and editor without importing CodeMirror into the eager bundle.
+
+`EditorHandle.setPreferences` reconfigures a dedicated compartment in every stored document and updates the scroller's font size. New documents use the latest preferences too. Text, selection and undo history survive; changing preferences does not call the source-edit handler or schedule a compile. The fallback textarea receives the same display preferences before the editor loads.
+
+**Rationale.** Editor appearance and indentation are reader preferences, not compiler options. Keeping them separate avoids accidental recompilation, while compartment updates preserve the file registry and each file's history.
+
+**Alternatives.** Rebuilding the editor (loses file state and undo); changing only the active document (preferences revert on a file switch); storing them among compiler settings (invites unrelated compile requests).

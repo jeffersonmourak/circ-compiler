@@ -6,6 +6,7 @@
 // library does not document for that operation. `PlaygroundSettings` and its
 // normalisation belong to the store; this module only projects them.
 import type { PlaygroundSettings } from '../utils/playground-store.ts';
+import { normalizeTruthTableCap } from '../utils/playground-store.ts';
 
 /** Every key the library documents. Nothing outside this list is ever sent. */
 export const DOCUMENTED_OPTION_KEYS = [
@@ -83,7 +84,7 @@ export function capRefusal(bits: number | null, s: PlaygroundSettings): string |
   if (bits === null || bits <= s.truthTableCap) return null;
   return (
     `This circuit has ${bits} input bits; the playground enumerates up to ${s.truthTableCap} ` +
-    `(${2 ** s.truthTableCap} rows). Raise the cap in settings, or use circ-compile --truth-table.`
+    `(${2 ** s.truthTableCap} rows). Raise the input-bit cap in Truth, or use circ-compile --truth-table.`
   );
 }
 
@@ -172,8 +173,8 @@ export function mountSettingsDrawer(root: ParentNode & EventTarget, deps: Settin
           (draft[key as BoolKey] as boolean) = el.checked;
         } else if (el instanceof HTMLInputElement && el.type === 'number') {
           const n = Number.parseInt(el.value, 10);
-          // The store clamps; this only refuses to write a non-number.
-          if (Number.isFinite(n)) draft.truthTableCap = n;
+          // Normalize before the request, not only when the envelope is read.
+          if (Number.isFinite(n)) draft.truthTableCap = normalizeTruthTableCap(n);
         } else {
           (draft[key as ChoiceKey] as string) = el.value;
         }

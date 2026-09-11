@@ -152,25 +152,16 @@ const groups = displayGroups(catalogue, []);
           <ul class="pg-diag" data-footer-panel="diagnostics"></ul>
           <div class="pg-settings" data-footer-panel="settings" hidden>
           <fieldset class="pg-settings-group">
-            <legend>Preview</legend>
-            <label><input type="checkbox" data-setting="expandMacros" /> Expand macros</label>
-            <label><input type="checkbox" data-setting="expandDisplay" /> Expand display</label>
-          </fieldset>
-          <fieldset class="pg-settings-group">
-            <legend>Truth table</legend>
-            <label for="pg-set-values">Values</label>
-            <select id="pg-set-values" data-setting="valueFormat">
-              <option value="binary">binary</option>
-              <option value="hex">hex</option>
-              <option value="decimal">decimal</option>
-            </select>
-            <label for="pg-set-cap">Input-bit cap</label>
-            <input id="pg-set-cap" type="number" min="1" max="24" step="1" data-setting="truthTableCap" />
-            <span class="pg-settings-hint">2^cap rows; once the enumeration starts, it runs to the end.</span>
-          </fieldset>
-          <fieldset class="pg-settings-group">
             <legend>Compile</legend>
             <label><input type="checkbox" data-setting="warningsAsErrors" /> Treat warnings as errors</label>
+          </fieldset>
+          <fieldset class="pg-settings-group">
+            <legend>Editor</legend>
+            <label>Wrap lines <input type="checkbox" data-editor-setting="wrapLines" /></label>
+            <label>Font size (px)<input id="pg-editor-font-size" type="number" min="10" max="24" step="1" data-editor-setting="fontSize" /></label>
+
+            <label for="pg-editor-tab-size">Tab size <input id="pg-editor-tab-size" type="number" min="1" max="8" step="1" data-editor-setting="tabSize" /></label>
+            <span class="pg-settings-hint">Tab indents with this many spaces.</span>
           </fieldset>
         </div>
         </div>
@@ -194,17 +185,19 @@ const groups = displayGroups(catalogue, []);
           <button type="button" role="tab" class="pg-view-tab" data-view="live" aria-selected="false" aria-controls="pg-view-live" tabindex="-1">Live</button>
           <button type="button" role="tab" class="pg-view-tab" data-view="truth" aria-selected="false" aria-controls="pg-view-truth" tabindex="-1">Truth</button>
         </div>
-        {/* Each view's own tools, shown with it (design file 3e, 3f). The
-            Schematic's two toggles are the same settings the footer's form
-            binds, on the same `data-setting` attribute, so one binding paints
-            both. The Truth chip carries the table's counts and, when the
-            reader is blocked, why. */}
+        {/* Each view owns its tools. The Truth chip carries the counts and
+            any refusal; its cap control is beside it. */}
         <div class="pg-view-tools" data-for="schematic">
           <label class="pg-tool-toggle"><input type="checkbox" data-setting="expandMacros" /> Expand macros</label>
           <label class="pg-tool-toggle"><input type="checkbox" data-setting="expandDisplay" /> Expand display</label>
           <button type="button" class="pg-tool-btn" data-copy="preview" title="Copy the schematic as text"><span class="pg-action-label">Copy</span></button>
         </div>
         <span class="pg-truth-chip" id="pg-truth-chip" data-for="truth"></span>
+        <div class="pg-view-tools pg-truth-tools" data-for="truth">
+          <label for="pg-set-cap">Input-bit cap</label>
+          <input id="pg-set-cap" type="number" min="1" max="24" step="1" data-setting="truthTableCap" aria-describedby="pg-cap-hint" />
+          <span class="visually-hidden" id="pg-cap-hint">2^cap rows; once the enumeration starts, it runs to the end.</span>
+        </div>
         <button type="button" class="pg-data-btn" aria-expanded="false" aria-controls="pg-data-card">Data <span class="pg-data-count"></span></button>
       </div>
       <div class="pg-view-panel" id="pg-view-schematic" data-view-panel="schematic" role="tabpanel"><pre class="pg-preview"></pre></div>
@@ -365,6 +358,7 @@ const groups = displayGroups(catalogue, []);
   import { createSplitter } from '../scripts/splitter.ts';
   import { clampPanel, defaultPos, positionFromDrag, crossedThreshold } from '../scripts/data-panel.ts';
   import type { PanelPos } from '../utils/playground-store.ts';
+  import { normalizeEditorPreferences, type EditorPreferences } from '../utils/editor-preferences.ts';
   import { fnv1a } from '../utils/artifact-hash.ts';
   import { artifactFileName } from '../utils/artifact-name.ts';
   import { capRefusal, mountSettingsDrawer, optionsFor, truthTableRefusal } from '../scripts/settings-drawer.ts';
@@ -3227,11 +3221,36 @@ const groups = displayGroups(catalogue, []);
     let editorPromise: Promise<EditorMod> | null = null;
     const loadEditor = () => (editorPromise ??= import('../scripts/circ-editor.ts'));
 
+    const editorControls = el.querySelectorAll<HTMLInputElement>('[data-editor-setting]');
+    function paintEditorPreferences() {
+      const preferences = store.envelope.editor;
+      for (const control of editorControls) {
+        const key = control.dataset.editorSetting as keyof EditorPreferences;
+        if (control.type === 'checkbox') control.checked = preferences.wrapLines;
+        else control.value = String(preferences[key]);
+      }
+      // The fallback observes the same preferences before CodeMirror mounts.
+      source.wrap = preferences.wrapLines ? 'soft' : 'off';
+      source.style.whiteSpace = preferences.wrapLines ? 'pre-wrap' : 'pre';
+      source.style.fontSize = `${preferences.fontSize}px`;
+      source.style.tabSize = String(preferences.tabSize);
+    }
+    for (const control of editorControls) control.addEventListener('change', () => {
+      const key = control.dataset.editorSetting as keyof EditorPreferences;
+      const value = control.type === 'checkbox' ? control.checked : control.valueAsNumber;
+      if (typeof value === 'number' && !Number.isFinite(value)) { paintEditorPreferences(); return; }
+      store.update((draft) => { draft.editor = normalizeEditorPreferences({ ...draft.editor, [key]: value }); });
+      editor?.setPreferences(store.envelope.editor);
+      paintEditorPreferences();
+    });
+    paintEditorPreferences();
+
     function mountEditor(mod: EditorMod) {
       editorMod = mod;
       editor = mod.createEditor(editorHost, {
         doc: activeFile(state.tabs).body,
         theme: mod.currentThemeMode(),
+        preferences: store.envelope.editor,
         ariaLabel: 'circ source',
         onCursor: (index, line, col, lineText) => {
           // Only the root file's declarations are drawn, so a cursor in a
