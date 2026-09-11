@@ -256,26 +256,23 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(doc.querySelector('.pg-term-line .pg-term-reply')?.textContent).toBe('Compile a circuit first.');
     expect(doc.querySelector('.pg-term-mem')?.getAttribute('aria-disabled')).toBe('true');
     expect(doc.querySelector('.pg-drawer-splitter')?.getAttribute('aria-orientation')).toBe('horizontal');
-    const drawerTabs = Array.from(
-      doc.querySelectorAll('.pg-drawer-tabs [role=tab]'),
-      (b) => (b as unknown as { dataset: Record<string, string> }).dataset.drawer,
-    );
-    expect(drawerTabs).toEqual(['console', 'memory']);
-    expect(doc.querySelector('.pg-drawer-tab[data-drawer="console"]')?.getAttribute('aria-selected')).toBe('true');
+    expect(doc.querySelector('.pg-drawer-tabs')).toBeNull();
+    expect(doc.querySelector('.pg-console-tab')?.textContent).toBe('Console');
+    expect(doc.querySelector('.pg-console-caret')).not.toBeNull();
     // The memory tab exists in the markup but is hidden: the default pick
     // declares no rom or ram, and a permanently empty tab is a worse answer
     // than no tab. Its panel ships hidden with it.
-    expect(doc.querySelector('.pg-drawer-tab[data-drawer="memory"]')?.hasAttribute('hidden')).toBe(true);
-    expect(doc.querySelector('[data-drawer-panel="memory"]')?.hasAttribute('hidden')).toBe(true);
+    expect(drawer.hasAttribute('data-mem')).toBe(false);
+    expect(doc.querySelector('.pg-drawer-mem')?.hasAttribute('hidden')).toBe(true);
     expect(doc.querySelector('.pg-mem')?.textContent).toBe('');
     expect(doc.querySelector('.pg-footer .pg-mem')).toBeNull();
     // The console: a scrollback and a prompt, shut until a session exists,
     // with the same sentence Simulate shows for why.
-    expect(doc.querySelector('[data-drawer-panel="console"] .pg-console-log')).not.toBeNull();
+    expect(doc.querySelector('.pg-drawer .pg-console-log')).not.toBeNull();
     // An editor's terminal: a bar naming the command it runs, with its actions.
     expect(doc.querySelector('.pg-console-title')?.textContent).toMatch(/^circ-compile \S+\.circ --sim$/);
     const consoleButtons = Array.from(
-      doc.querySelectorAll('.pg-console-bar .pg-console-btn'),
+      doc.querySelectorAll('.pg-console-head .pg-console-btn'),
       (b) => (b as unknown as { dataset: Record<string, string> }).dataset.console,
     );
     expect(consoleButtons).toEqual(['clear', 'script', 'log']);
@@ -805,8 +802,7 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     const drawer = doc.querySelector('.pg-drawer') as unknown as { dataset: Record<string, string> };
     const separator = doc.querySelector('.pg-drawer-splitter')!;
     const open = (name: string) => doc.querySelector(`.pg-term-open[data-term="${name}"]`) as unknown as { click(): void };
-    const toggle = doc.querySelector('.pg-drawer-toggle') as unknown as { click(): void };
-    const consoleTab = doc.querySelector('.pg-drawer-tab[data-drawer="console"]') as unknown as { click(): void };
+    const toggle = doc.querySelector('.pg-drawer-close') as unknown as { click(): void };
     (doc.querySelector('.pg-drawer-close') as unknown as HTMLElement).click();
 
     // Whatever the view, the row is there and shut.
@@ -835,9 +831,9 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(term.dataset.open).toBe('false');
     expect(frame.style.getPropertyValue('--pg-term-h')).toBe('');
     // The selected tab is the reopen gesture, as on the dock.
-    consoleTab.click();
+    open('console').click();
     expect(term.dataset.open).toBe('true');
-    consoleTab.click();
+    open('console').click();
     expect(term.dataset.open).toBe('false');
     // Memory is inert until the circuit declares one.
     open('memory').click();
@@ -1178,6 +1174,8 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     };
     island.renderMemory();
 
+    (doc.querySelector('.pg-term-mem') as unknown as HTMLElement).click();
+
     const click = (el: unknown) => (el as { click(): void }).click();
     const press = (el: unknown, key: string) =>
       (el as { dispatchEvent(e: unknown): void }).dispatchEvent(
@@ -1193,7 +1191,8 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     const errorLine = () => doc.querySelector('.pg-mem-error')?.textContent ?? '';
 
     // The tab is no longer hidden, and the grid is the memory's exact size.
-    expect(doc.querySelector('.pg-drawer-tab[data-drawer="memory"]')?.hasAttribute('hidden')).toBe(false);
+    expect(doc.querySelector('.pg-drawer')?.hasAttribute('data-mem')).toBe(true);
+    expect(doc.querySelector('.pg-drawer-mem')?.hasAttribute('hidden')).toBe(false);
     expect(cells()).toHaveLength(16);
     // Nothing runs in this harness, so the image can be edited but not saved.
     expect((doc.querySelector('.pg-mem-save') as unknown as { disabled: boolean }).disabled).toBe(true);

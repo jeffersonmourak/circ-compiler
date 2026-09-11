@@ -1205,96 +1205,15 @@ span.pg-diag-pos { color: var(--muted); cursor: default; }
 }
 /* The count beside the tab label, so a collapsed dock still says how many. */
 
-/* ---------- the output pane's drawer ----------
-   The session's strip under the Simulate and Data panels: Console and Memory.
-   It borrows the dock's strip, tab and toggle rules so the two read as one
-   family, and takes its height from the drawer divider: the panels above keep
-   `--pg-split-drawer` of the pane, the drawer the rest. */
-.pg-drawer {
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  border-top: 1px solid var(--border);
-  background: var(--pane-bg);
-}
-.pg-drawer[hidden] { display: none; }
-/* In the terminal row the drawer fills whatever the row is given. */
-.pg-drawer[data-open="true"] { flex: 1 1 auto; }
-.pg-drawer-bar {
-  display: flex;
-  align-items: stretch;
-  gap: 0.5rem;
-  background: var(--pane-label-bg);
-  flex: 0 0 auto;
-}
-.pg-drawer-tabs {
-  display: flex;
-  gap: 0;
-  overflow-x: auto;
-  flex: 1;
-  min-width: 0;
-  scrollbar-width: thin;
-}
-.pg-drawer-tab {
-  font: inherit;
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  letter-spacing: 0.04em;
-  color: var(--muted);
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  padding: 0.4rem 0.85rem;
-  cursor: pointer;
-  white-space: nowrap;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-.pg-drawer-tab:hover { color: var(--fg); }
-.pg-drawer-tab[aria-selected="true"] {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
-}
-.pg-drawer[data-open="false"] .pg-drawer-tab[aria-selected="true"] {
-  border-bottom-color: transparent;
-  color: var(--muted);
-}
-.pg-drawer-tab[hidden] { display: none; }
-.pg-drawer-count {
-  font-size: 0.68rem;
-  line-height: 1;
-  padding: 0.15rem 0.35rem;
-  border-radius: 999px;
-  background: var(--border);
-  color: var(--fg);
-}
-.pg-drawer-count[hidden] { display: none; }
-.pg-drawer-toggle {
-  font: inherit;
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.04em;
-  color: var(--muted);
-  background: transparent;
-  border: none;
-  padding: 0.4rem 0.85rem;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.pg-drawer-toggle:hover { color: var(--fg); }
-.pg-drawer-body {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  border-top: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-}
-.pg-drawer[data-open="false"] .pg-drawer-body { display: none; }
-.pg-drawer-panel { padding: 0.6rem 0.85rem; flex: 1; min-height: 0; }
-.pg-drawer-panel[hidden] { display: none; }
+/* The console and declared memories share the open terminal row. */
+[data-layout='app'] .pg-drawer { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr); min-height: 0; overflow: hidden; background: var(--pane-bg); }
+[data-layout='app'] .pg-drawer[data-mem] { grid-template-columns: minmax(0, 1fr) 1px 560px; }
+[data-layout='app'] .pg-drawer-rule { background: var(--border); }
+[data-layout='app'] .pg-drawer-mem { min-width: 0; min-height: 0; overflow: auto; background: var(--pane-bg); }
+[data-layout='app'] .pg-drawer-mem[hidden],
+[data-layout='app'] .pg-drawer-rule[hidden],
+[data-layout='app'] .pg-drawer[hidden],
+[data-layout='app'] .pg-term[data-open='false'] .pg-drawer { display: none; }
 /* The divider between the panels and the drawer: the main divider turned on
    its side, so the same handle reads the same way. */
 .pg-drawer-splitter {
@@ -1327,35 +1246,36 @@ span.pg-diag-pos { color: var(--muted); cursor: default; }
    bar naming the command it runs with its actions, the log, and a prompt
    that is one line of the same text with a glyph in front. Line kinds are
    colours only; the text is the executor's. */
-.pg-console {
+[data-layout='app'] .pg-console {
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  padding: 0.35rem 0.65rem 0.5rem;
-  border-radius: 4px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  border-radius: 0;
   background: var(--code-bg);
   font-family: var(--font-mono-strict);
-  font-size: 0.8rem;
+  font-size: 12.5px;
   line-height: 1.5;
   color: var(--fg);
   cursor: text;
 }
-.pg-console:focus-within { box-shadow: inset 0 0 0 1px var(--accent); }
-.pg-console-bar {
+[data-layout='app'] .pg-console-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  flex: 0 0 auto;
-  margin: 0 0 0.35rem;
-  padding-bottom: 0.3rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  gap: 12px;
+  flex: 0 0 34px;
+  min-width: 0;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
   cursor: default;
 }
-.pg-console-title {
+[data-layout='app'] .pg-console-tab { align-self: stretch; display: flex; align-items: center; border-bottom: 2px solid var(--accent); color: var(--fg); font: 11px var(--font-mono); }
+[data-layout='app'] .pg-console-title {
   font-family: var(--font-mono);
-  font-size: 0.72rem;
+  font-size: 11px;
   letter-spacing: 0.04em;
   color: var(--muted);
   white-space: nowrap;
@@ -1363,28 +1283,29 @@ span.pg-diag-pos { color: var(--muted); cursor: default; }
   text-overflow: ellipsis;
   min-width: 0;
 }
-.pg-console-actions { display: flex; gap: 0.15rem; flex: 0 0 auto; }
-.pg-console-btn {
+[data-layout='app'] .pg-console-actions { display: flex; gap: 12px; flex: none; margin-left: auto; }
+[data-layout='app'] .pg-console-btn {
   font: inherit;
   font-family: var(--font-mono);
-  font-size: 0.7rem;
+  font-size: 11px;
   letter-spacing: 0.04em;
   color: var(--muted);
   background: transparent;
   border: none;
-  border-radius: 3px;
-  padding: 0.15rem 0.5rem;
+  border-radius: 0;
+  padding: 0;
   cursor: pointer;
   white-space: nowrap;
 }
-.pg-console-btn:hover { color: var(--fg); background: color-mix(in srgb, var(--fg) 8%, transparent); }
+[data-layout='app'] .pg-console-btn:hover { color: var(--fg); }
 .pg-console-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
-.pg-console-note { margin: 0 0 0.4rem; color: var(--muted); font-family: var(--font-mono); font-size: 0.8rem; }
+[data-layout='app'] .pg-console-note { margin: 8px 12px; color: var(--muted); font-family: var(--font-mono); font-size: 11px; }
 .pg-console-note[hidden] { display: none; }
 .pg-console-log {
   flex: 1;
-  min-height: 3rem;
+  min-height: 0;
   margin: 0;
+  padding: 8px 12px;
   overflow: auto;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -1402,11 +1323,13 @@ span.pg-diag-pos { color: var(--muted); cursor: default; }
 .pg-console-line[data-origin="page"] { opacity: 0.8; }
 .pg-console-form {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.45rem;
   flex: 0 0 auto;
   margin: 0.15rem 0 0;
+  padding: 0 12px 8px;
 }
+[data-layout='app'] .pg-console-caret { width: 7px; height: 14px; flex: none; background: var(--accent); }
 .pg-console-prompt { color: var(--accent); font-weight: 600; }
 .pg-console-in {
   flex: 1;
@@ -2398,6 +2321,7 @@ a.install-line:hover {
   [data-layout='app'] .pg-output[data-data-open='true'] .pg-view-panel { right: auto; }
   [data-layout='app'] .pg-data-card { position: static; width: auto; max-width: none; max-height: none; order: 1; flex: none; margin-bottom: 16px; }
   [data-layout='app'] .pg-data-grip { display: none; }
+  [data-layout='app'] .pg-drawer[data-mem] { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(120px, 1fr) 1px minmax(120px, 1fr); overflow: auto; }
   [data-layout='app'] .pg-nav { height: auto; min-height: 48px; flex-wrap: wrap; padding: 8px 12px; }
   [data-layout='app'] .pg-nav-left { gap: 12px; max-width: 100%; flex-wrap: wrap; }
   [data-layout='app'] .pg-switch { left: 0; right: 0; width: auto; max-width: 100%; }

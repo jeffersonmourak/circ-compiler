@@ -273,3 +273,11 @@ Rolling log of shipped slices. Newest at the bottom. The plan is `DOCS/PLANS_PRO
 **Tests:** Added height defaults/migration and a real-session drawer walk proving focus, persistence and the two Escape gestures. Typecheck/build pass; all 600 tests pass across the full run and corrected smoke rerun; `/playground` 129.6 KB raw / 45.1 KB gzip.
 **Next slice:** The console header and removal of the tab strip.
 **Notes:** Focus return goes to the Console button rather than the focus-to-open line, avoiding an immediate reopen. The drawer's height field follows the active phase spec; later viewport changes only clamp the rendering. The old tab strip remains for this slice.
+
+## 2026-09-11 — Phase 6 — The console header
+
+**What shipped:** A 34px console header with the underlined label, command title, Clear/Copy actions and Close. The log uses 12.5px strict mono and the prompt has a 7×14px accent caret. Drawer tabs, their wrappers and their state machine are gone. Declared memories now sit beside the console in the 560px column; the narrow layout stacks them. Closed drawers defer memory reads.
+**Files touched:** `site/src/components/Playground.astro`, `site/src/styles/global.css`, `site/test/island-smoke.test.ts`, `DOCS/STATUS.md`
+**Tests:** Rewrote the drawer walk for the header and column; every existing console and transcript test passes. All four gates pass: 600 tests; `/playground` 128.8 KB raw / 44.9 KB gzip.
+**Next slice:** The memory header and toolbar.
+**Notes:** The column's structural move and `updateMemColumn` landed here because removing the tab wrappers needed a replacement home for memory immediately. Its existing contents remain until the next slice. The memory smoke now opens the drawer before expecting cells, matching the deferred-read contract.
