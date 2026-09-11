@@ -89,3 +89,43 @@ One entry per shipped slice, newest last. The plan is `DOCS/PLANS_PROMPT.md`; th
 **Tests:** none (review)
 **Next slice:** Phase 2 slice 1: the walk.
 **Notes:** none.
+
+## 2026-09-11 — Phase 2 — the walk, the machine half
+
+**What shipped:** the four examples the plan names, compiled through the committed `libcirc.wasm`, loaded into the real `CircRuntime` with their own images and `bootLow`, and driven as the other faces drive them — `session.set` for a canvas click and a Data-tab edit, `poke`/`clear` for the Memory tab's grid and Clear, `applyPreloads()` for its hex box, `reset` for the Data tab's Reset — with every event logged through `commandFor` and each `rebuilt` followed by the handshake; then `scriptOf` over that log replayed through the executor on a fresh session of the same circuit, and the page's replies and end state compared with the replay's (a scratch script, not committed).
+
+| Example | What the faces did | Log | Replay |
+|---|---|---|---|
+| four-bit-adder | `a`=3, `b`=5, `a`=`0x5/0x3`, `a`=`?`, Reset, `a`=0xf, `b`=1 | `> set a 0x3`, `> set b 0x5`, `> set a 0x1 0x3`, `> set a 0x0 0x0`, `> reset` + handshake, `> set a 0xf`, `> set b 0x1`, each with `ok` | 7 script lines; replies equal; end state equal |
+| ram-write-read | `a`=2, `d`=0x5a, `we`=1, clock pulse, cell 3 ← 0x77, cell 0 ← unknown, Clear | the five `set`s, `> poke data 0x3 0x77`, `> poke data 0x0 0x0 0x0`, `> clear data` | 8 lines; equal; equal |
+| rom-lookup | `pc`=1, image `aa bb` in the hex box, `pc`=0, image emptied, Reset | `> set pc 0x1`, `# code: image from the Memory tab, 2 words`, `> set pc 0x0`, `> clear code`, `> reset` + handshake | 5 lines; equal; equal (an emptied image is a `clear`, which is a command) |
+| sr-latch | `s` on, off; `r` on, off (the toggles) | four `set`s with `ok` | 4 lines; equal; equal |
+
+**Files touched:** `DOCS/STATUS.md`
+**Tests:** `zig build test-all` on `b60ac03`, result pass (no Zig file touched); the full site gate on the same tree (`bun test` 532 pass, typecheck 0 errors, build, bundle ok), result pass
+**Next slice:** the measurement.
+**Notes:** no defect. The one end state a replay cannot reproduce is an image that was loaded and then left loaded (the comment names it, a replay's `--mem` would supply it); no example's scenario ends there. The human's browser rows (both themes, the terminal's colours, a copied script through the CLI, the scroll lock, a project switch) are recorded in the completion entry from the human's report.
+
+## 2026-09-11 — Phase 2 — the measurement
+
+**What shipped:** the `/playground` route measured with `bun run bundle` against the plan's start.
+
+| Point | Eager graph (raw / gzip) | Lazy chunks |
+|---|---|---|
+| Plan start (`46d12c6`) | 104.9 KB / 37.3 KB | unchanged throughout |
+| Phase 0, events and the echo | 106.1 KB / 37.7 KB | |
+| Phase 1, the bar and the surface | 107.6 KB / 38.2 KB | |
+| Final tree (`b60ac03`) | 107.7 KB / 38.2 KB, ceiling 120 KB gzip | |
+
+**Files touched:** `DOCS/STATUS.md`
+**Tests:** none (measurement)
+**Next slice:** the decisions reread.
+**Notes:** the initiative's cost on the eager graph is 2.8 KB raw / 0.9 KB gzip: `commandFor`, `scriptOf`, the richer events, the bar's handlers, the scroll lock and the new-project reset. The stylesheet is not in the budget.
+
+## 2026-09-11 — Phase 2 — the decisions reread
+
+**What shipped:** `DOCS/decisions/playground.md` reread against the plan's eleven locked decisions. Present: 1 (events carry what was driven), 2 (`commandFor`), 3 (a page line looks like a typed line), 4 (the Memory panel through the session), 5 (Copy script), 6 (the toolbar), 7 (autoscroll), 8 (the prompt), 9 (line kinds), 10 (the document), plus the review's addition (a new project is a new terminal). Decision 11 (documentation lands with the code) is the driver plan's entry of that name, which this plan followed; it is not repeated.
+**Files touched:** `DOCS/STATUS.md`
+**Tests:** `grep -c '^### ' DOCS/decisions/playground.md` → 51, from 40 at the plan's start: eleven entries for ten decisions and one finding.
+**Next slice:** the completion entry, once the human has walked the page.
+**Notes:** none.
