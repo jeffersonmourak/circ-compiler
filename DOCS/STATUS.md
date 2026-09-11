@@ -81,3 +81,11 @@ One entry per shipped slice, newest last. The plan is `DOCS/PLANS_PROMPT.md`; th
 **Tests:** added `fan-out: a ring in the wire colour with the centre knocked out to alpha` (three cells × three signals × two widths, colour per case, composite mode restored last); ran `bun test` (436 pass), typecheck (0 errors), `bun --bun run build`, `bun run bundle` (every route ok; theme chunk 29.9 KB raw / 17.8 KB gzip, up 1.5 KB raw on the wire and junction code), result pass
 **Next slice:** gallery review (the human): `slice-and-concat`, `four-bit-adder`, `sr-latch`, `fan-out` in both modes at `cell` 10, 14, 24.
 **Notes:** the first `UPDATE_GOLDENS` run of the fan-out test died on a float-rounding assertion halfway through the loop and left `fanout.json` partial; the recorder rounds to three decimals and an expectation must round the same way. Decisions 1 and 2 recorded in `DOCS/decisions/canvas-theme.md`, with the four README/file disagreements now known.
+
+## 2026-09-10 — Phase 1 — gallery review
+
+**What shipped:** the human reviewed the Phase 1 tree and approved it ("great"); no value changed. Phase 1 complete.
+**Files touched:** `DOCS/STATUS.md`
+**Tests:** none (review)
+**Next slice:** Phase 2 slice 1: pin circle and single-bit pill.
+**Notes:** none.
