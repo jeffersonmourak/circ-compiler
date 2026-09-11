@@ -3383,11 +3383,17 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       assetsHooked: false,
       /** The one cell size, so the zoom line and the canvas agree. */
       cell: 14,
-      /** The reader zoomed or panned this canvas. Set by `onViewChange`,
-       *  cleared by `fit`, `100%` and a new canvas; gates the refit when the
-       *  inset changes, so a view the reader chose is never taken from them. */
+      /** The reader zoomed or panned this canvas. Set by `onViewChange` when
+       *  a gesture preceded it, cleared by `fit`, `100%` and a new canvas;
+       *  gates the refit when the inset changes, so a view the reader chose
+       *  is never taken from them. */
       navigated: false,
+      /** When the canvas last saw a wheel, a drag or a touch move. The
+       *  renderer reports its own fits through `onViewChange` too (the first
+       *  measurement under `viewport: 'parent'`), and those follow no gesture. */
+      gestureAt: 0,
     };
+    const GESTURE_WINDOW_MS = 500;
 
     // ---- the zoom line ----
     /** The percentage follows the canvas; the two buttons need one. */
@@ -3562,9 +3568,10 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           viewport: 'parent',
           navigation: { wheel: 'modifier', drag: true, touch: narrow.matches ? 'page' : 'own' },
           // Never for the view a canvas is built with, so `syncZoom` below
-          // writes the first percentage itself.
+          // writes the first percentage itself. A change the reader made
+          // follows a gesture; the renderer's own fit follows none.
           onViewChange: (view) => {
-            sim.navigated = true;
+            if (Date.now() - sim.gestureAt < GESTURE_WINDOW_MS) sim.navigated = true;
             zoomPct.textContent = formatZoom(view.scale);
           },
           // onPinChange, not onPinToggle: the older callback collapses any
@@ -3593,6 +3600,10 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         const view: View = { view: canvas, canvas: canvas.canvas, destroy: () => canvas.destroy() };
         sim.view = view;
         sim.navigated = false;
+        const gesture = () => { sim.gestureAt = Date.now(); };
+        canvas.canvas.addEventListener('wheel', gesture, { passive: true });
+        canvas.canvas.addEventListener('pointermove', (e) => { if (e.buttons !== 0) gesture(); });
+        canvas.canvas.addEventListener('touchmove', gesture, { passive: true });
         // The layout is the only place a collapsed macro box exists, so the
         // join is built from it rather than from the topology.
         link.table = linkLayout(link.decls, canvas.getLayout());
