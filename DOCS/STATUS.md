@@ -189,3 +189,11 @@ One entry per shipped slice, newest last. The plan is `DOCS/PLANS_PROMPT.md`; th
 **Tests:** `grep -c '^### ' DOCS/decisions/playground.md` → 40, from 27 before the initiative: thirteen entries for twelve decisions and one finding.
 **Next slice:** the completion entry, once the human has walked the page.
 **Notes:** none.
+
+## 2026-09-11 — Phase 4 — completion
+
+**What shipped:** the human walked `/playground` in both themes ("done", no defect): `four-bit-adder` driven from the Data tab, the console's `eval` and a canvas click with every face showing one value; `ram-write-read` clocked from the console with the Memory tab and the Data tab following; `rom-lookup` loaded and saved from the Memory tab and read through `peek`; `sr-latch` from the Data tab's toggles; a recompile mid-session, a theme flip, a `reset`. With the machine half of the walk, the measurement and the decisions reread above, the plan is complete: every phase shipped, every slice committed, nothing left to dispatch.
+**Files touched:** `DOCS/STATUS.md`
+**Tests:** the full site gate and `zig build test-all` on the final tree, result pass
+**Next slice:** none; plan complete. Archive per `DOCS/prompts/ARCHIVE.md` on the human's ask.
+**Notes:** follow-ups, none of them blocking: (1) `DOCS/sim-protocol.md` is not among the documents the site syncs into its reference pages, so the browser section is read from the repository only; a `site-config.ts` row would publish it. (2) The console's prompt loop has no headless test: the smoke harness cannot build a session (no worker, no canvas), so the loop is proved by the human's walk while the executor beneath it is proved byte for byte. (3) `E_PROTO command line exceeds limit` is never printed in the browser, recorded in the document. (4) Files through the console (a drop box) stayed deferred; the Memory tab is the file surface. (5) The `Save image` button is disabled until the circuit runs; a save of a rom's pending image without a session would need the panel's own bytes rather than the session's. (6) The renderer's `canvas-theme` branch PR into circ-renderer main is still the human's to open; this plan changed no renderer file.
