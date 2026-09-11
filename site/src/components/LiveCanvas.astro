@@ -25,7 +25,9 @@ interface Props {
   autoRun?: boolean;
 }
 
-const { wasm, cell = 14, padding = 16, memory, autoRun = false } = Astro.props;
+// Padding of 1.5 cells: the value chip above a pin reaches 1.34 cells over its
+// box, and a pin on the top row has only the padding above it.
+const { wasm, cell = 14, padding = Math.ceil(cell * 1.5), memory, autoRun = false } = Astro.props;
 const wasmHref = url(`/wasm/${wasm}`);
 // Serialised into the markup rather than passed to the script: the script is
 // hoisted and shared by every canvas on the page, so per-canvas data has to
@@ -104,7 +106,7 @@ const memoryAttr = memory && Object.keys(memory).length > 0 ? JSON.stringify(mem
   async function mount(container: HTMLElement) {
     const wasmUrl = container.dataset.circWasm!;
     const cell = parseInt(container.dataset.circCell ?? '14', 10);
-    const padding = parseInt(container.dataset.circPadding ?? '16', 10);
+    const padding = parseInt(container.dataset.circPadding ?? String(Math.ceil(cell * 1.5)), 10);
 
     const launch = container.querySelector<HTMLButtonElement>('.lc-launch');
     const mountEl = container.querySelector<HTMLElement>('.lc-mount');
@@ -129,6 +131,9 @@ const memoryAttr = memory && Object.keys(memory).length > 0 ? JSON.stringify(mem
         padding,
         interactive: true,
         theme: pickTheme(),
+        // Two free rows between stacked boxes: the value chip above a pin
+        // needs the second one, or it lands on the box above.
+        layoutOptions: { rowGutter: 2 },
       });
       await applyMemory(container, view);
       mountEl.innerHTML = '';
