@@ -241,3 +241,11 @@ One entry per shipped slice, newest last. The plan is `DOCS/PLANS_PROMPT.md`; th
 **Tests:** `both islands pad the canvas by two cells` (renamed, re-targeted); ran `bun test` (461 pass), typecheck (0 errors), `bun --bun run build` (every gallery card carries `data-circ-padding="28"`), `bun run bundle` (ok), result pass
 **Next slice:** Phase 5 slice 1: the walk.
 **Notes:** the renderer's padding is one number for all four sides; a top-only offset would be a renderer change. Two cells all round reads as balanced on a card, and is what decision 8 in `DOCS/decisions/canvas-theme.md` now says (updated in place, since the value was measured, not chosen).
+
+## 2026-09-10 — Phase 4 — review nit, second finding: padding halved on a 2x display
+
+**What shipped:** the chip was still tight at two cells, and the cause was the renderer's: `resize()` set the transform's translation to the padding as given, but a translation is in device pixels, so a 2x display drew the grid half a padding up and left of where `componentAtEvent` and `boxOf` looked for it. Fixed in the renderer (`setTransform(dpr, 0, 0, dpr, pad * dpr, pad * dpr)`), version `2.3.0-alpha.3`, renderer commit `7ca8593` (pushed by the human), with `test/padding-dpr.test.ts` at ratios 1, 2 and 3. The site pins it, `RENDERER_PIN_VERSION` bumped, the pin test reads the fix's shape from the installed source. The islands stay at two cells: that is now 28 real pixels, twice what the reader was seeing.
+**Files touched:** `circ-renderer/src/render/canvas.ts`, `test/canvas-stub.ts`, `test/padding-dpr.test.ts`, `package.json`; `site/package.json`, `site/bun.lock`, `site/src/utils/renderer-versions.ts`, `site/test/renderer-pin.test.ts`, `DOCS/STATUS.md`
+**Tests:** renderer `bun test` (203 pass), `bunx tsc --noEmit`; site `bun test` (461 pass), typecheck (0 errors), `bun --bun run build`, `bun run bundle` (ok), result pass
+**Next slice:** Phase 5 slice 1: the walk.
+**Notes:** the same half also shifted clicks on every high-density display since the renderer's first release; a click near a pin's edge landed half a padding off. Nobody noticed at the old 4px default. Both Phase 4 nits were renderer defects the site's theme made visible; neither was in the design.

@@ -115,6 +115,11 @@ describe('renderer pin', () => {
       wireOf([seg(0, 0, 4, 0), seg(4, 0, 4, 2), seg(4, 2, 8, 2)]),
       wireOf([seg(0, 0, 4, 0), seg(4, 0, 8, 0)]),
     ])).toEqual(['4,0', '4,2', '4,4']);
+    // The Phase 4 review's second finding: the padding came out halved on a
+    // 2x display, because the transform's translation is device pixels. The
+    // fix is in resize(); its shape is the one thing a source read can hold.
+    const canvasSrc = readFileSync(resolve(import.meta.dir, '..', 'node_modules', 'circ-renderer', 'src', 'render', 'canvas.ts'), 'utf8');
+    expect(canvasSrc).toMatch(/setTransform\(dpr, 0, 0, dpr, pad \* dpr, pad \* dpr\)/);
     const pkg = JSON.parse(
       readFileSync(resolve(import.meta.dir, '..', 'node_modules', 'circ-renderer', 'package.json'), 'utf8'),
     ) as { exports: Record<string, string> };
