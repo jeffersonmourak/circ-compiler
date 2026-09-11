@@ -33,3 +33,11 @@ One entry per shipped slice, newest last. The plan is `DOCS/PLANS_PROMPT.md`; th
 **Tests:** ran `bun --bun run build`, `bun test` (528 pass; `island-smoke` unchanged, nothing prints at mount), `bun --bun run typecheck` (0 errors), `bun run bundle` (`/playground` 106.1 KB raw / 37.7 KB gzip, ok; +1.2 KB raw for `commandFor` and the echo), result pass
 **Next slice:** the human's review of Phase 0 on the page: a canvas click, a Data-tab toggle and edit, a Memory-tab cell write and clear on `ram-write-read`, an image edit on `rom-lookup`, the Data tab's Reset; each typed line once.
 **Notes:** the handshake after a console-typed `reset` follows the `ok` as it did, so the executor's reply order is untouched and the transcript test's replies are not what the page logs around them.
+
+## 2026-09-11 — Phase 0 — review
+
+**What shipped:** the human reviewed the log of every face on the page and approved ("go for phase 1"). Phase 0 complete.
+**Files touched:** `DOCS/STATUS.md`
+**Tests:** none (review)
+**Next slice:** Phase 1 slice 1: `scriptOf`.
+**Notes:** none.
