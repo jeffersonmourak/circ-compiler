@@ -7,9 +7,11 @@
 import { describe, expect, test } from 'bun:test';
 import {
   fileNodeId,
+  filterNodes,
   groupOf,
   moveFor,
   reveal,
+  relativeTime,
   rollUp,
   sumCounts,
   toggle,
@@ -27,11 +29,11 @@ function input(over: Partial<TreeInput> = {}): TreeInput {
         id: 'introduction',
         label: 'Introduction',
         projects: [
-          { id: 'example:a', label: 'A', editable: false },
-          { id: 'example:b', label: 'B', editable: false },
+          { id: 'example:a', label: 'A', editable: false, fileCount: 1 },
+          { id: 'example:b', label: 'B', editable: false, fileCount: 3 },
         ],
       },
-      { id: 'yours', label: 'Yours', projects: [{ id: 'scratch:1', label: 'Mine', editable: true }] },
+      { id: 'yours', label: 'Yours', projects: [{ id: 'scratch:1', label: 'Mine', editable: true, fileCount: 2, updatedAt: 0 }] },
     ],
     activeId: 'scratch:1',
     files: [{ name: 'half.circ' }, { name: 'main.circ' }],
@@ -46,6 +48,12 @@ function input(over: Partial<TreeInput> = {}): TreeInput {
 const shape = (nodes: readonly TreeNode[]) => nodes.map((n) => `${'  '.repeat(n.level - 1)}${n.kind}:${n.label}`);
 
 describe('visibleNodes', () => {
+  test('a project carries its file count or age alongside its badge', () => {
+    const nodes = visibleNodes(input({ counts: [{ errors: 1, warnings: 0 }, NO_COUNTS] }), 180_000);
+    expect(nodes.filter((n) => n.kind === 'project').map((n) => [n.meta, n.badge])).toEqual([
+      ['1 file', 0], ['3 files', 0], ['3 min ago', 1],
+    ]);
+  });
   test('flattens groups, projects and the open project’s files in visual order', () => {
     expect(shape(visibleNodes(input()))).toEqual([
       'group:Introduction',
@@ -190,6 +198,42 @@ describe('visibleNodes', () => {
     );
     expect(shape(nodes)).toEqual(['group:Yours']);
     expect(nodes[0].kind === 'group' && nodes[0].count).toBe(0);
+  });
+});
+
+describe('filterNodes', () => {
+  const nodes = visibleNodes(input());
+  test('an empty query returns the same array', () => {
+    expect(filterNodes(nodes, '')).toBe(nodes);
+    expect(filterNodes(nodes, '  ')).toBe(nodes);
+  });
+  test('keeps a group when a project matches, preserving its flags', () => {
+    const found = filterNodes(nodes, 'B');
+    expect(found.map((n) => n.id)).toEqual(['introduction', 'example:b']);
+    expect(found[0]).toBe(nodes[0]);
+    expect(filterNodes(nodes, 'Introduction')).toEqual([]);
+  });
+  test('a file match keeps its project and group, and only matching files', () => {
+    expect(filterNodes(nodes, 'half').map((n) => n.id)).toEqual(['yours', 'scratch:1', 'scratch:1/0']);
+  });
+  test('a project match keeps its open files and trims without case sensitivity', () => {
+    expect(filterNodes(nodes, '  mINE ').map((n) => n.id)).toEqual(['yours', 'scratch:1', 'scratch:1/0', 'scratch:1/1']);
+    expect(filterNodes(nodes, 'missing')).toEqual([]);
+  });
+  test('moveFor walks only the filtered rows and their ancestors', () => {
+    const found = filterNodes(nodes, 'half');
+    expect(moveFor(found, 0, 'ArrowDown')).toEqual({ kind: 'focus', index: 1 });
+    expect(moveFor(found, 2, 'ArrowDown')).toBeNull();
+    expect(moveFor(found, 2, 'ArrowLeft')).toEqual({ kind: 'focus', index: 1 });
+  });
+});
+
+describe('relativeTime', () => {
+  test('steps through its bands with an injected clock', () => {
+    const at = Date.UTC(2026, 0, 1);
+    for (const [age, text] of [[-1, 'just now'], [30_000, 'just now'], [60_000, '1 min ago'], [300_000, '5 min ago'], [3 * 3600_000, '3 h ago'], [26 * 3600_000, 'yesterday'], [3 * 86400_000, '3 days ago'], [30 * 86400_000, '30 days ago'], [40 * 86400_000, '2026-01-01']] as const) {
+      expect(relativeTime(at, at + age)).toBe(text);
+    }
   });
 });
 

@@ -9,42 +9,41 @@
 // version bump.
 
 import type { DecodeResult, HashIntent, ShareKey } from './share-link.ts';
+import { normalizeEditorPreferences, type EditorPreferences } from './editor-preferences.ts';
+import { normalizeSourceImages, type SourceImages } from './source-images.ts';
 /** The content owns the tier vocabulary; this module only maps it to a
  *  heading. A type import is erased, so the store still pulls no content
  *  into the playground bundle. */
 import type { ExampleLevel } from '../content/examples.ts';
 
 export const STORE_KEY = 'circ.playground.v1';
-export const STORE_VERSION = 1;
+export const STORE_VERSION = 2;
 export const MAX_SCRATCH = 16;
 export const MAX_SOURCE_BYTES = 32 * 1024;
 export const MAX_ENVELOPE_BYTES = 256 * 1024;
 export const WRITE_DEBOUNCE_MS = 500;
 
 /**
- * The three output tabs. Diagnostics is not among them: it belongs to the
- * source, not to the compiled result, so it lives in the editor's own dock
- * beside the settings rather than competing with the preview for the pane a
- * reader is watching.
+ * The canvas region's three views. Data is not among them: it is a panel that
+ * can be open over any view (Phase 5), and diagnostics belong to the source,
+ * in the footer under the editor.
  */
-export type OutputTab = 'preview' | 'truth' | 'simulate' | 'data';
+export type View = 'schematic' | 'live' | 'truth';
+export const VIEWS: readonly View[] = ['schematic', 'live', 'truth'];
 
-/** The editor dock's panels. The memory panel left for the output pane's
- *  drawer, so a stored `memory` falls back like any other unknown tab. */
-export type DockTab = 'diagnostics' | 'settings';
+/** The footer under the editor: open or not, and which panel it was left on.
+ *  Remembered separately, as the dock's were. */
+export interface FooterState {
+  open: boolean;
+  tab: 'diagnostics' | 'settings';
+}
+export type FooterTab = FooterState['tab'];
 
 /** Which rows of the workspace explorer the reader has open. Ids, not
  *  indices: a group or project keeps its expansion across a content change
  *  that renumbers everything around it. */
 export interface WorkspaceState {
   expanded: string[];
-}
-
-/** The dock is collapsible, and which panel it was left on is remembered
- *  separately from whether it was left open. */
-export interface DockState {
-  open: boolean;
-  tab: DockTab;
 }
 
 /** `example:<slug>` | `tour:<n>` | `scratch:<id>`. */
@@ -61,11 +60,17 @@ export interface ScratchProject {
 }
 
 export interface LayoutState {
-  /** Splitter id → first-pane fraction, strictly between 0 and 1. A record so
-   *  a second divider costs no schema change: `main` is the editor's share of
-   *  the panes, `drawer` the output panels' share above the drawer. */
+  /** The source column, in CSS pixels (design file: `480px 1px minmax(0, 1fr)`).
+   *  The reader's intent: clamped on render, never on commit. */
+  sourceWidth: number;
+  /** Splitter id → first-pane fraction, strictly between 0 and 1. `drawer` is
+   *  the output panels' share above the drawer, until Phase 6 moves it to a
+   *  height; `main` left with version 1. */
   ratios: Record<string, number>;
 }
+export const DEFAULT_SOURCE_WIDTH = 480;
+const MIN_SOURCE_WIDTH = 320;
+const MAX_SOURCE_WIDTH = 8192;
 
 /**
  * Stored in camelCase deliberately: an envelope key must never be spreadable
@@ -85,7 +90,10 @@ export interface PlaygroundSettings {
   romImages: Record<string, string>;
 }
 
+export interface PanelPos { x: number; y: number }
+
 export interface PlaygroundEnvelope {
+  sourceImages: SourceImages;
   version: number;
   scratch: ScratchProject[];
   activeId: PickId | null;
@@ -93,12 +101,20 @@ export interface PlaygroundEnvelope {
   activeFile: string | null;
   layout: LayoutState;
   settings: PlaygroundSettings;
-  tab: OutputTab;
-  dock: DockState;
+  editor: EditorPreferences;
+  view: View;
+  /** The Data panel, open over whichever view; its rows are the session's. */
+  dataOpen: boolean;
+  /** Last committed position per project, in canvas-region CSS pixels. */
+  dataPanel: Record<PickId, PanelPos>;
+  /** Open drawer height in CSS pixels; clamped on render, not on read. */
+  drawerHeight: number;
+  footer: FooterState;
   ws: WorkspaceState;
 }
 
 export type StoreNote =
+  | { kind: 'images-skipped' }
   | { kind: 'reset'; reason: 'version' | 'corrupt' }
   | { kind: 'evicted'; names: string[] }
   /** Sources over `MAX_SOURCE_BYTES`: kept in memory so the reader keeps
@@ -118,15 +134,12 @@ export interface TimerLike {
   clearTimeout(id: number): void;
 }
 
-const OUTPUT_TABS: readonly OutputTab[] = ['preview', 'truth', 'simulate', 'data'];
-const DOCK_TABS: readonly DockTab[] = ['diagnostics', 'settings'];
-// Shut. The dock holds diagnostics, and the explorer now carries the per-file
-// error badge, so a reader sees that something is wrong without it — opening it
-// is for reading the messages, which is a deliberate act.
-export const DEFAULT_DOCK: DockState = { open: false, tab: 'diagnostics' };
-/** The reader's own projects, open. Everything else starts shut, and whichever
- *  group holds the open project is revealed at load without being persisted. */
-export const DEFAULT_WS: WorkspaceState = { expanded: ['yours'] };
+const FOOTER_TABS: readonly FooterTab[] = ['diagnostics', 'settings'];
+// Shut. The footer's bar already says how many errors and warnings there are,
+// so opening it is for reading the messages, which is a deliberate act.
+export const DEFAULT_FOOTER: FooterState = { open: false, tab: 'diagnostics' };
+/** All three display groups start open; project files are revealed at load. */
+export const DEFAULT_WS: WorkspaceState = { expanded: ['tour', 'examples', 'yours'] };
 /** Enough for every group plus every project; past this the envelope is being
  *  used as a scratchpad by something other than a reader. */
 const MAX_EXPANDED = 128;
@@ -147,16 +160,25 @@ export function defaultSettings(): PlaygroundSettings {
   };
 }
 
+export function normalizeTruthTableCap(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(1, Math.min(24, Math.round(value))) : 12;
+}
+
 export function defaultEnvelope(): PlaygroundEnvelope {
   return {
+    sourceImages: {},
     version: STORE_VERSION,
     scratch: [],
     activeId: null,
     activeFile: null,
-    layout: { ratios: {} },
+    layout: { sourceWidth: DEFAULT_SOURCE_WIDTH, ratios: {} },
     settings: defaultSettings(),
-    tab: 'preview',
-    dock: { ...DEFAULT_DOCK },
+    editor: normalizeEditorPreferences(undefined),
+    view: 'live',
+    dataOpen: false,
+    dataPanel: {},
+    drawerHeight: 320,
+    footer: { ...DEFAULT_FOOTER },
     ws: { expanded: [...DEFAULT_WS.expanded] },
   };
 }
@@ -166,13 +188,50 @@ const utf8Bytes = (s: string): number => new TextEncoder().encode(s).length;
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
 
-/** Missing entirely in every envelope written before the dock existed, which
- *  is why each field falls back on its own rather than the object as a whole. */
-function normalizeDock(raw: unknown): DockState {
-  const out: DockState = { ...DEFAULT_DOCK };
+/** Field by field, as the dock's state was: a version-1 envelope from before
+ *  the dock existed migrates with neither field, and each falls back alone. */
+function normalizeFooter(raw: unknown): FooterState {
+  const out: FooterState = { ...DEFAULT_FOOTER };
   if (!isObject(raw)) return out;
   if (typeof raw.open === 'boolean') out.open = raw.open;
-  if (DOCK_TABS.includes(raw.tab as DockTab)) out.tab = raw.tab as DockTab;
+  if (FOOTER_TABS.includes(raw.tab as FooterTab)) out.tab = raw.tab as FooterTab;
+  return out;
+}
+
+/** A whole number of pixels the bench can show; anything else is the default. */
+function normalizeSourceWidth(raw: unknown): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return DEFAULT_SOURCE_WIDTH;
+  const px = Math.round(raw);
+  return px < MIN_SOURCE_WIDTH || px > MAX_SOURCE_WIDTH ? DEFAULT_SOURCE_WIDTH : px;
+}
+
+/**
+ * A version-1 envelope reshaped for version 2, field by field, so a key the
+ * old writer never produced is simply absent and `normalize` defaults it. The
+ * scratch projects ride through untouched: a schema move is not a reset.
+ * The old output tab becomes a view (`preview → schematic`, `simulate` and
+ * `data → live`, `truth → truth`); the dock's state becomes the footer's; the
+ * main splitter's share is dropped for the source column's width.
+ */
+export function migrateV1(raw: Record<string, unknown>): Record<string, unknown> {
+  const tab = raw.tab;
+  const view: View = tab === 'truth' ? 'truth' : tab === 'simulate' || tab === 'data' ? 'live' : 'schematic';
+  const dock = isObject(raw.dock) ? raw.dock : {};
+  const layout = isObject(raw.layout) ? raw.layout : {};
+  const ratios = isObject(layout.ratios) ? { ...layout.ratios } : {};
+  delete ratios.main;
+  const out: Record<string, unknown> = {
+    ...raw,
+    version: 2,
+    view,
+    // The Data tab was a face of the live session; a reader who left the page
+    // on it finds their rows in the panel, open over the live view.
+    dataOpen: tab === 'data',
+    footer: { open: dock.open, tab: dock.tab },
+    layout: { sourceWidth: DEFAULT_SOURCE_WIDTH, ratios },
+  };
+  delete out.tab;
+  delete out.dock;
   return out;
 }
 
@@ -185,10 +244,25 @@ function normalizeWorkspace(raw: unknown): WorkspaceState {
   const seen = new Set<string>();
   for (const id of raw.expanded) {
     if (typeof id !== 'string' || id === '') continue;
-    seen.add(id);
+    // Version 1 and the early version-2 bench both wrote tier ids. Upgrade
+    // either here so existing version-2 readers keep their open groups too.
+    seen.add(['introduction', 'building-blocks', 'advanced'].includes(id) ? 'examples' : id);
     if (seen.size >= MAX_EXPANDED) break;
   }
   return { expanded: [...seen] };
+}
+
+function normalizeDataPanel(raw: unknown, scratchIds: ReadonlySet<string>): Record<PickId, PanelPos> {
+  const out: Record<PickId, PanelPos> = {};
+  if (!isObject(raw)) return out;
+  for (const [id, pos] of Object.entries(raw)) {
+    const kind = idKind(id);
+    if (!kind || !id.slice(id.indexOf(':') + 1) || (kind === 'scratch' && !scratchIds.has(id))) continue;
+    if (!isObject(pos) || typeof pos.x !== 'number' || typeof pos.y !== 'number') continue;
+    if (!Number.isFinite(pos.x) || !Number.isFinite(pos.y)) continue;
+    out[id] = { x: pos.x, y: pos.y };
+  }
+  return out;
 }
 
 function normalizeSettings(raw: unknown): PlaygroundSettings {
@@ -204,7 +278,7 @@ function normalizeSettings(raw: unknown): PlaygroundSettings {
     out.valueFormat = raw.valueFormat as PlaygroundSettings['valueFormat'];
   }
   if (typeof raw.truthTableCap === 'number' && Number.isFinite(raw.truthTableCap)) {
-    out.truthTableCap = Math.max(1, Math.min(24, Math.round(raw.truthTableCap)));
+    out.truthTableCap = normalizeTruthTableCap(raw.truthTableCap);
   }
   if (isObject(raw.romImages)) {
     for (const [name, hex] of Object.entries(raw.romImages)) {
@@ -234,6 +308,7 @@ function normalizeRatios(raw: unknown): Record<string, number> {
   const out: Record<string, number> = {};
   if (!isObject(raw)) return out;
   for (const [key, value] of Object.entries(raw)) {
+    if (key === 'drawer') continue; // The old share has no pixel meaning.
     if (typeof value === 'number' && Number.isFinite(value) && value > 0 && value < 1) {
       out[key] = value;
     }
@@ -249,32 +324,41 @@ function normalizeRatios(raw: unknown): Record<string, number> {
  */
 export function normalize(raw: unknown): { envelope: PlaygroundEnvelope; note: StoreNote | null } {
   if (!isObject(raw)) return { envelope: defaultEnvelope(), note: { kind: 'reset', reason: 'corrupt' } };
-  if (raw.version !== STORE_VERSION) {
-    // No migration path before v2: a mismatch resets rather than guesses.
+  const body = raw.version === 1 ? migrateV1(raw) : raw;
+  if (body.version !== STORE_VERSION) {
+    // No migration path from a version this code does not know: a mismatch
+    // resets rather than guesses.
     return { envelope: defaultEnvelope(), note: { kind: 'reset', reason: 'version' } };
   }
 
-  const scratch = normalizeScratch(raw.scratch);
+  const scratch = normalizeScratch(body.scratch);
   const ids = new Set(scratch.map((p) => p.id));
   const activeId =
-    typeof raw.activeId === 'string' && (!raw.activeId.startsWith('scratch:') || ids.has(raw.activeId))
-      ? raw.activeId
+    typeof body.activeId === 'string' && (!body.activeId.startsWith('scratch:') || ids.has(body.activeId))
+      ? body.activeId
       : null;
 
   return {
     envelope: {
+      sourceImages: normalizeSourceImages(body.sourceImages),
       version: STORE_VERSION,
       scratch,
       activeId,
-      activeFile: typeof raw.activeFile === 'string' ? raw.activeFile : null,
-      layout: { ratios: normalizeRatios(isObject(raw.layout) ? raw.layout.ratios : null) },
-      settings: normalizeSettings(raw.settings),
-      // An envelope written before diagnostics left the output pane carries
-      // `tab: 'diagnostics'`, which is no longer an output tab. It falls back
-      // here like any other unrecognised value rather than resetting anything.
-      tab: OUTPUT_TABS.includes(raw.tab as OutputTab) ? (raw.tab as OutputTab) : 'preview',
-      dock: normalizeDock(raw.dock),
-      ws: normalizeWorkspace(raw.ws),
+      activeFile: typeof body.activeFile === 'string' ? body.activeFile : null,
+      layout: {
+        sourceWidth: normalizeSourceWidth(isObject(body.layout) ? body.layout.sourceWidth : null),
+        ratios: normalizeRatios(isObject(body.layout) ? body.layout.ratios : null),
+      },
+      settings: normalizeSettings(body.settings),
+      editor: normalizeEditorPreferences(body.editor),
+      // A view this code does not have falls back like any other unrecognised
+      // value rather than resetting anything.
+      view: VIEWS.includes(body.view as View) ? (body.view as View) : 'live',
+      dataOpen: body.dataOpen === true,
+      dataPanel: normalizeDataPanel(body.dataPanel, ids),
+      drawerHeight: typeof body.drawerHeight === 'number' && Number.isFinite(body.drawerHeight) && body.drawerHeight > 0 ? body.drawerHeight : 320,
+      footer: normalizeFooter(body.footer),
+      ws: normalizeWorkspace(body.ws),
     },
     note: null,
   };
@@ -349,24 +433,32 @@ export function writeEnvelope(
   // typing and only loses persistence for that one project.
   const skipped = env.scratch.filter((p) => utf8Bytes(p.source) > MAX_SOURCE_BYTES);
   const skippedIds = new Set(skipped.map((p) => p.id));
-  const serialize = () =>
-    JSON.stringify({ ...env, scratch: env.scratch.filter((p) => !skippedIds.has(p.id)) });
+  // Images must never evict source projects. Fit them only after the source
+  // envelope is within its existing budget; oversized images stay in memory.
+  let imagesSkipped = false;
+  const serialize = (includeImages = true) => {
+    const base = { ...env, sourceImages: {}, scratch: env.scratch.filter((p) => !skippedIds.has(p.id)) };
+    const text = JSON.stringify({ ...base, sourceImages: includeImages ? env.sourceImages : {} });
+    imagesSkipped = includeImages && utf8Bytes(text) > MAX_ENVELOPE_BYTES && Object.keys(env.sourceImages).length > 0;
+    return imagesSkipped ? JSON.stringify(base) : text;
+  };
 
   const evicted: string[] = [];
-  let text = serialize();
+  let text = serialize(false);
   while (utf8Bytes(text) > MAX_ENVELOPE_BYTES) {
     const name = evictOldest(env, keep);
     if (name === null) break;
     evicted.push(name);
-    text = serialize();
+    text = serialize(false);
   }
+  text = serialize();
 
   const evictedNote = (): StoreNote | null =>
     evicted.length > 0 ? { kind: 'evicted', names: [...evicted] } : null;
 
   try {
     storage.setItem(STORE_KEY, text);
-    return { ok: true, note: evictedNote(), skipped };
+    return { ok: true, note: evictedNote() ?? (imagesSkipped ? { kind: 'images-skipped' } : null), skipped };
   } catch (err) {
     if (!isQuotaError(err)) {
       return { ok: false, note: { kind: 'disabled', reason: 'unavailable' }, skipped };
@@ -399,13 +491,16 @@ export function browserStorage(): StorageLike | null {
   }
 }
 
-export function describeNote(note: StoreNote): string {
+export function describeNote(note: StoreNote, context: 'save' | 'import' = 'save'): string {
   switch (note.kind) {
+    case 'images-skipped':
+      return 'Memory images are too large to save. They stay available until you reload.';
     case 'reset':
       return note.reason === 'version'
         ? 'Saved playground settings were from an older version and have been reset.'
         : 'Saved playground settings could not be read and have been reset.';
     case 'skipped':
+      if (context === 'import') return `Could not import ${note.names.join(', ')}: each circuit must fit in ${MAX_SOURCE_BYTES / 1024} KiB.`;
       return `${note.names.length === 1 ? 'One project is' : `${note.names.length} projects are`} too large to save (${note.names.join(', ')}); they stay open but will not survive a reload.`;
     case 'evicted':
       return `Storage was full, so ${note.names.length === 1 ? 'the oldest saved project' : 'the oldest saved projects'} (${note.names.join(', ')}) ${note.names.length === 1 ? 'was' : 'were'} removed.`;
@@ -769,4 +864,3 @@ export function resolveInitial(input: {
       : null,
   };
 }
-

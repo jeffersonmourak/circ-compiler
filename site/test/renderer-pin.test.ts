@@ -19,8 +19,10 @@ import {
   memoryLabel,
   traceWire,
   wirePath,
+  DEFAULT_ZOOM,
   type CircTheme,
   type LayoutOptions,
+  type RenderOptions,
 } from 'circ-renderer';
 import { ComponentKind as TopologyKind } from 'circ-renderer/topology';
 import { examples } from '../src/content/examples.ts';
@@ -125,6 +127,32 @@ describe('renderer pin', () => {
       readFileSync(resolve(import.meta.dir, '..', 'node_modules', 'circ-renderer', 'package.json'), 'utf8'),
     ) as { exports: Record<string, string> };
     expect(pkg.exports['./topology']).toBe('./src/wasm/topology.ts');
+    // Bench, Phase 2: the Live view fills its inset and the reader zooms and
+    // pans it. The canvas sizes to its parent, takes the gestures as options,
+    // reports every view change, and exposes the four calls a toolbar is.
+    for (const method of ['fit', 'resetView', 'getView', 'setView', 'zoomBy', 'setViewport']) {
+      expect(`${method}: ${typeof (CircCanvas.prototype as unknown as Record<string, unknown>)[method]}`).toBe(`${method}: function`);
+    }
+    const options = {
+      viewport: 'parent',
+      navigation: { wheel: 'modifier', drag: true, touch: 'own' },
+      onViewChange: () => {},
+    } satisfies Partial<RenderOptions>;
+    expect(options.viewport).toBe('parent');
+    expect(DEFAULT_ZOOM).toEqual({ min: 0.25, max: 8 });
+    // …and the island asks for exactly that: the parent's size, the modifier
+    // wheel (the page keeps the plain one, since below 800px it scrolls).
+    const island = readFileSync(resolve(import.meta.dir, '..', 'src', 'components', 'Playground.astro'), 'utf8');
+    expect(island).toContain("viewport: 'parent'");
+    expect(island).toMatch(/navigation: \{ wheel: 'modifier', drag: true, touch: /);
+    expect(island).not.toContain("wheel: 'always'");
+    expect(island).toContain('onViewChange: (view) =>');
+    const liveCanvas = readFileSync(resolve(import.meta.dir, '..', 'src', 'components', 'LiveCanvas.astro'), 'utf8');
+    expect(liveCanvas).toContain("container.dataset.circFit === 'parent'");
+    expect(liveCanvas).toMatch(/fitToParent \? \{ viewport: 'parent' as const, navigation: false \} : \{\}/);
+    expect(liveCanvas).toContain('onPinChange: container.dataset.circValues !== undefined ? refreshValues : undefined');
+    expect(liveCanvas).toContain('interactive: !thumbnail');
+    expect(liveCanvas).toContain('...(thumbnail ? { navigation: false } : {})');
   });
 
   test('the value dialog the site styles is the one the installed renderer builds', () => {
@@ -190,7 +218,9 @@ describe('renderer pin', () => {
     const gallery = readFileSync(resolve(import.meta.dir, '..', 'src', 'components', 'LiveCanvas.astro'), 'utf8');
     const playground = readFileSync(resolve(import.meta.dir, '..', 'src', 'components', 'Playground.astro'), 'utf8');
     for (const [name, source] of [['LiveCanvas', gallery], ['Playground', playground]] as const) {
-      expect(`${name}: ${/setTheme\(pickTheme\(\)/.test(source)}`).toBe(`${name}: true`);
+      // The playground wraps the picked theme with its dot grid; the gallery
+      // takes it as is. Either way the flip is a setTheme, never a rebuild.
+      expect(`${name}: ${/setTheme\((?:benchTheme\()?pickTheme\(\)/.test(source)}`).toBe(`${name}: true`);
       expect(`${name}: ${/rebuildAll|rebuildSim/.test(source)}`).toBe(`${name}: false`);
     }
     // The only renderCircuit call on each page is the first mount. Both pages

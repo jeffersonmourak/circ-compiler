@@ -13,11 +13,12 @@ import { buildCatalogue } from '../utils/playground-store.ts';
 interface Props {
   id: string;
   label?: string;
+  class?: string;
 }
-const { id, label = 'Open in playground' } = Astro.props;
+const { id, label = 'Open in playground', class: className = 'oip' } = Astro.props;
 
 if (!buildCatalogue(examples, tour).some((c) => c.id === id)) {
   throw new Error(`OpenInPlayground: '${id}' is not in the playground catalogue`);
 }
 ---
-<a class="oip" href={`${url('/playground')}#pick=${id}`}>{label} &rarr;</a>
+<a class={className} href={`${url('/playground')}#pick=${id}`}>{label} &rarr;</a>

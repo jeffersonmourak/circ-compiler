@@ -107,6 +107,44 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - What a skin draws is pinned as an op log (`canvas-record.ts`, `circ-skins.test.ts`, one golden file per kind under `test/fixtures/skins/`)
 - The handoff is tracked beside the plan (`DOCS/design/`, moved under `DOCS/archive/design/` at archive time)
 
+### [playground-bench.md](playground-bench.md)
+- The bench owns its chrome (the `app` variant renders no site nav or footer; a 48px nav and a 24px status line of the page's own)
+- The handoff was tracked without duplicate files, then deleted on closure (preserved at the canonical commit in the playground-bench archive)
+- The three terminal tokens stay site-local, and all three already exist (`--term-ok`, `--term-echo`, `--danger`; `--pg-dot` beside them)
+- The source column is the splitter, in pixels (`--pg-source-w`, `unit: 'px'`, the hairline as the divider)
+- The token guard is a source-text test (`bench-tokens.test.ts`: every colour and face in a `.pg-` rule is a token)
+- The envelope moves to version 2 by migration, once (`migrateV1` on a literal version-1 fixture; `view`, `footer`, `layout.sourceWidth`)
+- Settings live in the diagnostics footer (a 30px bar with the counts and the stats, the list as a grid, the form behind the gear; no `unicode | ascii` setting exists)
+- The file strip is a switch, over the tree's state (36px, `role="tab"`, `+ file`; rename, delete and reorder stay in the tree)
+- The view switch is three views and one panel (`view` and `dataOpen`; the Truth gate's reason in the toolbar note)
+- The Live view adopts the renderer's zoom and pan (`viewport: 'parent'`, the modifier wheel, `cell 14 · 100% · fit`, a refit only when the reader has not navigated)
+- Over the cap, the Truth view shows the rows the pins select (a scratch `SimSession` over the unknown pins; the live session read, never written; the gate blocks for errors only)
+- A truth row drives the pins through the session (one `set` per column; the tint follows the session; every cell spelled by `formatPinValue`)
+- The switcher is the tree, re-homed (Tour / Examples / Mine, name search, temporary search expansion, keyboard and focus contract, no reflow)
+- A file import creates a scratch project (one `.circ`, duplicate-name numbering, the store's 32 KiB cap and eviction, one read at a time)
+- The Data panel keeps a position per project (pointer threshold/cancel, keyboard steps, clamp on render, version-2 position map)
+- The Data card and canvas share the session being built (one pending build per artifact, controls rebound by session identity, deferred restore)
+- The narrow Data panel joins the page flow (static card, no right reserve or grip, automatic stacked tracks; coalesced desktop refit)
+- The drawer is a resizable row with two columns (saved pixel height, console header, 560px memory column, focus and Escape contract)
+- The memory grid marks the address net's value (topology addr source, unknown/implied/addressed/editing states, wide-word scrolling, image provenance)
+- Memory controls reuse the settings and session paths (delegated base radios, existing image/write actions, redraw on jump, panel-named protocol copy)
+- Editor preferences reconfigure every file (saved wrapping, font size and tab/indent size; preserved text, selection and undo; no compile on preference changes)
+- The active editor file is the playground entry point (sibling imports retained, matching canvas/pins/source links, immediate invalidation of previous-file replies)
+- ROM images belong to source declarations (project/file ownership, bounded persistence, imported-instance preloads and matching scratch Truth rows)
+
+### [home-page.md](home-page.md)
+- The home-page handoff is tracked without unused fonts and stale site code
+- `LiveCanvas` adds source, values and parent-fit surfaces only when requested
+- `.home-` and `.lc-` rules join the existing source-text token guard
+- Root pin values are formatted by a renderer-free pure module
+- The hero reports the renderer's real all-low boot state
+- The preview section frames the existing figure without changing the gallery component
+- The landing Markdown twin follows visible sections and shares their headings
+- Gallery tiles derive metadata and memory images from shipped examples
+- Thumbnail canvases retain fixed cell sizes, defer mounting and live inside single links
+- Sections and the install row stack under 800px without rebuilding simulations
+- Browser checks complement structural tests; reviewed user layout and copy changes are recorded explicitly
+
 ## Conventions
 
 - Decisions use `###` headings inside topic files.

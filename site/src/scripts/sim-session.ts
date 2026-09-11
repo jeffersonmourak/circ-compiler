@@ -19,6 +19,7 @@
 // The runtime is injected: `CircRuntime` on the page, a stub in a test.
 
 import { ComponentKind, widthMask, type BitValue } from 'circ-renderer/topology';
+import { applyImportedImages, type ImportedImages } from '../utils/source-images.ts';
 import {
   applyRomImages,
   imageErrorReason,
@@ -107,6 +108,7 @@ export interface SessionInit {
   /** Declared roms and their images from the Memory tab, applied at build and at reset. */
   roms?: readonly MemorySymbol[];
   images?: RomImageMap;
+  importedImages?: ImportedImages;
   /** Analysis warnings, for the console's handshake. */
   warnings?: readonly SessionWarning[];
   /**
@@ -189,6 +191,7 @@ export class SimSession {
   private readonly load: SessionInit['load'];
   private readonly roms: readonly MemorySymbol[];
   private readonly images: RomImageMap;
+  private readonly importedImages?: ImportedImages;
   private readonly listeners = new Set<SessionListener>();
   private alive = true;
   private resetting: Promise<void> | null = null;
@@ -203,6 +206,7 @@ export class SimSession {
     this.load = init.load;
     this.roms = init.roms ?? [];
     this.images = init.images ?? new Map();
+    this.importedImages = init.importedImages;
     this.warnings = init.warnings ?? [];
     this.pins = collectPins(runtime.topology);
     this.mems = collectMems(runtime.topology);
@@ -228,6 +232,10 @@ export class SimSession {
   /** The current runtime. Replaced by `reset()`; a face that holds it listens for `rebuilt`. */
   get runtime(): RuntimeLike {
     return this.rt;
+  }
+
+  get hasRam(): boolean {
+    return this.rt.topology.components.some((c) => c.kind === ComponentKind.Ram);
   }
 
   // ---- listeners ------------------------------------------------------------
@@ -347,9 +355,14 @@ export class SimSession {
    * of those moments.
    */
   applyPreloads(opts: { silent?: boolean } = {}): ApplyResult {
-    if (this.roms.length === 0 || !this.rt.hasMemory) return { applied: [], errors: new Map() };
+    if (!this.rt.hasMemory) return { applied: [], errors: new Map() };
     const plan = romPlan(this.images, this.roms);
     const result = applyRomImages(this.rt, plan, this.roms);
+    if (this.importedImages) {
+      const imported = applyImportedImages(this.rt, this.importedImages);
+      result.applied.push(...imported.applied);
+      for (const [name, error] of imported.errors) result.errors.set(name, error);
+    }
     if (!opts.silent) {
       for (const name of result.applied) {
         const write = plan.writes.find((w) => w.name === name);

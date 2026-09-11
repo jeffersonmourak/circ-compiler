@@ -2,11 +2,17 @@
 // writes, which no headless runner can exercise; everything a wrong number
 // could break is here.
 import { describe, expect, test } from 'bun:test';
+import { Window } from 'happy-dom';
 import {
   ariaValues,
+  clampPx,
   clampRatio,
+  createSplitter,
   effectiveBounds,
+  pxBounds,
+  pxFromPointer,
   ratioFromPointer,
+  stepPx,
   stepRatio,
   type SplitterBounds,
 } from '../src/scripts/splitter.ts';
@@ -15,6 +21,31 @@ const opts = { minPanePx: 240, minRatio: 0.2, maxRatio: 0.8 };
 const wide: SplitterBounds = { min: 0.2, max: 0.8 };
 
 describe('splitter', () => {
+  test('each pane can have its own minimum', () => {
+    expect(effectiveBounds(600, { minPanePx: [200, 160], minRatio: 0, maxRatio: 1 })).toEqual({ min: 200 / 600, max: 1 - 160 / 600 });
+    expect(effectiveBounds(300, { minPanePx: [200, 160], minRatio: 0, maxRatio: 1 })).toEqual({ min: 0.5, max: 0.5 });
+  });
+  test('the lower pane grows when the divider moves up, and resize never commits', () => {
+    const window = new Window();
+    const container = window.document.createElement('div') as unknown as HTMLElement;
+    const separator = window.document.createElement('div') as unknown as HTMLElement;
+    let size = 800;
+    const commits: number[] = [];
+    const handle = createSplitter({ container, separator, property: '--height', unit: 'px', pane: 'second', orientation: 'horizontal', minPx: 160, maxReservePx: 200, initial: 320, measure: () => ({ start: 100, size }), labels: ['bench', 'drawer'], onCommit: (v) => commits.push(v) });
+    expect(container.style.getPropertyValue('--height')).toBe('320px');
+    expect(separator.getAttribute('aria-valuetext')).toBe('drawer 40%, bench 60%');
+    size = 400; handle.refresh();
+    expect(container.style.getPropertyValue('--height')).toBe('200px');
+    expect(handle.intent).toBe(320);
+    expect(commits).toEqual([]);
+    size = 800; handle.refresh();
+    separator.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'ArrowUp' }) as unknown as Event);
+    expect(handle.intent).toBe(336);
+    expect(commits).toEqual([336]);
+    expect(pxFromPointer(100, 580, 800, 'second')).toBe(320);
+    expect(pxFromPointer(100, 1000, 800, 'second')).toBe(0);
+    handle.destroy();
+  });
   test('clampRatio holds the bounds and is idempotent', () => {
     expect(clampRatio(0.5, wide)).toBe(0.5);
     expect(clampRatio(0, wide)).toBe(0.2);
@@ -117,5 +148,50 @@ describe('splitter', () => {
       max: 50,
       text: 'a 50%, b 50%',
     });
+  });
+
+  // The pixel unit: the bench's source column.
+  const pxOpts = { minPx: 320, maxReservePx: 480 };
+
+  test('clampPx holds the bounds and rounds to whole pixels', () => {
+    const b: SplitterBounds = { min: 320, max: 960 };
+    expect(clampPx(100, b)).toBe(320);
+    expect(clampPx(2000, b)).toBe(960);
+    expect(clampPx(480.4, b)).toBe(480);
+    // A NaN width must not reach a CSS custom property.
+    expect(clampPx(Number.NaN, b)).toBe(320);
+  });
+
+  test('pixel bounds reserve the far pane', () => {
+    // 1440 wide: the source may grow until 480px is left for the canvas.
+    expect(pxBounds(1440, pxOpts)).toEqual({ min: 320, max: 960 });
+    // Too narrow for both minimums: the range collapses to the source's, so
+    // the canvas is what gives, and the bounds never invert.
+    expect(pxBounds(700, pxOpts)).toEqual({ min: 320, max: 320 });
+    expect(pxBounds(800, pxOpts)).toEqual({ min: 320, max: 320 });
+    expect(pxBounds(801, pxOpts)).toEqual({ min: 320, max: 321 });
+    // Nothing laid out yet: the intent stands, until the observer sees a size.
+    expect(pxBounds(0, pxOpts)).toEqual({ min: 320, max: Number.POSITIVE_INFINITY });
+    expect(pxBounds(Number.NaN, pxOpts)).toEqual({ min: 320, max: Number.POSITIVE_INFINITY });
+    expect(clampPx(480, pxBounds(0, pxOpts))).toBe(480);
+  });
+
+  test('pxFromPointer is the distance from the near edge, never negative', () => {
+    expect(pxFromPointer(100, 580)).toBe(480);
+    expect(pxFromPointer(100, 40)).toBe(0);
+    expect(pxFromPointer(100, Number.NaN)).toBe(0);
+  });
+
+  test('the keyboard contract, pixels', () => {
+    const o = { orientation: 'vertical' as const, stepPx: 16, coarseStepPx: 64, bounds: { min: 320, max: 960 } };
+    expect(stepPx(480, { key: 'ArrowRight' }, o)).toBe(496);
+    expect(stepPx(480, { key: 'ArrowRight', shiftKey: true }, o)).toBe(544);
+    expect(stepPx(480, { key: 'ArrowLeft' }, o)).toBe(464);
+    expect(stepPx(330, { key: 'ArrowLeft', shiftKey: true }, o)).toBe(320);
+    expect(stepPx(480, { key: 'Home' }, o)).toBe(320);
+    expect(stepPx(480, { key: 'End' }, o)).toBe(960);
+    // The wrong axis keeps its browser meaning.
+    expect(stepPx(480, { key: 'ArrowUp' }, o)).toBeNull();
+    expect(stepPx(480, { key: 'a' }, o)).toBeNull();
   });
 });

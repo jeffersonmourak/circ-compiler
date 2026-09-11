@@ -1,5 +1,5 @@
 // Multi-file sources are recognised by `// <name>.circ` line markers. The
-// LAST file is the root (it imports the others). A marker only opens a new
+// LAST file is the default root (it imports the others). A marker only opens a new
 // file when there is no current file yet or the current one has non-blank
 // content; otherwise the marker line stays in the current body as an
 // ordinary comment. Shared by scripts/compile-content.ts and the playground.
@@ -121,12 +121,13 @@ export const rootOf = <T extends NamedFile>(files: readonly T[]): T => files[fil
 /** The playground's virtual directory: every file keyed under /playground/. */
 export const PLAYGROUND_DIR = '/playground';
 
-/** Build the libcirc request for a split source (root = last file). */
-export function requestFor(files: readonly NamedFile[], options?: Record<string, unknown>) {
+/** Build a request with every sibling available for imports. Content builds
+ *  default to the last file; an editor may choose a different entry point. */
+export function requestFor(files: readonly NamedFile[], options?: Record<string, unknown>, rootName = rootOf(files).name) {
   const map: Record<string, string> = {};
   for (const f of files) map[`${PLAYGROUND_DIR}/${f.name}`] = f.body;
   return {
-    root: `${PLAYGROUND_DIR}/${rootOf(files).name}`,
+    root: `${PLAYGROUND_DIR}/${rootName}`,
     files: map,
     ...(options ? { options } : {}),
   };

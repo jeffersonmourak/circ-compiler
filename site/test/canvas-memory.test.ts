@@ -149,6 +149,26 @@ describe('the built gallery carries what it declares', () => {
     // …and the attribute is absent, not empty, on every other card.
     expect(built!).not.toContain('data-circ-memory=""');
   });
+
+  test.skipIf(built === null)("the gallery's cards carry none of the hero's additions", () => {
+    expect(built!).not.toContain('data-circ-fit');
+    expect(built!).not.toContain('data-circ-values');
+    expect(built!).not.toContain('data-circ-thumbnail');
+    expect(built!).not.toContain('lc-source');
+    expect(built!).not.toContain('lc-values');
+    const cards = [...built!.matchAll(/<div class="lc"[^>]*>/g)];
+    const originalOpening = [...built!.matchAll(
+      /<div class="lc"[^>]*>\s*<div class="lc-header">[\s\S]*?<\/div>\s*<button class="lc-launch"/g,
+    )];
+    expect(cards.length).toBeGreaterThan(1);
+    expect(originalOpening).toHaveLength(cards.length);
+  });
+});
+
+test('the landing ROM thumbnail carries its source image', () => {
+  const html = readFileSync(resolve(import.meta.dir, '..', 'dist', 'index.html'), 'utf8');
+  const images = [...html.matchAll(/data-circ-memory="([^"]*)"/g)].map(m => JSON.parse(m[1].replace(/&#34;/g, '"')));
+  expect(images).toEqual([examples.find(ex => ex.slug === 'rom-lookup')!.memory]);
 });
 
 describe('readMemoryAttr', () => {

@@ -30,7 +30,9 @@ output out(in=inv.out)
 | [preview.md](preview.md)                     | `circ-compile --preview`: ASCII circuit schematic rendering             |
 | [logisim-import.md](logisim-import.md)       | Mapping Logisim `ROM`/`RAM` components onto `rom`/`ram`                 |
 | [benchmark.md](benchmark.md)                 | `zig build bench`: engine regression gate, counters, golden workflow    |
+| [Home page plan](PLANS_PROMPT.md)            | Active landing-page redesign plan, phases, constraints and working loop |
 | [decisions/](decisions/index.md)             | Architectural decisions for the `.circ` compiler                        |
+| [Playground bench archive](archive/plan-playground-bench.md) | Canvas-first playground implementation, verification and carried-forward checks |
 | [archive/](archive/index.md)                 | Archived implementation plans                                           |
 | [prompts/ARCHIVE.md](prompts/ARCHIVE.md)     | How to archive a finished plan into `DOCS/archive/`                     |
 | [prompts/](prompts/PHASE_MACRO_PLANNER.md)   | The planner prompts that write a plan prompt and its per-phase specs    |

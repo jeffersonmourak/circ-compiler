@@ -3,8 +3,11 @@
 // tests are mostly about DEFINEDNESS — a half-known word must not be written
 // down as if it were known, and must not be written down as if it were blank.
 import { describe, expect, test } from 'bun:test';
+import { ComponentKind, PortName } from 'circ-renderer/topology';
 import {
   UNKNOWN,
+  addressedWord,
+  type RuntimeLike,
   cellWidth,
   clampWindow,
   dumpRows,
@@ -20,6 +23,31 @@ import {
 
 const cell = (value: bigint, defined: bigint): Cell => ({ value, defined });
 const full = (value: bigint, width: number): Cell => cell(value, maskFor(width));
+
+describe('addressedWord', () => {
+  test('reads the addr source directly, including a slice, and requires every bit', () => {
+    const reads: number[] = [];
+    let defined = 15n;
+    const runtime: RuntimeLike = {
+      topology: {
+        components: [{ id: 9, kind: ComponentKind.Rom, width: 8, name: 'lut', origin: [], memory: { addrWidth: 4 } }],
+        connections: [{ fromId: 1, toId: 9, port: PortName.Addr }],
+      },
+      readValue: (id) => { reads.push(id); return { value: 3n, defined, width: 4 }; },
+    };
+    expect(addressedWord(runtime, 9)).toBe(3);
+    runtime.topology.components.unshift({ id: 2, kind: ComponentKind.Slice, width: 4, name: '', origin: [], slice: { lo: 2, hi: 6 } });
+    runtime.topology.connections[0].fromId = 2;
+    expect(addressedWord(runtime, 9)).toBe(3);
+    expect(reads).toEqual([1, 2]);
+    defined = 7n;
+    expect(addressedWord(runtime, 9)).toBeNull();
+    expect(addressedWord(runtime, 2)).toBeNull();
+    expect(addressedWord(runtime, 99)).toBeNull();
+    runtime.topology.connections = [];
+    expect(addressedWord(runtime, 9)).toBeNull();
+  });
+});
 
 describe('formatWord', () => {
   test('a fully defined word follows the chosen format', () => {

@@ -3,6 +3,8 @@
 // reached from a real one on demand, so they are driven here against an
 // injected storage and a fake clock.
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   MAX_ENVELOPE_BYTES,
   MAX_SCRATCH,
@@ -87,20 +89,68 @@ describe('playground store', () => {
   test('defaults and round-trip', () => {
     const env = defaultEnvelope();
     expect(Object.keys(env).sort()).toEqual(
-      ['activeFile', 'activeId', 'dock', 'layout', 'scratch', 'settings', 'tab', 'version', 'ws'].sort(),
+      ['activeFile', 'activeId', 'dataOpen', 'dataPanel', 'drawerHeight', 'editor', 'footer', 'layout', 'scratch', 'settings', 'sourceImages', 'version', 'view', 'ws'].sort(),
     );
-    expect(env.version).toBe(1);
+    expect(env.version).toBe(2);
     expect(env.settings.truthTableCap).toBe(12);
     expect(env.settings.format).toBe('json');
-    expect(env.tab).toBe('preview');
-    expect(env.dock).toEqual({ open: false, tab: 'diagnostics' });
+    expect(env.view).toBe('live');
+    expect(normalize({ ...defaultEnvelope(), view: 'schematic' }).envelope.view).toBe('schematic');
+    expect(normalize({ ...defaultEnvelope(), view: 'truth' }).envelope.view).toBe('truth');
+    expect(env.dataOpen).toBe(false);
+    expect(env.dataPanel).toEqual({});
+    expect(env.drawerHeight).toBe(320);
+    expect(env.footer).toEqual({ open: false, tab: 'diagnostics' });
+    expect(env.layout).toEqual({ sourceWidth: 480, ratios: {} });
     // The reader's own projects open; every catalogue group starts shut, and
     // whichever one holds the open project is revealed at load.
-    expect(env.ws).toEqual({ expanded: ['yours'] });
+    expect(env.ws).toEqual({ expanded: ['tour', 'examples', 'yours'] });
     // normalize is a fixed point on its own output.
     const round = normalize(JSON.parse(JSON.stringify(env)));
     expect(round.note).toBeNull();
     expect(round.envelope).toEqual(env);
+  });
+
+  test('panel positions round-trip, default under v2, and drop invalid entries', () => {
+    const raw = {
+      ...defaultEnvelope(), dataOpen: true,
+      scratch: [{ id: 'scratch:abc', name: 'mine', source: 'input a\n', updatedAt: 1 }],
+      dataPanel: { 'scratch:abc': { x: 10, y: 20 }, 'example:half-adder': { x: 800, y: -10 } },
+    };
+    expect(normalize(JSON.parse(JSON.stringify(raw))).envelope).toEqual(raw);
+    const missing = { ...raw } as Record<string, unknown>;
+    delete missing.dataPanel;
+    expect(normalize(missing).envelope.dataPanel).toEqual({});
+    expect(normalize(missing).note).toBeNull();
+    const invalid = normalize({ ...raw, dataPanel: {
+      ...raw.dataPanel, nope: { x: 1, y: 2 }, 'scratch:gone': { x: 1, y: 2 },
+      'example:bad': { x: NaN, y: 2 }, 'tour:bad': { x: 0, y: Infinity },
+      'example:': { x: 1, y: 2 }, 'tour:2': { x: '1', y: 2 },
+    } });
+    expect(invalid.envelope.dataPanel).toEqual(raw.dataPanel);
+    expect(invalid.envelope.scratch).toEqual(raw.scratch);
+    expect(invalid.note).toBeNull();
+  });
+
+  test('drawer height keeps intent and replaces the old share', () => {
+    for (const drawerHeight of [160, 480, 2000]) expect(normalize({ ...defaultEnvelope(), drawerHeight }).envelope.drawerHeight).toBe(drawerHeight);
+    for (const drawerHeight of [undefined, null, -1, 0, Infinity, '480']) expect(normalize({ ...defaultEnvelope(), drawerHeight }).envelope.drawerHeight).toBe(320);
+    const migrated = normalize({ version: 1, layout: { ratios: { drawer: 0.62 } } });
+    expect(migrated.envelope.drawerHeight).toBe(320);
+    expect(migrated.envelope.layout.ratios).toEqual({});
+    expect(migrated.note).toBeNull();
+  });
+
+  test('editor preferences survive storage and default without resetting projects', () => {
+    const env = { ...defaultEnvelope(), editor: { wrapLines: false, fontSize: 18, tabSize: 4 } };
+    const storage = fakeStorage();
+    writeEnvelope(env, storage, null);
+    expect(readEnvelope(storage).envelope.editor).toEqual(env.editor);
+    const old = { ...env } as Record<string, unknown>;
+    delete old.editor;
+    expect(normalize(old).envelope.editor).toEqual({ wrapLines: true, fontSize: 14, tabSize: 2 });
+    expect(normalize(old).note).toBeNull();
+    expect(normalize({ ...env, editor: { fontSize: 100, tabSize: NaN } }).envelope.editor).toEqual({ wrapLines: true, fontSize: 24, tabSize: 2 });
   });
 
   test('unknown keys are dropped', () => {
@@ -112,8 +162,45 @@ describe('playground store', () => {
     expect(envelope.settings).toEqual(defaultEnvelope().settings);
   });
 
+  test('a version-1 envelope migrates, and keeps every project', () => {
+    // A literal envelope as `writeEnvelope` wrote it on main at 59e884c, not
+    // one built from today's defaults: the point is what the old writer put
+    // there. Version 1 is the one schema a reader's browser can hold from
+    // before the bench, so a reset here would cost them their projects.
+    const raw = JSON.parse(readFileSync(resolve(import.meta.dir, 'fixtures', 'store', 'envelope-v1.json'), 'utf8'));
+    const { envelope, note } = normalize(raw);
+    expect(note).toBeNull();
+    expect(envelope.version).toBe(2);
+    expect(envelope.scratch.map((p) => p.name)).toEqual(['my adder', 'scratch two']);
+    expect(envelope.activeId).toBe('scratch:1757500000000-abc123');
+    expect(envelope.activeFile).toBe('main.circ');
+    expect(envelope.settings.valueFormat).toBe('hex');
+    expect(envelope.settings.truthTableCap).toBe(10);
+    expect(envelope.settings.romImages).toEqual({ code: '0a0b' });
+    expect(envelope.ws).toEqual({ expanded: ['yours', 'examples'] });
+    // The Data tab was a face of the live session, so it lands on the live
+    // view, with the panel open over it.
+    expect(envelope.view).toBe('live');
+    expect(envelope.dataOpen).toBe(true);
+    expect(normalize({ ...raw, tab: 'simulate' }).envelope.dataOpen).toBe(false);
+    expect(envelope.footer).toEqual({ open: true, tab: 'settings' });
+    // The main splitter's share is gone; the drawer's rides through.
+    expect(envelope.layout).toEqual({ sourceWidth: 480, ratios: {} });
+    expect(envelope.drawerHeight).toBe(320);
+    expect('tab' in envelope).toBe(false);
+    expect('dock' in envelope).toBe(false);
+    // The rest of the map, and a version-1 body with nothing but its version.
+    for (const [tab, view] of [['preview', 'schematic'], ['truth', 'truth'], ['simulate', 'live'], ['diagnostics', 'schematic']] as const) {
+      expect(normalize({ ...raw, tab }).envelope.view).toBe(view);
+    }
+    const bare = normalize({ version: 1 });
+    expect(bare.note).toBeNull();
+    // Legacy envelopes keep the old implicit view; only fresh state defaults to Live.
+    expect(bare.envelope).toEqual({ ...defaultEnvelope(), view: 'schematic' });
+  });
+
   test('version mismatch and corruption reset', () => {
-    expect(normalize({ ...defaultEnvelope(), version: 2 })).toEqual({
+    expect(normalize({ ...defaultEnvelope(), version: 3 })).toEqual({
       envelope: defaultEnvelope(),
       note: { kind: 'reset', reason: 'version' },
     });
@@ -167,52 +254,58 @@ describe('playground store', () => {
     expect(settings.expandMacros).toBe(false);
     expect(normalize({ ...defaultEnvelope(), settings: { truthTableCap: 0 } }).envelope.settings.truthTableCap).toBe(1);
 
-    // A bad tab falls back.
-    expect(normalize({ ...defaultEnvelope(), tab: 'nope' }).envelope.tab).toBe('preview');
-    // The Data tab is an output tab; a name that is not one — the console is
-    // a drawer under two tabs, never a tab of its own — falls back too.
-    expect(normalize({ ...defaultEnvelope(), tab: 'data' }).envelope.tab).toBe('data');
-    expect(normalize({ ...defaultEnvelope(), tab: 'console' }).envelope.tab).toBe('preview');
-    // …and so does the one written by every envelope from before diagnostics
-    // left the output pane. This is the real migration, and it is not a reset:
-    // the scratch projects in that same envelope must survive it.
-    const legacy = normalize({ ...defaultEnvelope(), tab: 'diagnostics', scratch: [project('kept', 5)] });
-    expect(legacy.note).toBeNull();
-    expect(legacy.envelope.tab).toBe('preview');
-    expect(legacy.envelope.scratch.map((p) => p.name)).toEqual(['kept']);
+    // A view this code does not have falls back; the old tab names are views
+    // only through the migrator, never at version 2.
+    expect(normalize({ ...defaultEnvelope(), view: 'nope' }).envelope.view).toBe('live');
+    expect(normalize({ ...defaultEnvelope(), view: 'data' }).envelope.view).toBe('live');
+    expect(normalize({ ...defaultEnvelope(), view: 'truth' }).envelope.view).toBe('truth');
+    // The panel's flag is a boolean or nothing.
+    expect(normalize({ ...defaultEnvelope(), dataOpen: 'yes' }).envelope.dataOpen).toBe(false);
+    expect(normalize({ ...defaultEnvelope(), dataOpen: true }).envelope.dataOpen).toBe(true);
 
-    // The dock defaults field by field, since no envelope written before this
-    // change carries one at all.
-    const noDock = { ...defaultEnvelope() } as Record<string, unknown>;
-    delete noDock.dock;
-    expect(normalize(noDock).envelope.dock).toEqual({ open: false, tab: 'diagnostics' });
-    expect(normalize({ ...defaultEnvelope(), dock: 'nope' }).envelope.dock).toEqual({ open: false, tab: 'diagnostics' });
-    expect(normalize({ ...defaultEnvelope(), dock: { open: true } }).envelope.dock).toEqual({
+    // The footer defaults field by field.
+    const noFooter = { ...defaultEnvelope() } as Record<string, unknown>;
+    delete noFooter.footer;
+    expect(normalize(noFooter).envelope.footer).toEqual({ open: false, tab: 'diagnostics' });
+    expect(normalize({ ...defaultEnvelope(), footer: 'nope' }).envelope.footer).toEqual({ open: false, tab: 'diagnostics' });
+    expect(normalize({ ...defaultEnvelope(), footer: { open: true } }).envelope.footer).toEqual({
       open: true,
       tab: 'diagnostics',
     });
-    expect(normalize({ ...defaultEnvelope(), dock: { tab: 'settings' } }).envelope.dock).toEqual({
+    expect(normalize({ ...defaultEnvelope(), footer: { tab: 'settings' } }).envelope.footer).toEqual({
       open: false,
       tab: 'settings',
     });
-    // The memory panel moved to the output pane's drawer: an envelope that
-    // remembered it falls back like any other tab the dock does not have.
-    expect(normalize({ ...defaultEnvelope(), dock: { open: true, tab: 'memory' } }).envelope.dock).toEqual({
+    // A panel the footer does not have falls back without touching `open`.
+    expect(normalize({ ...defaultEnvelope(), footer: { open: true, tab: 'memory' } }).envelope.footer).toEqual({
       open: true,
       tab: 'diagnostics',
     });
-    // A tab the dock does not have falls back without touching `open`.
-    expect(normalize({ ...defaultEnvelope(), dock: { open: true, tab: 'preview' } }).envelope.dock).toEqual({
-      open: true,
-      tab: 'diagnostics',
-    });
+
+    // The source column: whole pixels the bench can show, else the default.
+    const width = (v: unknown) => normalize({ ...defaultEnvelope(), layout: { sourceWidth: v, ratios: {} } }).envelope.layout.sourceWidth;
+    expect(width(640)).toBe(640);
+    expect(width(640.4)).toBe(640);
+    expect(width(100)).toBe(480);
+    expect(width(9000)).toBe(480);
+    expect(width('x')).toBe(480);
+    expect(width(Number.NaN)).toBe(480);
+    const noLayout = { ...defaultEnvelope() } as Record<string, unknown>;
+    delete noLayout.layout;
+    expect(normalize(noLayout).envelope.layout).toEqual({ sourceWidth: 480, ratios: {} });
 
     // The explorer's expansion set: ids only, deduped, and defaulted when the
     // envelope predates it. An id naming nothing is harmless — it is never read.
     const noWs = { ...defaultEnvelope() } as Record<string, unknown>;
     delete noWs.ws;
-    expect(normalize(noWs).envelope.ws).toEqual({ expanded: ['yours'] });
-    expect(normalize({ ...defaultEnvelope(), ws: 'nope' }).envelope.ws).toEqual({ expanded: ['yours'] });
+    expect(normalize(noWs).envelope.ws).toEqual({ expanded: ['tour', 'examples', 'yours'] });
+    expect(normalize({ ...defaultEnvelope(), ws: 'nope' }).envelope.ws).toEqual({ expanded: ['tour', 'examples', 'yours'] });
+    for (const version of [1, 2]) {
+      const result = normalize({ ...defaultEnvelope(), version, ws: { expanded: ['building-blocks', 'yours', 'advanced', 'introduction'] } });
+      expect(result.envelope.ws.expanded).toEqual(['examples', 'yours']);
+      expect(result.note).toBeNull();
+      expect(normalize(result.envelope).envelope.ws).toEqual(result.envelope.ws);
+    }
     expect(normalize({ ...defaultEnvelope(), ws: { expanded: [] } }).envelope.ws).toEqual({ expanded: [] });
     expect(
       normalize({ ...defaultEnvelope(), ws: { expanded: ['a', 'a', 'b', 7, '', null] } }).envelope.ws,

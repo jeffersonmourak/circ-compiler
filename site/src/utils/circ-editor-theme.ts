@@ -148,9 +148,12 @@ export function editorPalette(theme: unknown): EditorPalette {
   return {
     background: colors['editor.background'],
     foreground: colors['editor.foreground'],
-    gutterBackground: 'var(--pane-label-bg)',
+    // The bench's gutter is a column of numbers on the pane, not a band: the
+    // design file draws no background and no rule, and dims the whole gutter
+    // to 55% (the opacity lives in the editor's chrome spec).
+    gutterBackground: 'transparent',
     gutterForeground: 'var(--muted)',
-    gutterBorder: 'var(--border)',
+    gutterBorder: 'transparent',
     caret: 'var(--accent)',
     selection: 'color-mix(in srgb, var(--accent) 28%, transparent)',
     activeLine: 'var(--pane-label-bg)',

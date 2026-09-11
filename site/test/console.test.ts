@@ -92,7 +92,7 @@ describe('a script is the commands and the comments, nothing else', () => {
       'cells 2',
       '0x0 0x10 0xff',
       '0x1 0x21 0xff',
-      '# code: image from the Memory tab, 4 words',
+      '# code: image from the memory panel, 4 words',
       '> reset',
       'ok',
       'ready proto=1 pins=3 warnings=0',
@@ -110,7 +110,7 @@ describe('a script is the commands and the comments, nothing else', () => {
       'dump all',
       'set zz 1',
       'mem code 0 2',
-      '# code: image from the Memory tab, 4 words',
+      '# code: image from the memory panel, 4 words',
       'reset',
       'help',
       '# values: decimal, 0x, 0o or 0b, with _ between digits; replies are 0x hex',
@@ -130,7 +130,7 @@ describe('a script is the commands and the comments, nothing else', () => {
   });
 });
 
-describe("the page's file source points at the Memory tab", () => {
+describe("the page's file source points at the memory panel", () => {
   test('both ways, with the two messages', () => {
     const files = new MemoryTabFiles();
     expect(files.read('x.bin')).toEqual({ ok: false, error: LOAD_REFUSAL });
@@ -194,8 +194,8 @@ describe('commandFor spells the protocol line and its reply', () => {
     expect(commandFor({ kind: 'memory', name: 'data', op: 'poke', addr: 2n, value: 0x5an, defined: 0xffn }, session)).toEqual(['> poke data 0x2 0x5a', 'ok']);
     expect(commandFor({ kind: 'memory', name: 'data', op: 'poke', addr: 15n, value: 0n, defined: 0n }, session)).toEqual(['> poke data 0xf 0x0 0x0', 'ok']);
     expect(commandFor({ kind: 'memory', name: 'data', op: 'clear' }, session)).toEqual(['> clear data', 'ok']);
-    expect(commandFor({ kind: 'memory', name: 'code', op: 'load', words: 4 }, session)).toEqual(['# code: image from the Memory tab, 4 words']);
-    expect(commandFor({ kind: 'memory', name: 'code', op: 'load', words: 1 }, session)).toEqual(['# code: image from the Memory tab, 1 word']);
+    expect(commandFor({ kind: 'memory', name: 'code', op: 'load', words: 4 }, session)).toEqual(['# code: image from the memory panel, 4 words']);
+    expect(commandFor({ kind: 'memory', name: 'code', op: 'load', words: 1 }, session)).toEqual(['# code: image from the memory panel, 1 word']);
   });
 
   test('a rebuild is a reset; an end is nothing', () => {

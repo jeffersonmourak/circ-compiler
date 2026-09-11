@@ -12,6 +12,21 @@
 // others are. Every formatter below preserves that distinction.
 
 import { maxWords } from '../utils/rom-image.ts';
+import { ComponentKind, PortName } from 'circ-renderer/topology';
+import type { CircRuntime } from 'circ-renderer';
+
+export type RuntimeLike = Pick<CircRuntime, 'topology' | 'readValue'>;
+
+/** Read the net feeding addr, including a slice or wire, never a memory word. */
+export function addressedWord(runtime: RuntimeLike, memId: number): number | null {
+  const mem = runtime.topology.components.find((c) => c.id === memId);
+  if (!mem?.memory || (mem.kind !== ComponentKind.Rom && mem.kind !== ComponentKind.Ram)) return null;
+  const edge = runtime.topology.connections.find((c) => c.toId === memId && c.port === PortName.Addr);
+  if (!edge) return null;
+  const value = runtime.readValue(edge.fromId);
+  const mask = maskFor(mem.memory.addrWidth);
+  return (value.defined & mask) === mask ? Number(value.value & mask) : null;
+}
 
 export type ValueFormat = 'binary' | 'hex' | 'decimal';
 

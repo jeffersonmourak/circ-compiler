@@ -57,13 +57,29 @@ describe('app layout', () => {
     expect(optIn.map((f) => f.split('/').pop())).toEqual(['playground.astro']);
   });
 
-  test('nothing restyles .lc-mount', () => {
-    // The frozen set. `.lc-mount` is LiveCanvas.astro's mount too, so a rule
-    // added for the workbench would silently restyle / and /gallery.
+  test('the landing page rules stay in their scope', () => {
+    const home = selectorsOf(css).filter(selector => selector.includes('.home-'));
+    expect(home.length).toBeGreaterThan(30);
+    for (const selector of home) {
+      for (const branch of selector.split(',')) expect(branch.trim()).toStartWith('.home-');
+      expect(selector).not.toContain('data-layout');
+      if (selector.includes('.lc-mount')) expect(selector).toMatch(/data-circ-(fit|thumbnail)/);
+    }
+  });
+
+  test('only LiveCanvas variants restyle .lc-mount', () => {
+    // The frozen set. `.lc-mount` is LiveCanvas.astro's shared mount, so only
+    // an explicit component variant may add to its base and mobile rules.
     const frozen = [
       '.lc-mount',
       '.lc-mount canvas',
       '.lc-launch[hidden], .lc-mount[hidden], .lc-error[hidden]',
+      ".lc[data-circ-fit='parent'] .lc-mount",
+      ".lc[data-circ-fit='parent'] .lc-mount[hidden]",
+      ".lc[data-circ-fit='parent'] .lc-mount canvas",
+      '.lc[data-circ-thumbnail] .lc-mount, .lc[data-circ-thumbnail] .lc-launch',
+      '.lc[data-circ-thumbnail] .lc-mount canvas',
+      '.lc[data-circ-thumbnail] .lc-mount[hidden], .lc[data-circ-thumbnail] .lc-launch[hidden]',
     ];
     const mentioning = selectorsOf(css).filter((s) => s.includes('.lc-mount'));
     expect([...new Set(mentioning)].sort()).toEqual([...new Set(frozen)].sort());
@@ -78,14 +94,16 @@ describe('app layout', () => {
     const gallery = /\.lc-mount canvas \{([^}]*)\}/.exec(css)?.[1] ?? '';
     expect(gallery).toMatch(/height:\s*auto\s*!important/);
     expect(gallery).toMatch(/max-width:\s*100%/);
-    // The workbench opts out of the shrink and lets the panel scroll.
+    // The bench's mount fills the Live view's inset and the renderer sizes
+    // the canvas to it, so the canvas takes no shrink and no margin.
     const mount = /\.pg-sim-mount \{([^}]*)\}/.exec(css)?.[1] ?? '';
     expect(mount).toMatch(/display:\s*block/);
+    expect(mount).toMatch(/overflow:\s*hidden/);
     const canvas = /\.pg-sim-mount canvas \{([^}]*)\}/.exec(css)?.[1] ?? '';
     expect(canvas).toMatch(/max-width:\s*none/);
-    expect(canvas).toMatch(/margin-inline:\s*auto/);
-    // …and the panel that holds it is the scroll container.
-    expect(/\.pg-panel \{[^}]*overflow:\s*auto/.test(css)).toBe(true);
+    expect(canvas).not.toMatch(/margin-inline/);
+    // …and the Schematic and Truth panels are the scroll containers.
+    expect(/\.pg-view-panel \{[^}]*overflow:\s*auto/.test(css)).toBe(true);
   });
 
   test('the app layout is always scoped to the attribute', () => {
@@ -115,12 +133,50 @@ describe('app layout', () => {
     // than tracks. `island-smoke` checks tracks against the rendered DOM,
     // which is the real invariant; this is the build-free half of it, and it
     // runs in every slice rather than only after `bun --bun run build`.
-    for (const [container, fills] of [['main', '.pg'], ['.pg', '.pg-panes']] as const) {
-      expect(declarations(`[data-layout='app'] ${container} {`)).toContain('min-height: 0');
+    for (const [container, fills] of [['main', '.pg'], ['.pg', '.pg-body']] as const) {
+      const block = declarations(`[data-layout='app'] ${container} {`);
+      expect(block).toContain('min-height: 0');
       const child = declarations(`[data-layout='app'] ${fills} {`);
-      expect(child).toContain('flex: 1');
       expect(child).toContain('min-height: 0');
+      // A flex column hands the leftover to the child that claims it; a grid
+      // hands each child a track, and `island-smoke` counts the tracks against
+      // the rendered children.
+      if (block.includes('grid-template-rows')) expect(block).toContain('display: grid');
+      else expect(child).toContain('flex: 1');
     }
+  });
+
+  test('Base renders the site chrome for the default layout only', () => {
+    // The app page brings its own chrome (the bench nav and status line), so
+    // the site nav and footer would be a second wordmark and a second row of
+    // links above and below it. Every other page keeps both.
+    expect(base).toMatch(/\{layout !== 'app' && <Nav \/>\}/);
+    expect(base).toMatch(/\{layout !== 'app' && <Footer \/>\}/);
+    const block = stripComments(css).slice(stripComments(css).indexOf("[data-layout='app'] {"));
+    const rows = block.slice(0, block.indexOf('}'));
+    // One viewport row, fallback first, for the same reason as the height.
+    const vh = rows.indexOf('grid-template-rows: 100vh');
+    const dvh = rows.indexOf('grid-template-rows: 100dvh');
+    expect(vh).toBeGreaterThanOrEqual(0);
+    expect(dvh).toBeGreaterThan(vh);
+    const main = block.slice(block.indexOf("[data-layout='app'] main {"));
+    expect(main.slice(0, main.indexOf('}'))).toContain('padding: 0;');
+    // And nothing in the app block styles chrome that is no longer rendered.
+    for (const selector of selectorsOf(css).filter((s) => s.includes("data-layout='app'"))) {
+      expect(selector).not.toContain('.site-footer');
+      expect(selector).not.toContain('.site-nav');
+    }
+  });
+
+  test('the frame is the bench rows', () => {
+    const block = stripComments(css).slice(stripComments(css).indexOf("[data-layout='app'] .pg {"));
+    const pg = block.slice(0, block.indexOf('}'));
+    expect(pg).toContain('grid-template-rows: 48px minmax(0, 1fr) var(--pg-term-h, 40px) 24px');
+    expect(pg).toContain('min-height: 0');
+    const bodyAt = block.indexOf("[data-layout='app'] .pg-body {");
+    const body = block.slice(bodyAt, block.indexOf('}', bodyAt));
+    expect(body).toContain('min-height: 0');
+    expect(body).toContain('grid-template-columns: var(--pg-source-w, 480px) 1px minmax(0, 1fr)');
   });
 
   test('the viewport lock has a 100vh fallback before 100dvh', () => {

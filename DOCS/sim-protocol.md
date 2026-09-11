@@ -216,8 +216,9 @@ err E_IO nope.bin: FileNotFound
 
 ## The protocol in the browser
 
-The playground's Console tab, in the drawer under the Simulate and Data
-tabs, speaks this protocol to the circuit the page compiled. The grammar is
+In Live and Truth, the playground's console sits in the drawer below the
+source and canvas. It speaks this protocol to the circuit the page compiled.
+The grammar is
 the CLI's (`site/src/scripts/sim-protocol.ts` copies `parseLine` and
 `parseValue` verb by verb), the replies are the CLI's
 (`site/src/scripts/sim-executor.ts` copies the strings of `lib/sim/loop.zig`),
@@ -227,17 +228,19 @@ byte for byte. What follows is the list of differences, all of them about the
 browser having no process, no working directory and no stdin.
 
 - **The handshake prints when the session is built**, which is the first
-  time the Simulate or Data tab is opened with a compiled circuit, and again
+  time the Live view, Data panel or a Truth-table action needs the compiled
+  circuit's runtime, and again
   after every `reset`, whichever face caused it. Its `<file>` is the root
-  file's name. Its `warnings` count and `diag` lines come from the analysis
+  file's name, which is the selected editor file in a multi-file project.
+  Its `warnings` count and `diag` lines come from the analysis
   the page ran on the same source.
 - **The log records every face.** A pin clicked on the canvas, a value typed
-  on the Data tab, a cell written or a memory cleared in the Memory tab, and a
+  in the Data panel, a cell written or a memory cleared in the memory panel, and a
   Reset pressed anywhere are logged as the line that would have done the
   same — `> set a 0x1`, `> poke data 0x2 0x5a`, `> clear data`, `> reset` —
   followed by the reply the session gave, in the order they happened. A
   partly-known value carries its mask (`> set a 0x1 0x3`). A ROM image edited
-  or loaded in the Memory tab is applied as a `--mem` preload, not as a
+  or loaded in the memory panel is applied as a `--mem` preload, not as a
   `load`, so it is logged as a comment naming the memory and the word count.
 - **The page boots low.** Before the first `reset` the circuit is in the
   state the canvas has always shown: every root input driven to 0 and
@@ -246,20 +249,20 @@ browser having no process, no working directory and no stdin.
   that depends on floating pins begins with `reset`.
 - **`quit` prints `ok bye` and is otherwise `reset`.** There is no process to
   end; the prompt stays live.
-- **`load` and `save` are the Memory tab's.** The page has no working
+- **`load` and `save` use the memory panel.** The page has no working
   directory, so both verbs are refused in the protocol's own shape, and the
   reason says where to go:
 
   ```
   load code prog.bin
-  err E_IO prog.bin: load images in the Memory tab
+  err E_IO prog.bin: load images in the memory panel
   save code snapshot.bin
-  err E_IO snapshot.bin: save images from the Memory tab
+  err E_IO snapshot.bin: save images from the memory panel
   ```
 
-  The Memory tab loads an image from a file or from pasted hex, and its
-  `Save image` button downloads `<mem>.bin` with the bytes `save` would
-  write. Preloads are the Memory tab's images: they are applied when the
+  The memory panel's `Load image…` opens the ROM file picker and hex editor;
+  `Save` downloads `<mem>.bin` with the bytes `save` would
+  write. Preloads are the memory panel's ROM images: they are applied when the
   session is built and again on every `reset`, as `--mem` is.
 - **`help` is a browser-only verb.** It prints the command table as `#`
   comment lines. The CLI answers `help` itself with `err E_PROTO malformed
@@ -273,3 +276,20 @@ browser having no process, no working directory and no stdin.
   accepts — each echo without its `> `, and the comments — and drops every
   reply. Saved as a `.script` and fed to `circ-compile <file>.circ --sim`,
   it replays what the reader did; `Copy log` copies the whole scrollback.
+
+The closed terminal line shows the last command and reply. Click it or focus
+it to open the drawer; its height is resizable and saved. Declared memories
+appear beside the console, or below it on a narrow screen. A defined address
+highlights its word in the grid. Close folds the drawer; Escape in a nonempty
+prompt clears the line, and Escape in an empty prompt folds it.
+Schematic hides the whole console/memory row. Returning to Live or Truth
+restores its previous open/closed state and height.
+
+Selecting another source file starts a fresh circuit and console for that
+file. Its sibling files remain available for imports, so an imported circuit
+can be exercised on its own. Pin state resets on this switch; ROM images stay
+with their source file and initialize each imported instance at build and
+reset. Changing only the output view keeps the same session. Images are saved
+with the project when they fit the saved-state budget; the page reports when
+they are too large to survive a reload. Console memory commands still address
+only memories declared in the selected root file.

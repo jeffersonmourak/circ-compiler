@@ -70,9 +70,9 @@ export class Stage {
 
   /**
    * Claim a sequence with no timer, for a run started outside `schedule` that
-   * must invalidate earlier ones. A tab switch deliberately does NOT claim: it
-   * re-uses the current sequence, so a compile already in flight stays current
-   * and its artifact still lands.
+   * must invalidate earlier ones. An output-view switch reuses the sequence;
+   * selecting a different source file claims immediately, since the old
+   * circuit must not land beside the newly selected file.
    */
   claim(): number {
     this.counter += 1;

@@ -1,4 +1,7 @@
 ---
+import { Code } from 'astro:components';
+import { circLang } from '../utils/circ-lang.mjs';
+import { shikiThemes } from '../utils/shiki-themes.mjs';
 import { url } from '../utils/url.ts';
 
 interface Props {
@@ -23,12 +26,36 @@ interface Props {
    * that on every visit before anyone has asked for anything.
    */
   autoRun?: boolean;
+  /** Optional card label; defaults to the gallery's existing label. */
+  label?: string;
+  /** Source rendered beside the circuit. */
+  source?: string;
+  /** Show the root input and output values below the circuit. */
+  values?: boolean;
+  /** Optional call at the right of the values line. */
+  link?: { href: string; label: string };
+  /** Fit the circuit into the mount and disable navigation. */
+  fit?: 'parent';
+  /** Decorative, fixed-cell preview inside a gallery link. */
+  thumbnail?: boolean;
 }
 
 // Padding of 2 cells: the value chip above a pin reaches 1.42 cells over its
 // box, stroke included, and a pin on the top row has only the padding above
 // it. Two cells leave it a clear half cell of air.
-const { wasm, cell = 14, padding = Math.ceil(cell * 2), memory, autoRun = false } = Astro.props;
+const {
+  wasm,
+  cell = 14,
+  padding = Math.ceil(cell * 2),
+  memory,
+  autoRun = false,
+  label = 'live simulation',
+  source,
+  values = false,
+  link,
+  fit,
+  thumbnail = false,
+} = Astro.props;
 const wasmHref = url(`/wasm/${wasm}`);
 // Serialised into the markup rather than passed to the script: the script is
 // hoisted and shared by every canvas on the page, so per-canvas data has to
@@ -42,14 +69,40 @@ const memoryAttr = memory && Object.keys(memory).length > 0 ? JSON.stringify(mem
   data-circ-padding={padding.toString()}
   data-circ-memory={memoryAttr}
   data-circ-autorun={autoRun ? '' : undefined}
+  data-circ-fit={fit}
+  data-circ-values={values ? '' : undefined}
+  data-circ-thumbnail={thumbnail ? '' : undefined}
 >
-  <div class="lc-header">
-    <span class="lc-label">live simulation</span>
+  {!thumbnail && <div class="lc-header">
+    <span class="lc-label">{label}</span>
     <span class="lc-hint">click input pins to toggle</span>
-  </div>
-  <button class="lc-launch" type="button">▶ Run interactively</button>
-  <div class="lc-mount" hidden></div>
-  <div class="lc-error" hidden></div>
+  </div>}
+  {source !== undefined ? (
+    <div class="lc-body">
+      <div class="lc-source">
+        <Code code={source.trim()} lang={circLang as any} themes={shikiThemes as any} defaultColor={false} />
+      </div>
+      <div class="lc-stage">
+        <button class="lc-launch" type="button">▶ Run interactively</button>
+        <div class="lc-mount" hidden></div>
+        <div class="lc-error" hidden></div>
+      </div>
+    </div>
+  ) : (
+    <>
+      {thumbnail ? <span class="lc-launch" aria-hidden="true">▶</span> : <button class="lc-launch" type="button">▶ Run interactively</button>}
+      <div class="lc-mount" hidden></div>
+      <div class="lc-error" hidden></div>
+    </>
+  )}
+  {values && (
+    <div class="lc-values">
+      <span class="lc-pins"></span>
+      <slot name="values-link">
+        {link && <a class="lc-values-link" href={link.href}>{link.label}</a>}
+      </slot>
+    </div>
+  )}
 </div>
 
 <script>
@@ -63,6 +116,7 @@ const memoryAttr = memory && Object.keys(memory).length > 0 ? JSON.stringify(mem
   // palette, so there is no local restatement to fall behind it.
   import type { CircView } from 'circ-renderer';
   import type { PaletteKey } from '../utils/circ-theme.mjs';
+  import { pinLineParts, rootPins } from '../scripts/pin-line.ts';
 
   type View = CircView<PaletteKey>;
 
@@ -104,10 +158,30 @@ const memoryAttr = memory && Object.keys(memory).length > 0 ? JSON.stringify(mem
     if (result.applied.length > 0) view.view.refreshState();
   }
 
+  function writePinLine(container: HTMLElement, view: View, inputKind: number, outputKind: number) {
+    const line = container.querySelector<HTMLElement>('.lc-pins');
+    if (!line) return;
+    const pins = rootPins(
+      view.runtime.topology,
+      (id) => view.runtime.readValue(id),
+      { input: inputKind, output: outputKind },
+    );
+    const nodes = pinLineParts(pins, 'hex').map((part) => {
+      if (!part.name) return document.createTextNode(part.text);
+      const name = document.createElement('span');
+      name.className = 'lc-pin-name';
+      name.textContent = part.text;
+      return name;
+    });
+    line.replaceChildren(...nodes);
+  }
+
   async function mount(container: HTMLElement) {
     const wasmUrl = container.dataset.circWasm!;
     const cell = parseInt(container.dataset.circCell ?? '14', 10);
     const padding = parseInt(container.dataset.circPadding ?? String(Math.ceil(cell * 2)), 10);
+    const fitToParent = container.dataset.circFit === 'parent';
+    const thumbnail = container.hasAttribute('data-circ-thumbnail');
 
     const launch = container.querySelector<HTMLButtonElement>('.lc-launch');
     const mountEl = container.querySelector<HTMLElement>('.lc-mount');
@@ -121,22 +195,30 @@ const memoryAttr = memory && Object.keys(memory).length > 0 ? JSON.stringify(mem
     errorEl.hidden = true;
 
     try {
-      const [{ renderCircuit }, themeMod] = await Promise.all([
+      const [{ renderCircuit, ComponentKind }, themeMod] = await Promise.all([
         loadRenderer(),
         loadThemes(),
       ]);
       const { pickTheme, onAssetsReady } = themeMod;
-      const view = await renderCircuit({
+      let view: View | null = null;
+      const refreshValues = () => {
+        if (view) writePinLine(container, view, ComponentKind.InputPin, ComponentKind.OutputPin);
+      };
+      view = await renderCircuit({
         url: wasmUrl,
         cell,
         padding,
-        interactive: true,
+        interactive: !thumbnail,
+        ...(thumbnail ? { navigation: false } : {}),
         theme: pickTheme(),
+        ...(fitToParent ? { viewport: 'parent' as const, navigation: false } : {}),
+        onPinChange: container.dataset.circValues !== undefined ? refreshValues : undefined,
         // Two free rows between stacked boxes: the value chip above a pin
         // needs the second one, or it lands on the box above.
         layoutOptions: { rowGutter: 2 },
       });
       await applyMemory(container, view);
+      refreshValues();
       mountEl.innerHTML = '';
       mountEl.appendChild(view.canvas);
       mountEl.hidden = false;
@@ -216,6 +298,7 @@ const memoryAttr = memory && Object.keys(memory).length > 0 ? JSON.stringify(mem
 
   function init() {
     document.querySelectorAll<HTMLElement>('.lc').forEach((container) => {
+      if (container.hasAttribute('data-circ-thumbnail')) return;
       const launch = container.querySelector<HTMLButtonElement>('.lc-launch');
       launch?.addEventListener('click', () => mount(container));
     });

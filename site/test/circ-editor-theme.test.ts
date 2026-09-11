@@ -113,6 +113,16 @@ describe('circ editor theme', () => {
     }
   });
 
+  test('the gutter is a band no more', () => {
+    // Design file: a 32px gutter at 55% opacity, no background, no rule. Both
+    // modes, so a theme flip cannot bring the band back.
+    for (const theme of [shikiLight, shikiDark]) {
+      expect(editorPalette(theme).gutterBackground).toBe('transparent');
+      expect(editorPalette(theme).gutterBorder).toBe('transparent');
+      expect(editorPalette(theme).gutterForeground).toBe('var(--muted)');
+    }
+  });
+
   test('the lint underline carries the palette colour', () => {
     expect(editorPalette(shikiLight).errorUnderline).toBe('#a83737');
     expect(editorPalette(shikiDark).errorUnderline).toBe('#ff6b8a');

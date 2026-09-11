@@ -1,8 +1,10 @@
 ---
 import { url } from '../utils/url.ts';
+import ThemeToggle from './ThemeToggle.astro';
 import { examples } from '../content/examples.ts';
 import { tour } from '../content/tour.ts';
-import { CATALOGUE_GROUPS, buildCatalogue } from '../utils/playground-store.ts';
+import { buildCatalogue } from '../utils/playground-store.ts';
+import { displayGroups } from '../scripts/ws-tree.ts';
 
 interface Props {
   manifest: { version: string; revision: string; full_version: number };
@@ -14,17 +16,11 @@ const wasmHref = url('/wasm/libcirc.wasm');
 // they cannot drift from each other or from the shipped content.
 const catalogue = buildCatalogue(examples, tour);
 const initial = catalogue[0];
-// Only the groups that actually have rows, so an empty tier renders no heading.
-// The slug is what the heading's id is built from: a group label may contain a
-// space, and an id may not.
-const groups = CATALOGUE_GROUPS.map((group) => ({
-  group,
-  slug: group.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-  items: catalogue.filter((c) => c.group === group),
-})).filter((g) => g.items.length > 0);
+const groups = displayGroups(catalogue, []);
 ---
 <div
   class="pg"
+  style="--pg-term-h: 40px"
   data-libcirc-wasm={wasmHref}
   data-supported-versions={supportedVersions.join(',')}
   data-manifest-full-version={manifest.full_version.toString()}
@@ -49,34 +45,60 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       }
     })();
   </script>
-  <div class="pg-banner" hidden></div>
-  <div class="pg-panes">
-    <!-- A sibling of the two panes, never a track inside them: the divider's
-         arithmetic, its ResizeObserver and its aria-controls all name exactly
-         the editor and output panes. -->
-    <nav class="pg-ws" aria-label="Workspace">
-      <button
-        type="button"
-        class="pg-ws-toggle"
-        aria-expanded="true"
-        aria-controls="pg-ws-body"
-      >Workspace</button>
-      <button type="button" class="pg-ws-new" aria-label="New project">+</button>
-      <div class="pg-ws-body" id="pg-ws-body">
+  <header class="pg-nav">
+    <div class="pg-nav-left">
+      <a class="pg-brand" href={url('/')}>circ</a>
+      <button type="button" class="pg-crumb" aria-expanded="false" aria-controls="pg-switch">
+        <span class="pg-crumb-group">Examples /</span>
+        <span class="pg-crumb-name">{initial.label}</span>
+        <span class="pg-crumb-chevron" aria-hidden="true">▾</span>
+      </button>
+      <span class="pg-status-cluster">
+        <span class="pg-dot" data-state="idle" aria-hidden="true"></span>
+        <span class="pg-status-label">Idle</span>
+        <span class="pg-status-detail">Type to compile.</span>
+      </span>
+    </div>
+    <div class="pg-nav-right">
+      {/* Disabled until a build exists; the island keeps the label and title current. */}
+      <button type="button" class="pg-action pg-download" disabled title="Compile a circuit first">
+        <svg class="pg-action-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <path d="M8 2v7.5M4.75 6.5 8 9.75l3.25-3.25M3 12.5h10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span class="pg-action-label">Download</span>
+        <span class="pg-action-meta"></span>
+      </button>
+      <button type="button" class="pg-action pg-share" title="Copy a link to this circuit">
+        <svg class="pg-action-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <path d="M6.5 9.5 9.5 6.5M7 4.5l1.3-1.3a2.5 2.5 0 0 1 3.5 3.5L10.5 8M5.5 8 4.2 9.3a2.5 2.5 0 0 0 3.5 3.5L9 11.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span class="pg-action-label">Share</span>
+      </button>
+      <ThemeToggle />
+    </div>
+  </header>
+  <div class="pg-scrim" aria-hidden="true" hidden></div>
+    <nav class="pg-switch" id="pg-switch" aria-label="Workspace" hidden>
+      <label class="pg-switch-search">
+        <span aria-hidden="true">⌕</span>
+        <input type="search" class="pg-switch-query" aria-label="Find a circuit" placeholder="Find a circuit…" autocomplete="off" spellcheck="false" />
+        <kbd aria-hidden="true">⌘K</kbd>
+      </label>
+      <div class="pg-switch-body" id="pg-switch-body">
         {/* The pre-hydration fallback: every project, flat, as ordinary links
             into the picker. The island replaces this whole subtree with a real
             `role=tree` once it runs — expansion state and the open project's
             file children both need the store, which the server does not have.
             Kept rather than shipped empty so the sidebar is never a blank box
             on a slow connection. */}
-        <ul class="pg-ws-fallback">
-          {groups.map(({ group, slug, items }) => (
-            <li class="pg-ws-section">
-              <h2 class="pg-ws-group" id={`pg-ws-h-${slug}`}>{group}</h2>
-              <ul class="pg-ws-list" aria-labelledby={`pg-ws-h-${slug}`}>
-                {items.map((c) => (
+        <ul class="pg-switch-fallback">
+          {groups.map(({ label, id, projects }) => (
+            <li>
+              <h2 class="pg-switch-group" id={`pg-switch-h-${id}`}>{label}</h2>
+              <ul aria-labelledby={`pg-switch-h-${id}`}>
+                {projects.map((c) => (
                   <li>
-                    <button type="button" class="pg-ws-row" data-pick={c.id}>{c.label}</button>
+                    <button type="button" class="pg-switch-row pg-switch-project" data-pick={c.id}>{c.label}</button>
                   </li>
                 ))}
               </ul>
@@ -85,10 +107,23 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         </ul>
         {/* One line under the tree, naming the first file that cannot be
             written back to the combined source. */}
-        <p class="pg-ws-error" role="alert"></p>
+        <p class="pg-switch-error" role="alert"></p>
+      </div>
+      <div class="pg-switch-footer">
+        <button type="button" class="pg-switch-new" aria-label="New circuit">+ New circuit</button>
+        <button type="button" class="pg-switch-import">Import .circ</button>
+        <input type="file" class="pg-switch-picker" accept=".circ" aria-label="Import a circuit" hidden />
       </div>
     </nav>
+  <div class="pg-body">
     <section class="pg-editor" id="pg-pane-editor">
+      <div class="pg-banner" hidden></div>
+      {/* The file strip (design file: 36px, the open file underlined in the
+          accent). A switch only: rename, delete and reorder are the tree's,
+          and the island fills the tabs from the same state the tree reads. */}
+      <div class="pg-files" role="tablist" aria-label="Files">
+        <button type="button" class="pg-file-add" aria-label="New file">+ file</button>
+      </div>
       <div class="pg-editor-wrap" id="pg-editor-panel" role="tabpanel">
         <div id="pg-editor" class="pg-cm" hidden></div>
         <textarea
@@ -101,85 +136,37 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           rows="18"
         >{initial.source}</textarea>
       </div>
-      <!-- The dock. Both of its panels are about the SOURCE rather than the
-           compiled result, which is why they sit under the editor instead of
-           competing with the preview for the output pane. It ships open so a
-           reader with no stored envelope sees their diagnostics. -->
-      <div class="pg-dock" data-open="false">
-        <div class="pg-dock-bar">
-          <div class="pg-dock-tabs" role="tablist" aria-label="Editor panel">
-            <button
-              type="button"
-              role="tab"
-              class="pg-dock-tab"
-              id="pg-dock-tab-diagnostics"
-              data-dock="diagnostics"
-              aria-selected="true"
-              aria-controls="pg-dock-panel-diagnostics"
-            >Diagnostics<span class="pg-dock-badge" hidden></span></button>
-            <button
-              type="button"
-              role="tab"
-              class="pg-dock-tab"
-              id="pg-dock-tab-settings"
-              data-dock="settings"
-              aria-selected="false"
-              aria-controls="pg-dock-panel-settings"
-            >Settings</button>
-          </div>
-          <button
-            type="button"
-            class="pg-dock-toggle"
-            aria-expanded="true"
-            aria-controls="pg-dock-body"
-          >Hide</button>
+      {/* The diagnostics footer (design file 3b: 30px). The bar says how many
+          errors and warnings the compiler found and what the source is made
+          of; the counts open the list, the gear opens the settings. Both are
+          about the SOURCE, which is why they sit under the editor. */}
+      <div class="pg-footer" data-open="false" data-tab="diagnostics">
+        <div class="pg-footer-bar">
+          <button type="button" class="pg-footer-counts" data-severity="none" aria-expanded="false" aria-controls="pg-footer-body">
+            <span class="pg-footer-counts-text">0 errors · 0 warnings</span><span class="pg-footer-caret" aria-hidden="true">▾</span>
+          </button>
+          <span class="pg-footer-stats"></span>
+          <button type="button" class="pg-footer-gear" aria-label="Settings" aria-expanded="false" aria-controls="pg-footer-body">⚙</button>
         </div>
-        <div class="pg-dock-body" id="pg-dock-body">
-          <div
-            class="pg-dock-panel"
-            id="pg-dock-panel-diagnostics"
-            data-dock-panel="diagnostics"
-            role="tabpanel"
-            aria-labelledby="pg-dock-tab-diagnostics"
-          ><ul class="pg-diag"></ul></div>
-          <div
-            class="pg-dock-panel"
-            id="pg-dock-panel-settings"
-            data-dock-panel="settings"
-            role="tabpanel"
-            aria-labelledby="pg-dock-tab-settings"
-            hidden
-          >
-            <div class="pg-settings">
-              <fieldset class="pg-settings-group">
-                <legend>Preview</legend>
-                <label><input type="checkbox" data-setting="expandMacros" /> Expand macros</label>
-                <label><input type="checkbox" data-setting="expandDisplay" /> Expand display</label>
-              </fieldset>
-              <fieldset class="pg-settings-group">
-                <legend>Truth table</legend>
-                <label for="pg-set-format">Format</label>
-                <select id="pg-set-format" data-setting="format">
-                  <option value="json">table</option>
-                  <option value="markdown">markdown</option>
-                  <option value="csv">csv</option>
-                </select>
-                <label for="pg-set-values">Values</label>
-                <select id="pg-set-values" data-setting="valueFormat">
-                  <option value="binary">binary</option>
-                  <option value="hex">hex</option>
-                  <option value="decimal">decimal</option>
-                </select>
-                <label for="pg-set-cap">Input-bit cap</label>
-                <input id="pg-set-cap" type="number" min="1" max="24" step="1" data-setting="truthTableCap" />
-                <span class="pg-settings-hint">2^cap rows; once the enumeration starts, it runs to the end.</span>
-              </fieldset>
-              <fieldset class="pg-settings-group">
-                <legend>Compile</legend>
-                <label><input type="checkbox" data-setting="warningsAsErrors" /> Treat warnings as errors</label>
-              </fieldset>
-            </div>
-          </div>
+        <div class="pg-footer-body" id="pg-footer-body" hidden>
+          <ul class="pg-diag" data-footer-panel="diagnostics"></ul>
+          <div class="pg-settings" data-footer-panel="settings" hidden>
+          <fieldset class="pg-settings-group">
+            <legend>Compile</legend>
+            <div><input id="pg-compiler-warn-as-error" type="checkbox" data-setting="warningsAsErrors" /></div>
+            <label for="pg-compiler-warn-as-error">Treat warnings as errors</label>
+          </fieldset>
+          <fieldset class="pg-settings-group">
+            <legend>Editor</legend>
+            <div><input id="pg-editor-wrap-lines" type="checkbox" data-editor-setting="wrapLines" /></div>
+            <label for="pg-editor-wrap-lines">Wrap lines</label>
+            <input id="pg-editor-font-size" type="number" min="10" max="24" step="1" data-editor-setting="fontSize" />
+            <label for="pg-editor-font-size">Font size (px)</label>
+            <input id="pg-editor-tab-size" type="number" min="1" max="8" step="1" data-editor-setting="tabSize" />
+            <label for="pg-editor-tab-size">Tab size</label>
+            <span class="pg-settings-hint">Tab indents with this many spaces.</span>
+          </fieldset>
+        </div>
         </div>
       </div>
     </section>
@@ -191,169 +178,157 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       aria-label="Resize the editor and output panes"
       aria-controls="pg-pane-editor pg-pane-output"
     ></div>
-    <section class="pg-output" id="pg-pane-output">
-      <div class="pg-tabs" role="tablist">
-        <button type="button" role="tab" data-tab="preview" aria-selected="true">Preview</button>
-        <button
-          type="button"
-          role="tab"
-          data-tab="truth"
-          aria-selected="false"
-          aria-describedby="pg-tab-tip-truth"
-        >Truth table</button>
-        <button type="button" role="tab" data-tab="simulate" aria-selected="false">Simulate</button>
-        <button type="button" role="tab" data-tab="data" aria-selected="false">Data</button>
-        {/* Empty and invisible until the tab is actually blocked; the island
-            fills it with the same sentence the panel shows. `role=tooltip`
-            plus the aria-describedby above is what makes the reason reachable
-            without a pointer. */}
-        <span class="pg-tab-tip" id="pg-tab-tip-truth" role="tooltip"></span>
+    <section class="pg-output" id="pg-pane-output" data-view="live">
+      {/* The canvas region (design file, board 2a): the view switch top-left,
+          the Data button top-right, the hint line bottom-left, the zoom line
+          bottom-right, and the view itself in the inset between them. */}
+      <div class="pg-view-bar">
+        <div class="pg-view-switch" role="tablist" aria-label="View">
+          <button type="button" role="tab" class="pg-view-tab" data-view="schematic" aria-selected="false" aria-controls="pg-view-schematic" tabindex="-1">Schematic</button>
+          <button type="button" role="tab" class="pg-view-tab" data-view="live" aria-selected="true" aria-controls="pg-view-live" tabindex="0">Live</button>
+          <button type="button" role="tab" class="pg-view-tab" data-view="truth" aria-selected="false" aria-controls="pg-view-truth" tabindex="-1">Truth</button>
+        </div>
+        {/* Each view owns its tools. The Truth chip carries the counts and
+            any refusal; its cap control is beside it. */}
+        <div class="pg-view-tools" data-for="schematic" hidden>
+          <label class="pg-tool-toggle"><input type="checkbox" data-setting="expandMacros" /> Expand macros</label>
+          <label class="pg-tool-toggle"><input type="checkbox" data-setting="expandDisplay" /> Expand display</label>
+          <button type="button" class="pg-tool-btn" data-copy="preview" title="Copy the schematic as text"><span class="pg-action-label">Copy</span></button>
+        </div>
+        <span class="pg-truth-chip" id="pg-truth-chip" data-for="truth" hidden></span>
+        <div class="pg-view-tools pg-truth-tools" data-for="truth" hidden>
+          <label for="pg-set-cap">Input-bit cap</label>
+          <input id="pg-set-cap" type="number" min="1" max="24" step="1" data-setting="truthTableCap" aria-describedby="pg-cap-hint" />
+          <span class="visually-hidden" id="pg-cap-hint">2^cap rows; once the enumeration starts, it runs to the end.</span>
+        </div>
+        <button type="button" class="pg-data-btn" aria-expanded="false" aria-controls="pg-data-card">Data <span class="pg-data-count"></span></button>
       </div>
-      <div class="pg-panel" data-panel="preview"><pre class="pg-preview"></pre></div>
-      <div class="pg-panel" data-panel="truth" hidden><div class="pg-table"></div></div>
-      <div class="pg-panel" data-panel="simulate" hidden>
+      <div class="pg-view-panel" id="pg-view-schematic" data-view-panel="schematic" role="tabpanel" hidden><pre class="pg-preview"></pre></div>
+      {/* The truth table in a card on the dot grid (design file 3f): the row
+          matching the session's pins tinted, a click on a row driving them. */}
+      <div class="pg-view-panel" id="pg-view-truth" data-view-panel="truth" role="tabpanel" hidden><div class="pg-truth-card"><div class="pg-table"></div></div></div>
+      <div class="pg-view-panel pg-live" id="pg-view-live" data-view-panel="live" role="tabpanel">
         <div class="pg-sim-note"></div>
-        <div class="lc-mount pg-sim-mount" hidden></div>
+        <div class="pg-sim-mount" hidden></div>
       </div>
-      <div class="pg-panel" data-panel="data" hidden>
-        {/* The same circuit as Simulate, as values: one row per root pin,
-            inputs editable in the settings' base, outputs read. Drives the
-            same session the canvas draws. */}
+      {/* Every face drives the same session; the panel is a non-modal dialog. */}
+      <div class="pg-data-card" id="pg-data-card" role="dialog" aria-label="Data" tabindex="-1" hidden>
+        <div class="pg-data-head">
+          <button type="button" class="pg-data-grip" aria-label="Move the panel" title="Drag, or use the arrow keys. Shift moves farther.">⋮⋮</button>
+          <strong>Data</strong><span class="pg-data-summary"></span>
+          <div class="pg-data-base" role="radiogroup" aria-label="Value base">
+            {([['hex', 'hex'], ['binary', 'bin'], ['decimal', 'dec']] as const).map(([value, label]) => (
+              <label><input type="radio" name="pg-data-base" data-setting="valueFormat" value={value} aria-label={value} /><span>{label}</span></label>
+            ))}
+          </div>
+          <button type="button" class="pg-data-close" aria-label="Close Data">✕</button>
+        </div>
         <div class="pg-data-note"></div>
-        <div class="pg-data-head" hidden>
-          <span class="pg-data-hint">Type a value and press Enter; ? makes a pin unknown.</span>
+        <div class="pg-data" hidden></div>
+        <div class="pg-data-footer" hidden>
+          <span class="pg-data-hint">edits settle the circuit and echo in the console</span>
           <button type="button" class="pg-data-reset" title="Every pin unknown, ROM images re-applied">Reset</button>
         </div>
-        <div class="pg-data" hidden></div>
       </div>
-      {/* The drawer: the session's own strip under the two tabs that drive it.
-          Console is the --sim protocol at a prompt; Memory is the panel that
-          used to live in the editor's dock, which is about the RUNNING circuit
-          rather than the source. Hidden with the other output tabs, because a
-          preview or a truth table has no session to drive. */}
-      <div
-        class="pg-drawer-splitter"
-        role="separator"
-        tabindex="0"
-        aria-orientation="horizontal"
-        aria-label="Resize the output and the drawer"
-        aria-controls="pg-pane-output pg-drawer"
-        hidden
-      ></div>
-      <div class="pg-drawer" id="pg-drawer" data-open="true" hidden>
-        <div class="pg-drawer-bar">
-          <div class="pg-drawer-tabs" role="tablist" aria-label="Session panel">
-            <button
-              type="button"
-              role="tab"
-              class="pg-drawer-tab"
-              id="pg-drawer-tab-console"
-              data-drawer="console"
-              aria-selected="true"
-              aria-controls="pg-drawer-panel-console"
-            >Console</button>
-            {/* Present but hidden until the circuit declares a rom or a ram.
-                A memory's contents are runtime state rather than part of the
-                artifact, so there is nothing to show for a circuit that has
-                none, and a permanently empty tab would be a worse answer than
-                no tab. The island unhides it from the analysis. */}
-            <button
-              type="button"
-              role="tab"
-              class="pg-drawer-tab"
-              id="pg-drawer-tab-memory"
-              data-drawer="memory"
-              aria-selected="false"
-              aria-controls="pg-drawer-panel-memory"
-              hidden
-            >Memory<span class="pg-drawer-count" hidden></span></button>
-          </div>
-          <button
-            type="button"
-            class="pg-drawer-toggle"
-            aria-expanded="true"
-            aria-controls="pg-drawer-body"
-          >Hide</button>
-        </div>
-        <div class="pg-drawer-body" id="pg-drawer-body">
-          <div
-            class="pg-drawer-panel"
-            id="pg-drawer-panel-console"
-            data-drawer-panel="console"
-            role="tabpanel"
-            aria-labelledby="pg-drawer-tab-console"
-          >
-            {/* The --sim protocol at a prompt, dressed as an editor's terminal:
-                a bar with the command the terminal is "running" and its
-                actions, the log, the prompt line. Every line in the log is
-                the executor's reply, the echo of a line (`> …`) — typed, or
-                what another face did — or a comment (`# …`); Copy script
-                gives the lines --sim accepts. The note says why there is
-                nothing to drive. */}
-            <div class="pg-console">
-              <div class="pg-console-bar">
-                <span class="pg-console-title">circ-compile main.circ --sim</span>
-                <span class="pg-console-actions">
-                  <button type="button" class="pg-console-btn" data-console="clear" title="Clear the log (Ctrl+L)">Clear</button>
-                  <button type="button" class="pg-console-btn" data-console="script" title="Copy the commands, as a --sim script">Copy script</button>
-                  <button type="button" class="pg-console-btn" data-console="log" title="Copy the whole log">Copy log</button>
-                </span>
-              </div>
-              <p class="pg-console-note">Compile a circuit first.</p>
-              <pre class="pg-console-log" aria-live="polite" aria-label="Console transcript"></pre>
-              <form class="pg-console-form">
-                <span class="pg-console-prompt" aria-hidden="true">&gt;</span>
-                <input
-                  class="pg-console-in"
-                  type="text"
-                  spellcheck="false"
-                  autocomplete="off"
-                  autocapitalize="off"
-                  aria-label="Protocol command; help lists them"
-                  placeholder="help"
-                  disabled
-                />
-              </form>
-            </div>
-          </div>
-          <div
-            class="pg-drawer-panel"
-            id="pg-drawer-panel-memory"
-            data-drawer-panel="memory"
-            role="tabpanel"
-            aria-labelledby="pg-drawer-tab-memory"
-            hidden
-          ><div class="pg-mem"></div></div>
-        </div>
+      <div class="pg-hint"></div>
+      {/* The bottom-right line is the view's: the schematic's size, the truth
+          table's copies, the Live view's zoom. */}
+      <div class="pg-size" data-for="schematic" hidden>0 × 0 chars</div>
+      <div class="pg-truth-copy" data-for="truth" hidden>
+        <button type="button" class="pg-tool-btn" data-copy="markdown" title="Copy the table as markdown"><span class="pg-action-label">Copy as markdown</span></button>
+        <span class="pg-zoom-sep" aria-hidden="true">·</span>
+        <button type="button" class="pg-tool-btn" data-copy="csv" title="Copy the table as CSV"><span class="pg-action-label">CSV</span></button>
+      </div>
+      <div class="pg-zoom" data-for="live">
+        <span class="pg-zoom-cell">cell 14</span>
+        <span class="pg-zoom-sep" aria-hidden="true">·</span>
+        <button type="button" class="pg-zoom-pct" aria-label="Reset zoom to 100%" aria-disabled="true">100%</button>
+        <span class="pg-zoom-sep" aria-hidden="true">·</span>
+        <button type="button" class="pg-zoom-fit" aria-label="Fit the circuit" aria-disabled="true">fit</button>
       </div>
     </section>
   </div>
-  <div class="pg-statusbar">
-    <span class="pg-dot" data-state="idle" aria-hidden="true"></span>
-    <span class="pg-status-label">Idle</span>
-    <span class="pg-status-detail">Type to compile.</span>
-    <span class="pg-status-spacer"></span>
-    {/* Rendered from the committed manifest so the bar is never blank before
+  {/* Row 3 of the frame: the session's drawer, folded to one line until asked
+      for. The line reads the console's transcript — the command title, the
+      last thing typed and the first reply — and opens the drawer on Console
+      or Memory. The drawer itself is the element it was under the output
+      pane; only its row changed. */}
+  <div class="pg-term" data-open="false">
+    <div class="pg-term-line" tabindex="0" role="group" aria-label="Session console and memory">
+      <span class="pg-term-title">circ-compile main.circ --sim</span>
+      <span class="pg-term-prompt" aria-hidden="true">&gt;</span>
+      <span class="pg-term-cmd"></span>
+      <span class="pg-term-sep" aria-hidden="true"></span>
+      <span class="pg-term-reply">Compile a circuit first.</span>
+      <span class="pg-term-spacer"></span>
+      <button type="button" class="pg-term-open" data-term="console" aria-controls="pg-drawer">Console <span aria-hidden="true">▴</span></button>
+      <button type="button" class="pg-term-open pg-term-mem" data-term="memory" aria-controls="pg-drawer" aria-disabled="true">Memory</button>
+    </div>
+    <div
+      class="pg-drawer-splitter"
+      role="separator"
+      tabindex="0"
+      aria-orientation="horizontal"
+      aria-label="Resize the output and the drawer"
+      aria-controls="pg-pane-output pg-drawer"
+      hidden
+    ></div>
+    <div class="pg-drawer" id="pg-drawer" data-open="false">
+          {/* The --sim protocol at a prompt, dressed as an editor's terminal:
+              a bar with the command the terminal is "running" and its
+              actions, the log, the prompt line. Every line in the log is
+              the executor's reply, the echo of a line (`> …`) — typed, or
+              what another face did — or a comment (`# …`); Copy script
+              gives the lines --sim accepts. The note says why there is
+              nothing to drive. */}
+          <div class="pg-console">
+            <div class="pg-console-head">
+              <span class="pg-console-tab">Console</span>
+              <span class="pg-console-title">circ-compile main.circ --sim</span>
+              <span class="pg-console-actions">
+                <button type="button" class="pg-console-btn" data-console="clear" title="Clear the log (Ctrl+L)">Clear</button>
+                <button type="button" class="pg-console-btn" data-console="script" title="Copy the commands, as a --sim script">Copy script</button>
+                <button type="button" class="pg-console-btn" data-console="log" title="Copy the whole log">Copy log</button>
+              </span>
+              <button type="button" class="pg-drawer-close" aria-label="Close drawer">▾</button>
+            </div>
+            <p class="pg-console-note">Compile a circuit first.</p>
+            <pre class="pg-console-log" aria-live="polite" aria-label="Console transcript"></pre>
+            <form class="pg-console-form">
+              <span class="pg-console-prompt" aria-hidden="true">&gt;</span>
+              <span class="pg-console-caret" aria-hidden="true"></span>
+              <input
+                class="pg-console-in"
+                type="text"
+                spellcheck="false"
+                autocomplete="off"
+                autocapitalize="off"
+                aria-label="Protocol command; help lists them"
+                placeholder="help"
+                disabled
+              />
+            </form>
+          </div>
+      <div class="pg-drawer-rule" hidden></div>
+      <div class="pg-drawer-mem" aria-label="Memory" tabindex="-1" hidden><div class="pg-mem"></div></div>
+    </div>
+  </div>
+  <footer class="pg-statusline">
+    {/* Rendered from the committed manifest so the line is never blank before
         the version handshake resolves; the island overwrites it after. */}
     <span class="pg-status-identity">circ {manifest.version} · {manifest.revision} · CIRF v{manifest.full_version}</span>
-    <span class="pg-status-actions">
-      {/* Disabled until a build exists; the island keeps the title current. */}
-      <button type="button" class="pg-action pg-download" disabled title="Compile a circuit first">
-        <svg class="pg-action-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-          <path d="M8 2v7.5M4.75 6.5 8 9.75l3.25-3.25M3 12.5h10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-        <span class="pg-action-label">Download .wasm</span>
-      </button>
-      <button type="button" class="pg-action pg-share" title="Copy a link to this circuit">
-        <svg class="pg-action-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-          <path d="M6.5 9.5 9.5 6.5M7 4.5l1.3-1.3a2.5 2.5 0 0 1 3.5 3.5L10.5 8M5.5 8 4.2 9.3a2.5 2.5 0 0 0 3.5 3.5L9 11.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-        <span class="pg-action-label">Share</span>
-      </button>
+    {/* The site footer's signature, verbatim: the app page renders no footer. */}
+    <p class="signature muted">
+      Made with <span class="heart" aria-hidden="true">♥︎</span><span class="visually-hidden">love</span>
+      by <a href="https://github.com/jeffersonmourak" rel="noreferrer noopener">@jeffersonmourak</a>
+    </p>
+    <span class="pg-statusline-right">
+      {/* The announcement channel: file-tab operations and store notes. While
+          it holds a sentence the promise beside it yields the cell. */}
+      <span class="pg-status" role="status" aria-live="polite"></span>
+      <span class="pg-promise">runs in your browser · nothing leaves the page</span>
     </span>
-    {/* The announcement channel: file-tab operations and store notes. */}
-    <span class="pg-status" role="status" aria-live="polite"></span>
-  </div>
+  </footer>
   {/* Page data, not a module: it never enters the eager module graph, so the
       content files stay out of the island's bundle. */}
   <script type="application/json" id="pg-picks" set:html={JSON.stringify(catalogue)} />
@@ -362,7 +337,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
 <script>
   import { getSharedClient, type LibcircVersion, type WorkerReply } from '../scripts/libcirc-client.ts';
   // TYPE only: erased at build, so the renderer stays behind its dynamic import.
-  import type { BitValue, CircRuntime, CircView } from 'circ-renderer';
+  import type { BitValue, CircRuntime, CircTheme, CircView } from 'circ-renderer';
   import type { PaletteKey } from '../utils/circ-theme.mjs';
   // A VALUE, but from the topology-only entry point: the decoder and its enum,
   // nothing of the canvas, so the eager bundle stays what it was.
@@ -375,11 +350,21 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
   // pulls their one shared dependency, so they ride in the eager bundle.
   import { execute, handshake } from '../scripts/sim-executor.ts';
   import { HELP_VERB, HistoryRing, MemoryTabFiles, Transcript, commandFor, helpLines, promptEcho, scriptOf } from '../scripts/console.ts';
-  import { joinConflicts, requestFor, rootOf, PLAYGROUND_DIR } from '../utils/split-files.ts';
+  import { summaryOf, memoryHeader, legendFor, imageLine } from '../scripts/terminal-line.ts';
+  import { addressedWord } from '../scripts/memory-panel.ts';
+  import { summarize, summaryLabels } from '../scripts/footer-summary.ts';
+  import { pinCountLabel } from '../scripts/pin-count.ts';
+  import { formatZoom } from '../scripts/zoom-label.ts';
+  import { chipText } from '../scripts/truth-chip.ts';
+  import type { TruthRows } from '../scripts/truth-view.ts';
+  import { joinConflicts, requestFor, rootOf, splitFiles, PLAYGROUND_DIR } from '../utils/split-files.ts';
   import { createSplitter } from '../scripts/splitter.ts';
+  import { clampPanel, defaultPos, positionFromDrag, crossedThreshold } from '../scripts/data-panel.ts';
+  import type { PanelPos } from '../utils/playground-store.ts';
+  import { normalizeEditorPreferences, type EditorPreferences } from '../utils/editor-preferences.ts';
   import { fnv1a } from '../utils/artifact-hash.ts';
   import { artifactFileName } from '../utils/artifact-name.ts';
-  import { mountSettingsDrawer, optionsFor, truthTableRefusal } from '../scripts/settings-drawer.ts';
+  import { capRefusal, mountSettingsDrawer, optionsFor, truthTableRefusal } from '../scripts/settings-drawer.ts';
   import { formatBytes } from '../scripts/pipeline.ts';
   import {
     applyRomImages,
@@ -390,6 +375,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     romSymbols,
     type MemorySymbol,
   } from '../utils/rom-image.ts';
+  import { sourceImageKey, type ImportedImages } from '../utils/source-images.ts';
   import {
     UNKNOWN,
     cellWidth,
@@ -431,8 +417,9 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     touchScratch,
     uniqueName,
     NEW_PROJECT_SOURCE,
-    CATALOGUE_GROUPS,
     type CatalogueItem,
+    type View as StoredView,
+    type FooterTab,
   } from '../utils/playground-store.ts';
   import {
     ANALYZE_DEBOUNCE_MS,
@@ -469,6 +456,9 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     type TreeInput,
     type TreeKey,
     type TreeNode,
+    displayGroups,
+    groupOf,
+    filterNodes,
   } from '../scripts/ws-tree.ts';
   import {
     indexDoc,
@@ -480,15 +470,11 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     type TabbedDiagnostic,
   } from '../scripts/circ-diagnostics.ts';
 
-  type Tab = 'preview' | 'truth' | 'simulate' | 'data';
-  type DockTab = 'diagnostics' | 'settings';
-  type DrawerTab = 'console' | 'memory';
+
   /** A mapped diagnostic plus the file tab it belongs to; `null` when the
    *  compiler blamed a file with no tab (a `<builtin>/…` source, or a stale
    *  path from a reply that outlived a rename). */
   type MappedRow = TabbedDiagnostic;
-  interface TruthTable { inputs: string[]; outputs: string[]; rows: { in: (number | null)[]; out: (number | null)[] }[] }
-
 
   const root = document.querySelector<HTMLElement>('.pg');
   if (root) init(root);
@@ -496,6 +482,8 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
   function init(el: HTMLElement) {
     const source = el.querySelector<HTMLTextAreaElement>('#pg-source')!;
     const editorWrap = el.querySelector<HTMLElement>('.pg-editor-wrap')!;
+    const filesEl = el.querySelector<HTMLElement>('.pg-files')!;
+    const fileAdd = el.querySelector<HTMLButtonElement>('.pg-file-add')!;
     const editorHost = el.querySelector<HTMLElement>('#pg-editor')!;
     const status = el.querySelector<HTMLElement>('.pg-status')!;
     const dot = el.querySelector<HTMLElement>('.pg-dot')!;
@@ -509,37 +497,64 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     const tableEl = el.querySelector<HTMLElement>('.pg-table')!;
     const simNote = el.querySelector<HTMLElement>('.pg-sim-note')!;
     const dataNote = el.querySelector<HTMLElement>('.pg-data-note')!;
-    const dataHead = el.querySelector<HTMLElement>('.pg-data-head')!;
+    const dataFooter = el.querySelector<HTMLElement>('.pg-data-footer')!;
+    const dataSummary = el.querySelector<HTMLElement>('.pg-data-summary')!;
+    const dataClose = el.querySelector<HTMLButtonElement>('.pg-data-close')!;
+    const dataGrip = el.querySelector<HTMLButtonElement>('.pg-data-grip')!;
     const dataEl = el.querySelector<HTMLElement>('.pg-data')!;
     const dataReset = el.querySelector<HTMLButtonElement>('.pg-data-reset')!;
-    // Narrowed to the OUTPUT strip: an unscoped [role=tab] would also collect
-    // the file tabs, and showTab() would then clobber their aria-selected and
-    // blank the output pane.
-    const tabs = Array.from(el.querySelectorAll<HTMLButtonElement>('.pg-tabs [role=tab]'));
-    const wsRoot = el.querySelector<HTMLElement>('.pg-ws')!;
-    const wsToggle = el.querySelector<HTMLButtonElement>('.pg-ws-toggle')!;
-    const wsBody = el.querySelector<HTMLElement>('.pg-ws-body')!;
-    const wsNew = el.querySelector<HTMLButtonElement>('.pg-ws-new')!;
-    const wsError = el.querySelector<HTMLElement>('.pg-ws-error')!;
+    // Narrowed to the view switch: an unscoped [role=tab] would also collect
+    // the file strip, and showView() would then clobber its aria-selected.
+    const viewSwitch = el.querySelector<HTMLElement>('.pg-view-switch')!;
+    const viewTabs = Array.from(el.querySelectorAll<HTMLButtonElement>('.pg-view-switch [role=tab]'));
+    const truthChip = el.querySelector<HTMLElement>('.pg-truth-chip')!;
+    const sizeLine = el.querySelector<HTMLElement>('.pg-size')!;
+    const copyButtons = Array.from(el.querySelectorAll<HTMLButtonElement>('[data-copy]'));
+    const dataBtn = el.querySelector<HTMLButtonElement>('.pg-data-btn')!;
+    const dataCount = el.querySelector<HTMLElement>('.pg-data-count')!;
+    const dataCard = el.querySelector<HTMLElement>('.pg-data-card')!;
+    const hintEl = el.querySelector<HTMLElement>('.pg-hint')!;
+    const zoomPct = el.querySelector<HTMLButtonElement>('.pg-zoom-pct')!;
+    const zoomFit = el.querySelector<HTMLButtonElement>('.pg-zoom-fit')!;
+    const wsRoot = el.querySelector<HTMLElement>('.pg-switch')!;
+    const scrim = el.querySelector<HTMLElement>('.pg-scrim')!;
+    const crumbChevron = el.querySelector<HTMLElement>('.pg-crumb-chevron')!;
+    const switchQuery = el.querySelector<HTMLInputElement>('.pg-switch-query')!;
+    const crumb = el.querySelector<HTMLButtonElement>('.pg-crumb')!;
+    const wsBody = el.querySelector<HTMLElement>('.pg-switch-body')!;
+    const wsNew = el.querySelector<HTMLButtonElement>('.pg-switch-new')!;
+    const importButton = el.querySelector<HTMLButtonElement>('.pg-switch-import')!;
+    const importPicker = el.querySelector<HTMLInputElement>('.pg-switch-picker')!;
+    const wsError = el.querySelector<HTMLElement>('.pg-switch-error')!;
     const shareBtn = el.querySelector<HTMLButtonElement>('.pg-share')!;
     const downloadBtn = el.querySelector<HTMLButtonElement>('.pg-download')!;
-    const statusActions = el.querySelector<HTMLElement>('.pg-status-actions')!;
-    const panels = Array.from(el.querySelectorAll<HTMLElement>('.pg-panel'));
-    // The dock: the editor's own strip, distinct from both the output tabs
-    // above and the file tabs. Its [role=tab] query is scoped for the same
-    // reason .pg-tabs's is.
-    const dock = el.querySelector<HTMLElement>('.pg-dock')!;
-    const dockTabs = Array.from(el.querySelectorAll<HTMLButtonElement>('.pg-dock-tabs [role=tab]'));
-    const dockPanels = Array.from(el.querySelectorAll<HTMLElement>('.pg-dock-panel'));
-    const dockToggle = el.querySelector<HTMLButtonElement>('.pg-dock-toggle')!;
-    const dockBadge = el.querySelector<HTMLElement>('.pg-dock-badge')!;
+    const navActions = el.querySelector<HTMLElement>('.pg-nav-right')!;
+    const downloadLabel = el.querySelector<HTMLElement>('.pg-download .pg-action-label')!;
+    const downloadMeta = el.querySelector<HTMLElement>('.pg-download .pg-action-meta')!;
+    const crumbGroup = el.querySelector<HTMLElement>('.pg-crumb-group')!;
+    const crumbName = el.querySelector<HTMLElement>('.pg-crumb-name')!;
+    const viewPanels = Array.from(el.querySelectorAll<HTMLElement>('[data-view-panel]'));
+    // The diagnostics footer under the editor: its bar, the two openers, and
+    // the body the two panels share.
+    const footer = el.querySelector<HTMLElement>('.pg-footer')!;
+    const footerCounts = el.querySelector<HTMLButtonElement>('.pg-footer-counts')!;
+    const footerCountsText = el.querySelector<HTMLElement>('.pg-footer-counts-text')!;
+    const footerStats = el.querySelector<HTMLElement>('.pg-footer-stats')!;
+    const footerGear = el.querySelector<HTMLButtonElement>('.pg-footer-gear')!;
+    const footerBody = el.querySelector<HTMLElement>('.pg-footer-body')!;
+    const footerPanels = Array.from(el.querySelectorAll<HTMLElement>('[data-footer-panel]'));
     // The drawer: the session's strip under the Simulate and Data panels,
     // with the same scoped [role=tab] query as the two strips above.
     const drawer = el.querySelector<HTMLElement>('.pg-drawer')!;
+    const term = el.querySelector<HTMLElement>('.pg-term')!;
+    const termTitle = el.querySelector<HTMLElement>('.pg-term-title')!;
+    const termCmd = el.querySelector<HTMLElement>('.pg-term-cmd')!;
+    const termReply = el.querySelector<HTMLElement>('.pg-term-reply')!;
+    const termOpeners = Array.from(el.querySelectorAll<HTMLButtonElement>('.pg-term-open'));
+    const termMem = el.querySelector<HTMLButtonElement>('.pg-term-mem')!;
     const drawerSeparator = el.querySelector<HTMLElement>('.pg-drawer-splitter')!;
-    const drawerTabs = Array.from(el.querySelectorAll<HTMLButtonElement>('.pg-drawer-tabs [role=tab]'));
-    const drawerPanels = Array.from(el.querySelectorAll<HTMLElement>('.pg-drawer-panel'));
-    const drawerToggle = el.querySelector<HTMLButtonElement>('.pg-drawer-toggle')!;
+    const memColumn = el.querySelector<HTMLElement>('.pg-drawer-mem')!;
+    const drawerRule = el.querySelector<HTMLElement>('.pg-drawer-rule')!;
     const consoleEl = el.querySelector<HTMLElement>('.pg-console')!;
     const consoleTitle = el.querySelector<HTMLElement>('.pg-console-title')!;
     const consoleButtons = Array.from(el.querySelectorAll<HTMLButtonElement>('.pg-console-btn'));
@@ -547,12 +562,10 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     const consoleLog = el.querySelector<HTMLElement>('.pg-console-log')!;
     const consoleForm = el.querySelector<HTMLFormElement>('.pg-console-form')!;
     const consoleIn = el.querySelector<HTMLInputElement>('.pg-console-in')!;
-    const memTab = el.querySelector<HTMLButtonElement>('.pg-drawer-tab[data-drawer="memory"]')!;
-    const memCount = el.querySelector<HTMLElement>('.pg-drawer-count')!;
     const memPanel = el.querySelector<HTMLElement>('.pg-mem')!;
-    const truthTab = el.querySelector<HTMLButtonElement>('.pg-tabs [data-tab="truth"]')!;
-    const truthTip = el.querySelector<HTMLElement>('#pg-tab-tip-truth')!;
+    const truthTab = el.querySelector<HTMLButtonElement>('.pg-view-tab[data-view="truth"]')!;
     const catalogue = JSON.parse(el.querySelector('#pg-picks')!.textContent || '[]') as CatalogueItem[];
+    const countedCatalogue = catalogue.map((p) => ({ ...p, fileCount: splitFiles(p.source).length }));
     const supported = (el.dataset.supportedVersions || '').split(',').filter(Boolean).map(Number);
 
     // One client per wasm URL, shared by every island on the page.
@@ -567,6 +580,8 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       analyzedDoc: null as number | null,
       /** The file NAME list as of the outputs currently on screen. */
       renderedFiles: [] as string[],
+      /** The file whose circuit is being analyzed and simulated. */
+      circuitFile: null as string | null,
       stale: false,
       /** The pipeline's single source of truth: the file set and which tab is
        *  visible. The combined string is never stored — it is computed on
@@ -577,14 +592,38 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       /** `state.diagnostics` mapped onto absolute offsets in the combined
        *  document. Refreshed by BOTH producers in the pipeline. */
       mapped: [] as MappedRow[],
-      artifact: null as { bytes: Uint8Array; hash: number; size: number } | null,
-      tab: 'preview' as Tab,
+      artifact: null as { bytes: Uint8Array; hash: number; size: number; importedImages: ImportedImages } | null,
+      view: 'live' as StoredView,
+      /** The Data card: open over whichever view; its rows are the session's. */
+      dataOpen: false,
       version: null as LibcircVersion | null,
       simulateEnabled: true,
     };
+    function activeRequest(options?: Record<string, unknown>) {
+      return requestFor(state.tabs.files, options, activeFile(state.tabs).name);
+    }
+    /** The Truth view's table on screen, and how it came to be. Declared
+     *  here, beside the state, because the gate reads it at boot. */
+    const truth = {
+      table: null as TruthRows | null,
+      /** The over-cap path: rows enumerated on the site over the unknown pins. */
+      filtered: false,
+      unknownBits: undefined as number | undefined,
+      /** How long the last enumeration on the site took, for the record. */
+      lastMs: null as number | null,
+    };
     // Slice 8 attaches the simulator here.
     const hooks = {
+      onDataOpen: null as null | (() => void),
+      onCircuitChanged: null as null | (() => void),
       onArtifact: null as null | ((bytes: Uint8Array | null, reason: 'built' | 'files-changed') => void),
+      /** The Live view was shown: build or note. Set once the simulator is
+       *  wired, which is after the restore from the envelope runs — a restore
+       *  onto Live must not reach the simulator's record before it exists. */
+      onLive: null as null | (() => void),
+      /** What a copy button copies, by its `data-copy`; null for one the
+       *  island does not know. The Truth view registers markdown and csv. */
+      copySource: null as null | ((what: string) => Promise<string> | null),
       /** Re-read the artifact into the Download button; set once the status
        *  actions are wired, called from every place the artifact changes. */
       refreshActions: null as null | (() => void),
@@ -599,9 +638,26 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     (el as any).__playground = {
       state,
       hooks,
+      compiler: client,
+      flushPipeline: () => flushPipeline(),
       renderMemory: () => renderMemory({ force: true }),
       refreshActions: () => hooks.refreshActions?.(),
       setStale: (stale: boolean) => setStale(stale),
+      // The terminal line follows the transcript, which only a session feeds;
+      // the smoke test feeds it lines the way a reply would arrive.
+      consoleAppend: (lines: readonly string[]) => consoleAppend(lines, 'page', { force: true }),
+      // The footer's list follows `state.mapped`, which only an analysis
+      // fills; the smoke test seeds it and calls this.
+      renderDiagnostics: () => renderDiagnostics(),
+      // The Truth view's rows come from the worker; the smoke test hands it
+      // the compiler's JSON and reads the card.
+      renderTruth: (json: string) => loadTruthView().then((m) => renderTruth(m.parseTruthTable(json))),
+      // The Data walk uses a real artifact without mounting a canvas.
+      getSession: () => ensureSession(),
+      showData: () => showData(),
+      placeDataPanel: () => placeDataPanel(),
+      dataPanelState: () => ({ open: store.envelope.dataOpen, positions: store.envelope.dataPanel }),
+      truth,
     };
 
     // ---- tabs ----
@@ -613,13 +669,16 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     function truthBlock(): string | null {
       const errors = state.mapped.filter((m) => m.severity === 'error');
       const first = errors[0];
+      // The errors only: over the cap the table still opens (decision 10), on
+      // the site's own enumeration of the unknown pins, so the cap is the
+      // chip's to say and never a block.
       return truthTableRefusal(
         {
           errors: errors.length,
           // Code and message only. The file and line are one click away in the
-          // dock right below, and a tooltip is not the place for a position.
+          // footer right below, and a chip is not the place for a position.
           firstError: first ? `${first.code} ${first.message}` : null,
-          bits: rootInputBits(),
+          bits: null,
         },
         settings(),
       );
@@ -636,141 +695,236 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     function applyTruthGate() {
       const reason = truthBlock();
       truthTab.setAttribute('aria-disabled', String(reason !== null));
-      truthTip.textContent = reason ?? '';
-      // A tooltip pointing at an empty element says nothing; drop the link
-      // entirely rather than describing the tab as ''.
+      // The chip beside the switch carries the counts and, when the reader is
+      // blocked, why; the tab is described by it only while there is a reason.
+      truthChip.textContent = chipText({
+        bits: rootInputBits(),
+        rows: truth.table?.rows.length ?? null,
+        cap: settings().truthTableCap,
+        blocked: reason,
+        filtered: truth.filtered,
+        unknownBits: truth.unknownBits,
+      });
       if (reason === null) truthTab.removeAttribute('aria-describedby');
-      else truthTab.setAttribute('aria-describedby', 'pg-tab-tip-truth');
-      // Blocked while it is the open tab: say so in the panel rather than
+      else truthTab.setAttribute('aria-describedby', 'pg-truth-chip');
+      // Blocked while it is the open view: say so in the panel rather than
       // moving the reader somewhere they did not ask to go. Transient errors
-      // are constant while typing, and a tab that flees mid-keystroke is worse
-      // than one that explains itself.
-      if (reason !== null && state.tab === 'truth') {
+      // are constant while typing, and a view that flees mid-keystroke is
+      // worse than one that explains itself.
+      if (reason !== null && state.view === 'truth') {
         tableEl.innerHTML = '';
         tableEl.textContent = reason;
       }
     }
 
-    function showTab(tab: Tab, opts: { persist?: boolean } = {}) {
-      state.tab = tab;
-      if (opts.persist !== false) store.update((draft) => { draft.tab = tab; });
-      for (const b of tabs) b.setAttribute('aria-selected', String(b.dataset.tab === tab));
-      for (const p of panels) p.hidden = p.dataset.panel !== tab;
-      setDrawerShown(tab === 'simulate' || tab === 'data');
-      // A tab switch re-uses the build stage's current sequence rather than
+    /** The hint line under each view (design file, board 2a). */
+    const HINTS: Record<StoredView, string> = {
+      schematic: '',
+      live: 'click a pin to toggle · hover a part to find it in the source',
+      truth: '',
+    };
+
+    function showView(view: StoredView, opts: { persist?: boolean } = {}) {
+      state.view = view;
+      if (opts.persist !== false) store.update((draft) => { draft.view = view; });
+      for (const b of viewTabs) {
+        const selected = b.dataset.view === view;
+        b.setAttribute('aria-selected', String(selected));
+        b.tabIndex = selected ? 0 : -1;
+      }
+      for (const p of viewPanels) p.hidden = p.dataset.viewPanel !== view;
+      // The region wears the view: the Schematic's code surface without the
+      // grid, and each view's tools and bottom-right line.
+      outputPane.dataset.view = view;
+      syncDrawerVisibility();
+      if (memVisible()) renderMemory();
+      hintEl.textContent = HINTS[view];
+      // A view switch re-uses the build stage's current sequence rather than
       // claiming a new one, so a compile already in flight stays current and
       // its artifact still lands.
-      if (tab === 'preview') void runPreview(buildStage.seq);
-      if (tab === 'truth') void runTruth(buildStage.seq);
-      if (tab === 'data') void showData();
+      if (view === 'schematic') void runPreview(buildStage.seq);
+      if (view === 'truth') void runTruth(buildStage.seq);
+      // Through the hook: `sim` is declared after the restore that calls this
+      // at boot, and the artifact that lands later builds the canvas itself.
+      if (view === 'live') hooks.onLive?.();
     }
-    for (const b of tabs) {
+    for (const b of viewTabs) {
       b.addEventListener('click', () => {
-        const tab = b.dataset.tab as Tab;
-        // The gate lives here rather than in showTab: a restore from the
-        // envelope must still be able to land on a blocked tab, or a reader
-        // who left the page on the truth table would come back to a pane that
-        // silently moved. Refusing here also keeps the reason on screen.
-        if (tab === 'truth' && b.getAttribute('aria-disabled') === 'true') {
-          const reason = truthTip.textContent;
+        const view = b.dataset.view as StoredView;
+        // The gate lives here rather than in showView: a restore from the
+        // envelope must still be able to land on a blocked view, or a reader
+        // who left the page on the truth table would come back to a region
+        // that silently moved. Refusing here also keeps the reason on screen.
+        if (view === 'truth' && b.getAttribute('aria-disabled') === 'true') {
+          const reason = truthChip.textContent;
           if (reason) status.textContent = reason;
           return;
         }
-        showTab(tab);
+        showView(view);
       });
     }
+    // The tablist's due: arrows move between the three, Home and End to the
+    // ends, and a blocked Truth view is skipped the way a click would refuse it.
+    viewSwitch.addEventListener('keydown', (e) => {
+      const order = viewTabs.map((b) => b.dataset.view as StoredView);
+      const at = order.indexOf(state.view);
+      const next =
+        e.key === 'ArrowLeft' ? Math.max(0, at - 1)
+        : e.key === 'ArrowRight' ? Math.min(order.length - 1, at + 1)
+        : e.key === 'Home' ? 0
+        : e.key === 'End' ? order.length - 1
+        : null;
+      if (next === null) return;
+      e.preventDefault();
+      viewTabs[next].click();
+      viewTabs[next].focus();
+    });
 
-    // ---- the editor's dock ----
-    /** Move the selection. DOM only — no store write and no re-render, so the
-     *  memory tab's own availability check can use it without recursing back
-     *  through the render that called it. */
-    function selectDockPanel(tab: DockTab) {
-      for (const b of dockTabs) b.setAttribute('aria-selected', String(b.dataset.dock === tab));
-      for (const p of dockPanels) p.hidden = p.dataset.dockPanel !== tab;
+    /** The Data card: open over whichever view, its rows the session's. */
+    function setDataOpen(open: boolean, opts: { persist?: boolean; focus?: boolean } = {}) {
+      if (!open) cancelDataDrag();
+      state.dataOpen = open;
+      if (opts.persist !== false) store.update((draft) => { draft.dataOpen = open; });
+      dataCard.hidden = !open;
+      dataBtn.setAttribute('aria-expanded', String(open));
+      outputPane.dataset.dataOpen = String(open);
+      if (open) {
+        placeDataPanel();
+        hooks.onDataOpen?.();
+      }
+      if (opts.focus !== false) (open ? dataCard : dataBtn).focus();
+    }
+    dataBtn.addEventListener('click', () => setDataOpen(!state.dataOpen));
+    dataClose.addEventListener('click', () => setDataOpen(false));
+    dataCard.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (dataDrag) { cancelDataDrag(); return; }
+      setDataOpen(false);
+    });
+
+    /** `N → M` on the Data button: the root's pins, from the last analysis. */
+    function renderDataCount() {
+      const a = state.analysis;
+      dataCount.textContent = a
+        ? pinCountLabel(a.symbols, rootFileId(a.files, rootPathFor(activeFile(state.tabs).name)))
+        : '';
     }
 
-    function showDockTab(tab: DockTab, opts: { persist?: boolean } = {}) {
-      selectDockPanel(tab);
-      if (opts.persist !== false) store.update((draft) => { draft.dock.tab = tab; });
+    // ---- the diagnostics footer ----
+    // The bar under the editor says how many errors and warnings there are and
+    // what the source is made of; its body opens on the diagnostics list or on
+    // the settings form. The gestures are the dock's: the counts open the body
+    // on diagnostics, or close it when it is already open there; the gear
+    // does the same for settings; the other button while open switches panel.
+    // Escape in the body closes it and hands focus back to whichever opened it.
+    let footerOpener: HTMLButtonElement | null = null;
+    function reflectFooter() {
+      const open = footer.dataset.open === 'true';
+      const tab = footer.dataset.tab;
+      footerCounts.setAttribute('aria-expanded', String(open && tab === 'diagnostics'));
+      footerGear.setAttribute('aria-expanded', String(open && tab === 'settings'));
     }
-
-    function setDockOpen(open: boolean, opts: { persist?: boolean } = {}) {
-      dock.dataset.open = String(open);
-      dockToggle.setAttribute('aria-expanded', String(open));
-      dockToggle.textContent = open ? 'Hide' : 'Show';
-      if (opts.persist !== false) store.update((draft) => { draft.dock.open = open; });
+    function showFooterTab(tab: FooterTab, opts: { persist?: boolean } = {}) {
+      footer.dataset.tab = tab;
+      for (const p of footerPanels) p.hidden = p.dataset.footerPanel !== tab;
+      reflectFooter();
+      if (opts.persist !== false) store.update((draft) => { draft.footer.tab = tab; });
     }
-
-    for (const b of dockTabs) {
-      b.addEventListener('click', () => {
-        const tab = b.dataset.dock as DockTab;
-        // Clicking the panel you are already on, while open, closes the dock —
-        // the gesture every editor with a bottom panel uses. Clicking the other
-        // panel while closed opens it on that panel.
-        if (dock.dataset.open === 'true' && b.getAttribute('aria-selected') === 'true') {
-          setDockOpen(false);
-          return;
-        }
-        showDockTab(tab);
-        setDockOpen(true);
-      });
+    function setFooterOpen(open: boolean, opts: { persist?: boolean } = {}) {
+      footer.dataset.open = String(open);
+      footerBody.hidden = !open;
+      reflectFooter();
+      if (opts.persist !== false) store.update((draft) => { draft.footer.open = open; });
     }
-    dockToggle.addEventListener('click', () => setDockOpen(dock.dataset.open !== 'true'));
+    function toggleFooter(tab: FooterTab, opener: HTMLButtonElement) {
+      if (footer.dataset.open === 'true' && footer.dataset.tab === tab) {
+        setFooterOpen(false);
+        return;
+      }
+      footerOpener = opener;
+      showFooterTab(tab);
+      setFooterOpen(true);
+    }
+    footerCounts.addEventListener('click', () => toggleFooter('diagnostics', footerCounts));
+    footerGear.addEventListener('click', () => toggleFooter('settings', footerGear));
+    footerBody.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      setFooterOpen(false);
+      (footerOpener ?? footerCounts).focus();
+    });
 
     // ---- the drawer ----
-    // Which tab is selected and whether it is open are island fields, never
-    // stored: the drawer is only ever a face on the current session.
+    // The drawer keeps its open state while Schematic hides the whole row.
     /** The drawer's divider, created with the main one once the panes exist. */
     let drawerSplitter: ReturnType<typeof createSplitter> | null = null;
-    function currentDrawerTab(): DrawerTab {
-      const selected = drawerTabs.find((b) => b.getAttribute('aria-selected') === 'true');
-      return (selected?.dataset.drawer as DrawerTab) ?? 'console';
-    }
+    const drawerClose = el.querySelector<HTMLButtonElement>('.pg-drawer-close')!;
+    const termLine = el.querySelector<HTMLElement>('.pg-term-line')!;
 
-    function selectDrawerTab(tab: DrawerTab) {
-      for (const b of drawerTabs) b.setAttribute('aria-selected', String(b.dataset.drawer === tab));
-      for (const p of drawerPanels) p.hidden = p.dataset.drawerPanel !== tab;
-      // Reading a memory is deferred until someone is looking at it, so
-      // arriving on the tab is when the contents are actually fetched.
-      if (tab === 'memory') renderMemory();
-    }
-
-    /** The divider only means something while the drawer is on screen and open. */
+    /** A hidden or folded drawer has no divider to reach. */
     function refreshDrawerSeparator() {
-      drawerSeparator.hidden = drawer.hidden || drawer.dataset.open !== 'true';
+      drawerSeparator.hidden = term.hidden || drawer.dataset.open !== 'true';
       drawerSplitter?.refresh();
     }
 
+    function syncDrawerVisibility() {
+      const hidden = state.view === 'schematic';
+      const hadFocus = hidden && term.contains(document.activeElement);
+      term.hidden = hidden;
+      term.toggleAttribute('inert', hidden);
+      el.style.setProperty('--pg-term-h', hidden ? '0px' : drawer.dataset.open === 'true' ? 'var(--pg-drawer-h, 320px)' : '');
+      refreshDrawerSeparator();
+      if (hadFocus) viewTabs.find((b) => b.dataset.view === 'schematic')?.focus();
+    }
+
+    /** Open state is the terminal row's: `data-open` on it, and the row's
+     *  height on the frame, written together so the two cannot disagree. */
     function setDrawerOpen(open: boolean) {
+      if (open && state.view === 'schematic') return;
+      term.dataset.open = String(open);
       drawer.dataset.open = String(open);
-      drawerToggle.setAttribute('aria-expanded', String(open));
-      drawerToggle.textContent = open ? 'Hide' : 'Show';
-      refreshDrawerSeparator();
+      for (const b of termOpeners) b.setAttribute('aria-expanded', String(open));
+      syncDrawerVisibility();
       if (open && memVisible()) renderMemory();
+      if (!open && (drawer.contains(document.activeElement) || document.activeElement === drawerSeparator)) termOpeners[0]?.focus();
     }
+    drawerClose.addEventListener('click', () => setDrawerOpen(false));
+    const openConsole = () => {
+      if (term.hidden) return;
+      setDrawerOpen(true);
+      (consoleIn.disabled ? drawerClose : consoleIn).focus();
+    };
+    termLine.addEventListener('focusin', (e) => { if (e.target === termLine) openConsole(); });
+    termLine.addEventListener('click', (e) => { if (!(e.target as HTMLElement).closest('button')) openConsole(); });
+    consoleIn.addEventListener('focus', () => { if (drawer.dataset.open !== 'true') setDrawerOpen(true); });
 
-    /** Shown under Simulate and Data only; the other tabs have no session to drive. */
-    function setDrawerShown(shown: boolean) {
-      const was = !drawer.hidden;
-      drawer.hidden = !shown;
-      refreshDrawerSeparator();
-      if (shown && !was && memVisible()) renderMemory();
+    /** The closed line: the last command and its reply, off the transcript. */
+    function renderTermLine() {
+      const { command, reply } = summaryOf(consoleState.transcript.lines);
+      termCmd.textContent = command ?? '';
+      // Liveness as the prompt's gate already renders it (`refreshConsoleGate`
+      // hides the note while a session is alive), so this needs nothing that
+      // is declared after it.
+      const live = consoleNote.hidden;
+      termReply.textContent = reply ?? (command ? '' : live ? (consoleState.transcript.last ?? '') : 'Compile a circuit first.');
+      termReply.dataset.kind = reply ? consoleKind(reply) : 'note';
+      const hasMem = drawer.hasAttribute('data-mem');
+      termMem.setAttribute('aria-disabled', String(!hasMem));
     }
-
-    for (const b of drawerTabs) {
+    for (const b of termOpeners) {
       b.addEventListener('click', () => {
-        const tab = b.dataset.drawer as DrawerTab;
-        // The dock's gesture: the tab already showing collapses the drawer,
-        // and any tab while collapsed opens it on that tab.
-        if (drawer.dataset.open === 'true' && b.getAttribute('aria-selected') === 'true') {
-          setDrawerOpen(false);
-          return;
-        }
-        selectDrawerTab(tab);
-        setDrawerOpen(true);
+        if (term.hidden) return;
+        if (b.dataset.term === 'memory') {
+          if (!drawer.hasAttribute('data-mem')) return;
+          setDrawerOpen(true);
+          memColumn.focus();
+        } else if (drawer.dataset.open === 'true') setDrawerOpen(false);
+        else openConsole();
       });
     }
-    drawerToggle.addEventListener('click', () => setDrawerOpen(drawer.dataset.open !== 'true'));
+
 
     // ---- the console ----
     // One transcript and one history whichever output tab is open: the drawer
@@ -824,11 +978,13 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       }
       while (consoleLog.childElementCount > consoleState.transcript.cap) consoleLog.firstElementChild?.remove();
       if (follow) consoleLog.scrollTop = consoleLog.scrollHeight;
+      renderTermLine();
     }
 
     function consoleClear() {
       consoleState.transcript.clear();
       consoleLog.innerHTML = '';
+      renderTermLine();
     }
 
     /**
@@ -840,6 +996,8 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       consoleClear();
       consoleState.history = new HistoryRing();
       consoleState.fresh = true;
+      consoleTitle.textContent = `circ-compile ${activeFile(state.tabs).name} --sim`;
+      termTitle.textContent = consoleTitle.textContent;
     }
 
     /** The prompt follows the session: live with one, shut without. */
@@ -847,12 +1005,16 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       const live = sim.session !== null && sim.session.isAlive;
       consoleIn.disabled = !live || consoleState.busy;
       consoleNote.hidden = live;
+      // The handshake can paint before readiness changes. Refresh the folded
+      // line here too, so it never waits for the first user interaction.
+      renderTermLine();
     }
 
     /** The lines `--sim` prints first, with the root file as the name the CLI was given. */
     function consoleHandshake(session: SimSession) {
-      const root = rootOf(state.tabs.files).name;
+      const root = activeFile(state.tabs).name;
       consoleTitle.textContent = `circ-compile ${root} --sim`;
+      termTitle.textContent = consoleTitle.textContent;
       consoleState.fresh = false;
       consoleAppend(handshake(session, root), 'prompt', { force: true });
     }
@@ -940,8 +1102,10 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         consoleClear();
       } else if (e.key === 'Escape') {
         e.preventDefault();
+        const empty = consoleIn.value === '';
         consoleIn.value = '';
         consoleState.history.reset();
+        if (empty) setDrawerOpen(false);
       }
     });
     // A terminal takes the caret wherever you click in it, unless you are
@@ -982,7 +1146,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
      * hover must never steal the reader's place, so a declaration in another
      * file is named in the simulate note instead of switching tabs.
      */
-    function markInEditor(link_: SourceLink | null) {
+    function markInEditor(link_: Pick<SourceLink, 'name' | 'kind'> | null) {
       if (!editor) return;
       if (!link_) {
         editor.setLinkHighlight(null);
@@ -990,19 +1154,18 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         return;
       }
       const decl = link.decls.find((d) => d.name === link_.name && d.kind === link_.kind);
-      const rootIdx = rootIndex(state.tabs);
-      if (!decl || state.tabs.active !== rootIdx) {
+      const file = activeFile(state.tabs);
+      if (!decl) {
         editor.setLinkHighlight(null);
-        simNote.textContent = `${link_.name} is declared in ${state.tabs.files[rootIdx]?.name ?? 'the root file'}.`;
+        simNote.textContent = `${link_.name} is not declared in ${file.name}.`;
         return;
       }
-      const files = state.tabs.files;
-      const body = files[rootIdx].body;
+      const body = file.body;
       const index = indexDoc(body);
       const span = rangeToSpan(
         index,
-        [{ name: files[rootIdx].name, body, startLine: 0 }],
-        { files: [{ file_id: decl.fileId, path: rootPathFor(files[rootIdx].name) }], diagnostics: [], symbols: [], references: [] } as Analysis,
+        [{ name: file.name, body, startLine: 0 }],
+        { files: [{ file_id: decl.fileId, path: rootPathFor(file.name) }], diagnostics: [], symbols: [], references: [] } as Analysis,
         decl.fileId,
         decl.range,
       );
@@ -1021,15 +1184,18 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
      * reader's own context behind.
      */
     function highlightByName(name: string | null) {
+      // The editor's span comes from the declaration; the layout table only
+      // adds the box. Before a canvas exists (a page refreshed onto the Truth
+      // view) the table is null, and the declaration alone is enough.
       if (name === null) {
         highlightComponent(link.current);
-        markInEditor(link.current ? (link.table?.byName.get(link.current.name) ?? null) : null);
+        markInEditor(link.current ? (link.table?.byName.get(link.current.name) ?? link.current) : null);
         markTableColumn(link.current);
         return;
       }
       const decl = link.decls.find((d) => d.name === name) ?? null;
       highlightComponent(decl);
-      markInEditor(link.table?.byName.get(name) ?? null);
+      markInEditor(link.table?.byName.get(name) ?? decl);
       markTableColumn(decl);
     }
 
@@ -1074,6 +1240,88 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     const store = createStore();
     store.onNote((note) => { status.textContent = describeNote(note); });
 
+    // One rendered position over per-project intent. Resizing only borrows
+    // space; a pointer release or an arrow key is what commits a position.
+    const dataNarrow = matchMedia('(max-width: 800px)');
+    let dataPosition: PanelPos = { x: 0, y: 0 };
+    let dataDrag: { pointerId: number; projectId: string; from: PanelPos; start: PanelPos; moved: boolean } | null = null;
+
+    function placeDataPanel(pos?: PanelPos) {
+      if (!state.dataOpen) return;
+      dataGrip.disabled = dataNarrow.matches;
+      if (dataNarrow.matches) {
+        dataCard.style.removeProperty('left');
+        dataCard.style.removeProperty('top');
+        dataCard.style.removeProperty('right');
+        return;
+      }
+      const region = outputPane.getBoundingClientRect();
+      const card = dataCard.getBoundingClientRect();
+      const id = store.envelope.activeId;
+      const intent = pos ?? (dataDrag?.moved ? dataPosition : (id ? store.envelope.dataPanel[id] : undefined) ?? defaultPos(region));
+      dataPosition = clampPanel(intent, card, region);
+      dataCard.style.left = `${dataPosition.x}px`;
+      dataCard.style.top = `${dataPosition.y}px`;
+      dataCard.style.right = 'auto';
+    }
+    function cancelDataDrag() {
+      if (!dataDrag) return;
+      const id = dataDrag.pointerId;
+      dataDrag = null;
+      delete dataCard.dataset.dragging;
+      try { dataGrip.releasePointerCapture(id); } catch { /* The pointer may already be gone. */ }
+      placeDataPanel();
+    }
+    dataGrip.addEventListener('pointerdown', (e) => {
+      const id = store.envelope.activeId;
+      if (!id || !state.dataOpen || dataNarrow.matches || dataDrag || e.button !== 0 || e.isPrimary === false) return;
+      placeDataPanel();
+      dataDrag = { pointerId: e.pointerId, projectId: id, from: { x: e.clientX, y: e.clientY }, start: { ...dataPosition }, moved: false };
+      e.preventDefault();
+      e.stopPropagation();
+      dataGrip.focus();
+      try { dataGrip.setPointerCapture(e.pointerId); } catch { /* Synthetic pointers have no capture. */ }
+    });
+    dataGrip.addEventListener('pointermove', (e) => {
+      const drag = dataDrag;
+      if (!drag || e.pointerId !== drag.pointerId) return;
+      if (dataNarrow.matches) { cancelDataDrag(); return; }
+      const point = { x: e.clientX, y: e.clientY };
+      if (!drag.moved && !crossedThreshold(drag.from, point)) return;
+      drag.moved = true;
+      dataCard.dataset.dragging = 'true';
+      placeDataPanel(positionFromDrag(drag.start, drag.from, point));
+    });
+    dataGrip.addEventListener('pointerup', (e) => {
+      const drag = dataDrag;
+      if (!drag || e.pointerId !== drag.pointerId) return;
+      if (drag.moved && drag.projectId === store.envelope.activeId) {
+        const pos = { ...dataPosition };
+        store.update((draft) => { draft.dataPanel[drag.projectId] = pos; });
+      }
+      cancelDataDrag();
+    });
+    for (const event of ['pointercancel', 'lostpointercapture']) dataGrip.addEventListener(event, (e) => {
+      if ((e as PointerEvent).pointerId === dataDrag?.pointerId) cancelDataDrag();
+    });
+    dataGrip.addEventListener('keydown', (e) => {
+      if (dataDrag || dataNarrow.matches || e.altKey || e.ctrlKey || e.metaKey) return;
+      const delta = e.key === 'ArrowLeft' ? [-1, 0] : e.key === 'ArrowRight' ? [1, 0]
+        : e.key === 'ArrowUp' ? [0, -1] : e.key === 'ArrowDown' ? [0, 1] : null;
+      const id = store.envelope.activeId;
+      if (!delta || !id) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const step = e.shiftKey ? 32 : 8;
+      placeDataPanel({ x: dataPosition.x + delta[0] * step, y: dataPosition.y + delta[1] * step });
+      const pos = { ...dataPosition };
+      store.update((draft) => { draft.dataPanel[id] = pos; });
+    });
+    const dataResize = new ResizeObserver(() => placeDataPanel());
+    dataResize.observe(outputPane);
+    dataResize.observe(dataCard);
+    dataNarrow.addEventListener('change', () => { cancelDataDrag(); placeDataPanel(); });
+
     // ---- the workspace ----
     /** Load a project by id. A switch replaces the whole document registry, so
      *  the previous project's text is never one Ctrl-Z away. */
@@ -1086,7 +1334,10 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       state.tabs = selectTab(state.tabs, index >= 0 ? index : rootIndex(state.tabs));
       source.value = toSource(state.tabs);
       editor?.setDocuments(state.tabs.files.map((f) => f.body), state.tabs.active);
-      if (store.envelope.activeId !== id) consoleNewSession();
+      if (store.envelope.activeId !== id) {
+        setDataOpen(false, { focus: false });
+        state.circuitFile = null;
+      }
       store.update((draft) => {
         draft.activeId = id;
         draft.activeFile = activeFile(state.tabs).name;
@@ -1152,9 +1403,14 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         draft.scratch = r.list;
         draft.activeId = r.created.id;
         draft.activeFile = fileName;
+        for (const file of state.tabs.files) {
+          const images = draft.sourceImages[sourceImageKey(id, file.name)];
+          if (images) draft.sourceImages[sourceImageKey(r.created.id, file.name)] = { ...images };
+        }
         created = r.created.id;
       });
       if (created) {
+        state.circuitFile = null;
         status.textContent = `Copied into your own project so the example stays as it shipped.`;
         renderWorkspace();
       }
@@ -1173,7 +1429,43 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         draft.scratch = r.list;
         created = r.created.id;
       });
-      if (created) loadProject(created);
+      if (created) {
+        loadProject(created);
+        closeSwitcher();
+      }
+    }
+
+    /** Import one file through the same store limits as a new project. The
+     *  picker stays disabled until its read settles, including a failed read. */
+    async function importProject() {
+      const file = importPicker.files?.[0];
+      if (!file || importPicker.disabled) return;
+      importPicker.disabled = true;
+      importButton.disabled = true;
+      try {
+        const source = await file.text();
+        const result = createScratch(store.envelope.scratch, {
+          name: file.name.replace(/\.circ$/i, '').trim() || 'Untitled',
+          source,
+          now: nowMs(),
+          keep: store.envelope.activeId,
+        });
+        if (!result.created) {
+          status.textContent = describeNote({ kind: 'skipped', names: result.skipped.map((p) => p.name) }, 'import');
+          return;
+        }
+        store.update((draft) => { draft.scratch = result.list; });
+        loadProject(result.created.id);
+        closeSwitcher();
+        status.textContent = `Imported ${file.name}.` + (result.evicted.length
+          ? ` ${describeNote({ kind: 'evicted', names: result.evicted.map((p) => p.name) })}` : '');
+      } catch {
+        status.textContent = `Could not read ${file.name}.`;
+      } finally {
+        importPicker.value = '';
+        importPicker.disabled = false;
+        importButton.disabled = false;
+      }
     }
 
     // ---- the workspace explorer ----
@@ -1199,32 +1491,15 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     const remembered = new Map<string, { errors: number; warnings: number }>();
     /** Index into the flattened tree that holds the single tab stop. */
     let treeFocus = 0;
-    let treeNodes: TreeNode[] = [];
-
-    const groupSlug = (label: string) => label.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    let treeNodes: readonly TreeNode[] = [];
+    let query = '';
+    let searchExpanded = new Set<string>();
 
     /** The tree as data. Rebuilt on every render rather than cached: each of
      *  its inputs — the catalogue, the scratch list, the file set, the
      *  analysis — moves on its own schedule. */
     function treeInput(): TreeInput {
-      // "Yours" is not a catalogue group — it comes from the envelope — so the
-      // array is typed off TreeInput rather than inferred from CATALOGUE_GROUPS.
-      const groups: TreeInput['groups'][number][] = CATALOGUE_GROUPS
-        .filter((g) => catalogue.some((c) => c.group === g))
-        .map((g) => ({
-          id: groupSlug(g),
-          label: g as string,
-          projects: catalogue
-            .filter((c) => c.group === g)
-            .map((c) => ({ id: c.id, label: c.label, editable: false })),
-        }));
-      groups.push({
-        id: 'yours',
-        label: 'Yours',
-        projects: [...store.envelope.scratch]
-          .sort((a, b) => b.updatedAt - a.updatedAt)
-          .map((p) => ({ id: p.id, label: p.name, editable: true })),
-      });
+      const groups = displayGroups(countedCatalogue, store.envelope.scratch);
       return {
         groups,
         activeId: store.envelope.activeId,
@@ -1243,9 +1518,14 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
 
     /** Open a row and redraw. */
     function expandNode(id: string, open: boolean) {
-      if (expanded.has(id) === open) return;
-      expanded = toggleExpanded(expanded, id);
-      persistExpanded();
+      if (query.trim()) {
+        if (searchExpanded.has(id) === open) return;
+        searchExpanded = toggleExpanded(searchExpanded, id);
+      } else {
+        if (expanded.has(id) === open) return;
+        expanded = toggleExpanded(expanded, id);
+        persistExpanded();
+      }
       renderTree();
     }
 
@@ -1266,7 +1546,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
 
     function badgeEl(severity: 'error' | 'warning', count: number): HTMLElement {
       const badge = document.createElement('span');
-      badge.className = 'pg-tree-badge';
+      badge.className = 'pg-switch-badge';
       badge.dataset.severity = severity;
       badge.textContent = String(count);
       // The accessible name already carries the counts in words.
@@ -1291,21 +1571,55 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       return b;
     }
 
+    /** The breadcrumb names the open project the way the tree does: its
+     *  group's label, then its own. Rendered with the tree, which redraws on
+     *  every load, rename and duplicate. */
+    function renderCrumb() {
+      const id = store.envelope.activeId;
+      const input = treeInput();
+      const group = input.groups.find((g) => g.id === groupOf(input, id))?.label ?? 'Mine';
+      crumbGroup.textContent = `${group} /`;
+      crumbName.textContent = activeLabel();
+    }
+
     function renderTree(opts: { keepFocusOn?: string | null } = {}) {
+      renderCrumb();
       const wantedId = opts.keepFocusOn !== undefined
         ? opts.keepFocusOn
         : (treeNodes[treeFocus]?.id ?? null);
-      treeNodes = visibleNodes(treeInput());
+      const input = treeInput();
+      // Search also reaches collapsed groups, without saving an expansion the
+      // reader never chose. Clearing it restores the original tree.
+      if (query.trim()) input.expanded = new Set([
+        ...input.groups.map((g) => g.id), ...(input.activeId ? [input.activeId] : []),
+      ]);
+      treeNodes = filterNodes(visibleNodes(input, nowMs()), query);
+      if (query.trim()) {
+        let groupOpen = true;
+        let projectOpen = true;
+        treeNodes = treeNodes.flatMap((node): TreeNode[] => {
+          if (node.kind === 'group') {
+            groupOpen = searchExpanded.has(node.id);
+            return [{ ...node, expanded: groupOpen }];
+          }
+          if (!groupOpen) return [];
+          if (node.kind === 'project') {
+            projectOpen = node.expandable && searchExpanded.has(node.id);
+            return [{ ...node, expanded: projectOpen }];
+          }
+          return projectOpen ? [node] : [];
+        });
+      }
       treeFocus = preferredFocus(treeNodes, wantedId);
 
       const tree = document.createElement('div');
-      tree.className = 'pg-tree';
+      tree.className = 'pg-switch-tree';
       tree.setAttribute('role', 'tree');
       tree.setAttribute('aria-label', 'Projects and files');
 
       treeNodes.forEach((node, i) => {
         const row = document.createElement('div');
-        row.className = `pg-tree-row pg-tree-${node.kind}`;
+        row.className = `pg-switch-row pg-switch-${node.kind}`;
         row.setAttribute('role', 'treeitem');
         row.setAttribute('aria-level', String(node.level));
         row.dataset.node = node.id;
@@ -1325,16 +1639,17 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         // otherwise: a disabled-looking triangle that does nothing is worse
         // than the indent alone.
         const twisty = document.createElement('span');
-        twisty.className = 'pg-tree-twisty';
+        twisty.className = 'pg-switch-twisty';
         twisty.setAttribute('aria-hidden', 'true');
         const openable = node.kind === 'group' || (node.kind === 'project' && node.expandable);
         twisty.textContent = openable ? (node.expanded ? '▾' : '▸') : '';
-        row.appendChild(twisty);
+        if (node.kind !== 'group') row.appendChild(twisty);
 
         const name = document.createElement('span');
-        name.className = 'pg-tree-label';
+        name.className = 'pg-switch-label';
         name.textContent = node.label;
         row.appendChild(name);
+        if (node.kind === 'group') row.appendChild(twisty);
 
         if (node.kind === 'project') {
           row.dataset.pick = node.id;
@@ -1346,17 +1661,23 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           if (node.severity) {
             row.appendChild(badgeEl(node.severity, node.badge));
             parts.push(`${node.badge} ${node.severity}${node.badge === 1 ? '' : 's'}`);
+          } else {
+            const meta = document.createElement('span');
+            meta.className = 'pg-switch-meta';
+            meta.textContent = node.meta;
+            row.appendChild(meta);
+            parts.push(node.meta);
           }
           if (node.editable) {
             const actions = document.createElement('span');
-            actions.className = 'pg-tree-actions';
+            actions.className = 'pg-switch-actions';
             const id = node.id;
             const label = node.label;
-            actions.appendChild(iconButton('pg-tree-action', '✎', `Rename ${label}`, () => startRenameProject(id)));
+            actions.appendChild(iconButton('pg-switch-action', '✎', `Rename ${label}`, () => startRenameProject(id)));
             actions.appendChild(
-              iconButton('pg-tree-action', '⧉', `Duplicate ${label}`, () => duplicateProject(id)),
+              iconButton('pg-switch-action', '⧉', `Duplicate ${label}`, () => duplicateProject(id)),
             );
-            const del = iconButton('pg-tree-action', '×', `Delete ${label}`, () => armOrDeleteProject(id));
+            const del = iconButton('pg-switch-action', '×', `Delete ${label}`, () => armOrDeleteProject(id));
             if (confirmProject === id) {
               del.dataset.confirm = 'true';
               del.setAttribute('aria-label', `Delete ${label}? Activate again to confirm`);
@@ -1365,7 +1686,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
             row.appendChild(actions);
           }
           if (node.active) {
-            const add = iconButton('pg-tree-action pg-tree-add', '＋', 'Add a file', addNewFile);
+            const add = iconButton('pg-switch-action pg-switch-add', '＋', 'Add a file', addNewFile);
             row.appendChild(add);
           }
         }
@@ -1379,7 +1700,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           }
           if (node.root) {
             const chip = document.createElement('span');
-            chip.className = 'pg-tree-root';
+            chip.className = 'pg-switch-root';
             chip.textContent = 'root';
             chip.setAttribute('aria-hidden', 'true');
             row.appendChild(chip);
@@ -1393,7 +1714,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           }
           if (node.conflict) {
             const mark = document.createElement('span');
-            mark.className = 'pg-tree-conflict';
+            mark.className = 'pg-switch-conflict';
             mark.textContent = '⚠';
             mark.setAttribute('aria-hidden', 'true');
             row.appendChild(mark);
@@ -1406,12 +1727,12 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           // way a project is rather than only through F2 — which is reachable
           // but undiscoverable, and unusable without a keyboard.
           const fileActions = document.createElement('span');
-          fileActions.className = 'pg-tree-actions';
+          fileActions.className = 'pg-switch-actions';
           fileActions.appendChild(
-            iconButton('pg-tree-action', '✎', `Rename ${node.label}`, () => startRename(fileIndex)),
+            iconButton('pg-switch-action', '✎', `Rename ${node.label}`, () => startRename(fileIndex)),
           );
           fileActions.appendChild(
-            iconButton('pg-tree-action', '×', `Delete ${node.label}`, () => armOrDelete(fileIndex)),
+            iconButton('pg-switch-action', '×', `Delete ${node.label}`, () => armOrDelete(fileIndex)),
           );
           row.appendChild(fileActions);
 
@@ -1448,15 +1769,21 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         // a row that failed to render. Only "Yours" can be empty today.
         if (node.kind === 'group' && node.expanded && node.count === 0) {
           const empty = document.createElement('div');
-          empty.className = 'pg-ws-empty';
+          empty.className = 'pg-switch-empty';
           empty.textContent = 'Edit an example to start your own.';
           tree.appendChild(empty);
         }
       });
 
-      wsBody.querySelector('.pg-tree')?.remove();
-      wsBody.querySelector('.pg-ws-fallback')?.remove();
+      wsBody.querySelector('.pg-switch-tree')?.remove();
+      wsBody.querySelector('.pg-switch-fallback')?.remove();
       wsBody.insertBefore(tree, wsError);
+      if (treeNodes.length === 0) {
+        const empty = document.createElement('p');
+        empty.className = 'pg-switch-empty';
+        empty.textContent = 'No circuits found.';
+        tree.appendChild(empty);
+      }
 
       // One line naming the first file that cannot be written back, so the
       // reader learns why a row is marked rather than only that it is.
@@ -1465,32 +1792,74 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         ? `${state.tabs.files[first.index].name}: ${CONFLICT_TEXT[first.reason]}`
         : '';
 
-      // The editor panel is labelled by whichever file row is current.
-      const activeRow = tree.querySelector<HTMLElement>('.pg-tree-file[aria-current="true"]');
-      if (activeRow) {
-        activeRow.id = `pg-tree-file-${state.tabs.active}`;
-        editorWrap.setAttribute('aria-labelledby', activeRow.id);
-      } else {
-        editorWrap.removeAttribute('aria-labelledby');
-      }
+      const activeRow = tree.querySelector<HTMLElement>('.pg-switch-file[aria-current="true"]');
+      if (activeRow) activeRow.id = `pg-switch-file-${state.tabs.active}`;
+      // The strip reads the same state, and the editor panel is labelled by
+      // its current tab.
+      renderFileTabs();
     }
+
+    // ---- the file strip ----
+    /** One tab per file, in order, the active one selected and the only tab
+     *  stop; rebuilt whole, since a strip of a handful of names is cheap. */
+    function renderFileTabs() {
+      for (const old of filesEl.querySelectorAll('.pg-file')) old.remove();
+      state.tabs.files.forEach((f, i) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'pg-file';
+        b.setAttribute('role', 'tab');
+        b.id = `pg-file-${i}`;
+        b.dataset.file = String(i);
+        const active = i === state.tabs.active;
+        b.setAttribute('aria-selected', String(active));
+        b.setAttribute('aria-controls', 'pg-editor-panel');
+        b.tabIndex = active ? 0 : -1;
+        b.textContent = f.name;
+        b.addEventListener('click', () => showFile(i));
+        filesEl.insertBefore(b, fileAdd);
+      });
+      editorWrap.setAttribute('aria-labelledby', `pg-file-${state.tabs.active}`);
+    }
+    filesEl.addEventListener('keydown', (e) => {
+      const at = state.tabs.active;
+      const last = state.tabs.files.length - 1;
+      const next =
+        e.key === 'ArrowLeft' ? Math.max(0, at - 1)
+        : e.key === 'ArrowRight' ? Math.min(last, at + 1)
+        : e.key === 'Home' ? 0
+        : e.key === 'End' ? last
+        : null;
+      if (next === null || !(e.target as HTMLElement).classList.contains('pg-file')) return;
+      e.preventDefault();
+      showFile(next);
+    });
+    fileAdd.addEventListener('click', addNewFile);
 
     /** Kept for the callers that predate the tree; the tree is the workspace. */
     const renderWorkspace = renderTree;
 
     function focusNode(index: number) {
       treeFocus = Math.max(0, Math.min(index, treeNodes.length - 1));
-      for (const row of wsBody.querySelectorAll<HTMLElement>('.pg-tree-row')) {
+      for (const row of wsBody.querySelectorAll<HTMLElement>('.pg-switch-row')) {
         row.tabIndex = Number(row.dataset.index) === treeFocus ? 0 : -1;
       }
-      wsBody.querySelector<HTMLElement>(`.pg-tree-row[data-index="${treeFocus}"]`)?.focus();
+      const row = wsBody.querySelector<HTMLElement>(`.pg-switch-row[data-index="${treeFocus}"]`);
+      row?.focus();
+      row?.scrollIntoView({ block: 'nearest' });
     }
 
     /** Focus the row showing file `index`, which is what every file operation
      *  wants afterwards. */
+    /** Focus follows the file: into the tree's row while the card is open (a
+     *  rename or a delete there keeps the reader where they were), else onto
+     *  the strip's tab. */
     function focusFileTab(index: number) {
-      const at = treeNodes.findIndex((n) => n.kind === 'file' && n.index === index);
-      if (at >= 0) focusNode(at);
+      if (!wsRoot.hidden) {
+        const at = treeNodes.findIndex((n) => n.kind === 'file' && n.index === index);
+        if (at >= 0) { focusNode(at); return; }
+      }
+      filesEl.querySelector<HTMLElement>(`.pg-file[data-file="${index}"]`)?.focus();
     }
 
     /** Enter, Space, or a click. A folder toggles; a project loads; a file
@@ -1515,13 +1884,19 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           return;
         }
         loadProject(node.id);
+        closeSwitcher();
         return;
       }
       showFile(node.index);
+      closeSwitcher();
     }
 
     wsBody.addEventListener('keydown', (e) => {
-      const row = (e.target as HTMLElement).closest<HTMLElement>('.pg-tree-row');
+      const target = e.target as HTMLElement;
+      // Nested controls own Enter and Space. Tab reaches the focused row's
+      // actions; arrows, F2 and Delete remain the tree's shortcuts.
+      if (target.closest('button, input')) return;
+      const row = target.closest<HTMLElement>('.pg-switch-row');
       if (!row) return;
       const index = Number(row.dataset.index);
       const node = treeNodes[index];
@@ -1566,7 +1941,10 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       // a rename input, and the arrows must still move the caret in the editor.
       e.preventDefault();
       if (move.kind === 'focus') focusNode(move.index);
-      else expandNode(move.id, move.kind === 'expand');
+      else {
+        expandNode(move.id, move.kind === 'expand');
+        focusNode(treeFocus);
+      }
     });
 
     // ---- project operations ----
@@ -1576,6 +1954,10 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         const r = duplicateScratch(draft.scratch, id, { now: nowMs() });
         if (!r || !r.created) return;
         draft.scratch = r.list;
+        for (const file of splitFiles(r.created.source)) {
+          const images = draft.sourceImages[sourceImageKey(id, file.name)];
+          if (images) draft.sourceImages[sourceImageKey(r.created.id, file.name)] = { ...images };
+        }
         created = r.created.id;
       });
       if (created) loadProject(created);
@@ -1594,6 +1976,11 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       const wasActive = store.envelope.activeId === id;
       remembered.delete(id);
       store.update((draft) => {
+        const source = draft.scratch.find((p) => p.id === id)?.source ?? '';
+        for (const file of splitFiles(source)) {
+          const key = sourceImageKey(id, file.name);
+          delete draft.sourceImages[key]; imageContexts.delete(key);
+        }
         draft.scratch = deleteScratch(draft.scratch, id);
         if (wasActive) draft.activeId = null;
       });
@@ -1605,11 +1992,11 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     /** Swaps the row's label for an input. Escape reverts; a blur commits. */
     function startRenameProject(id: string) {
       const current = store.envelope.scratch.find((p) => p.id === id);
-      const row = wsBody.querySelector<HTMLElement>(`.pg-tree-row[data-node="${CSS.escape(id)}"]`);
-      const nameEl = row?.querySelector<HTMLElement>('.pg-tree-label');
+      const row = wsBody.querySelector<HTMLElement>(`.pg-switch-row[data-node="${CSS.escape(id)}"]`);
+      const nameEl = row?.querySelector<HTMLElement>('.pg-switch-label');
       if (!current || !row || !nameEl) return;
       const input = document.createElement('input');
-      input.className = 'pg-ws-input';
+      input.className = 'pg-switch-input';
       input.value = current.name;
       input.setAttribute('aria-label', 'Project name');
       let done = false;
@@ -1634,11 +2021,98 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     }
 
     wsNew.addEventListener('click', newProject);
+    importButton.addEventListener('click', () => importPicker.click());
+    importPicker.addEventListener('change', importProject);
+    switchQuery.addEventListener('input', () => {
+      query = switchQuery.value;
+      const input = treeInput();
+      searchExpanded = new Set([
+        ...expanded, ...input.groups.map((g) => g.id), ...(input.activeId ? [input.activeId] : []),
+      ]);
+      renderTree();
+    });
+    switchQuery.addEventListener('keydown', (e) => {
+      if (e.isComposing || (e.key !== 'ArrowDown' && e.key !== 'Enter')) return;
+      e.preventDefault();
+      const matches = treeNodes.filter((n) => n.kind === 'project');
+      if (e.key === 'Enter' && matches.length === 1) {
+        loadProject(matches[0].id);
+        closeSwitcher();
+      }
+      else focusNode(0);
+    });
 
-    wsToggle.addEventListener('click', () => {
-      const open = wsToggle.getAttribute('aria-expanded') === 'true';
-      wsToggle.setAttribute('aria-expanded', String(!open));
-      wsRoot.toggleAttribute('data-collapsed', open);
+    // ---- the workspace card ----
+    // The tree opens under the breadcrumb and closes on Escape, on a click
+    // outside it, or on the breadcrumb again; focus goes back to the button
+    // it came from. Nothing else on the bench moves when it opens.
+    function openSwitcher() {
+      setSwitcherOpen(true);
+      switchQuery.focus();
+      switchQuery.select();
+    }
+    function closeSwitcher(opts: { focus?: boolean } = {}) { setSwitcherOpen(false, opts); }
+    function setSwitcherOpen(open: boolean, opts: { focus?: boolean } = {}) {
+      if (open === !wsRoot.hidden) return;
+      crumb.setAttribute('aria-expanded', String(open));
+      crumbChevron.textContent = open ? '▴' : '▾';
+      wsRoot.hidden = !open;
+      scrim.hidden = !open;
+      if (open) {
+        renderTree();
+        document.addEventListener('pointerdown', onOutsidePointer, true);
+        document.addEventListener('keydown', onSwitcherKey, true);
+      } else {
+        document.removeEventListener('pointerdown', onOutsidePointer, true);
+        document.removeEventListener('keydown', onSwitcherKey, true);
+        query = '';
+        switchQuery.value = '';
+        renderTree();
+        if (opts.focus !== false) crumb.focus();
+      }
+    }
+    function onOutsidePointer(e: Event) {
+      const t = e.target as Node | null;
+      if (t && (wsRoot.contains(t) || crumb.contains(t))) return;
+      closeSwitcher({ focus: t === scrim || wsRoot.contains(document.activeElement) });
+    }
+    function onSwitcherKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      // A rename input owns its own Escape; the card closes on the next one.
+      if ((e.target as HTMLElement | null)?.classList.contains('pg-switch-input')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      closeSwitcher();
+    }
+    crumb.addEventListener('click', () => wsRoot.hidden ? openSwitcher() : closeSwitcher());
+    scrim.addEventListener('click', () => closeSwitcher());
+    const nav = el.querySelector<HTMLElement>('.pg-nav')!;
+    new ResizeObserver(() => {
+      const height = nav.getBoundingClientRect().height;
+      if (height > 0) el.style.setProperty('--pg-nav-h', `${height}px`);
+    }).observe(nav);
+    document.addEventListener('keydown', (e) => {
+      if (e.isComposing || e.altKey || e.shiftKey || !(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'k') return;
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('input, textarea') && target !== switchQuery && !target.closest('.pg-cm')) return;
+      e.preventDefault();
+      openSwitcher();
+    });
+    // The popover is non-modal. Leaving it by Tab closes it without stealing
+    // focus from the next bench control.
+    wsRoot.addEventListener('focusout', (e) => {
+      const next = e.relatedTarget as Node | null;
+      if (next && !wsRoot.contains(next) && !crumb.contains(next)) closeSwitcher({ focus: false });
+    });
+    wsBody.addEventListener('focusin', (e) => {
+      const row = (e.target as HTMLElement).closest<HTMLElement>('.pg-switch-row');
+      if (!row) return;
+      treeFocus = Number(row.dataset.index);
+      for (const candidate of wsBody.querySelectorAll<HTMLElement>('.pg-switch-row')) {
+        const active = candidate === row;
+        candidate.tabIndex = active ? 0 : -1;
+        for (const action of candidate.querySelectorAll<HTMLButtonElement>('button')) action.tabIndex = active ? 0 : -1;
+      }
     });
 
     // ---- share ----
@@ -1653,7 +2127,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         input.className = 'pg-share-fallback';
         input.readOnly = true;
         input.value = text;
-        statusActions.appendChild(input);
+        navActions.appendChild(input);
         input.focus();
         input.select();
         input.addEventListener('blur', () => input.remove(), { once: true });
@@ -1725,6 +2199,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       if (idKind(id) === 'scratch') return store.envelope.scratch.find((p) => p.id === id)?.name ?? 'circuit';
       return catalogue.find((c) => c.id === id)?.label ?? 'circuit';
     }
+    const artifactLabel = () => state.tabs.files.length > 1 ? activeFile(state.tabs).name.replace(/\.circ$/, '') : activeLabel();
 
     /**
      * The button follows the artifact: disabled with no build, and with a
@@ -1734,11 +2209,15 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     function refreshActions() {
       const a = state.artifact;
       downloadBtn.disabled = !a;
+      // The button says what it would save: the artifact's name, and its
+      // size beside it in the muted tone. With no build it is the bare verb.
+      downloadLabel.textContent = a ? artifactFileName(artifactLabel()) : 'Download';
+      downloadMeta.textContent = a ? formatBytes(a.size) : '';
       downloadBtn.title = !a
         ? 'Compile a circuit first'
         : state.stale
-          ? `Download the last good build, ${artifactFileName(activeLabel())} (${formatBytes(a.size)}) — the source has changed since it was built`
-          : `Download ${artifactFileName(activeLabel())} (${formatBytes(a.size)})`;
+          ? `Download the last good build, ${artifactFileName(artifactLabel())} (${formatBytes(a.size)}) — the source has changed since it was built`
+          : `Download ${artifactFileName(artifactLabel())} (${formatBytes(a.size)})`;
       if (state.stale && a) downloadBtn.dataset.stale = '';
       else delete downloadBtn.dataset.stale;
     }
@@ -1754,7 +2233,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       link.download = name;
       link.hidden = true;
       // In the document for the click, so the page's own listeners see it.
-      statusActions.appendChild(link);
+      navActions.appendChild(link);
       link.click();
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(href), 1000);
@@ -1763,7 +2242,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     downloadBtn.addEventListener('click', () => {
       const a = state.artifact;
       if (!a) return;
-      const name = artifactFileName(activeLabel());
+      const name = artifactFileName(artifactLabel());
       downloadBytes(name, a.bytes, 'application/wasm');
       flash(downloadBtn, 'Saved');
       status.textContent = state.stale
@@ -1774,13 +2253,36 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
 
     // ---- settings ----
     const settings = () => store.envelope.settings;
-    /** The reader's ROM text, per memory. Session state: an image can be
-     *  megabytes once hex-encoded, far past what the envelope may hold. */
-    const romImages = new Map<string, string>();
+    /** Each file retains its declaration-owned images across runtime rebuilds. */
+    let romImages = new Map<string, string>();
+    const imageContexts = new Map<string, {
+      images: Map<string, string>; implied: Map<string, Set<number>>;
+      files: Map<string, { text: string; file: string }>;
+    }>();
+    function selectImages() {
+      const key = sourceImageKey(store.envelope.activeId, activeFile(state.tabs).name);
+      let context = imageContexts.get(key);
+      if (!context) {
+        context = { images: new Map(Object.entries(store.envelope.sourceImages[key] ?? {})), implied: new Map(), files: new Map() };
+        imageContexts.set(key, context);
+      }
+      romImages = context.images; romImplied = context.implied; imageFiles = context.files;
+    }
+    function importedImagesFor(analysis: Analysis | null): ImportedImages {
+      return {
+        files: new Map(analysis?.files.map((f) => [f.file_id, f.path]) ?? []),
+        images: new Map(state.tabs.files.map((f) => {
+          const key = sourceImageKey(store.envelope.activeId, f.name);
+          return [rootPathFor(f.name), imageContexts.get(key)?.images ?? new Map(Object.entries(store.envelope.sourceImages[key] ?? {}))];
+        })),
+      };
+    }
+    const hasImportedImages = () => state.tabs.files.some((f) => f.name !== activeFile(state.tabs).name &&
+      Object.keys(store.envelope.sourceImages[sourceImageKey(store.envelope.activeId, f.name)] ?? {}).length > 0);
     const currentRoms = (): MemorySymbol[] => {
       const a = state.analysis;
       if (!a) return [];
-      return romSymbols(a.symbols, rootFileId(a.files, rootPathFor(rootOf(state.tabs.files).name)));
+      return romSymbols(a.symbols, rootFileId(a.files, rootPathFor(activeFile(state.tabs).name)));
     };
     const preloads = () => preloadsFor(romImages, currentRoms());
 
@@ -1799,9 +2301,10 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     /** Addresses holding a zero the reader never typed, per rom. The image
      *  cannot tell a chosen zero from a gap it had to fill, so the distinction
      *  is carried beside it. */
-    const romImplied = new Map<string, Set<number>>();
+    let romImplied = new Map<string, Set<number>>();
     /** Roms whose hex escape hatch is showing. */
     const hexOpen = new Set<string>();
+    let imageFiles = new Map<string, { text: string; file: string }>();
 
     /** The running circuit's runtime, or null when nothing is simulating or
      *  the artifact predates memories. Contents can be read whenever a
@@ -1828,40 +2331,30 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     }
 
     /** The tab appears and disappears with the declared set. */
-    function updateMemTab() {
+    function updateMemColumn() {
       const mems = currentRoms();
-      memTab.hidden = mems.length === 0;
-      memCount.hidden = mems.length === 0;
-      memCount.textContent = String(mems.length);
-      memTab.setAttribute(
-        'aria-label',
-        `Memory, ${mems.length} declared`,
-      );
-      // A drawer left on a tab that no longer exists would show a blank panel
-      // with no tab selected, so the selection falls back to the console.
-      // Nothing is stored, so there is nothing to restore when the memory
-      // comes back on the next keystroke.
-      if (mems.length === 0 && currentDrawerTab() === 'memory') {
-        for (const b of drawerTabs) b.setAttribute('aria-selected', String(b.dataset.drawer === 'console'));
-        for (const p of drawerPanels) p.hidden = p.dataset.drawerPanel !== 'console';
-      }
+      drawer.toggleAttribute('data-mem', mems.length > 0);
+      memColumn.hidden = drawerRule.hidden = mems.length === 0;
+      memColumn.setAttribute('aria-label', `Memory, ${mems.length} declared`);
+      termMem.setAttribute('aria-disabled', String(mems.length === 0));
     }
 
     /** True only when the memory dump is actually on screen. Every visible
      *  word is a call across the wasm boundary, so nothing reads one otherwise. */
     function memVisible(): boolean {
-      return !drawer.hidden && drawer.dataset.open === 'true' && currentDrawerTab() === 'memory' && !memTab.hidden;
+      return !term.hidden && term.dataset.open === 'true' && drawer.hasAttribute('data-mem');
     }
 
     /** Rebuild the whole panel. Cheap: the number of declared memories is
      *  small, and only one page of one memory is ever read. */
     function renderMemory(opts: { force?: boolean } = {}) {
-      updateMemTab();
+      updateMemColumn();
       const mems = currentRoms();
       if (mems.length === 0) {
         memPanel.innerHTML = '';
         return;
       }
+      if (!memVisible()) return;
       // Typing in the hex box must not destroy the box being typed into, so a
       // rebuild is skipped while a TEXT FIELD inside the panel has focus and
       // nothing structural changed. `force` overrides that, and every path
@@ -1916,7 +2409,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           read: () => ({ value: 0n, defined: 0n }),
           live: false,
           editable: false,
-          note: 'A ram holds nothing until the circuit runs. Open the Simulate tab to fill it.',
+          note: 'A ram holds nothing until the circuit runs. Open Live to fill it.',
         };
       }
       const cells = imageCells(romImages.get(mem.name) ?? '', mem);
@@ -1931,7 +2424,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         },
         live: false,
         editable: true,
-        note: 'Not running: this is the image that will be loaded. Open the Simulate tab to watch it live.',
+        note: 'Not running: this is the image that will be loaded. Open Live to watch it.',
       };
     }
 
@@ -1944,48 +2437,58 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
 
       const head = document.createElement('div');
       head.className = 'pg-mem-head';
+      const label = document.createElement('span');
+      label.className = 'pg-mem-tab';
+      label.textContent = 'Memory';
+      head.appendChild(label);
       const title = document.createElement('h3');
       title.className = 'pg-mem-name';
       title.textContent = mem.name;
       head.appendChild(title);
       const shape = document.createElement('span');
       shape.className = 'pg-mem-shape';
-      shape.textContent = `${mem.kind} [${mem.width}, ${mem.addrWidth}] · ${total} word${total === 1 ? '' : 's'}`;
+      shape.textContent = memoryHeader(mem, total);
       head.appendChild(shape);
       const live = document.createElement('span');
       live.className = 'pg-mem-live';
       live.dataset.live = String(source.live);
-      live.textContent = source.live ? 'running' : 'not running';
+      live.textContent = source.live ? 'live' : 'not running';
       head.appendChild(live);
+      const base = document.createElement('div');
+      base.className = 'pg-mem-base';
+      base.setAttribute('role', 'radiogroup');
+      base.setAttribute('aria-label', `${mem.name} value base`);
+      for (const [value, text] of [['hex', 'hex'], ['binary', 'bin'], ['decimal', 'dec']]) {
+        const label = document.createElement('label');
+        const input = document.createElement('input');
+        input.type = 'radio'; input.name = `pg-mem-base-${mem.name}`;
+        input.dataset.setting = 'valueFormat'; input.value = value;
+        input.checked = settings().valueFormat === value;
+        input.setAttribute('aria-label', value);
+        const span = document.createElement('span'); span.textContent = text;
+        label.append(input, span); base.appendChild(label);
+      }
+      head.appendChild(base);
       wrap.appendChild(head);
 
       // --- the grid, which is now the editor as well as the view
       const win = clampWindow(memWindows.get(mem.name) ?? 0, MEM_PAGE, total);
-      const pages = pageCount(MEM_PAGE, total);
-      if (pages > 1) wrap.appendChild(pageNav(mem, win, total));
-      wrap.appendChild(gridTable(mem, source, win));
       const gridError = document.createElement('p');
       gridError.className = 'pg-mem-error';
       gridError.id = memErrorId(mem);
       gridError.setAttribute('role', 'alert');
-      wrap.appendChild(gridError);
-
-      if (source.note) {
-        const note = document.createElement('p');
-        note.className = 'pg-mem-idle';
-        note.textContent = source.note;
-        wrap.appendChild(note);
-      }
 
       // --- controls
       const controls = document.createElement('div');
-      controls.className = 'pg-mem-controls';
+      controls.className = 'pg-mem-tools';
+      controls.appendChild(pageNav(mem, win, total));
 
       const buttons = document.createElement('div');
       buttons.className = 'pg-mem-buttons';
       const clear = document.createElement('button');
       clear.type = 'button';
       clear.className = 'pg-mem-btn';
+      clear.dataset.mem = 'clear';
       clear.textContent = 'Clear';
       clear.title = mem.kind === 'rom'
         ? 'Empty the image, so every word is unknown again'
@@ -1994,14 +2497,16 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       clear.addEventListener('click', () => clearMemory(mem));
       buttons.appendChild(clear);
 
-      if (source.live) {
+      {
         const refresh = document.createElement('button');
         refresh.type = 'button';
         refresh.className = 'pg-mem-btn';
+        refresh.dataset.mem = 'refresh';
+        refresh.disabled = !source.live;
         refresh.textContent = 'Refresh';
         refresh.title = 'Read the contents again';
         refresh.addEventListener('click', () => renderMemory({ force: true }));
-        buttons.appendChild(refresh);
+        buttons.prepend(refresh);
       }
 
       // The image the running circuit holds, as the raw file `--sim`'s `save`
@@ -2009,42 +2514,52 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       const save = document.createElement('button');
       save.type = 'button';
       save.className = 'pg-mem-btn pg-mem-save';
-      save.textContent = 'Save image';
+      save.dataset.mem = 'save';
+      save.textContent = 'Save';
       save.title = source.live
         ? `Download ${mem.name}.bin, every word as the circuit holds it`
-        : 'Open the Simulate or Data tab to save what the circuit holds';
+        : 'Open Live or Data to save what the circuit holds';
       save.disabled = !source.live;
       save.addEventListener('click', () => saveMemoryImage(mem));
-      buttons.appendChild(save);
 
       if (mem.kind === 'rom') {
-        // The hex is behind a checkbox: it is the escape hatch for pasting a
-        // blob or loading a file, not the thing a reader should have to use.
-        const toggle = document.createElement('label');
-        toggle.className = 'pg-mem-hextoggle';
-        const box = document.createElement('input');
-        box.type = 'checkbox';
-        box.checked = hexOpen.has(mem.name);
-        box.addEventListener('change', () => {
-          if (box.checked) hexOpen.add(mem.name);
-          else hexOpen.delete(mem.name);
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'pg-mem-btn pg-mem-load';
+        toggle.dataset.mem = 'load';
+        toggle.textContent = 'Load image…';
+        toggle.setAttribute('aria-expanded', String(hexOpen.has(mem.name)));
+        toggle.addEventListener('click', () => {
+          if (!hexOpen.delete(mem.name)) hexOpen.add(mem.name);
           renderMemory({ force: true });
+          memPanel.querySelector<HTMLButtonElement>(`.pg-mem-item[data-name="${CSS.escape(mem.name)}"] .pg-mem-load`)?.focus();
         });
-        toggle.appendChild(box);
-        toggle.appendChild(document.createTextNode(' Load image'));
         buttons.appendChild(toggle);
       }
+      buttons.appendChild(save);
       controls.appendChild(buttons);
-
-      if (mem.kind === 'rom' && hexOpen.has(mem.name)) controls.appendChild(hexEditor(mem));
+      wrap.appendChild(controls);
+      wrap.appendChild(gridTable(mem, source, win));
+      wrap.appendChild(gridError);
+      const legend = document.createElement('p');
+      legend.className = 'pg-mem-legend';
+      const host = source.live ? memHost() : null;
+      const memId = host ? memIdOf(mem) : null;
+      legend.textContent = legendFor(mem, host && memId !== null ? addressedWord(host, memId) : null);
+      wrap.appendChild(legend);
+      if (source.note) {
+        const note = document.createElement('p');
+        note.className = 'pg-mem-idle'; note.textContent = source.note; wrap.appendChild(note);
+      }
+      if (mem.kind === 'rom' && hexOpen.has(mem.name)) wrap.appendChild(hexEditor(mem));
 
       const meta = document.createElement('div');
-      meta.className = 'pg-rom-meta';
-      controls.appendChild(meta);
+      meta.className = 'pg-rom-meta pg-mem-image';
+      if (mem.kind === 'ram') meta.textContent = imageLine(mem, null);
+      wrap.appendChild(meta);
       const err = document.createElement('div');
       err.className = 'pg-rom-error';
-      controls.appendChild(err);
-      wrap.appendChild(controls);
+      wrap.appendChild(err);
 
       if (mem.kind === 'rom') updateRomStatus(mem, wrap);
       return wrap;
@@ -2083,7 +2598,9 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       file.addEventListener('change', () => {
         const chosen = file.files?.[0];
         if (!chosen) return;
+        const owner = romImages;
         void chosen.arrayBuffer().then((buffer) => {
+          if (romImages !== owner) return;
           const result = imageFromBytes(new Uint8Array(buffer), mem);
           if (!result.ok) {
             status.textContent = result.message;
@@ -2091,6 +2608,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           }
           // A loaded file is entirely the reader's choice, so nothing in it is
           // implied.
+          imageFiles.set(mem.name, { text: result.text, file: chosen.name });
           setImage(mem, result.text, new Set());
           status.textContent = `Loaded ${chosen.name} into ${mem.name}.`;
         });
@@ -2105,7 +2623,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       const back = document.createElement('button');
       back.type = 'button';
       back.className = 'pg-mem-btn';
-      back.textContent = '◀';
+      back.textContent = '◂';
       back.setAttribute('aria-label', 'Previous page');
       back.disabled = win.start === 0;
       back.addEventListener('click', () => {
@@ -2117,13 +2635,13 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       const range = document.createElement('span');
       range.className = 'pg-mem-range';
       range.textContent =
-        `${formatAddress(win.start, mem.addrWidth)}–${formatAddress(win.start + win.count - 1, mem.addrWidth)}`;
+        `0x${formatAddress(win.start, mem.addrWidth)} – 0x${formatAddress(win.start + win.count - 1, mem.addrWidth)}`;
       nav.appendChild(range);
 
       const fwd = document.createElement('button');
       fwd.type = 'button';
       fwd.className = 'pg-mem-btn';
-      fwd.textContent = '▶';
+      fwd.textContent = '▸';
       fwd.setAttribute('aria-label', 'Next page');
       fwd.disabled = win.start + win.count >= total;
       fwd.addEventListener('click', () => {
@@ -2135,7 +2653,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       const jump = document.createElement('input');
       jump.className = 'pg-mem-jump';
       jump.setAttribute('aria-label', `Go to an address in ${mem.name}`);
-      jump.placeholder = 'addr';
+      jump.placeholder = '0x__';
       jump.addEventListener('keydown', (e) => {
         e.stopPropagation();
         if (e.key !== 'Enter') return;
@@ -2146,9 +2664,10 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           return;
         }
         memWindows.set(mem.name, pageContaining(addr, MEM_PAGE, total).start);
-        renderMemory();
+        renderMemory({ force: true });
       });
-      nav.appendChild(jump);
+      const label = document.createElement('label');
+      label.textContent = 'jump '; label.appendChild(jump); nav.appendChild(label);
       return nav;
     }
 
@@ -2160,7 +2679,19 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       const implied = romImplied.get(mem.name) ?? new Set<number>();
       const table = document.createElement('table');
       table.className = 'pg-mem-table';
+      const head = document.createElement('thead');
+      const labels = document.createElement('tr');
+      for (const text of ['addr', ...Array.from({ length: MEM_PER_ROW }, (_, i) => `+${i}`)]) {
+        const th = document.createElement('th');
+        th.scope = 'col'; th.textContent = text;
+        th.className = text === 'addr' ? 'pg-mem-addr' : 'pg-mem-offset';
+        labels.appendChild(th);
+      }
+      head.appendChild(labels); table.appendChild(head);
       const body = document.createElement('tbody');
+      const host = source.live ? memHost() : null;
+      const memId = host ? memIdOf(mem) : null;
+      const addressed = host && memId !== null ? addressedWord(host, memId) : null;
       const rows = dumpRows(source.read, win, MEM_PER_ROW, mem.width, settings().valueFormat);
       for (const row of rows) {
         const tr = document.createElement('tr');
@@ -2172,6 +2703,8 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         for (const c of row.cells) {
           const td = document.createElement('td');
           td.className = 'pg-mem-cell';
+          td.dataset.addr = String(c.addr);
+          if (c.addr === addressed) td.dataset.addressed = 'true';
           td.textContent = c.text;
           if (!c.known) td.dataset.unknown = 'true';
           // A zero that is only there because a later word was written is not
@@ -2212,7 +2745,10 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       implied: ReadonlySet<number>,
       opts: { redraw?: boolean } = {},
     ) {
+      if (imageFiles.get(mem.name)?.text !== text) imageFiles.delete(mem.name);
       romImages.set(mem.name, text);
+      const key = sourceImageKey(store.envelope.activeId, activeFile(state.tabs).name);
+      store.update((draft) => { draft.sourceImages[key] = Object.fromEntries(romImages); });
       romImplied.set(mem.name, new Set(implied));
       applyToView();
       void runTruth(buildStage.seq);
@@ -2221,6 +2757,8 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
 
     /** Swap one cell for an input. Enter writes it; Escape leaves it alone. */
     function editCell(td: HTMLElement, mem: MemorySymbol, addr: number) {
+      if (td.querySelector('input')) return;
+      td.dataset.editing = 'true';
       const format = settings().valueFormat;
       const previous = td.textContent ?? '';
       const input = document.createElement('input');
@@ -2397,9 +2935,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       const parsed = parseRomImage(text, mem);
       if (parsed.ok) {
         err.textContent = '';
-        meta.textContent = text.trim() === ''
-          ? 'No image; the rom starts undefined.'
-          : `${parsed.words} of ${maxWords(mem.addrWidth)} words`;
+        meta.textContent = imageLine(mem, { file: imageFiles.get(mem.name)?.file ?? null, words: parsed.words });
       } else {
         meta.textContent = '';
         err.textContent = parsed.message;
@@ -2439,7 +2975,8 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         // nothing the reader typed or loaded is touched.
         if (settings().valueFormat !== before) {
           sim.view?.view.setValueFormat(settings().valueFormat);
-          if (state.tab === 'data') renderData();
+          if (state.dataOpen) renderData();
+          renderMemory({ force: true });
         }
         schedule();
       },
@@ -2486,10 +3023,11 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         if (note) status.textContent = note;
       }
 
-      showTab(store.envelope.tab as Tab, { persist: false });
-      showDockTab(store.envelope.dock.tab, { persist: false });
-      setDockOpen(store.envelope.dock.open, { persist: false });
-      renderDockBadge();
+      showView(store.envelope.view, { persist: false });
+      setDataOpen(store.envelope.dataOpen, { persist: false, focus: false });
+      showFooterTab(store.envelope.footer.tab, { persist: false });
+      setFooterOpen(store.envelope.footer.open, { persist: false });
+      renderFooterBar();
       applyTruthGate();
       renderWorkspace();
 
@@ -2501,16 +3039,24 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     }
 
     // ---- the pane divider ----
-    const panes = el.querySelector<HTMLElement>('.pg-panes')!;
+    // The source column's width in pixels (design file: `480px 1px
+    // minmax(0, 1fr)`), the envelope's `layout.sourceWidth`.
+    const body = el.querySelector<HTMLElement>('.pg-body')!;
     const separator = el.querySelector<HTMLElement>('.pg-splitter')!;
     const splitter = createSplitter({
-      container: panes,
+      container: body,
       separator,
-      initial: store.envelope.layout.ratios.main ?? 0.5,
-      labels: ['editor', 'output'],
+      unit: 'px',
+      property: '--pg-source-w',
+      initial: store.envelope.layout.sourceWidth,
+      minPx: 320,
+      maxReservePx: 480,
+      stepPx: 16,
+      coarseStepPx: 64,
+      labels: ['source', 'canvas'],
       // Only a drag, a key or a double-click persists; a window resize
       // re-clamps what is rendered and never commits.
-      onCommit: (ratio) => store.update((draft) => { draft.layout.ratios.main = ratio; }),
+      onCommit: (px) => store.update((draft) => { draft.layout.sourceWidth = px; }),
     });
 
     // Below the breakpoint the panes stack, so the divider means nothing: it
@@ -2528,16 +3074,23 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     // drawer takes the rest. Declared after the drawer's handlers, which read
     // it through `refreshDrawerSeparator` only once it exists.
     drawerSplitter = createSplitter({
-      container: outputPane,
+      container: el,
       separator: drawerSeparator,
-      property: '--pg-split-drawer',
+      property: '--pg-drawer-h',
+      unit: 'px',
+      pane: 'second',
       orientation: 'horizontal',
-      minPanePx: 96,
-      minRatio: 0.2,
-      maxRatio: 0.85,
-      initial: store.envelope.layout.ratios.drawer ?? 0.62,
-      labels: ['output', 'drawer'],
-      onCommit: (ratio) => store.update((draft) => { draft.layout.ratios.drawer = ratio; }),
+      minPx: 160,
+      maxReservePx: 200,
+      initial: store.envelope.drawerHeight,
+      labels: ['bench', 'drawer'],
+      measure: () => {
+        const frame = el.getBoundingClientRect();
+        const nav = el.querySelector<HTMLElement>('.pg-nav')!.getBoundingClientRect().height;
+        const footer = el.querySelector<HTMLElement>('.pg-statusline')!.getBoundingClientRect().height;
+        return { start: frame.top + nav, size: Math.max(0, frame.height - nav - footer) };
+      },
+      onCommit: (height) => store.update((draft) => { draft.drawerHeight = height; }),
     });
     refreshDrawerSeparator();
 
@@ -2556,10 +3109,12 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         return;
       }
       state.tabs = next;
+      store.update((draft) => { draft.activeFile = activeFile(state.tabs).name; });
+      schedule();
       editor?.showDocument(state.tabs.active);
       renderTree();
       focusFileTab(state.tabs.active);
-      // No schedule(): the source did not change, only which file is visible.
+      // Selecting a file changes the circuit, not the project or file order.
     }
 
 
@@ -2586,6 +3141,9 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       }
       const name = state.tabs.files[index].name;
       const wasRoot = index === rootIndex(state.tabs);
+      const imageKey = sourceImageKey(store.envelope.activeId, name);
+      imageContexts.delete(imageKey);
+      store.update((draft) => { delete draft.sourceImages[imageKey]; });
       confirmIndex = null;
       if (confirmTimer !== null) window.clearTimeout(confirmTimer);
       confirmTimer = null;
@@ -2616,11 +3174,11 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
      *  Escape reverts, and a blur commits only if the name is legal. */
     function startRename(index: number) {
       disarm();
-      const tab = wsBody.querySelector<HTMLElement>(`.pg-tree-file[data-file="${index}"]`);
-      const nameEl = tab?.querySelector<HTMLElement>('.pg-tree-label');
+      const tab = wsBody.querySelector<HTMLElement>(`.pg-switch-file[data-file="${index}"]`);
+      const nameEl = tab?.querySelector<HTMLElement>('.pg-switch-label');
       if (!tab || !nameEl) return;
       const input = document.createElement('input');
-      input.className = 'pg-ws-input';
+      input.className = 'pg-switch-input';
       input.value = state.tabs.files[index].name;
       input.setAttribute('aria-label', 'File name');
       input.setAttribute('aria-invalid', 'false');
@@ -2633,6 +3191,15 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         if (commit) {
           const next = renameFile(state.tabs, index, input.value);
           if (next !== state.tabs) {
+            const oldKey = sourceImageKey(store.envelope.activeId, state.tabs.files[index].name);
+            const newKey = sourceImageKey(store.envelope.activeId, next.files[index].name);
+            const context = imageContexts.get(oldKey);
+            if (context) { imageContexts.set(newKey, context); imageContexts.delete(oldKey); }
+            store.update((draft) => {
+              const images = draft.sourceImages[oldKey];
+              if (images) draft.sourceImages[newKey] = images;
+              delete draft.sourceImages[oldKey];
+            });
             state.tabs = next;
             status.textContent =
               `Renamed to ${input.value}. Imports keep the old name; update them yourself if another file imports this one.`;
@@ -2690,26 +3257,66 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     // ---- editor ----
     // The textarea is the fallback editing surface: it edits and compiles on
     // its own, and it is removed from the DOM only once CodeMirror has mounted.
+    function readFallbackSource() {
+      const selected = activeFile(state.tabs).name;
+      const tabs = fromSource(source.value);
+      const index = tabs.files.findIndex((f) => f.name === selected);
+      state.tabs = selectTab(tabs, index >= 0 ? index : rootIndex(tabs));
+    }
     source.addEventListener('keydown', (e) => {
       if (e.key === 'Tab') {
         e.preventDefault();
         source.setRangeText('  ', source.selectionStart, source.selectionEnd, 'end');
-        state.tabs = fromSource(source.value);
+        readFallbackSource();
         schedule();
       }
     });
-    /** Every edit arms both stages: the fast one paints squiggles, the slow one
-     *  builds. They never wait on each other. */
+    /** Edits debounce both stages. A new file or project changes the circuit
+     *  immediately, so its old outputs and pending replies are discarded. */
     function schedule() {
       state.doc += 1;
+      const changedCircuit = state.circuitFile !== activeFile(state.tabs).name;
+      const names = state.tabs.files.map((f) => f.name);
+      if (changedCircuit || outputsShouldClear(state.renderedFiles, names)) {
+        // Selection invalidates in-flight replies immediately, before any
+        // debounce can let the previous file's artifact arrive.
+        analyzeStage.claim();
+        buildStage.claim();
+        state.circuitFile = activeFile(state.tabs).name;
+        if (changedCircuit) {
+          consoleNewSession();
+          hooks.onCircuitChanged?.();
+          selectImages();
+          memWindows.clear(); hexOpen.clear();
+        }
+        state.analysis = null;
+        state.analyzedDoc = null;
+        state.diagnostics = [];
+        state.mapped = [];
+        link.decls = []; link.table = null; link.current = null;
+        editor?.setLinkHighlight(null);
+        state.tabs.files.forEach((_, i) => editor?.setDiagnosticsFor(i, []));
+        pipe.errors = 0; pipe.warnings = 0; pipe.failure = null;
+        markOutputs(names, true);
+        renderDiagnostics(); renderDataCount(); renderMemory();
+        void flushPipeline();
+        return;
+      }
       state.stale = true;
       analyzeStage.schedule((seq) => void runAnalyze(seq));
       buildStage.schedule((seq) => void runBuild(seq));
     }
+    async function flushPipeline(): Promise<void> {
+      let analysis: Promise<void> | undefined;
+      let build: Promise<void> | undefined;
+      analyzeStage.flush((seq) => { analysis = runAnalyze(seq); });
+      buildStage.flush((seq) => { build = runBuild(seq); });
+      await Promise.all([analysis, build]);
+    }
     // The fallback surface edits the COMBINED text; re-splitting on every
     // keystroke keeps one model for both surfaces.
     source.addEventListener('input', () => {
-      state.tabs = fromSource(source.value);
+      readFallbackSource();
       persistSource();
       schedule();
     });
@@ -2726,17 +3333,39 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     let editorPromise: Promise<EditorMod> | null = null;
     const loadEditor = () => (editorPromise ??= import('../scripts/circ-editor.ts'));
 
+    const editorControls = el.querySelectorAll<HTMLInputElement>('[data-editor-setting]');
+    function paintEditorPreferences() {
+      const preferences = store.envelope.editor;
+      for (const control of editorControls) {
+        const key = control.dataset.editorSetting as keyof EditorPreferences;
+        if (control.type === 'checkbox') control.checked = preferences.wrapLines;
+        else control.value = String(preferences[key]);
+      }
+      // The fallback observes the same preferences before CodeMirror mounts.
+      source.wrap = preferences.wrapLines ? 'soft' : 'off';
+      source.style.whiteSpace = preferences.wrapLines ? 'pre-wrap' : 'pre';
+      source.style.fontSize = `${preferences.fontSize}px`;
+      source.style.tabSize = String(preferences.tabSize);
+    }
+    for (const control of editorControls) control.addEventListener('change', () => {
+      const key = control.dataset.editorSetting as keyof EditorPreferences;
+      const value = control.type === 'checkbox' ? control.checked : control.valueAsNumber;
+      if (typeof value === 'number' && !Number.isFinite(value)) { paintEditorPreferences(); return; }
+      store.update((draft) => { draft.editor = normalizeEditorPreferences({ ...draft.editor, [key]: value }); });
+      editor?.setPreferences(store.envelope.editor);
+      paintEditorPreferences();
+    });
+    paintEditorPreferences();
+
     function mountEditor(mod: EditorMod) {
       editorMod = mod;
       editor = mod.createEditor(editorHost, {
         doc: activeFile(state.tabs).body,
         theme: mod.currentThemeMode(),
+        preferences: store.envelope.editor,
         ariaLabel: 'circ source',
         onCursor: (index, line, col, lineText) => {
-          // Only the root file's declarations are drawn, so a cursor in a
-          // sibling tab resolves to nothing rather than to the wrong box.
-          const isRoot = index === rootIndex(state.tabs);
-          setCurrentDeclaration(isRoot ? declarationAt(link.decls, line, col, lineText) : null);
+          setCurrentDeclaration(index === state.tabs.active ? declarationAt(link.decls, line, col, lineText) : null);
         },
         onChange: (doc, index) => {
           state.tabs = setBody(state.tabs, index, doc);
@@ -2808,17 +3437,20 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       renderStatus();
     }
 
-    /** Dim the outputs, or clear them outright when the FILE SET changed —
-     *  the only case where the last good preview, table and canvas describe a
-     *  project that no longer exists. */
-    function markOutputs(nextFiles: string[]) {
-      if (outputsShouldClear(state.renderedFiles, nextFiles)) {
+    /** Clear outputs when files change or a caller selects another circuit.
+     *  Body edits within the same target may keep the last good build. */
+    function markOutputs(nextFiles: string[], force = false) {
+      if (force || outputsShouldClear(state.renderedFiles, nextFiles)) {
         state.renderedFiles = nextFiles;
         state.artifact = null;
         state.stale = false;
+        pipe.stale = false;
         pipe.artifactBytes = null;
         previewEl.textContent = '';
+        renderSizeLine();
         tableEl.innerHTML = '';
+        truth.table = null; truth.filtered = false;
+        truth.unknownBits = undefined; truth.lastMs = null;
         outputPane.removeAttribute('data-stale');
         hooks.onArtifact?.(null, 'files-changed');
         hooks.refreshActions?.();
@@ -2836,6 +3468,18 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       renderStatus();
     }
 
+    const pendingAnalyses = new Map<string, Promise<WorkerReply>>();
+    function analysisFor(request: ReturnType<typeof activeRequest>) {
+      const key = JSON.stringify(request);
+      const pending = pendingAnalyses.get(key);
+      if (pending) return pending;
+      const promise = client.call('analyze', request);
+      pendingAnalyses.set(key, promise);
+      const clear = () => { if (pendingAnalyses.get(key) === promise) pendingAnalyses.delete(key); };
+      void promise.then(clear, clear);
+      return promise;
+    }
+
     async function runAnalyze(seq: number) {
       const doc = state.doc;
       if (!(await ensureReady())) return;
@@ -2843,7 +3487,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       const snapshot = snapshotBodies();
       setBusy(true, pipe.building);
 
-      const an = await client.call('analyze', requestFor(state.tabs.files));
+      const an = await analysisFor(activeRequest());
       if (!analyzeStage.isCurrent(seq)) return;
       if (an.status !== 0) {
         pipe.failure = `analyze failed: ${an.error ?? an.status}`;
@@ -2858,7 +3502,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       const openId = store.envelope.activeId;
       if (openId) remembered.set(openId, sumCounts(countsByFile(state.tabs.files, state.analysis)));
       renderTree();
-      link.decls = declsFor(state.analysis, rootPathFor(rootOf(state.tabs.files).name));
+      link.decls = declsFor(state.analysis, rootPathFor(activeFile(state.tabs).name));
       renderRoms();
 
       const errors = state.diagnostics.filter((d) => d.severity === 'error').length;
@@ -2886,7 +3530,13 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
 
       const snapshot = snapshotBodies();
       setBusy(pipe.analyzing, true);
-      const c = await client.call('compile', requestFor(state.tabs.files));
+      const request = activeRequest();
+      // File IDs are local to this exact request. Never pair topology with a
+      // later editor analysis, including while a last-good artifact is shown.
+      const [c, metadata] = await Promise.all([
+        client.call('compile', request),
+        state.tabs.files.length > 1 ? analysisFor(request) : Promise.resolve(null),
+      ]);
       if (!buildStage.isCurrent(seq)) return;
 
       if (c.status === 0 && c.bytes) {
@@ -2894,8 +3544,11 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         // reports 0.
         const size = c.bytes.length;
         const hash = fnv1a(c.bytes);
-        if (!state.artifact || state.artifact.hash !== hash) {
-          state.artifact = { bytes: c.bytes, hash, size };
+        const analysis = metadata?.status === 0 && metadata.text ? JSON.parse(metadata.text) as Analysis : null;
+        const importedImages = importedImagesFor(analysis);
+        if (!state.artifact || state.artifact.hash !== hash ||
+          JSON.stringify([...(state.artifact.importedImages?.files ?? [])]) !== JSON.stringify([...importedImages.files])) {
+          state.artifact = { bytes: c.bytes, hash, size, importedImages };
           hooks.onArtifact?.(c.bytes, 'built');
           hooks.refreshActions?.();
         }
@@ -2919,18 +3572,19 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       }
       setBusy(pipe.analyzing, false);
 
-      if (state.tab === 'preview') await runPreview(seq);
-      if (state.tab === 'truth') await runTruth(seq);
+      if (state.view === 'schematic') await runPreview(seq);
+      if (state.view === 'truth') await runTruth(seq);
     }
 
     async function runPreview(seq: number) {
       if (!state.tabs.files.length || !state.version) return;
-      const r = await client.call('preview', requestFor(state.tabs.files, optionsFor('preview', settings())));
+      const r = await client.call('preview', activeRequest(optionsFor('preview', settings())));
       // The follow-on call re-checks the SAME stage: this is the guard the
       // langlang playground omits on its second stage.
       if (!buildStage.isCurrent(seq)) return;
       if (r.status === 0) {
         previewEl.textContent = r.text!;
+        renderSizeLine();
         return;
       }
       // Leave the last good schematic in place and say so in the status bar.
@@ -2938,10 +3592,34 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       setStale(previewEl.textContent !== '');
     }
 
+    /** `rows × cols chars` of the schematic on screen (design file 3e). */
+    function renderSizeLine() {
+      const lines = previewEl.textContent ? previewEl.textContent.replace(/\n$/, '').split('\n') : [];
+      const cols = lines.reduce((w, l) => Math.max(w, l.length), 0);
+      sizeLine.textContent = `${lines.length} × ${cols} chars`;
+    }
+
+    // ---- the copies ----
+    // The schematic as its text; the table as the compiler's markdown or CSV
+    // (the Truth slice fills those two in).
+    for (const b of copyButtons) {
+      b.addEventListener('click', async () => {
+        const what = b.dataset.copy;
+        const textOf = hooks.copySource?.(what ?? '') ?? (what === 'preview' ? Promise.resolve(previewEl.textContent ?? '') : null);
+        if (!textOf) return;
+        const text = await textOf;
+        if (!text) {
+          flash(b, 'Nothing yet', 'failed');
+          return;
+        }
+        flash(b, (await copyText(text)) ? 'Copied' : 'Select below', 'done');
+      });
+    }
+
     function rootInputBits(): number | null {
       const a = state.analysis;
       if (!a) return null;
-      const rootId = rootFileId(a.files, rootPathFor(rootOf(state.tabs.files).name));
+      const rootId = rootFileId(a.files, rootPathFor(activeFile(state.tabs).name));
       // Null stays null: a 0 here would read as "no input bits" and silently
       // switch off the only defence against an enumeration that cannot be
       // stopped once it has started.
@@ -2949,18 +3627,147 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       return a.symbols.filter((s) => s.file_id === rootId && s.kind === 'input').reduce((n, s) => n + s.width, 0);
     }
 
+    // ---- the Truth view ----
+    let truthViewPromise: Promise<typeof import('../scripts/truth-view.ts')> | null = null;
+    /** The module reaches the renderer, so it loads beside it, on first need. */
+    const loadTruthView = () => (truthViewPromise ??= import('../scripts/truth-view.ts'));
+
+    /** The reader's input pins as the live row is matched against them: the
+     *  session's when there is one, else the ones the page remembers. */
+    function inputPins(): { name: string; value: PinValue }[] {
+      const session = sim.session;
+      if (session && session.isAlive) {
+        return session.pins.filter((p) => p.kind === 'in').map((p) => {
+          const r = session.get(p.name);
+          return { name: p.name, value: r.ok ? r.value : { value: 0n, defined: 0n, width: p.width } };
+        });
+      }
+      return Array.from(sim.pins, ([name, value]) => ({ name, value }));
+    }
+
+    /** The tint follows the session, never the click (decision 11). */
+    async function refreshTruthTint() {
+      const table = truth.table;
+      if (!table) return;
+      const { liveRowIndex } = await loadTruthView();
+      if (truth.table !== table) return;
+      const at = liveRowIndex(table, inputPins());
+      for (const tr of tableEl.querySelectorAll<HTMLElement>('tr[data-row]')) {
+        if (Number(tr.dataset.row) === at) tr.setAttribute('aria-current', 'true');
+        else tr.removeAttribute('aria-current');
+      }
+    }
+
+    /** Drive every input column of a row through the session, so the canvas,
+     *  the Data panel and the console all follow (decision 11). */
+    async function driveTruthRow(row: number) {
+      const table = truth.table;
+      if (!table) return;
+      const seq = buildStage.seq;
+      const session = await ensureSession();
+      if (!buildStage.isCurrent(seq) || truth.table !== table) return;
+      if (!session) {
+        status.textContent = state.simulateEnabled ? 'Compile a circuit first.' : 'Simulate is disabled.';
+        return;
+      }
+      const [{ driveRow }, { describeError }] = await Promise.all([loadTruthView(), loadDataView()]);
+      if (sim.session !== session || !buildStage.isCurrent(seq) || truth.table !== table) return;
+      const r = driveRow(session, table, row);
+      if (!r.ok) {
+        status.textContent = describeError(r.code, r.arg);
+        return;
+      }
+      // The page's memory of the pins, so a rebuilt session replays the row.
+      for (const col of table.inputs) {
+        const v = session.get(col.name);
+        if (v.ok) sim.pins.set(col.name, v.value);
+      }
+    }
+
+    /** Draw the rows: headers that light the schematic and the editor, cells
+     *  by value in the reader's base, rows that drive. */
+    async function renderTruth(table: TruthRows, seq = buildStage.seq) {
+      const { cellText } = await loadTruthView();
+      if (!buildStage.isCurrent(seq)) return;
+      truth.table = table;
+      tableEl.innerHTML = '';
+      // Plain elements rather than `insertRow`/`insertCell`: the same DOM,
+      // and the headless harness the smoke test runs in has only the former.
+      const t = document.createElement('table');
+      const thead = document.createElement('thead');
+      const head = document.createElement('tr');
+      thead.appendChild(head);
+      t.appendChild(thead);
+      const cols = [...table.inputs, ...table.outputs];
+      cols.forEach((col, i) => {
+        const th = document.createElement('th');
+        th.textContent = col.width > 1 ? `${col.name}[${col.width}]` : col.name;
+        // The join key is the bare name.
+        th.dataset.symbolName = col.name;
+        if (i === table.inputs.length) th.classList.add('pg-truth-first-out');
+        // Focusable, so this is not a pointer-only affordance.
+        th.tabIndex = 0;
+        const show = () => highlightByName(col.name);
+        const clear = () => highlightByName(null);
+        th.addEventListener('pointerenter', show);
+        th.addEventListener('focus', show);
+        th.addEventListener('pointerleave', clear);
+        th.addEventListener('blur', clear);
+        head.appendChild(th);
+      });
+      const body = document.createElement('tbody');
+      t.appendChild(body);
+      const format = settings().valueFormat;
+      table.rows.forEach((row, r) => {
+        const tr = document.createElement('tr');
+        body.appendChild(tr);
+        tr.dataset.row = String(r);
+        tr.tabIndex = 0;
+        tr.title = 'Drive the inputs to this row';
+        [...row.in, ...row.out].forEach((cell, i) => {
+          const td = document.createElement('td');
+          tr.appendChild(td);
+          td.textContent = cellText(cell, cols[i].width, format);
+          td.className = cell === null ? 'pg-truth-unknown' : cell === 0n ? 'pg-truth-low' : 'pg-truth-high';
+          if (i === table.inputs.length) td.classList.add('pg-truth-first-out');
+        });
+        tr.addEventListener('click', () => void driveTruthRow(r));
+        tr.addEventListener('keydown', (e) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          e.preventDefault();
+          void driveTruthRow(r);
+        });
+      });
+      tableEl.appendChild(t);
+      applyTruthGate();
+      await refreshTruthTint();
+    }
+
+    /** What the card says instead of a table. */
+    function showTruthNote(text: string) {
+      truth.table = null;
+      tableEl.innerHTML = '';
+      tableEl.textContent = text;
+      applyTruthGate();
+    }
+
     async function runTruth(seq: number) {
       if (!state.tabs.files.length || !state.version) return;
-      const bits = rootInputBits();
-      // The same refusal the tab is painted with, so the panel and the tooltip
+      // The same refusal the chip is painted with, so the card and the chip
       // can never disagree about why there is no table.
       const refusal = truthBlock();
       if (refusal) {
-        tableEl.innerHTML = '';
-        tableEl.textContent = refusal;
+        truth.filtered = false;
+        truth.unknownBits = undefined;
+        showTruthNote(refusal);
         return;
       }
-      const r = await client.call('truth_table', requestFor(state.tabs.files, optionsFor('truth_table', settings(), preloads())));
+      const overCap = capRefusal(rootInputBits(), settings()) !== null;
+      if (overCap || hasImportedImages()) {
+        await runScratchTruth(seq, overCap);
+        return;
+      }
+      const r = await client.call('truth_table', activeRequest(optionsFor('truth_table', settings(), preloads())));
       if (!buildStage.isCurrent(seq)) return;
       if (r.status !== 0) {
         // A refusal leaves the last good table on screen; the reason goes to
@@ -2969,38 +3776,76 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         setStale(tableEl.textContent !== '');
         return;
       }
-      tableEl.innerHTML = '';
-      const table = JSON.parse(r.text!) as TruthTable;
-      const t = document.createElement('table');
-      const head = t.createTHead().insertRow();
-      for (const name of [...table.inputs, ...table.outputs]) {
-        const th = document.createElement('th');
-        th.textContent = name;
-        // Headers are `name` or `name[W]`; the join key is the bare name.
-        const symbol = headerSymbolName(name);
-        th.dataset.symbolName = symbol;
-        // Focusable, so this is not a pointer-only affordance.
-        th.tabIndex = 0;
-        const show = () => highlightByName(symbol);
-        const clear = () => highlightByName(null);
-        th.addEventListener('pointerenter', show);
-        th.addEventListener('focus', show);
-        th.addEventListener('pointerleave', clear);
-        th.addEventListener('blur', clear);
-        head.appendChild(th);
+      const { parseTruthTable } = await loadTruthView();
+      if (!buildStage.isCurrent(seq)) return;
+      truth.filtered = false;
+      truth.unknownBits = undefined;
+      await renderTruth(parseTruthTable(r.text!));
+    }
+
+    /**
+     * Decision 10: over the cap the compiler would enumerate every input bit,
+     * so the site enumerates only the unknown ones. The known pins are held
+     * at the live session's values on a scratch session built from the same
+     * artifact. Imported images also need this runtime path below the cap:
+     * the compiler only preloads root memories. In that case all scratch
+     * inputs start floating and every combination is enumerated. The live
+     * session is read and never written.
+     */
+    async function runScratchTruth(seq: number, filtered = true) {
+      const cap = settings().truthTableCap;
+      const live = await ensureSession();
+      if (!buildStage.isCurrent(seq)) return;
+      if (!live) {
+        truth.filtered = false;
+        showTruthNote(state.simulateEnabled ? 'Compile a circuit first.' : 'Simulate is disabled, and this table needs it.');
+        return;
       }
-      const body = t.createTBody();
-      for (const row of table.rows) {
-        const tr = body.insertRow();
-        for (const v of [...row.in, ...row.out]) tr.insertCell().textContent = v === null ? '?' : String(v);
+      const bytes = sim.bytes;
+      if (!bytes) return;
+      const [{ rowsForPins }, { CircRuntime: Runtime }] = await Promise.all([loadTruthView(), loadRenderer()]);
+      if (!buildStage.isCurrent(seq) || sim.bytes !== bytes) return;
+      const scratch = await SimSession.build({
+        bytes,
+        load: (b) => Runtime.loadFromBytes(b, { noInitialPinDrive: true }),
+        roms: currentRoms(),
+        images: romImages,
+        importedImages: state.artifact?.importedImages,
+      });
+      if (!buildStage.isCurrent(seq) || sim.bytes !== bytes || sim.session !== live) {
+        scratch.destroy();
+        return;
       }
-      if (bits !== null && bits > 10) {
-        const note = document.createElement('p');
-        note.className = 'pg-table-note';
-        note.textContent = `${table.rows.length} rows.`;
-        tableEl.appendChild(note);
+      const t0 = performance.now();
+      const outcome = rowsForPins(scratch, filtered ? live : scratch, cap);
+      truth.lastMs = performance.now() - t0;
+      scratch.destroy();
+      truth.unknownBits = filtered ? outcome.unknownBits : undefined;
+      if (!outcome.ok) {
+        truth.filtered = false;
+        showTruthNote(
+          outcome.reason === 'stateful'
+            ? 'A truth table needs a circuit without ram.'
+            : `${outcome.unknownBits} unknown input bits are over the cap of ${cap}. Set more pins, on the canvas or in the Data panel, or raise the cap.`,
+        );
+        return;
       }
-      tableEl.appendChild(t);
+      truth.filtered = filtered;
+      await renderTruth(outcome.table);
+    }
+
+    /** The copies: the compiler's own markdown or CSV for its table, the
+     *  module's for rows the compiler never saw. */
+    hooks.copySource = (what) => {
+      if (what !== 'markdown' && what !== 'csv') return null;
+      const table = truth.table;
+      if (!table) return Promise.resolve('');
+      if (truth.filtered || hasImportedImages()) {
+        return loadTruthView().then((m) => (what === 'markdown' ? m.toMarkdown : m.toCsv)(table, settings().valueFormat));
+      }
+      return client
+        .call('truth_table', activeRequest(optionsFor('truth_table', settings(), preloads(), what)))
+        .then((r) => (r.status === 0 ? r.text! : ''));
     }
 
     function messageOf(r: WorkerReply): string {
@@ -3028,6 +3873,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       const { perTab, rows } = mapPerTab(state.tabs.files, analysis);
       state.mapped = rows;
       renderDiagnostics();
+      renderDataCount();
 
       // Phase 1's staleness guard, re-based per tab: a reply computed against
       // a body the reader has since edited must not be pushed, because the
@@ -3041,82 +3887,63 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       });
     }
 
-    /** `<file>:<line>:<col> <code> <message>`, with the compiler's own
-     *  FILE-LOCAL position. A combined-document line number means nothing to a
-     *  reader who is looking at `half_adder.circ`; the jump target keeps using
-     *  the absolute span, so nothing about clicking changes. */
-    function diagnosticLabel(m: TabbedDiagnostic): string {
-      return `${m.fileName}:${m.line}:${m.column} ${m.code} ${m.message}`;
+    /** The bar: the counts on the left, what the source is made of on the
+     *  right, both from the island's own state. The severity on the counts
+     *  button is what colours it and shows its caret. */
+    function renderFooterBar() {
+      const summary = summarize(state.tabs.files, state.analysis, state.mapped);
+      const [left, right] = summaryLabels(summary);
+      footerCountsText.textContent = left;
+      footerStats.textContent = right;
+      footerCounts.dataset.severity = summary.errors > 0 ? 'error' : summary.warnings > 0 ? 'warning' : 'none';
     }
 
-    /** The count on the dock tab. It is the only diagnostics signal a reader
-     *  gets while the dock is collapsed, so it carries the severity in its
-     *  colour as well as the number. */
-    function renderDockBadge() {
-      const errors = state.mapped.filter((m) => m.severity === 'error').length;
-      const warnings = state.mapped.length - errors;
-      dockBadge.hidden = state.mapped.length === 0;
-      dockBadge.dataset.severity = errors > 0 ? 'error' : 'warning';
-      dockBadge.textContent = String(errors > 0 ? errors : warnings);
-      dockBadge.title =
-        `${errors} error${errors === 1 ? '' : 's'}, ${warnings} warning${warnings === 1 ? '' : 's'}`;
-    }
-
+    /** The list as a grid (design file 3b: `14px 104px 52px 1fr`): a glyph,
+     *  the compiler's own FILE-LOCAL position as the jump, the code, the
+     *  message. A combined-document line number means nothing to a reader
+     *  looking at `half_adder.circ`; the jump target keeps the absolute span. */
     function renderDiagnostics() {
       diagList.innerHTML = '';
-      // Both derive from `state.mapped`, so they are refreshed together with
-      // the list rather than by whoever remembers to call them.
-      renderDockBadge();
+      // All three derive from `state.mapped`, so they are refreshed together
+      // with the list rather than by whoever remembers to call them.
+      renderFooterBar();
       applyTruthGate();
+      const cell = (cls: string, text: string): HTMLSpanElement => {
+        const el = document.createElement('span');
+        el.className = cls;
+        el.textContent = text;
+        return el;
+      };
       if (state.mapped.length === 0) {
         const li = document.createElement('li');
-        li.className = 'pg-diag-ok';
+        li.className = 'pg-diag-none';
         li.textContent = 'No diagnostics.';
         diagList.appendChild(li);
         return;
       }
 
-      const errors = state.mapped.filter((m) => m.severity === 'error').length;
-      const warnings = state.mapped.length - errors;
-      const counts = document.createElement('li');
-      counts.className = 'pg-diag-counts';
-      counts.textContent =
-        `${errors} error${errors === 1 ? '' : 's'}, ${warnings} warning${warnings === 1 ? '' : 's'}`;
-      diagList.appendChild(counts);
-
       for (const m of state.mapped) {
         const li = document.createElement('li');
-        li.className = `pg-diag-${m.severity}`;
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.textContent = diagnosticLabel(m);
-        // Hovering or focusing a row lights up whatever it points at, so the
-        // list is a third way into the picture.
-        if (m.tab !== null) {
-          const show = () => {
-            const line = m.line;
-            const file = state.tabs.files[m.tab!];
-            const decl = file
-              ? declarationAt(link.decls, line, m.column, file.body.split('\n')[line - 1] ?? '')
-              : null;
-            if (decl) highlightByName(decl.name);
-          };
-          btn.addEventListener('pointerenter', show);
-          btn.addEventListener('focus', show);
-          btn.addEventListener('pointerleave', () => highlightByName(null));
-          btn.addEventListener('blur', () => highlightByName(null));
-        }
-        // Any row with a span jumps, switching tabs first when the compiler
-        // blamed another file. `showDocument` is synchronous, so the select on
-        // the next statement lands in the file that just became visible.
+        li.className = 'pg-diag-row';
+        li.dataset.severity = m.severity;
+        const glyph = cell('pg-diag-glyph', '▲');
+        glyph.setAttribute('role', 'img');
+        glyph.setAttribute('aria-label', m.severity);
+        const position = `${m.fileName}:${m.line}:${m.column}`;
+        let pos: HTMLElement;
         if (m.from !== null && m.to !== null && m.tab !== null) {
+          // A row with a span jumps, switching files first when the compiler
+          // blamed another one. `showDocument` is synchronous, so the select
+          // on the next statement lands in the file that just became visible.
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'pg-diag-pos';
+          btn.textContent = position;
           const { from, to, tab } = m;
           btn.addEventListener('click', () => {
             if (editor) {
               if (tab !== state.tabs.active) {
-                state.tabs = selectTab(state.tabs, tab);
-                editor.showDocument(tab);
-                renderTree();
+                showFile(tab);
               }
               editor.select(from, to);
             } else {
@@ -3125,12 +3952,28 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
               source.focus();
             }
           });
+          // Hovering or focusing a row lights up whatever it points at, so
+          // the list is a third way into the picture.
+          const show = () => {
+            const line = m.line;
+            const file = state.tabs.files[tab];
+            const decl = file && tab === state.tabs.active
+              ? declarationAt(link.decls, line, m.column, file.body.split('\n')[line - 1] ?? '')
+              : null;
+            if (decl) highlightByName(decl.name);
+          };
+          btn.addEventListener('pointerenter', show);
+          btn.addEventListener('focus', show);
+          btn.addEventListener('pointerleave', () => highlightByName(null));
+          btn.addEventListener('blur', () => highlightByName(null));
+          pos = btn;
         } else {
-          // A file with no editor buffer (`<builtin>/…`): the row stays, so the
-          // count and the message are still visible, but there is nowhere to go.
-          btn.disabled = true;
+          // A file with no editor buffer (`<builtin>/…`): the row stays, so
+          // the count and the message are still visible, but there is nowhere
+          // to go, and a span says so where a disabled button would not.
+          pos = cell('pg-diag-pos', position);
         }
-        li.appendChild(btn);
+        li.append(glyph, pos, cell('pg-diag-code', m.code), cell('pg-diag-msg', m.message));
         diagList.appendChild(li);
       }
     }
@@ -3143,7 +3986,9 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
      *  which is the session's. `destroy` ends the canvas and not the runtime. */
     type View = Pick<CircView<PaletteKey>, 'view' | 'canvas' | 'destroy'>;
     const simMount = el.querySelector<HTMLElement>('.pg-sim-mount')!;
-    const simNoteBase = 'Click input pins to toggle them; hover one to find it in the source.';
+    // The hint line under the view carries the gesture now; the note is for
+    // what stops the picture.
+    const simNoteBase = '';
     const sim = {
       /** One session per artifact: the runtime, the pins and memories by name,
        *  the listeners. Every face drives and reads through it. */
@@ -3161,7 +4006,107 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       rendererPromise: null as Promise<typeof import('circ-renderer')> | null,
       themesPromise: null as Promise<typeof import('../utils/circ-theme.mjs')> | null,
       assetsHooked: false,
+      /** The one cell size, so the zoom line and the canvas agree. */
+      cell: 14,
+      /** The reader zoomed or panned this canvas. Set by `onViewChange` when
+       *  a gesture preceded it, cleared by `fit`, `100%` and a new canvas;
+       *  gates the refit when the inset changes, so a view the reader chose
+       *  is never taken from them. */
+      navigated: false,
+      /** When the canvas last saw a wheel, a drag or a touch move. The
+       *  renderer reports its own fits through `onViewChange` too (the first
+       *  measurement under `viewport: 'parent'`), and those follow no gesture. */
+      gestureAt: 0,
     };
+    const GESTURE_WINDOW_MS = 500;
+
+    /** The furniture's bands: the switch at the top, the two lines at the
+     *  bottom. The canvas covers the whole region under them, so the fit
+     *  keeps this much clear on every side. */
+    const BENCH_INSET = 60;
+
+    /**
+     * The theme the bench draws with: the site's, plus the dot grid under the
+     * circuit (design file: --fg at 14% light, 18% dark; 18px), drawn in world
+     * space through the renderer's background hook so it moves and zooms
+     * with the contents. The colour is the region's own token, read when the
+     * theme is picked, so a flip re-reads it. Zoomed out, the spacing doubles
+     * until the dots are 12px apart on screen; a dot stays one pixel wide.
+     */
+    function benchTheme(theme: CircTheme<PaletteKey>): CircTheme<PaletteKey> {
+      const dot = getComputedStyle(outputPane).getPropertyValue('--pg-dot').trim() || 'rgba(0, 0, 0, 0.14)';
+      return {
+        ...theme,
+        background: ({ ctx, view, viewport }) => {
+          const scale = view.scale;
+          const left = -view.x / scale;
+          const top = -view.y / scale;
+          const width = viewport.width / scale;
+          const height = viewport.height / scale;
+          // The whole element, not the grid: zoomed out, the grid is smaller
+          // than the element, and the page must show through around it.
+          ctx.clearRect(left, top, width, height);
+          let step = 18;
+          while (step * scale < 12) step *= 2;
+          const r = 1 / scale;
+          const x0 = Math.floor(left / step) * step;
+          const y0 = Math.floor(top / step) * step;
+          ctx.fillStyle = dot;
+          ctx.beginPath();
+          for (let x = x0; x <= left + width; x += step) {
+            for (let y = y0; y <= top + height; y += step) {
+              ctx.moveTo(x + r, y);
+              ctx.arc(x, y, r, 0, Math.PI * 2);
+            }
+          }
+          ctx.fill();
+        },
+      };
+    }
+
+    // ---- the zoom line ----
+    /** The percentage follows the canvas; the two buttons need one, and the
+     *  region's static dots yield to the canvas's own while one is showing. */
+    function syncZoom() {
+      const view = sim.view?.view ?? null;
+      zoomPct.textContent = formatZoom(view ? view.getView().scale : 1);
+      zoomPct.setAttribute('aria-disabled', String(view === null));
+      zoomFit.setAttribute('aria-disabled', String(view === null));
+      outputPane.dataset.canvas = String(view !== null);
+    }
+    zoomPct.addEventListener('click', () => {
+      if (!sim.view) return;
+      sim.view.view.resetView();
+      sim.navigated = false;
+      syncZoom();
+    });
+    zoomFit.addEventListener('click', () => {
+      if (!sim.view) return;
+      sim.view.view.fit();
+      sim.navigated = false;
+      syncZoom();
+    });
+    /**
+     * The inset changed (the Data card opened or closed, the drawer grew): a
+     * canvas the reader has not navigated refits to it; one they zoomed or
+     * panned keeps their view. Deferred by one frame: ResizeObserver delivers
+     * shallowest-first, so this mount's callback runs before the renderer's
+     * own on the canvas in the same pass, and a synchronous `fit()` here would
+     * measure the old size. The site never calls `fit()` synchronously from a
+     * layout change.
+     */
+    let refitPending = false;
+    function refitIfIdle() {
+      if (refitPending) return;
+      refitPending = true;
+      requestAnimationFrame(() => {
+        refitPending = false;
+        if (!sim.view || sim.navigated) return;
+        sim.view.view.fit();
+        syncZoom();
+      });
+    }
+    if (typeof ResizeObserver === 'function') new ResizeObserver(() => refitIfIdle()).observe(simMount);
     const loadRenderer = () => (sim.rendererPromise ??= import('circ-renderer'));
     const loadThemes = () => (sim.themesPromise ??= import('../utils/circ-theme.mjs'));
     // The Data tab's module reaches the renderer's index for its two value
@@ -3188,6 +4133,8 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       sim.session?.destroy();
       sim.session = null;
       sim.sessionBytes = null;
+      refreshConsoleGate();
+      syncZoom();
     }
 
     /**
@@ -3197,10 +4144,19 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
      * then replays the reader's pins by name. Guarded at every await by the
      * bytes: a newer artifact while this one loads wins.
      */
-    async function ensureSession(): Promise<SimSession | null> {
-      if (!state.simulateEnabled || !sim.bytes) return null;
+    let sessionBuild: { bytes: Uint8Array; promise: Promise<SimSession | null> } | null = null;
+    function ensureSession(): Promise<SimSession | null> {
+      if (!state.simulateEnabled || !sim.bytes) return Promise.resolve(null);
       const bytes = sim.bytes;
-      if (sim.session && sim.sessionBytes === bytes) return sim.session;
+      if (sim.session && sim.sessionBytes === bytes) return Promise.resolve(sim.session);
+      if (sessionBuild?.bytes === bytes) return sessionBuild.promise;
+      const pending = { bytes, promise: buildSession(bytes) };
+      sessionBuild = pending;
+      const clear = () => { if (sessionBuild === pending) sessionBuild = null; };
+      void pending.promise.then(clear, clear);
+      return pending.promise;
+    }
+    async function buildSession(bytes: Uint8Array): Promise<SimSession | null> {
       const { CircRuntime: Runtime } = await loadRenderer();
       if (sim.bytes !== bytes) return null;
       dropSession();
@@ -3209,6 +4165,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         load: (b) => Runtime.loadFromBytes(b, { noInitialPinDrive: true }),
         roms: currentRoms(),
         images: romImages,
+        importedImages: state.artifact?.importedImages,
         // The handshake's `diag warning` lines, from the analysis this
         // artifact was built beside; `--sim` prints its own the same way.
         warnings: state.mapped
@@ -3237,8 +4194,14 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           // follow. Only redrawn while on screen: each visible word costs a
           // call across the boundary.
           sim.view?.view.refreshState();
-          if (state.tab === 'data') renderData();
+          if (state.dataOpen) renderData();
           if (memVisible()) renderMemory();
+          // The filtered table is a function of the pins: a drive re-enumerates
+          // it; under the cap the tint alone moves.
+          if (state.view === 'truth') {
+            if (truth.filtered) void runTruth(buildStage.seq);
+            else void refreshTruthTint();
+          }
           // The console is the record of every face: what another face did
           // is logged as the line that would have done it. The console's own
           // lines are already in the log (it is busy while they run).
@@ -3247,7 +4210,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           // The protocol's reset: a new runtime, so a canvas over the old one
           // is rebuilt over the new, and the rows read the new.
           if (sim.view) void buildCanvas();
-          if (state.tab === 'data') renderData();
+          if (state.dataOpen) renderData();
           renderMemory();
           // The console says so after the reply that caused it, or at once
           // when another face reset the session.
@@ -3278,14 +4241,31 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       simMount.innerHTML = '';
       try {
         const canvas = new Canvas<PaletteKey>(session.runtime as CircRuntime, {
-          cell: 14,
-          // Two cells: the value chip above a top-row pin reaches 1.42 cells
-          // over its box, and it wants air, not a fit to the pixel.
-          padding: Math.ceil(14 * 2),
+          cell: sim.cell,
+          // The furniture's bands, or two cells if ever wider: the value chip
+          // above a top-row pin reaches 1.42 cells over its box and wants air.
+          padding: Math.max(BENCH_INSET, Math.ceil(sim.cell * 2)),
           interactive: true,
-          theme: pickTheme(),
+          theme: benchTheme(pickTheme()),
           // Two free rows between stacked boxes, for the same chip.
           layoutOptions: { rowGutter: 2 },
+          // The canvas is the inset's size and the renderer fits the circuit
+          // into it on its first measurement; a change of inset is the
+          // site's to refit (`refitIfIdle`). Zoom on the modifier wheel (a
+          // trackpad pinch arrives as one), pan by drag; the page keeps the
+          // plain wheel. One finger is the canvas's own above the breakpoint
+          // and the page's below it, where the page scrolls (decision 15).
+          // Read at construction: a resize across the breakpoint keeps the
+          // gesture until the next artifact.
+          viewport: 'parent',
+          navigation: { wheel: 'modifier', drag: true, touch: narrow.matches ? 'page' : 'own' },
+          // Never for the view a canvas is built with, so `syncZoom` below
+          // writes the first percentage itself. A change the reader made
+          // follows a gesture; the renderer's own fit follows none.
+          onViewChange: (view) => {
+            if (Date.now() - sim.gestureAt < GESTURE_WINDOW_MS) sim.navigated = true;
+            zoomPct.textContent = formatZoom(view.scale);
+          },
           // onPinChange, not onPinToggle: the older callback collapses any
           // mixed bus to High, so a reader who typed 0x2A and then flipped the
           // theme would get 0xFF back on the rebuilt canvas. The canvas drove
@@ -3311,12 +4291,18 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         });
         const view: View = { view: canvas, canvas: canvas.canvas, destroy: () => canvas.destroy() };
         sim.view = view;
+        sim.navigated = false;
+        const gesture = () => { sim.gestureAt = Date.now(); };
+        canvas.canvas.addEventListener('wheel', gesture, { passive: true });
+        canvas.canvas.addEventListener('pointermove', (e) => { if (e.buttons !== 0) gesture(); });
+        canvas.canvas.addEventListener('touchmove', gesture, { passive: true });
         // The layout is the only place a collapsed macro box exists, so the
         // join is built from it rather than from the topology.
         link.table = linkLayout(link.decls, canvas.getLayout());
         simMount.appendChild(canvas.canvas);
         simMount.hidden = false;
         simNote.textContent = simNoteBase;
+        syncZoom();
         if (!sim.assetsHooked) {
           sim.assetsHooked = true;
           // The theme's sprite sheet finished decoding: the same theme now
@@ -3332,21 +4318,23 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     /** A signature of the rows' shape: a change rebuilds the table, else the
      *  cells are updated in place so a field being typed into survives. */
     let dataShape = '';
+    let dataSession: SimSession | null = null;
 
     /** Open the Data tab on the session, building it on first need. */
     async function showData() {
+      const bytes = sim.bytes;
       const session = await ensureSession();
-      if (state.tab !== 'data') return;
+      if (!state.dataOpen || sim.bytes !== bytes) return;
       if (!session) {
         if (!dataNote.textContent) dataNote.textContent = state.simulateEnabled ? 'Compile a circuit first.' : dataNote.textContent;
-        dataHead.hidden = true;
+        dataFooter.hidden = true;
         dataEl.hidden = true;
         return;
       }
       await loadDataView();
-      if (sim.session !== session) return;
+      if (sim.session !== session || !state.dataOpen) return;
       dataNote.textContent = '';
-      dataHead.hidden = false;
+      dataFooter.hidden = false;
       dataEl.hidden = false;
       renderData();
     }
@@ -3357,30 +4345,43 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       const mod = dataViewLoaded;
       if (!session || !mod) return;
       const rows = mod.rowsFor(session, settings().valueFormat);
+      dataSummary.textContent = `${rows.filter((r) => r.kind === 'in').length} in · ${rows.filter((r) => r.kind === 'out').length} out`;
       const shape = rows.map((r) => `${r.kind}:${r.name}:${r.width}`).join('|');
-      if (shape !== dataShape || dataEl.childElementCount === 0) {
+      if (session !== dataSession || shape !== dataShape || dataEl.childElementCount === 0) {
+        dataSession = session;
         dataShape = shape;
         dataEl.innerHTML = '';
-        const table = document.createElement('table');
-        const head = table.createTHead().insertRow();
-        for (const label of ['pin', 'width', 'value']) {
-          const th = document.createElement('th');
-          th.textContent = label;
-          head.appendChild(th);
+        const sections = new Map<string, HTMLElement>();
+        for (const [kind, label] of [['in', 'input'], ['out', 'output']]) {
+          const section = document.createElement('section');
+          section.className = 'pg-data-section';
+          section.setAttribute('aria-label', `${label} pins`);
+          const header = document.createElement('div');
+          header.className = 'pg-data-columns';
+          for (const text of [label, 'bits', 'value']) {
+            const span = document.createElement('span');
+            span.textContent = text;
+            header.appendChild(span);
+          }
+          section.appendChild(header);
+          sections.set(kind, section);
+          dataEl.appendChild(section);
         }
-        const body = table.createTBody();
         for (const row of rows) {
-          const tr = body.insertRow();
+          const tr = document.createElement('div');
+          tr.className = 'pg-data-row';
           tr.dataset.name = row.name;
           tr.dataset.kind = row.kind;
-          const name = tr.insertCell();
+          const name = document.createElement('span');
           name.textContent = row.name;
           name.className = 'pg-data-name';
-          const width = tr.insertCell();
+          const width = document.createElement('span');
           width.textContent = String(row.width);
           width.className = 'pg-data-width';
-          const cell = tr.insertCell();
+          const cell = document.createElement('div');
           cell.className = 'pg-data-value';
+          tr.append(name, width, cell);
+          sections.get(row.kind)!.appendChild(tr);
           if (row.kind === 'out') {
             const span = document.createElement('span');
             span.className = 'pg-data-out';
@@ -3413,23 +4414,26 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
             };
             input.addEventListener('keydown', (e) => {
               if (e.key === 'Enter') { e.preventDefault(); commit(); }
-              if (e.key === 'Escape') { e.preventDefault(); input.value = currentText(row.name); input.removeAttribute('aria-invalid'); }
+              if (e.key === 'Escape' && (input.value !== currentText(row.name) || input.hasAttribute('aria-invalid'))) {
+                e.preventDefault(); e.stopPropagation();
+                input.value = currentText(row.name); input.removeAttribute('aria-invalid');
+              }
             });
             input.addEventListener('blur', () => { if (input.value !== currentText(row.name)) commit(); });
             cell.appendChild(input);
           }
         }
-        dataEl.appendChild(table);
       }
       const active = document.activeElement;
       for (const row of rows) {
-        const tr = dataEl.querySelector<HTMLElement>(`tr[data-name="${CSS.escape(row.name)}"]`);
+        const tr = dataEl.querySelector<HTMLElement>(`.pg-data-row[data-name="${CSS.escape(row.name)}"]`);
         if (!tr) continue;
         const out = tr.querySelector<HTMLElement>('.pg-data-out');
         if (out) out.textContent = row.text;
         const btn = tr.querySelector<HTMLButtonElement>('.pg-data-toggle');
         if (btn) {
-          btn.textContent = row.text;
+          btn.textContent = row.signal === 2 ? '?' : String(row.signal);
+          btn.setAttribute('aria-label', `${row.name}, ${row.signal === 2 ? 'unknown' : row.signal}`);
           btn.dataset.signal = String(row.signal);
           btn.setAttribute('aria-pressed', String(row.signal === 1));
         }
@@ -3462,6 +4466,16 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       void session.reset().finally(() => { dataReset.disabled = false; });
     });
 
+    hooks.onCircuitChanged = () => { sim.pins.clear(); };
+    hooks.onDataOpen = () => { void showData(); };
+    hooks.onLive = () => {
+      if (state.artifact && sim.renderedHash !== state.artifact.hash) {
+        sim.renderedHash = state.artifact.hash;
+        void buildCanvas();
+      } else if (!state.artifact && !sim.bytes) {
+        simNote.textContent = state.simulateEnabled ? 'Compile a circuit first.' : simNote.textContent;
+      }
+    };
     hooks.onArtifact = (bytes, reason) => {
       sim.bytes = bytes;
       // A new artifact is a new session; the reader's pins are replayed onto it
@@ -3476,7 +4490,8 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           : simNote.textContent;
         dataNote.textContent = simNote.textContent;
         consoleNote.textContent = simNote.textContent;
-        dataHead.hidden = true;
+        dataFooter.hidden = true;
+        dataSummary.textContent = '';
         dataEl.hidden = true;
         dataEl.innerHTML = '';
         sim.renderedHash = -1;
@@ -3484,25 +4499,12 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         return;
       }
       simNote.textContent = '';
-      if (state.tab === 'data') void showData();
-      if (state.tab === 'simulate' && state.artifact && sim.renderedHash !== state.artifact.hash) {
+      if (state.dataOpen) void showData();
+      if (state.view === 'live' && state.artifact && sim.renderedHash !== state.artifact.hash) {
         sim.renderedHash = state.artifact.hash;
         void buildCanvas();
       }
     };
-    const showTabBase = showTab;
-    for (const b of tabs) {
-      if (b.dataset.tab !== 'simulate') continue;
-      b.addEventListener('click', () => {
-        if (state.artifact && sim.renderedHash !== state.artifact.hash) {
-          sim.renderedHash = state.artifact.hash;
-          void buildCanvas();
-        } else if (!state.artifact && !sim.bytes) {
-          simNote.textContent = state.simulateEnabled ? 'Compile a circuit first.' : simNote.textContent;
-        }
-      });
-    }
-    void showTabBase;
     // Theme flips: circ-renderer captures the theme at construction, so the
     // canvas is rebuilt; the editor reconfigures its theme compartment in place.
     new MutationObserver(() => {
@@ -3510,7 +4512,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       // In place: the pins the reader set, the values they typed and the
       // images they loaded are all runtime state of THIS canvas, and a
       // rebuild used to throw every one of them away and replay what it could.
-      if (sim.view) void loadThemes().then(({ pickTheme }) => sim.view?.view.setTheme(pickTheme()));
+      if (sim.view) void loadThemes().then(({ pickTheme }) => sim.view?.view.setTheme(benchTheme(pickTheme())));
     }).observe(document.documentElement, {
       attributes: true,
       attributeFilter: ['data-theme'],

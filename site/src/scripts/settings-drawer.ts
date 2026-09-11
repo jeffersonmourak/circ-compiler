@@ -6,6 +6,7 @@
 // library does not document for that operation. `PlaygroundSettings` and its
 // normalisation belong to the store; this module only projects them.
 import type { PlaygroundSettings } from '../utils/playground-store.ts';
+import { normalizeTruthTableCap } from '../utils/playground-store.ts';
 
 /** Every key the library documents. Nothing outside this list is ever sent. */
 export const DOCUMENTED_OPTION_KEYS = [
@@ -38,6 +39,11 @@ export function optionsFor(
   op: LibcircOp,
   s: PlaygroundSettings,
   preloads?: Record<string, string>,
+  /** The truth table's wire format. The table on screen is parsed, so it
+   *  always asks for `json`; a copy asks for the compiler's `markdown` or
+   *  `csv`. The stored `format` setting is not read: a table requested in
+   *  markdown threw at `JSON.parse` for as long as the setting existed. */
+  format: 'json' | 'markdown' | 'csv' = 'json',
 ): Record<string, unknown> {
   switch (op) {
     case 'analyze':
@@ -55,7 +61,7 @@ export function optionsFor(
       };
     case 'truth_table':
       return {
-        format: s.format,
+        format,
         value_format: s.valueFormat,
         truth_table_cap: s.truthTableCap,
         warnings_as_errors: s.warningsAsErrors,
@@ -78,7 +84,7 @@ export function capRefusal(bits: number | null, s: PlaygroundSettings): string |
   if (bits === null || bits <= s.truthTableCap) return null;
   return (
     `This circuit has ${bits} input bits; the playground enumerates up to ${s.truthTableCap} ` +
-    `(${2 ** s.truthTableCap} rows). Raise the cap in settings, or use circ-compile --truth-table.`
+    `(${2 ** s.truthTableCap} rows). Raise the input-bit cap in Truth, or use circ-compile --truth-table.`
   );
 }
 
@@ -139,14 +145,15 @@ type ChoiceKey = 'format' | 'valueFormat';
  * change; nothing here validates, because the store already clamps and falls
  * back key by key, and a second validator is a second thing to disagree with.
  */
-export function mountSettingsDrawer(root: ParentNode, deps: SettingsDeps): void {
-  const controls = root.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-setting]');
+export function mountSettingsDrawer(root: ParentNode & EventTarget, deps: SettingsDeps): void {
 
   const paint = () => {
     const s = deps.get();
-    for (const el of controls) {
+    for (const el of root.querySelectorAll<HTMLInputElement | HTMLSelectElement>('[data-setting]')) {
       const key = el.dataset.setting as keyof PlaygroundSettings;
-      if (el instanceof HTMLInputElement && el.type === 'checkbox') {
+      if (el instanceof HTMLInputElement && el.type === 'radio') {
+        el.checked = el.value === s[key as ChoiceKey];
+      } else if (el instanceof HTMLInputElement && el.type === 'checkbox') {
         el.checked = Boolean(s[key as BoolKey]);
       } else if (el instanceof HTMLInputElement && el.type === 'number') {
         el.value = String(s.truthTableCap);
@@ -156,16 +163,18 @@ export function mountSettingsDrawer(root: ParentNode, deps: SettingsDeps): void 
     }
   };
 
-  for (const el of controls) {
-    el.addEventListener('change', () => {
+  root.addEventListener('change', (event) => {
+      const el = event.target;
+      if (!(el instanceof HTMLInputElement || el instanceof HTMLSelectElement) || !el.matches('[data-setting]')) return;
+      if (el instanceof HTMLInputElement && el.type === 'radio' && !el.checked) return;
       const key = el.dataset.setting as keyof PlaygroundSettings;
       deps.set((draft) => {
         if (el instanceof HTMLInputElement && el.type === 'checkbox') {
           (draft[key as BoolKey] as boolean) = el.checked;
         } else if (el instanceof HTMLInputElement && el.type === 'number') {
           const n = Number.parseInt(el.value, 10);
-          // The store clamps; this only refuses to write a non-number.
-          if (Number.isFinite(n)) draft.truthTableCap = n;
+          // Normalize before the request, not only when the envelope is read.
+          if (Number.isFinite(n)) draft.truthTableCap = normalizeTruthTableCap(n);
         } else {
           (draft[key as ChoiceKey] as string) = el.value;
         }
@@ -173,9 +182,7 @@ export function mountSettingsDrawer(root: ParentNode, deps: SettingsDeps): void 
       // Repaint from the store, so a clamped value is shown as stored rather
       // than as typed.
       paint();
-    });
-  }
+  });
 
   paint();
 }
-

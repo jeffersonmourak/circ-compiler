@@ -25,7 +25,13 @@ describe('island canvas options', () => {
     expect(gallery).toMatch(/padding = Math\.ceil\(cell \* 2\)/);
     expect(gallery).toMatch(/circPadding \?\? String\(Math\.ceil\(cell \* 2\)\)/);
     const playground = src('Playground.astro');
-    expect(playground).toMatch(/padding:\s*Math\.ceil\(14 \* 2\)/);
+    // The playground names its one cell size once and pads from it, so the
+    // zoom line's `cell 14` and the canvas cannot disagree.
+    expect(playground).toMatch(/cell: 14,/);
+    expect(playground).toMatch(/cell:\s*sim\.cell,/);
+    // …and pads by the furniture's bands, or two cells if ever wider.
+    expect(playground).toMatch(/const BENCH_INSET = 60;/);
+    expect(playground).toMatch(/padding:\s*Math\.max\(BENCH_INSET, Math\.ceil\(sim\.cell \* 2\)\)/);
     expect(playground).not.toMatch(/padding:\s*16\b/);
   });
 });
