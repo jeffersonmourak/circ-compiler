@@ -416,6 +416,216 @@ const drawHighlight = ({ ctx, cell, component, theme }) => {
   ctx.restore();
 };
 
+/* ───── gate anatomy: three containers ─────────────────────────────
+ *
+ *   port [space] [ exclusive ][   gate   ][ negate ] [space] port
+ *
+ * Every gate is authored from the same three slots inside its box. The
+ * slots are always reserved — an AND leaves exclusive and negate empty —
+ * so the gate symbol is the same size and sits at the same x for the
+ * whole family, and the box, ports and tails never move. Containers
+ * never touch: each has its own inset.
+ */
+const NS_INSET = 0.4;   // box edge → first container, in cells
+const NS_SLOT = 0.55;   // exclusive / negate container width, in cells
+const NS_BUBBLE_R = 0.24;
+
+function nsGateLayout(cell, c) {
+  const x0 = c.x * cell, y0 = c.y * cell, w = c.width * cell, h = c.height * cell;
+  const cy = y0 + h / 2;
+  const innerL = x0 + NS_INSET * cell, innerR = x0 + w - NS_INSET * cell;
+  const slot = NS_SLOT * cell;
+  const exclusive = { left: innerL, right: innerL + slot, top: y0, bottom: y0 + h };
+  const negate = { left: innerR - slot, right: innerR, top: y0, bottom: y0 + h };
+  const gate = { left: exclusive.right, right: negate.left, top: y0, bottom: y0 + h };
+  // The symbol is sized by its PAINTED extent, not its PNG square: the art
+  // must span the port rows (a at y+1, b at y+3 → 2 cells apart, plus one
+  // half-cell lobe beyond each) so the inputs meet the lobes, and it must
+  // fit the gate slot horizontally so the side assets stay clear of it.
+  const gcx = (gate.left + gate.right) / 2;
+  const rect = {
+    left: gcx, right: gcx, top: cy, size: 0, cx: gcx, cy,
+    gateW: gate.right - gate.left, boxH: h,
+    // Filled by nsFitSymbol once the painted bounds are known.
+    artL: gcx, artR: gcx, apexX: gcx, depth: 0,
+  };
+  return { x0, y0, w, h, cy, innerL, innerR, exclusive, gate, negate, rect };
+}
+
+/** Finish the rect once the sprite (or vector) painted bounds are known. */
+function nsFitSymbol(rect, bounds, cell, nInputs) {
+  const paintedH = bounds.b - bounds.t;
+  // Size comes from the port spread ONLY — the painted lobes must span the
+  // port rows plus one cell each side. It never depends on which side
+  // slots are occupied, so AND and NAND, OR and NOR, XOR and XNOR share
+  // one symbol size. Two-input gates: ports 2 cells apart → 4 cells tall.
+  const targetH = Math.min(rect.boxH, (nInputs > 1 ? 2 * (nInputs - 1) + 2 : 2) * cell);
+  // …and by the FIXED gate-slot width — the same number for every gate in
+  // the family, occupied side slots or not. Whichever binds, wins.
+  const paintedW = bounds.r - bounds.l;
+  const size = Math.min(targetH / paintedH, rect.gateW / paintedW);
+  // Centre the PAINTED art on the gate slot, not the PNG square.
+  const cxArt = (bounds.l + bounds.r) / 2, cyArt = (bounds.t + bounds.b) / 2;
+  rect.size = size;
+  rect.left = rect.cx - cxArt * size;
+  rect.right = rect.left + size;
+  rect.top = rect.cy - cyArt * size;
+  rect.artL = rect.left + bounds.l * size;
+  rect.artR = rect.left + bounds.r * size;
+  rect.apexX = rect.left + (bounds.apex ?? bounds.l) * size;
+  rect.depth = rect.apexX - rect.artL;
+  return rect;
+}
+
+/**
+ * The geometry a gate is drawn on: the three containers and the fitted
+ * symbol rect, for the given bounds and recipe. Exported for the tests
+ * that check the anatomy without drawing; `nsGate` computes the same.
+ */
+export function gateGeometry(cell, c, bounds, opts, nInputs = c.inPorts.length) {
+  const L = nsGateLayout(cell, c);
+  // Unused side slots lend their width to the symbol; used ones keep it.
+  // The exclusive curve nests INSIDE the OR's concave back, so it needs
+  // only the part of its slot the back does not already vacate.
+  const spanL = opts.exclusive ? L.exclusive.left + cell * 0.36 : L.exclusive.left;
+  const spanR = opts.negate ? L.gate.right - cell * 0.1 : L.negate.right;
+  L.rect.cx = (spanL + spanR) / 2;
+  nsFitSymbol(L.rect, bounds, cell, nInputs);
+  return L;
+}
+
+/** The ink a symbol takes for a signal, and its alpha. */
+const symbolInk = (t, sig) => (sig === 1 ? t.inputOn : sig === 2 ? t.labelMuted : t.spriteInk);
+const symbolAlpha = (sig) => (sig === 1 ? 0.92 : sig === 2 ? 0.5 : 0.94);
+
+/**
+ * Sprite that answers to signal: tinted to ink, warmed and haloed when
+ * HIGH. The PNGs point up; the canvas turns them a quarter clockwise to
+ * match the layout's left-to-right flow — `bounds` are measured in that
+ * rotation.
+ */
+function nsSpriteRect(ctx, name, rect, sig, t) {
+  const art = tintedSprite(name, symbolInk(t, sig), symbolAlpha(sig));
+  if (!art) return;
+  ctx.save();
+  ctx.translate(rect.left + rect.size / 2, rect.top + rect.size / 2);
+  ctx.rotate(Math.PI / 2);
+  if (sig === 1) {
+    const halo = haloSprite(name, t.inputOn);
+    if (halo) {
+      const hs = rect.size * (1 + HALO_PAD * 2);
+      ctx.globalAlpha = 0.55;
+      ctx.drawImage(halo, -hs / 2, -hs / 2, hs, hs);
+      ctx.globalAlpha = 1;
+    }
+  }
+  ctx.drawImage(art, -rect.size / 2, -rect.size / 2, rect.size, rect.size);
+  ctx.restore();
+}
+
+/** Negate container: one bubble, tangent to where the symbol actually ends, clamped inside its slot. */
+function nsNegate(ctx, cell, slot, cy, sig, t, symbolRight) {
+  const r = Math.min(NS_BUBBLE_R * cell, (slot.right - slot.left) / 2 - cell * 0.03);
+  const bx = Math.min(slot.right - r, Math.max(slot.left + r, (symbolRight ?? slot.left) + cell * 0.14 + r));
+  if (sig === 1) {
+    nsVecHalo(ctx, 'bubble', bx - r, cy - r, r * 2, r * 2, t.inputOn, cell * 0.55,
+      (g) => { g.beginPath(); g.arc(r, r, r, 0, Math.PI * 2); g.closePath(); });
+  }
+  ctx.save();
+  ctx.fillStyle = symbolInk(t, sig);
+  ctx.globalAlpha = symbolAlpha(sig);
+  ctx.beginPath();
+  ctx.arc(bx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+/**
+ * Exclusive container: the second back-curve that turns OR into XOR — the
+ * same concave arc the OR silhouette has on its input side, echoed one
+ * slot to the left, a stroked curve with round caps sized to the symbol
+ * and kept a clear gap from it. Its apex sits just left of the OR back's
+ * own apex, by the gap plus the stroke's half width, so the two curves
+ * are parallel.
+ */
+function nsExclusive(ctx, cell, slot, rect, sig, t) {
+  const lw = Math.max(2, cell * 0.2);
+  const gapToGate = cell * 0.14;
+  const half = rect.size * 0.30;
+  const top = rect.cy - half, bot = rect.cy + half;
+  const xTip = (rect.apexX ?? rect.left) - gapToGate - lw / 2;
+  const xEnd = Math.max(slot.left + lw / 2, xTip - (rect.depth ?? rect.size * 0.16));
+  const depth = xTip - xEnd;
+  const path = (g, ox, oy) => {
+    g.beginPath();
+    g.moveTo(xEnd - ox, top - oy);
+    g.quadraticCurveTo(xTip + depth - ox, rect.cy - oy, xEnd - ox, bot - oy);
+  };
+  if (sig === 1) {
+    nsVecHalo(ctx, 'excl', xEnd - lw, top - lw, depth + lw * 2 + depth * 0.3, bot - top + lw * 2, t.inputOn, cell * 0.6,
+      (g) => { path(g, xEnd - lw, top - lw); g.lineWidth = lw; g.lineCap = 'round'; g.stroke(); g.beginPath(); });
+  }
+  ctx.save();
+  ctx.strokeStyle = symbolInk(t, sig);
+  ctx.globalAlpha = symbolAlpha(sig);
+  ctx.lineWidth = lw;
+  ctx.lineCap = 'round';
+  path(ctx, 0, 0);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** NOT's triangle: the one symbol that is a vector, since a bubble cannot be subtracted from a PNG. */
+function nsTriangle(ctx, t, cell, rect, sig) {
+  const x0 = rect.left + rect.size * 0.2, x1 = rect.left + rect.size * 0.84;
+  const y0 = rect.cy - rect.size * 0.3, y1 = rect.cy + rect.size * 0.3;
+  const tri = (g, ox, oy) => {
+    g.beginPath();
+    g.moveTo(x0 - ox, y0 - oy);
+    g.lineTo(x1 - ox, rect.cy - oy);
+    g.lineTo(x0 - ox, y1 - oy);
+    g.closePath();
+  };
+  if (sig === 1) {
+    nsVecHalo(ctx, 'tri', x0, y0, x1 - x0, y1 - y0, t.inputOn, cell * 0.7, (g) => tri(g, x0, y0));
+  }
+  ctx.save();
+  ctx.fillStyle = symbolInk(t, sig);
+  ctx.globalAlpha = symbolAlpha(sig);
+  tri(ctx, 0, 0);
+  ctx.fill();
+  ctx.restore();
+}
+
+/**
+ * Vector stand-ins for the two sprites, drawn inside the triangle's painted
+ * bounds so the layout does not move, for the moment before the PNGs
+ * decode. The sprite-ready retheme replaces them.
+ */
+function nsVectorGate(ctx, t, cell, rect, sig, shape) {
+  const l = rect.left + rect.size * 0.2, r = rect.left + rect.size * 0.84;
+  const top = rect.cy - rect.size * 0.3, bot = rect.cy + rect.size * 0.3;
+  const mid = (l + r) / 2;
+  ctx.save();
+  ctx.fillStyle = symbolInk(t, sig);
+  ctx.globalAlpha = symbolAlpha(sig);
+  ctx.beginPath();
+  if (shape === 'OR') {
+    ctx.moveTo(l, top);
+    ctx.quadraticCurveTo(mid, top, r, rect.cy);
+    ctx.quadraticCurveTo(mid, bot, l, bot);
+    ctx.quadraticCurveTo(l + rect.size * 0.16, rect.cy, l, top);
+  } else {
+    ctx.moveTo(l, top);
+    ctx.lineTo(mid, top);
+    ctx.bezierCurveTo(r, top, r, bot, mid, bot);
+    ctx.lineTo(l, bot);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
 /* ───── skins ──────────────────────────────────────────────────────── */
 
 const drawInputPin = ({ ctx, cell, component, outputSignal, theme }) => {

@@ -17,7 +17,7 @@ import { ComponentKind, widthMask } from 'circ-renderer/topology';
 import type { BitValue } from 'circ-renderer/topology';
 import type { CircTheme, PlacedComponent, RoutedWire } from 'circ-renderer';
 import { colorsDark, colorsLight, type PaletteKey } from '../src/utils/circ-palette.mjs';
-import { makeSkins, spriteArt } from '../src/utils/circ-skins.mjs';
+import { gateGeometry, makeSkins, spriteArt } from '../src/utils/circ-skins.mjs';
 import { STUB_BOUNDS, recordingContext, stubAssets, type Op } from './canvas-record.ts';
 
 const GOLDENS = resolve(import.meta.dir, 'fixtures', 'skins');
@@ -198,6 +198,83 @@ describe('sprite art', () => {
     const assets = readFileSync(resolve(import.meta.dir, '..', 'src', 'utils', 'circ-assets.mjs'), 'utf8');
     const exported = [...assets.matchAll(/^export const (\w+)/gm)].map((m) => m[1]).sort();
     expect(exported).toEqual(['AND', 'NAND', 'NOT', 'OR', 'XOR']);
+  });
+});
+
+describe('gate anatomy', () => {
+  const cell = 14;
+  const box = component('and_gate', 1); // 5×5 at (2,2), ports a at y+1, b at y+3
+  const or = { ...STUB_BOUNDS };
+  const RECIPES = {
+    and: {}, nand: { negate: true },
+    or: {}, nor: { negate: true }, xor: { exclusive: true }, xnor: { exclusive: true, negate: true },
+  } as const;
+
+  test('the three containers are inset and never touch', () => {
+    const L = gateGeometry(cell, box, or, {});
+    const x0 = box.x * cell, w = box.width * cell;
+    expect(L.innerL).toBeCloseTo(x0 + 0.4 * cell, 9);
+    expect(L.innerR).toBeCloseTo(x0 + w - 0.4 * cell, 9);
+    expect(L.exclusive.right - L.exclusive.left).toBeCloseTo(0.55 * cell, 9);
+    expect(L.negate.right - L.negate.left).toBeCloseTo(0.55 * cell, 9);
+    expect(L.gate.left).toBe(L.exclusive.right);
+    expect(L.gate.right).toBe(L.negate.left);
+  });
+
+  test('the symbol is sized by the port spread and the gate slot, whichever binds', () => {
+    const L = gateGeometry(cell, box, or, {});
+    const paintedH = or.b - or.t, paintedW = or.r - or.l;
+    // Two inputs two cells apart: four cells of painted height.
+    const expected = Math.min((4 * cell) / paintedH, L.rect.gateW / paintedW);
+    expect(L.rect.size).toBe(expected);
+    // The painted art is centred on the span, so its lobes sit on the port rows.
+    const artMid = (L.rect.artL + L.rect.artR) / 2;
+    expect(Math.abs(artMid - L.rect.cx)).toBeLessThan(1e-9);
+  });
+
+  test('a negated pair, and an exclusive pair, share one symbol size', () => {
+    for (const [a, b] of [['and', 'nand'], ['or', 'nor'], ['xor', 'xnor']] as const) {
+      const sa = gateGeometry(cell, box, or, RECIPES[a]).rect.size;
+      const sb = gateGeometry(cell, box, or, RECIPES[b]).rect.size;
+      expect(`${a}/${b}: ${sa === sb}`).toBe(`${a}/${b}: true`);
+    }
+  });
+
+  test('an unused slot lends its width: the symbol recentres, never resizes', () => {
+    const plain = gateGeometry(cell, box, or, {});
+    const negated = gateGeometry(cell, box, or, { negate: true });
+    expect(negated.rect.size).toBe(plain.rect.size);
+    expect(negated.rect.cx).toBeLessThan(plain.rect.cx);
+    const excl = gateGeometry(cell, box, or, { exclusive: true });
+    expect(excl.rect.cx).toBeGreaterThan(plain.rect.cx);
+  });
+
+  test('the negate bubble is tangent to the measured tip, clamped inside its slot', () => {
+    const L = gateGeometry(cell, box, or, { negate: true });
+    const r = Math.min(0.24 * cell, (L.negate.right - L.negate.left) / 2 - 0.03 * cell);
+    const tangent = L.rect.artR + 0.14 * cell + r;
+    const bx = Math.min(L.negate.right - r, Math.max(L.negate.left + r, tangent));
+    expect(bx - r).toBeGreaterThanOrEqual(L.negate.left);
+    expect(bx + r).toBeLessThanOrEqual(L.negate.right);
+    // The symbol keeps its size when a slot is used, so with a wide OR the art
+    // ends a little inside the gate slot and the bubble sits at the slot's
+    // left edge, the nearest it can be to the tip.
+    expect(L.rect.artR).toBeLessThan(L.negate.left);
+    expect(bx).toBe(L.negate.left + r);
+    expect(tangent).toBeLessThan(bx);
+  });
+
+  test("the exclusive curve nests in the OR's back, apex just left of the back's own", () => {
+    const L = gateGeometry(cell, box, or, { exclusive: true });
+    const lw = Math.max(2, cell * 0.2);
+    // The back apex is inside the art's box: the lobe tips are its left edge.
+    expect(L.rect.apexX).toBeGreaterThan(L.rect.artL);
+    expect(L.rect.depth).toBeCloseTo((or.apex - or.l) * L.rect.size, 9);
+    const xTip = L.rect.apexX - 0.14 * cell - lw / 2;
+    expect(xTip).toBeLessThan(L.rect.apexX);
+    const xEnd = Math.max(L.exclusive.left + lw / 2, xTip - L.rect.depth);
+    expect(xEnd).toBeLessThan(xTip);
+    expect(xEnd - lw / 2).toBeGreaterThanOrEqual(L.exclusive.left);
   });
 });
 
