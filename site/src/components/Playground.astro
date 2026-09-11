@@ -194,9 +194,17 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           <button type="button" role="tab" class="pg-view-tab" data-view="live" aria-selected="false" aria-controls="pg-view-live" tabindex="-1">Live</button>
           <button type="button" role="tab" class="pg-view-tab" data-view="truth" aria-selected="false" aria-controls="pg-view-truth" tabindex="-1">Truth</button>
         </div>
-        {/* Why the Truth view is blocked, when it is; empty otherwise. Phase 3
-            makes it the chip. */}
-        <span class="pg-view-note" id="pg-view-note"></span>
+        {/* Each view's own tools, shown with it (design file 3e, 3f). The
+            Schematic's two toggles are the same settings the footer's form
+            binds, on the same `data-setting` attribute, so one binding paints
+            both. The Truth chip carries the table's counts and, when the
+            reader is blocked, why. */}
+        <div class="pg-view-tools" data-for="schematic">
+          <label class="pg-tool-toggle"><input type="checkbox" data-setting="expandMacros" /> Expand macros</label>
+          <label class="pg-tool-toggle"><input type="checkbox" data-setting="expandDisplay" /> Expand display</label>
+          <button type="button" class="pg-tool-btn" data-copy="preview" title="Copy the schematic as text"><span class="pg-action-label">Copy</span></button>
+        </div>
+        <span class="pg-truth-chip" id="pg-truth-chip" data-for="truth"></span>
         <button type="button" class="pg-data-btn" aria-pressed="false" aria-controls="pg-data-card">Data <span class="pg-data-count"></span></button>
       </div>
       <div class="pg-view-panel" id="pg-view-schematic" data-view-panel="schematic" role="tabpanel"><pre class="pg-preview"></pre></div>
@@ -218,7 +226,15 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         <div class="pg-data" hidden></div>
       </div>
       <div class="pg-hint"></div>
-      <div class="pg-zoom">
+      {/* The bottom-right line is the view's: the schematic's size, the truth
+          table's copies, the Live view's zoom. */}
+      <div class="pg-size" data-for="schematic">0 × 0 chars</div>
+      <div class="pg-truth-copy" data-for="truth">
+        <button type="button" class="pg-tool-btn" data-copy="markdown" title="Copy the table as markdown"><span class="pg-action-label">Copy as markdown</span></button>
+        <span class="pg-zoom-sep" aria-hidden="true">·</span>
+        <button type="button" class="pg-tool-btn" data-copy="csv" title="Copy the table as CSV"><span class="pg-action-label">CSV</span></button>
+      </div>
+      <div class="pg-zoom" data-for="live">
         <span class="pg-zoom-cell">cell 14</span>
         <span class="pg-zoom-sep" aria-hidden="true">·</span>
         <button type="button" class="pg-zoom-pct" aria-label="Reset zoom to 100%" aria-disabled="true">100%</button>
@@ -529,7 +545,9 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     // the file strip, and showView() would then clobber its aria-selected.
     const viewSwitch = el.querySelector<HTMLElement>('.pg-view-switch')!;
     const viewTabs = Array.from(el.querySelectorAll<HTMLButtonElement>('.pg-view-switch [role=tab]'));
-    const viewNote = el.querySelector<HTMLElement>('.pg-view-note')!;
+    const truthChip = el.querySelector<HTMLElement>('.pg-truth-chip')!;
+    const sizeLine = el.querySelector<HTMLElement>('.pg-size')!;
+    const copyButtons = Array.from(el.querySelectorAll<HTMLButtonElement>('[data-copy]'));
     const dataBtn = el.querySelector<HTMLButtonElement>('.pg-data-btn')!;
     const dataCount = el.querySelector<HTMLElement>('.pg-data-count')!;
     const dataCard = el.querySelector<HTMLElement>('.pg-data-card')!;
@@ -621,6 +639,9 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
        *  wired, which is after the restore from the envelope runs — a restore
        *  onto Live must not reach the simulator's record before it exists. */
       onLive: null as null | (() => void),
+      /** What a copy button copies, by its `data-copy`; null for one the
+       *  island does not know. The Truth view registers markdown and csv. */
+      copySource: null as null | ((what: string) => Promise<string> | null),
       /** Re-read the artifact into the Download button; set once the status
        *  actions are wired, called from every place the artifact changes. */
       refreshActions: null as null | (() => void),
@@ -678,11 +699,11 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     function applyTruthGate() {
       const reason = truthBlock();
       truthTab.setAttribute('aria-disabled', String(reason !== null));
-      // The reason sits in the region's toolbar, beside the switch, and the
-      // tab is described by it only while there is one to read.
-      viewNote.textContent = reason ?? '';
+      // The reason sits in the Truth chip, beside the switch, and the tab is
+      // described by it only while there is one to read.
+      truthChip.textContent = reason ?? '';
       if (reason === null) truthTab.removeAttribute('aria-describedby');
-      else truthTab.setAttribute('aria-describedby', 'pg-view-note');
+      else truthTab.setAttribute('aria-describedby', 'pg-truth-chip');
       // Blocked while it is the open view: say so in the panel rather than
       // moving the reader somewhere they did not ask to go. Transient errors
       // are constant while typing, and a view that flees mid-keystroke is
@@ -709,6 +730,9 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         b.tabIndex = selected ? 0 : -1;
       }
       for (const p of viewPanels) p.hidden = p.dataset.viewPanel !== view;
+      // The region wears the view: the Schematic's code surface without the
+      // grid, and each view's tools and bottom-right line.
+      outputPane.dataset.view = view;
       hintEl.textContent = HINTS[view];
       // A view switch re-uses the build stage's current sequence rather than
       // claiming a new one, so a compile already in flight stays current and
@@ -727,7 +751,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         // who left the page on the truth table would come back to a region
         // that silently moved. Refusing here also keeps the reason on screen.
         if (view === 'truth' && b.getAttribute('aria-disabled') === 'true') {
-          const reason = viewNote.textContent;
+          const reason = truthChip.textContent;
           if (reason) status.textContent = reason;
           return;
         }
@@ -3142,11 +3166,36 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       if (!buildStage.isCurrent(seq)) return;
       if (r.status === 0) {
         previewEl.textContent = r.text!;
+        renderSizeLine();
         return;
       }
       // Leave the last good schematic in place and say so in the status bar.
       pipe.failure = messageOf(r);
       setStale(previewEl.textContent !== '');
+    }
+
+    /** `rows × cols chars` of the schematic on screen (design file 3e). */
+    function renderSizeLine() {
+      const lines = previewEl.textContent ? previewEl.textContent.replace(/\n$/, '').split('\n') : [];
+      const cols = lines.reduce((w, l) => Math.max(w, l.length), 0);
+      sizeLine.textContent = `${lines.length} × ${cols} chars`;
+    }
+
+    // ---- the copies ----
+    // The schematic as its text; the table as the compiler's markdown or CSV
+    // (the Truth slice fills those two in).
+    for (const b of copyButtons) {
+      b.addEventListener('click', async () => {
+        const what = b.dataset.copy;
+        const textOf = hooks.copySource?.(what ?? '') ?? (what === 'preview' ? Promise.resolve(previewEl.textContent ?? '') : null);
+        if (!textOf) return;
+        const text = await textOf;
+        if (!text) {
+          flash(b, 'Nothing yet', 'failed');
+          return;
+        }
+        flash(b, (await copyText(text)) ? 'Copied' : 'Select below', 'done');
+      });
     }
 
     function rootInputBits(): number | null {

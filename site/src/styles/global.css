@@ -752,7 +752,36 @@ hr {
 /* Blocked, not disabled: the element stays focusable so the reason beside it
    is reachable without a pointer. */
 .pg-view-tab[aria-disabled='true'] { opacity: 0.45; cursor: not-allowed; }
-.pg-view-note {
+/* Each view's tools ride in the bar and show with the view; the region's
+   `data-view` says which. A tool is a ghost button or a small toggle. */
+.pg-view-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.pg-tool-toggle { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+.pg-tool-toggle input { margin: 0; accent-color: var(--accent); }
+.pg-tool-toggle:hover { color: var(--fg); }
+.pg-tool-btn {
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  padding: 2px 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pg-tool-btn:hover { color: var(--fg); }
+.pg-tool-btn[data-state='done'] { color: var(--accent); }
+.pg-tool-btn[data-state='failed'] { color: var(--danger); }
+.pg-tool-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pg-truth-chip {
   flex: 1;
   min-width: 0;
   font-family: var(--font-mono);
@@ -762,7 +791,30 @@ hr {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.pg-view-note:empty { display: none; }
+.pg-truth-chip:empty { display: none; }
+.pg-output[data-view='schematic'] [data-for]:not([data-for='schematic']),
+.pg-output[data-view='live'] [data-for]:not([data-for='live']),
+.pg-output[data-view='truth'] [data-for]:not([data-for='truth']) { display: none; }
+/* The Schematic view: the region on the code surface with no grid, the
+   `--preview` text centred in the strict mono at 20px (design file 3e). */
+.pg-output[data-view='schematic'] { background: var(--code-bg); }
+.pg-output[data-view='schematic']::before { display: none; }
+.pg-view-panel[data-view-panel='schematic'] { display: grid; }
+.pg-view-panel[data-view-panel='schematic'][hidden] { display: none; }
+.pg-size,
+.pg-truth-copy {
+  position: absolute;
+  right: 16px;
+  bottom: 12px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
 .pg-data-btn {
   margin-left: auto;
   flex: none;
@@ -1375,11 +1427,12 @@ span.pg-diag-pos { color: var(--muted); cursor: default; }
   box-shadow: inset 0 -2px 0 var(--accent);
 }
 .pg-preview {
-  margin: 0;
+  margin: auto;
   font-family: var(--font-mono-strict);
-  font-size: 0.85rem;
-  line-height: 1;
+  font-size: 20px;
+  line-height: 1.35;
   white-space: pre;
+  color: var(--fg);
 }
 .pg-table table { border-collapse: collapse; font-family: var(--font-mono); font-size: 0.85rem; }
 .pg-table th, .pg-table td { border: 1px solid var(--border); padding: 0.2rem 0.6rem; text-align: center; }

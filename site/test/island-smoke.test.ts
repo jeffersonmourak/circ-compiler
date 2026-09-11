@@ -289,7 +289,9 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     // the settings two sets of live controls bound to one store.
     const output = doc.querySelector('.pg-output')!;
     expect(output.querySelectorAll('.pg-diag')).toHaveLength(0);
-    expect(output.querySelectorAll('[data-setting]')).toHaveLength(0);
+    // The Schematic's two toggles are the only settings in the region, on the
+    // same attribute the footer's form binds, so one binding paints both.
+    expect(Array.from(output.querySelectorAll('[data-setting]'), (e) => e.getAttribute('data-setting'))).toEqual(['expandMacros', 'expandDisplay']);
     expect(doc.querySelectorAll('.pg-diag')).toHaveLength(1);
     const editorPane = doc.querySelector('.pg-editor')!;
     expect(editorPane.querySelectorAll('[data-setting]').length).toBeGreaterThan(0);
@@ -311,7 +313,11 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     // No analysis lands in this harness, so the truth view is not blocked and
     // the note beside the switch says nothing.
     expect(doc.querySelector('.pg-view-tab[data-view="truth"]')?.getAttribute('aria-disabled')).toBe('false');
-    expect(doc.querySelector('.pg-view-note')?.textContent).toBe('');
+    expect(doc.querySelector('.pg-truth-chip')?.textContent).toBe('');
+    // The region wears the view, and the Schematic's size line starts empty.
+    expect((doc.querySelector('.pg-output') as unknown as { dataset: Record<string, string> }).dataset.view).toBe('schematic');
+    expect(doc.querySelector('.pg-size')?.textContent).toBe('0 × 0 chars');
+    expect(doc.querySelector('.pg-view-tools[data-for="schematic"] [data-copy="preview"]')).not.toBeNull();
     expect(doc.querySelector('.pg-data-btn')?.getAttribute('aria-pressed')).toBe('false');
     expect(doc.querySelector('.pg-data-card')?.hasAttribute('hidden')).toBe(true);
     expect(doc.querySelector('.pg-data-card .pg-data')).not.toBeNull();
@@ -400,6 +406,7 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
 
     view('live').click();
     expect(view('live').getAttribute('aria-selected')).toBe('true');
+    expect(region.dataset.view).toBe('live');
     expect(panel('live').hasAttribute('hidden')).toBe(false);
     expect(panel('schematic').hasAttribute('hidden')).toBe(true);
     expect(panel('truth').hasAttribute('hidden')).toBe(true);
