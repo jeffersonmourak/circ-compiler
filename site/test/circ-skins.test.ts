@@ -194,10 +194,18 @@ describe('sprite art', () => {
     expect(warm.calls.offscreen).toBe(1);
   });
 
-  test('the sprite module still exports what the page decodes', () => {
+  test('only the AND and OR sprites remain', () => {
+    // NAND, NOR, XOR and XNOR are the base sprite plus the bubble and the
+    // curve; NOT is a vector. Their PNGs were 60% of the module.
     const assets = readFileSync(resolve(import.meta.dir, '..', 'src', 'utils', 'circ-assets.mjs'), 'utf8');
-    const exported = [...assets.matchAll(/^export const (\w+)/gm)].map((m) => m[1]).sort();
-    expect(exported).toEqual(['AND', 'NAND', 'NOT', 'OR', 'XOR']);
+    const exported = [...assets.matchAll(/^export (?:const|async function) (\w+)/gm)].map((m) => m[1]).sort();
+    expect(exported).toEqual(['AND', 'OR', 'loadAssets']);
+    expect(assets).not.toMatch(/data:image\/png[^\n]*\n[^\n]*\n[^\n]*data:image\/png[^\n]*\n[^\n]*\n[^\n]*data:image/);
+    // No skin asks for a sprite that no longer exists.
+    const skins = readFileSync(resolve(import.meta.dir, '..', 'src', 'utils', 'circ-skins.mjs'), 'utf8');
+    for (const name of [...skins.matchAll(/sprite: '([A-Z]+)'/g)].map((m) => m[1])) {
+      expect(`${name}: ${['AND', 'OR'].includes(name)}`).toBe(`${name}: true`);
+    }
   });
 });
 

@@ -57,7 +57,7 @@ export function recordingContext(cell: number): Recording {
   return { ctx, ops, canvas };
 }
 
-export const SPRITE_NAMES = ['AND', 'NAND', 'OR', 'XOR', 'NOT'] as const;
+export const SPRITE_NAMES = ['AND', 'OR'] as const;
 
 export interface Bounds { l: number; r: number; t: number; b: number; apex: number }
 
