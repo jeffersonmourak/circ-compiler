@@ -80,7 +80,7 @@ Status 0 omits warnings; call `circ_analyze` for them.
 `circ_version` is always status 0 with:
 
 ```json
-{"version":"0.0.2","revision":"<git short sha>","topology_version":3,"full_version":3,
+{"version":"0.0.3","revision":"<git short sha>","topology_version":3,"full_version":3,
  "parser":"langlang go/v0.0.12 abi=1",
  "parser_runtime_sha256":"<sha256 of the runtime pasted into lib/parser/parser.zig>",
  "grammar_sha256":"<sha256 of lib/grammar/proto-circ.peg at build time>"}
