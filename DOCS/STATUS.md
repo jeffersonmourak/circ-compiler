@@ -177,3 +177,11 @@ One entry per shipped slice, newest last. The plan is `DOCS/PLANS_PROMPT.md`; th
 **Tests:** replaced the sprite-module guard with `only the AND and OR sprites remain`; ran `bun test` (456 pass), typecheck (0 errors), `bun --bun run build`, `bun run bundle` (every route ok), result pass
 **Next slice:** gallery review (the human): `builtin-xor`, `full-adder`, `mux-2to1`, `inverter-chain` at `cell` 10 and 24, both modes; then Phase 4.
 **Notes:** measured: `circ-assets.mjs` 19,940 → 7,594 bytes; the lazy theme chunk 31.7 KB raw / 18.3 KB gzip (end of Phase 2) → 23.6 KB / 11.5 KB, against the Phase 0 baseline of 28.4 KB / 17.2 KB. Decisions 4, 5 and 6 recorded.
+
+## 2026-09-10 — Phase 3 — gallery review
+
+**What shipped:** the human reviewed the Phase 3 tree and approved it ("looks great"); no value changed. Phase 3 complete.
+**Files touched:** `DOCS/STATUS.md`
+**Tests:** none (review)
+**Next slice:** Phase 4 slice 1: slice ruler and range bar.
+**Notes:** none.
