@@ -129,3 +129,11 @@ One entry per shipped slice, newest last. The plan is `DOCS/PLANS_PROMPT.md`; th
 **Tests:** `grep -c '^### ' DOCS/decisions/playground.md` → 51, from 40 at the plan's start: eleven entries for ten decisions and one finding.
 **Next slice:** the completion entry, once the human has walked the page.
 **Notes:** none.
+
+## 2026-09-11 — Phase 2 — completion
+
+**What shipped:** the human walked `/playground` in both themes and approved ("great push and merge"): every face's action in the console in order, the copied script through the CLI, the image comment, the scroll lock, a fresh terminal on a project switch. With the machine half of the walk, the measurement and the decisions reread above, the plan is complete: every phase shipped, every slice committed, nothing left to dispatch.
+**Files touched:** `DOCS/STATUS.md`
+**Tests:** the full site gate and `zig build test-all` on the final tree, result pass
+**Next slice:** none; plan complete. Archive per `DOCS/prompts/ARCHIVE.md` on the human's ask.
+**Notes:** follow-ups, none blocking: (1) a replay cannot reproduce an image that was loaded from the Memory tab and left loaded — the comment names it, and `--mem=<mem>=<file>` supplies it on the CLI; a `Copy script` that also offered the images as files would close that. (2) Tab completion of verbs and pin names at the prompt stayed deferred. (3) The console's prompt loop still has no headless test; `commandFor`, `scriptOf` and the executor are the tested core, the loop is the human's walk. (4) `DOCS/sim-protocol.md` is still not synced into the site's reference pages.
