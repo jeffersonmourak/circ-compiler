@@ -151,7 +151,9 @@ export function mountSettingsDrawer(root: ParentNode, deps: SettingsDeps): void 
     const s = deps.get();
     for (const el of controls) {
       const key = el.dataset.setting as keyof PlaygroundSettings;
-      if (el instanceof HTMLInputElement && el.type === 'checkbox') {
+      if (el instanceof HTMLInputElement && el.type === 'radio') {
+        el.checked = el.value === s[key as ChoiceKey];
+      } else if (el instanceof HTMLInputElement && el.type === 'checkbox') {
         el.checked = Boolean(s[key as BoolKey]);
       } else if (el instanceof HTMLInputElement && el.type === 'number') {
         el.value = String(s.truthTableCap);
@@ -163,6 +165,7 @@ export function mountSettingsDrawer(root: ParentNode, deps: SettingsDeps): void 
 
   for (const el of controls) {
     el.addEventListener('change', () => {
+      if (el instanceof HTMLInputElement && el.type === 'radio' && !el.checked) return;
       const key = el.dataset.setting as keyof PlaygroundSettings;
       deps.set((draft) => {
         if (el instanceof HTMLInputElement && el.type === 'checkbox') {
@@ -183,4 +186,3 @@ export function mountSettingsDrawer(root: ParentNode, deps: SettingsDeps): void 
 
   paint();
 }
-

@@ -134,6 +134,9 @@ Add an entry here during execution whenever a non-obvious constraint surfaces â€
 
 **The canvas**
 
+- Restoring an open Data panel can run before the simulator record exists. Use the deferred `hooks.onDataOpen`, as Live uses `hooks.onLive`; artifact delivery fills the panel afterward.
+- Live and Data can request a session for the same artifact concurrently. `ensureSession` shares its pending build by bytes; Data row handlers also rebuild when session identity changes, even if the pin shape does not.
+
 - With `viewport: 'parent'` the renderer sizes to the mount; a mount with no height renders nothing and throws nothing. The mount's height comes from the region's grid, not from the canvas.
 - `fit()` after a rebuild must run after the mount has its size; a theme flip rebuilds the canvas (`buildCanvas`), so the refit belongs there, once.
 

@@ -15,6 +15,7 @@ import { examples } from '../src/content/examples.ts';
 import { tour } from '../src/content/tour.ts';
 import { resolve } from 'node:path';
 import { Window } from 'happy-dom';
+import type { SimSession } from '../src/scripts/sim-session.ts';
 
 const SITE = resolve(import.meta.dir, '..');
 const DIST = resolve(SITE, 'dist');
@@ -165,8 +166,10 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     // back to it. This is the boot path that once reached the simulator's
     // record before it was declared ("Cannot access 'sim' before
     // initialization"), and it aborted the rest of the boot with it.
-    const { doc, errors } = await runIsland('playground', 'Playground.astro', { ...defaultEnvelope(), view: 'live' });
+    const { doc, errors } = await runIsland('playground', 'Playground.astro', { ...defaultEnvelope(), view: 'live', dataOpen: true });
     expect(errors).toEqual([]);
+    expect(doc.querySelector('.pg-data-card')?.hasAttribute('hidden')).toBe(false);
+    (doc.querySelector('.pg-data-close') as unknown as HTMLElement).click();
     expect(doc.querySelector('.pg-view-tab[data-view="live"]')?.getAttribute('aria-selected')).toBe('true');
     expect(doc.querySelector('[data-view-panel="live"]')?.hasAttribute('hidden')).toBe(false);
     // Back to the default view for the rest of the walk.
@@ -291,7 +294,7 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(output.querySelectorAll('.pg-diag')).toHaveLength(0);
     // The Schematic's two toggles are the only settings in the region, on the
     // same attribute the footer's form binds, so one binding paints both.
-    expect(Array.from(output.querySelectorAll('[data-setting]'), (e) => e.getAttribute('data-setting'))).toEqual(['expandMacros', 'expandDisplay']);
+    expect(Array.from(output.querySelectorAll('.pg-view-tools [data-setting]'), (e) => e.getAttribute('data-setting'))).toEqual(['expandMacros', 'expandDisplay']);
     expect(doc.querySelectorAll('.pg-diag')).toHaveLength(1);
     const editorPane = doc.querySelector('.pg-editor')!;
     expect(editorPane.querySelectorAll('[data-setting]').length).toBeGreaterThan(0);
@@ -320,7 +323,9 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect((doc.querySelector('.pg-output') as unknown as { dataset: Record<string, string> }).dataset.view).toBe('schematic');
     expect(doc.querySelector('.pg-size')?.textContent).toBe('0 × 0 chars');
     expect(doc.querySelector('.pg-view-tools[data-for="schematic"] [data-copy="preview"]')).not.toBeNull();
-    expect(doc.querySelector('.pg-data-btn')?.getAttribute('aria-pressed')).toBe('false');
+    expect(doc.querySelector('.pg-data-btn')?.getAttribute('aria-expanded')).toBe('false');
+    expect(doc.querySelector('.pg-data-card')?.getAttribute('role')).toBe('dialog');
+    expect(doc.querySelector('.pg-data-card')?.getAttribute('aria-label')).toBe('Data');
     expect(doc.querySelector('.pg-data-card')?.hasAttribute('hidden')).toBe(true);
     expect(doc.querySelector('.pg-data-card .pg-data')).not.toBeNull();
     expect(doc.querySelector('.pg-data-card .pg-data-reset')).not.toBeNull();
@@ -428,14 +433,87 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     // says so for the view's inset.
     const data = doc.querySelector('.pg-data-btn') as unknown as { click(): void; getAttribute(n: string): string | null };
     data.click();
-    expect(data.getAttribute('aria-pressed')).toBe('true');
+    expect(data.getAttribute('aria-expanded')).toBe('true');
     expect(doc.querySelector('.pg-data-card')?.hasAttribute('hidden')).toBe(false);
     expect(region.dataset.dataOpen).toBe('true');
     expect(view('schematic').getAttribute('aria-selected')).toBe('true');
     data.click();
-    expect(data.getAttribute('aria-pressed')).toBe('false');
+    expect(data.getAttribute('aria-expanded')).toBe('false');
     expect(doc.querySelector('.pg-data-card')?.hasAttribute('hidden')).toBe(true);
     expect(region.dataset.dataOpen).toBe('false');
+  }));
+
+  test('the Data card edits a real session, shares its build and rebinds after a new artifact', async () => driveAsync(async (doc) => {
+    const island = (doc.querySelector('.pg') as unknown as { __playground: {
+      hooks: { onArtifact(bytes: Uint8Array | null, reason: string): void };
+      getSession(): Promise<SimSession | null>; showData(): Promise<void>;
+    } }).__playground;
+    const bytes = new Uint8Array(readFileSync(resolve(SITE, 'public/wasm/four-bit-adder.wasm')));
+    const click = (selector: string) => (doc.querySelector(selector) as unknown as HTMLElement).click();
+    const press = (target: HTMLElement, key: string) => target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+    const card = doc.querySelector('.pg-data-card') as unknown as HTMLElement;
+    const field = () => doc.querySelector('.pg-data-row[data-name="a"] .pg-data-in') as unknown as HTMLInputElement;
+    const select = doc.querySelector('#pg-set-values') as unknown as HTMLSelectElement;
+    const originalBase = select.value;
+    try {
+      island.hooks.onArtifact(bytes, 'compiled');
+      const [session, other] = await Promise.all([island.getSession(), island.getSession()]);
+      expect(session).not.toBeNull();
+      expect(session === other).toBe(true);
+      click('.pg-data-btn');
+      await island.showData();
+      expect(doc.querySelectorAll('.pg-data-section')).toHaveLength(2);
+      expect(doc.querySelectorAll('.pg-data-row')).toHaveLength(4);
+      expect(doc.querySelector('.pg-data table')).toBeNull();
+      expect(doc.querySelector('.pg-data-summary')?.textContent).toBe('2 in · 2 out');
+      click('.pg-data-base input[value="hex"]');
+      expect(select.value).toBe('hex');
+      field().value = '0x3';
+      press(field(), 'Enter');
+      expect(session!.get('a')).toMatchObject({ ok: true, value: { value: 3n } });
+      expect(doc.querySelector('.pg-console-log')?.textContent).toContain('set a 0x3');
+      expect(doc.querySelector('.pg-data-row[data-kind="out"] .pg-data-out')?.textContent).toBe('0x3');
+      select.value = 'decimal';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      expect((doc.querySelector('.pg-data-base input[value="decimal"]') as unknown as HTMLInputElement).checked).toBe(true);
+      expect(field().value).toBe('3');
+      field().value = '99';
+      press(field(), 'Enter');
+      expect(field().getAttribute('aria-invalid')).toBe('true');
+      press(field(), 'Escape');
+      expect(field().value).toBe('3');
+      expect(card.hidden).toBe(false);
+      press(field(), 'Escape');
+      expect(card.hidden).toBe(true);
+      expect(doc.activeElement === doc.querySelector('.pg-data-btn')).toBe(true);
+      // Same shape, new artifact: controls must drive the new session.
+      island.hooks.onArtifact(new Uint8Array(bytes), 'compiled');
+      const next = await island.getSession();
+      expect(next === session).toBe(false);
+      click('.pg-data-btn');
+      await island.showData();
+      field().value = '5';
+      field().dispatchEvent(new Event('blur'));
+      expect(next!.get('a')).toMatchObject({ ok: true, value: { value: 5n } });
+      click('.pg-data-reset');
+      for (let i = 0; i < 100 && (doc.querySelector('.pg-data-reset') as unknown as HTMLButtonElement).disabled; i++) await new Promise((r) => setTimeout(r, 1));
+      expect(next!.get('a')).toMatchObject({ ok: true, value: { defined: 0n } });
+      expect(doc.querySelector('.pg-console-log')?.textContent).toContain('reset');
+      // A scalar artifact exercises the round knob, including unknown.
+      island.hooks.onArtifact(new Uint8Array(readFileSync(resolve(SITE, 'public/wasm/half-adder.wasm'))), 'compiled');
+      await island.showData();
+      const knob = doc.querySelector('.pg-data-toggle') as unknown as HTMLButtonElement;
+      expect(knob.textContent).toBe('0');
+      knob.click();
+      expect(knob.textContent).toBe('1');
+      expect(knob.getAttribute('aria-pressed')).toBe('true');
+      expect(doc.querySelector('.pg-console-log')?.textContent).toContain('set a 0x1');
+    } finally {
+      if (!card.hidden) click('.pg-data-close');
+      island.hooks.onArtifact(null, 'files-changed');
+      select.value = originalBase;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    }
   }));
 
   test('the truth table renders as a card of rows that drive', async () => {

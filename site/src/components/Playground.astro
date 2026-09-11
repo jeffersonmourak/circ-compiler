@@ -204,7 +204,7 @@ const groups = displayGroups(catalogue, []);
           <button type="button" class="pg-tool-btn" data-copy="preview" title="Copy the schematic as text"><span class="pg-action-label">Copy</span></button>
         </div>
         <span class="pg-truth-chip" id="pg-truth-chip" data-for="truth"></span>
-        <button type="button" class="pg-data-btn" aria-pressed="false" aria-controls="pg-data-card">Data <span class="pg-data-count"></span></button>
+        <button type="button" class="pg-data-btn" aria-expanded="false" aria-controls="pg-data-card">Data <span class="pg-data-count"></span></button>
       </div>
       <div class="pg-view-panel" id="pg-view-schematic" data-view-panel="schematic" role="tabpanel"><pre class="pg-preview"></pre></div>
       {/* The truth table in a card on the dot grid (design file 3f): the row
@@ -214,17 +214,24 @@ const groups = displayGroups(catalogue, []);
         <div class="pg-sim-note"></div>
         <div class="pg-sim-mount" hidden></div>
       </div>
-      {/* The same circuit as the Live view, as values: one row per root pin,
-          inputs editable in the settings' base, outputs read. Drives the
-          same session the canvas draws. A card under the button until Phase 5
-          makes it the floating panel. */}
-      <div class="pg-data-card" id="pg-data-card" hidden>
+      {/* Every face drives the same session; the panel is a non-modal dialog. */}
+      <div class="pg-data-card" id="pg-data-card" role="dialog" aria-label="Data" tabindex="-1" hidden>
+        <div class="pg-data-head">
+          <button type="button" class="pg-data-grip" aria-label="Move the panel" disabled>⋮⋮</button>
+          <strong>Data</strong><span class="pg-data-summary"></span>
+          <div class="pg-data-base" role="radiogroup" aria-label="Value base">
+            {([['hex', 'hex'], ['binary', 'bin'], ['decimal', 'dec']] as const).map(([value, label]) => (
+              <label><input type="radio" name="pg-data-base" data-setting="valueFormat" value={value} aria-label={value} /><span>{label}</span></label>
+            ))}
+          </div>
+          <button type="button" class="pg-data-close" aria-label="Close Data">✕</button>
+        </div>
         <div class="pg-data-note"></div>
-        <div class="pg-data-head" hidden>
-          <span class="pg-data-hint">Type a value and press Enter; ? makes a pin unknown.</span>
+        <div class="pg-data" hidden></div>
+        <div class="pg-data-footer" hidden>
+          <span class="pg-data-hint">edits settle the circuit and echo in the console</span>
           <button type="button" class="pg-data-reset" title="Every pin unknown, ROM images re-applied">Reset</button>
         </div>
-        <div class="pg-data" hidden></div>
       </div>
       <div class="pg-hint"></div>
       {/* The bottom-right line is the view's: the schematic's size, the truth
@@ -541,7 +548,9 @@ const groups = displayGroups(catalogue, []);
     const tableEl = el.querySelector<HTMLElement>('.pg-table')!;
     const simNote = el.querySelector<HTMLElement>('.pg-sim-note')!;
     const dataNote = el.querySelector<HTMLElement>('.pg-data-note')!;
-    const dataHead = el.querySelector<HTMLElement>('.pg-data-head')!;
+    const dataFooter = el.querySelector<HTMLElement>('.pg-data-footer')!;
+    const dataSummary = el.querySelector<HTMLElement>('.pg-data-summary')!;
+    const dataClose = el.querySelector<HTMLButtonElement>('.pg-data-close')!;
     const dataEl = el.querySelector<HTMLElement>('.pg-data')!;
     const dataReset = el.querySelector<HTMLButtonElement>('.pg-data-reset')!;
     // Narrowed to the view switch: an unscoped [role=tab] would also collect
@@ -653,6 +662,7 @@ const groups = displayGroups(catalogue, []);
     };
     // Slice 8 attaches the simulator here.
     const hooks = {
+      onDataOpen: null as null | (() => void),
       onArtifact: null as null | ((bytes: Uint8Array | null, reason: 'built' | 'files-changed') => void),
       /** The Live view was shown: build or note. Set once the simulator is
        *  wired, which is after the restore from the envelope runs — a restore
@@ -687,6 +697,9 @@ const groups = displayGroups(catalogue, []);
       // The Truth view's rows come from the worker; the smoke test hands it
       // the compiler's JSON and reads the card.
       renderTruth: (json: string) => loadTruthView().then((m) => renderTruth(m.parseTruthTable(json))),
+      // The Data walk uses a real artifact without mounting a canvas.
+      getSession: () => ensureSession(),
+      showData: () => showData(),
       truth,
     };
 
@@ -809,15 +822,23 @@ const groups = displayGroups(catalogue, []);
     });
 
     /** The Data card: open over whichever view, its rows the session's. */
-    function setDataOpen(open: boolean, opts: { persist?: boolean } = {}) {
+    function setDataOpen(open: boolean, opts: { persist?: boolean; focus?: boolean } = {}) {
       state.dataOpen = open;
       if (opts.persist !== false) store.update((draft) => { draft.dataOpen = open; });
       dataCard.hidden = !open;
-      dataBtn.setAttribute('aria-pressed', String(open));
+      dataBtn.setAttribute('aria-expanded', String(open));
       outputPane.dataset.dataOpen = String(open);
-      if (open) void showData();
+      if (open) hooks.onDataOpen?.();
+      if (opts.focus !== false) (open ? dataCard : dataBtn).focus();
     }
     dataBtn.addEventListener('click', () => setDataOpen(!state.dataOpen));
+    dataClose.addEventListener('click', () => setDataOpen(false));
+    dataCard.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setDataOpen(false);
+    });
 
     /** `N → M` on the Data button: the root's pins, from the last analysis. */
     function renderDataCount() {
@@ -2880,7 +2901,7 @@ const groups = displayGroups(catalogue, []);
       }
 
       showView(store.envelope.view, { persist: false });
-      setDataOpen(store.envelope.dataOpen, { persist: false });
+      setDataOpen(store.envelope.dataOpen, { persist: false, focus: false });
       showFooterTab(store.envelope.footer.tab, { persist: false });
       setFooterOpen(store.envelope.footer.open, { persist: false });
       renderFooterBar();
@@ -3838,8 +3859,12 @@ const groups = displayGroups(catalogue, []);
      * measure the old size. The site never calls `fit()` synchronously from a
      * layout change.
      */
+    let refitPending = false;
     function refitIfIdle() {
+      if (refitPending) return;
+      refitPending = true;
       requestAnimationFrame(() => {
+        refitPending = false;
         if (!sim.view || sim.navigated) return;
         sim.view.view.fit();
         syncZoom();
@@ -3882,10 +3907,19 @@ const groups = displayGroups(catalogue, []);
      * then replays the reader's pins by name. Guarded at every await by the
      * bytes: a newer artifact while this one loads wins.
      */
-    async function ensureSession(): Promise<SimSession | null> {
-      if (!state.simulateEnabled || !sim.bytes) return null;
+    let sessionBuild: { bytes: Uint8Array; promise: Promise<SimSession | null> } | null = null;
+    function ensureSession(): Promise<SimSession | null> {
+      if (!state.simulateEnabled || !sim.bytes) return Promise.resolve(null);
       const bytes = sim.bytes;
-      if (sim.session && sim.sessionBytes === bytes) return sim.session;
+      if (sim.session && sim.sessionBytes === bytes) return Promise.resolve(sim.session);
+      if (sessionBuild?.bytes === bytes) return sessionBuild.promise;
+      const pending = { bytes, promise: buildSession(bytes) };
+      sessionBuild = pending;
+      const clear = () => { if (sessionBuild === pending) sessionBuild = null; };
+      void pending.promise.then(clear, clear);
+      return pending.promise;
+    }
+    async function buildSession(bytes: Uint8Array): Promise<SimSession | null> {
       const { CircRuntime: Runtime } = await loadRenderer();
       if (sim.bytes !== bytes) return null;
       dropSession();
@@ -4046,6 +4080,7 @@ const groups = displayGroups(catalogue, []);
     /** A signature of the rows' shape: a change rebuilds the table, else the
      *  cells are updated in place so a field being typed into survives. */
     let dataShape = '';
+    let dataSession: SimSession | null = null;
 
     /** Open the Data tab on the session, building it on first need. */
     async function showData() {
@@ -4053,14 +4088,14 @@ const groups = displayGroups(catalogue, []);
       if (!state.dataOpen) return;
       if (!session) {
         if (!dataNote.textContent) dataNote.textContent = state.simulateEnabled ? 'Compile a circuit first.' : dataNote.textContent;
-        dataHead.hidden = true;
+        dataFooter.hidden = true;
         dataEl.hidden = true;
         return;
       }
       await loadDataView();
-      if (sim.session !== session) return;
+      if (sim.session !== session || !state.dataOpen) return;
       dataNote.textContent = '';
-      dataHead.hidden = false;
+      dataFooter.hidden = false;
       dataEl.hidden = false;
       renderData();
     }
@@ -4071,30 +4106,43 @@ const groups = displayGroups(catalogue, []);
       const mod = dataViewLoaded;
       if (!session || !mod) return;
       const rows = mod.rowsFor(session, settings().valueFormat);
+      dataSummary.textContent = `${rows.filter((r) => r.kind === 'in').length} in · ${rows.filter((r) => r.kind === 'out').length} out`;
       const shape = rows.map((r) => `${r.kind}:${r.name}:${r.width}`).join('|');
-      if (shape !== dataShape || dataEl.childElementCount === 0) {
+      if (session !== dataSession || shape !== dataShape || dataEl.childElementCount === 0) {
+        dataSession = session;
         dataShape = shape;
         dataEl.innerHTML = '';
-        const table = document.createElement('table');
-        const head = table.createTHead().insertRow();
-        for (const label of ['pin', 'width', 'value']) {
-          const th = document.createElement('th');
-          th.textContent = label;
-          head.appendChild(th);
+        const sections = new Map<string, HTMLElement>();
+        for (const [kind, label] of [['in', 'input'], ['out', 'output']]) {
+          const section = document.createElement('section');
+          section.className = 'pg-data-section';
+          section.setAttribute('aria-label', `${label} pins`);
+          const header = document.createElement('div');
+          header.className = 'pg-data-columns';
+          for (const text of [label, 'bits', 'value']) {
+            const span = document.createElement('span');
+            span.textContent = text;
+            header.appendChild(span);
+          }
+          section.appendChild(header);
+          sections.set(kind, section);
+          dataEl.appendChild(section);
         }
-        const body = table.createTBody();
         for (const row of rows) {
-          const tr = body.insertRow();
+          const tr = document.createElement('div');
+          tr.className = 'pg-data-row';
           tr.dataset.name = row.name;
           tr.dataset.kind = row.kind;
-          const name = tr.insertCell();
+          const name = document.createElement('span');
           name.textContent = row.name;
           name.className = 'pg-data-name';
-          const width = tr.insertCell();
+          const width = document.createElement('span');
           width.textContent = String(row.width);
           width.className = 'pg-data-width';
-          const cell = tr.insertCell();
+          const cell = document.createElement('div');
           cell.className = 'pg-data-value';
+          tr.append(name, width, cell);
+          sections.get(row.kind)!.appendChild(tr);
           if (row.kind === 'out') {
             const span = document.createElement('span');
             span.className = 'pg-data-out';
@@ -4127,23 +4175,26 @@ const groups = displayGroups(catalogue, []);
             };
             input.addEventListener('keydown', (e) => {
               if (e.key === 'Enter') { e.preventDefault(); commit(); }
-              if (e.key === 'Escape') { e.preventDefault(); input.value = currentText(row.name); input.removeAttribute('aria-invalid'); }
+              if (e.key === 'Escape' && (input.value !== currentText(row.name) || input.hasAttribute('aria-invalid'))) {
+                e.preventDefault(); e.stopPropagation();
+                input.value = currentText(row.name); input.removeAttribute('aria-invalid');
+              }
             });
             input.addEventListener('blur', () => { if (input.value !== currentText(row.name)) commit(); });
             cell.appendChild(input);
           }
         }
-        dataEl.appendChild(table);
       }
       const active = document.activeElement;
       for (const row of rows) {
-        const tr = dataEl.querySelector<HTMLElement>(`tr[data-name="${CSS.escape(row.name)}"]`);
+        const tr = dataEl.querySelector<HTMLElement>(`.pg-data-row[data-name="${CSS.escape(row.name)}"]`);
         if (!tr) continue;
         const out = tr.querySelector<HTMLElement>('.pg-data-out');
         if (out) out.textContent = row.text;
         const btn = tr.querySelector<HTMLButtonElement>('.pg-data-toggle');
         if (btn) {
-          btn.textContent = row.text;
+          btn.textContent = row.signal === 2 ? '?' : String(row.signal);
+          btn.setAttribute('aria-label', `${row.name}, ${row.signal === 2 ? 'unknown' : row.signal}`);
           btn.dataset.signal = String(row.signal);
           btn.setAttribute('aria-pressed', String(row.signal === 1));
         }
@@ -4176,6 +4227,7 @@ const groups = displayGroups(catalogue, []);
       void session.reset().finally(() => { dataReset.disabled = false; });
     });
 
+    hooks.onDataOpen = () => { void showData(); };
     hooks.onLive = () => {
       if (state.artifact && sim.renderedHash !== state.artifact.hash) {
         sim.renderedHash = state.artifact.hash;
@@ -4198,7 +4250,8 @@ const groups = displayGroups(catalogue, []);
           : simNote.textContent;
         dataNote.textContent = simNote.textContent;
         consoleNote.textContent = simNote.textContent;
-        dataHead.hidden = true;
+        dataFooter.hidden = true;
+        dataSummary.textContent = '';
         dataEl.hidden = true;
         dataEl.innerHTML = '';
         sim.renderedHash = -1;

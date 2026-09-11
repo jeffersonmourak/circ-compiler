@@ -233,3 +233,11 @@ Rolling log of shipped slices. Newest at the bottom. The plan is `DOCS/PLANS_PRO
 **Tests:** Four geometry cases and a store round-trip/default/normalization case. All four gates pass: 594 tests; `/playground` 124.5 KB raw / 43.5 KB gzip.
 **Next slice:** The Data card and its value controls.
 **Notes:** Catalogue positions are validated by nonempty `example:`/`tour:` id shape, as the store does not hold the catalogue. Scratch positions also require a surviving scratch id; non-finite coordinates and unknown shapes are dropped without resetting projects. No schema bump.
+
+## 2026-09-11 — Phase 5 — The Data card
+
+**What shipped:** The card has its title, pin counts, hex/bin/dec radios, Close button, input/output sections, 22px scalar knobs, bus fields and read-only outputs, plus the hint and Reset footer. The radios share the settings binding with the footer's select. Escape first restores an edited bus field, then closes the panel with focus return. The canvas keeps its 344px inset while open; resize refits are coalesced to one per frame.
+**Files touched:** `site/src/components/Playground.astro`, `site/src/scripts/settings-drawer.ts`, `site/src/styles/global.css`, `site/test/island-smoke.test.ts`, `DOCS/PLANS_PROMPT.md`, `DOCS/STATUS.md`
+**Tests:** The smoke now restores an open Data panel at boot. A real-artifact Data walk proves shared pending session builds, bus edits and refusals, Escape, reset, base synchronization, scalar toggles, console echoes, and rebinding after a same-shaped replacement artifact. All four gates pass: 595 tests; `/playground` 125.9 KB raw / 43.9 KB gzip.
+**Next slice:** Drag, per-project placement and the narrow card.
+**Notes:** Chrome measured a 312px card at top 52/right 16, the last two row columns at 36/92px, and the canvas clear of the card in both themes. Captured `bench-3d-{light,dark}-1440.png` and `bench-3d-toggle-dark-1440.png` in the session's `/T/opencode/` directory; reviewed light/bus and dark/toggle. Restoring `dataOpen` uses a deferred hook, matching Live's boot-order fix. Live and Data now share the pending build for one artifact, and the rows' rebuild key includes session identity so controls cannot retain a destroyed session. The grip is drawn but disabled until the next slice.
