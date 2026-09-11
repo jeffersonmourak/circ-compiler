@@ -1,10 +1,10 @@
 # home-page
 
-The entries below record the decisions exercised while redrawing the site's landing page around a live circuit. The active plan and implementation record are in `DOCS/PLANS_PROMPT.md` and `DOCS/STATUS.md` until the initiative is archived.
+The entries below record the decisions exercised while redrawing the site's landing page around a live circuit. The implementation is summarized in [the archive](../archive/plan-home-page.md). The full plan and STATUS record are preserved at `b6e341466f178a110882599c251813c76e3915e4`; read the prompt with `git show b6e341466f178a110882599c251813c76e3915e4:DOCS/PLANS_PROMPT.md`.
 
 ### The handoff is tracked without its unused payload
 
-**Decision.** The repository tracks the home-page board, its source map, harness modules, CircDS bundle and two WOFF2 faces under `DOCS/design/design_handoff_home_page/`. The 32 JetBrains Mono TTF files, `.DS_Store` files and the handoff's stale `circ-assets.mjs` copy are removed. Where its README and board disagree, the board is authoritative.
+**Decision.** The implementation tracked the home-page board, its source map, harness modules, CircDS bundle and two WOFF2 faces under `DOCS/design/design_handoff_home_page/`, after removing 32 JetBrains Mono TTF files and the stale `circ-assets.mjs` copy. Where its README and board disagreed, the board was authoritative. On closure, the user requested deletion of `DOCS/design/`; the handoff remains at `b6e341466f178a110882599c251813c76e3915e4:DOCS/design/design_handoff_home_page/`.
 
 **Rationale.** The retained files make the design reproducible and citable. The removed files added 7.6 MB without changing the mock or the shipped site.
 
