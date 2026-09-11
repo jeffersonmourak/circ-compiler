@@ -162,6 +162,8 @@ The console fills the drawer when no memory is declared. Otherwise a hairline se
 
 **Alternatives.** Another pixel-splitter implementation (Phase 0 already supplied the unit); changing callbacks to a new object shape (existing callers already speak the configured unit); a tab strip above the columns (another control with no panel to switch).
 
+**Visibility correction after review.** Schematic hides the entire console/memory row, including an open drawer and its divider. The row is hidden and inert, its frame track becomes zero, and the bottom status line stays explicitly in row 4. Focus inside the row moves to the Schematic view button. Live and Truth restore the prior open/closed state and height; the transcript survives, and hidden memory views do not read words on session changes. The initial Schematic markup also starts with the row hidden.
+
 ### The memory grid marks the address net's value
 
 **Decision.** Each memory keeps its own header, paging/jump toolbar, grid and image controls. The grid has a 40px sticky address column and eight shared word tracks, with +0…+7 headers. Tracks use `minmax(max-content, 1fr)` and row-group subgrids: ordinary words spread across the column, and wide binary values scroll within the table. The table, groups and rows remain elements, rather than `display: contents`. Unknown words, implied zeros, the addressed word and the word under edit have distinct marks.

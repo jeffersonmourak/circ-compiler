@@ -415,7 +415,8 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(panel('schematic').hasAttribute('hidden')).toBe(true);
     expect(panel('truth').hasAttribute('hidden')).toBe(true);
     expect(doc.querySelector('.pg-hint')?.textContent).toBe('click a pin to toggle · hover a part to find it in the source');
-    // The drawer never hides with the view now; it is the frame's own row.
+    // Live exposes the terminal row.
+    expect(doc.querySelector('.pg-term')?.hasAttribute('hidden')).toBe(false);
     expect(doc.querySelector('.pg-drawer')?.hasAttribute('hidden')).toBe(false);
     // One tab stop, and the arrows move it.
     const stops = Array.from(doc.querySelectorAll('.pg-view-switch [role=tab]')).filter((b) => (b as unknown as { tabIndex: number }).tabIndex === 0);
@@ -425,6 +426,7 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     press(view('truth'), 'Home');
     expect(view('schematic').getAttribute('aria-selected')).toBe('true');
     expect(doc.querySelector('.pg-hint')?.textContent).toBe('');
+    expect(doc.querySelector('.pg-term')?.hasAttribute('hidden')).toBe(true);
 
     // The Data button toggles the card over whichever view, and the region
     // says so for the view's inset.
@@ -794,10 +796,10 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     });
   });
 
-  test('the terminal line opens the drawer and follows the transcript', () => drive((doc) => {
+  test('the terminal row hides in Schematic and restores its drawer in Live and Truth', () => drive((doc) => {
     type Island = { consoleAppend(lines: readonly string[]): void };
     const island = (doc.querySelector('.pg') as unknown as { __playground: Island }).__playground;
-    const term = doc.querySelector('.pg-term') as unknown as { dataset: Record<string, string> };
+    const term = doc.querySelector('.pg-term') as unknown as HTMLElement;
     const frame = doc.querySelector('.pg') as unknown as { style: { getPropertyValue(n: string): string } };
     const drawer = doc.querySelector('.pg-drawer') as unknown as { dataset: Record<string, string> };
     const separator = doc.querySelector('.pg-drawer-splitter')!;
@@ -808,9 +810,17 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     // Whatever the view, the row is there and shut.
     const view = (name: string) => doc.querySelector(`.pg-view-tab[data-view="${name}"]`) as unknown as { click(): void };
     view('live').click();
+    expect(term.hidden).toBe(false);
     expect(term.dataset.open).toBe('false');
     view('schematic').click();
+    expect(term.hidden).toBe(true);
+    expect(term.hasAttribute('inert')).toBe(true);
+    expect(frame.style.getPropertyValue('--pg-term-h')).toBe('0px');
+    open('console').click();
     expect(term.dataset.open).toBe('false');
+    view('truth').click();
+    expect(term.hidden).toBe(false);
+    expect(term.hasAttribute('inert')).toBe(false);
 
     // The line reads the transcript: the last echo and the first reply.
     island.consoleAppend(['> set a 1', 'ok']);
@@ -826,6 +836,20 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(drawer.dataset.open).toBe('true');
     expect(frame.style.getPropertyValue('--pg-term-h')).toBe('var(--pg-drawer-h, 320px)');
     expect(separator.hasAttribute('hidden')).toBe(false);
+    (doc.querySelector('.pg-drawer-close') as unknown as HTMLElement).focus();
+    view('schematic').click();
+    expect(term.hidden).toBe(true);
+    expect(drawer.dataset.open).toBe('true');
+    expect(separator.hasAttribute('hidden')).toBe(true);
+    expect(frame.style.getPropertyValue('--pg-term-h')).toBe('0px');
+    expect(doc.activeElement === doc.querySelector('.pg-view-tab[data-view="schematic"]')).toBe(true);
+    view('truth').click();
+    expect(term.hidden).toBe(false);
+    expect(drawer.dataset.open).toBe('true');
+    expect(frame.style.getPropertyValue('--pg-term-h')).toBe('var(--pg-drawer-h, 320px)');
+    view('live').click();
+    expect(term.hidden).toBe(false);
+    expect(drawer.dataset.open).toBe('true');
     // The drawer bar's toggle closes it, and the frame's row goes back.
     toggle.click();
     expect(term.dataset.open).toBe('false');
@@ -838,6 +862,7 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     // Memory is inert until the circuit declares one.
     open('memory').click();
     expect(term.dataset.open).toBe('false');
+    view('schematic').click();
   }));
 
   test('the drawer grows on focus, saves its height and closes only after clearing the prompt', async () => driveAsync(async (doc) => {
@@ -850,6 +875,7 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     const close = doc.querySelector('.pg-drawer-close') as unknown as HTMLButtonElement;
     const press = (el: HTMLElement, key: string) => el.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
     try {
+      (doc.querySelector('.pg-view-tab[data-view="truth"]') as unknown as HTMLElement).click();
       island.hooks.onArtifact(new Uint8Array(readFileSync(resolve(SITE, 'public/wasm/half-adder.wasm'))), 'compiled');
       await island.getSession();
       (doc.querySelector('.pg-term-line') as unknown as HTMLElement).focus();
@@ -879,6 +905,7 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     } finally {
       close.click();
       island.hooks.onArtifact(null, 'files-changed');
+      (doc.querySelector('.pg-view-tab[data-view="schematic"]') as unknown as HTMLElement).click();
     }
   }));
 
@@ -1158,6 +1185,7 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
   }));
 
   test('the memory grid refuses a bad word without closing, and Load image opens', () => drive((doc) => {
+    (doc.querySelector('.pg-view-tab[data-view="truth"]') as unknown as HTMLElement).click();
     // The panel exists only once an analysis reports a memory, and no headless
     // harness can run the worker that produces one — so the island's own seam
     // is handed a minimal analysis declaring `rom code[8, 4]`.
@@ -1267,6 +1295,8 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     const select = doc.querySelector('#pg-set-values') as unknown as HTMLSelectElement;
     select.value = 'binary'; select.dispatchEvent(new Event('change', { bubbles: true }));
     expect(cells()[0].textContent).toBe('11111111');
+    (doc.querySelector('.pg-drawer-close') as unknown as HTMLElement).click();
+    (doc.querySelector('.pg-view-tab[data-view="schematic"]') as unknown as HTMLElement).click();
   }));
 
   test('Download follows the artifact, and saves it under the project\'s name', async () => {
@@ -1449,8 +1479,14 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
 
       const rows = block.match(/grid-template-rows:([^;]+);/);
       if (rows) {
-        // Allowed, but only while the tracks and the real children agree.
-        expect(trackCount(rows[1])).toBe(kids.length);
+        const hiddenTerminal = selector === '.pg' && doc.querySelector('.pg-term')?.hasAttribute('hidden');
+        if (hiddenTerminal) {
+          // Schematic intentionally leaves row 3 at zero, with the status
+          // footer explicitly anchored after it rather than auto-placed in it.
+          expect((el as unknown as HTMLElement).style.getPropertyValue('--pg-term-h')).toBe('0px');
+          expect(declarationsOf("[data-layout='app'] .pg-statusline {")).toContain('grid-row: 4');
+        }
+        expect(trackCount(rows[1])).toBe(kids.length + (hiddenTerminal ? 1 : 0));
       } else {
         expect(block).toContain('display: flex');
         expect(block).toContain('flex-direction: column');

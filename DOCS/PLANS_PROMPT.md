@@ -137,6 +137,7 @@ Add an entry here during execution whenever a non-obvious constraint surfaces â€
 - Phase 0 already added `unit: 'px'` to the splitter. Phase 6 extends it with `pane: 'second'` and a usable-span measurement; callbacks remain numeric in the configured unit, not the obsolete phase spec's object shape.
 - The closed terminal line opens on focus. Return focus to its Console button when closing, or the return itself reopens the drawer. Center the splitter's hit band on the bordered row edge so a drag does not acquire a one-pixel offset.
 - Memory headers are rebuilt. Their settings controls need delegated change events, and a jump must force its redraw past the focused-text-field guard. Closed drawers skip memory reads.
+- After the Phase 6 review, Schematic hides the whole console/memory row. Its track is zero and the status line is pinned to row 4; Live and Truth restore the drawer state. Include this human override when checking the Schematic board.
 
 **The canvas**
 

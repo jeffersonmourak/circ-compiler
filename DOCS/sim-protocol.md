@@ -216,8 +216,9 @@ err E_IO nope.bin: FileNotFound
 
 ## The protocol in the browser
 
-The playground's console, in the drawer below the source and canvas,
-speaks this protocol to the circuit the page compiled. The grammar is
+In Live and Truth, the playground's console sits in the drawer below the
+source and canvas. It speaks this protocol to the circuit the page compiled.
+The grammar is
 the CLI's (`site/src/scripts/sim-protocol.ts` copies `parseLine` and
 `parseValue` verb by verb), the replies are the CLI's
 (`site/src/scripts/sim-executor.ts` copies the strings of `lib/sim/loop.zig`),
@@ -280,3 +281,5 @@ it to open the drawer; its height is resizable and saved. Declared memories
 appear beside the console, or below it on a narrow screen. A defined address
 highlights its word in the grid. Close folds the drawer; Escape in a nonempty
 prompt clears the line, and Escape in an empty prompt folds it.
+Schematic hides the whole console/memory row. Returning to Live or Truth
+restores its previous open/closed state and height.

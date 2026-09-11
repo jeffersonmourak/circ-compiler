@@ -313,3 +313,11 @@ Rolling log of shipped slices. Newest at the bottom. The plan is `DOCS/PLANS_PRO
 **Tests:** All four gates pass: 603 tests, typecheck, build and bundle; `/playground` remains 131.1 KB raw / 45.6 KB gzip. Chrome confirmed identical effective backgrounds for the editor, gutter and bar: rgb(244, 238, 251) in light mode and rgb(12, 5, 23) in dark mode. Captured `bench-editor-{light,dark}.png` under `/T/opencode/` and reviewed dark mode.
 **Next slice:** Phase 7, on the human's word.
 **Notes:** Requested by the human after the drawer review: the editor should use the same background as the strip beneath it. The source pane already had the correct token; CodeMirror's theme was covering it.
+
+## 2026-09-11 — Phase 6 — Schematic hides the terminal row
+
+**What shipped:** The entire console/memory row is hidden and inert in Schematic, including an open drawer and its resize handle. Its space is reclaimed; the status line stays in row 4. Returning to Live or Truth restores the prior open state and height. Focus leaves the hidden row, and session changes do not read hidden memory words. Initial Schematic markup starts hidden too.
+**Files touched:** `site/src/components/Playground.astro`, `site/src/styles/global.css`, `site/test/island-smoke.test.ts`, `DOCS/decisions/playground-bench.md`, `DOCS/sim-protocol.md`, `DOCS/PLANS_PROMPT.md`, `DOCS/STATUS.md`
+**Tests:** Extended the view/drawer walk for closed and expanded hiding, inaccessible controls, focus return, restoration in both views, and the intentional zero-height grid track. All four gates pass: 603 tests; `/playground` 131.4 KB raw / 45.7 KB gzip. Chrome confirmed 40px/320px reclaimed, a visible 24px status line, no focus in the hidden row, zero hidden memory-word reads, and Schematic reload behavior in both themes at 1440 and 700.
+**Next slice:** Phase 7, on the human's word.
+**Notes:** Requested by the human before the sweep. Captured `bench-schematic-no-drawer-{light,dark}-{1440,700}.png` in the session's `/T/opencode/` directory and reviewed dark/1440. The browser's narrow-layout measurement uses document coordinates because returning focus to Schematic also scrolls the page.

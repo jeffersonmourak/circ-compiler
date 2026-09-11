@@ -20,6 +20,7 @@ const groups = displayGroups(catalogue, []);
 ---
 <div
   class="pg"
+  style="--pg-term-h: 0px"
   data-libcirc-wasm={wasmHref}
   data-supported-versions={supportedVersions.join(',')}
   data-manifest-full-version={manifest.full_version.toString()}
@@ -256,7 +257,7 @@ const groups = displayGroups(catalogue, []);
       last thing typed and the first reply — and opens the drawer on Console
       or Memory. The drawer itself is the element it was under the output
       pane; only its row changed. */}
-  <div class="pg-term" data-open="false">
+  <div class="pg-term" data-open="false" hidden inert>
     <div class="pg-term-line" tabindex="0" role="group" aria-label="Session console and memory">
       <span class="pg-term-title">circ-compile main.circ --sim</span>
       <span class="pg-term-prompt" aria-hidden="true">&gt;</span>
@@ -729,6 +730,8 @@ const groups = displayGroups(catalogue, []);
       // The region wears the view: the Schematic's code surface without the
       // grid, and each view's tools and bottom-right line.
       outputPane.dataset.view = view;
+      syncDrawerVisibility();
+      if (memVisible()) renderMemory();
       hintEl.textContent = HINTS[view];
       // A view switch re-uses the build stage's current sequence rather than
       // claiming a new one, so a compile already in flight stays current and
@@ -848,34 +851,42 @@ const groups = displayGroups(catalogue, []);
     });
 
     // ---- the drawer ----
-    // Which tab is selected and whether it is open are island fields, never
-    // stored: the drawer is only ever a face on the current session.
+    // The drawer keeps its open state while Schematic hides the whole row.
     /** The drawer's divider, created with the main one once the panes exist. */
     let drawerSplitter: ReturnType<typeof createSplitter> | null = null;
     const drawerClose = el.querySelector<HTMLButtonElement>('.pg-drawer-close')!;
     const termLine = el.querySelector<HTMLElement>('.pg-term-line')!;
 
-    /** The drawer's divider meant something between the output panels and
-     *  the drawer; in its own row the drawer has no neighbour to share with.
-     *  Hidden until Phase 6 turns it into the row's height. */
+    /** A hidden or folded drawer has no divider to reach. */
     function refreshDrawerSeparator() {
-      drawerSeparator.hidden = drawer.dataset.open !== 'true';
+      drawerSeparator.hidden = term.hidden || drawer.dataset.open !== 'true';
       drawerSplitter?.refresh();
+    }
+
+    function syncDrawerVisibility() {
+      const hidden = state.view === 'schematic';
+      const hadFocus = hidden && term.contains(document.activeElement);
+      term.hidden = hidden;
+      term.toggleAttribute('inert', hidden);
+      el.style.setProperty('--pg-term-h', hidden ? '0px' : drawer.dataset.open === 'true' ? 'var(--pg-drawer-h, 320px)' : '');
+      refreshDrawerSeparator();
+      if (hadFocus) viewTabs.find((b) => b.dataset.view === 'schematic')?.focus();
     }
 
     /** Open state is the terminal row's: `data-open` on it, and the row's
      *  height on the frame, written together so the two cannot disagree. */
     function setDrawerOpen(open: boolean) {
+      if (open && state.view === 'schematic') return;
       term.dataset.open = String(open);
       drawer.dataset.open = String(open);
-      el.style.setProperty('--pg-term-h', open ? 'var(--pg-drawer-h, 320px)' : '');
       for (const b of termOpeners) b.setAttribute('aria-expanded', String(open));
-      refreshDrawerSeparator();
+      syncDrawerVisibility();
       if (open && memVisible()) renderMemory();
       if (!open && (drawer.contains(document.activeElement) || document.activeElement === drawerSeparator)) termOpeners[0]?.focus();
     }
     drawerClose.addEventListener('click', () => setDrawerOpen(false));
     const openConsole = () => {
+      if (term.hidden) return;
       setDrawerOpen(true);
       (consoleIn.disabled ? drawerClose : consoleIn).focus();
     };
@@ -898,6 +909,7 @@ const groups = displayGroups(catalogue, []);
     }
     for (const b of termOpeners) {
       b.addEventListener('click', () => {
+        if (term.hidden) return;
         if (b.dataset.term === 'memory') {
           if (!drawer.hasAttribute('data-mem')) return;
           setDrawerOpen(true);
@@ -2282,7 +2294,7 @@ const groups = displayGroups(catalogue, []);
     /** True only when the memory dump is actually on screen. Every visible
      *  word is a call across the wasm boundary, so nothing reads one otherwise. */
     function memVisible(): boolean {
-      return term.dataset.open === 'true' && drawer.hasAttribute('data-mem');
+      return !term.hidden && term.dataset.open === 'true' && drawer.hasAttribute('data-mem');
     }
 
     /** Rebuild the whole panel. Cheap: the number of declared memories is
