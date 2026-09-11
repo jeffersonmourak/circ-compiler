@@ -97,6 +97,8 @@ export interface PlaygroundEnvelope {
   layout: LayoutState;
   settings: PlaygroundSettings;
   view: View;
+  /** The Data panel, open over whichever view; its rows are the session's. */
+  dataOpen: boolean;
   footer: FooterState;
   ws: WorkspaceState;
 }
@@ -157,6 +159,7 @@ export function defaultEnvelope(): PlaygroundEnvelope {
     layout: { sourceWidth: DEFAULT_SOURCE_WIDTH, ratios: {} },
     settings: defaultSettings(),
     view: 'schematic',
+    dataOpen: false,
     footer: { ...DEFAULT_FOOTER },
     ws: { expanded: [...DEFAULT_WS.expanded] },
   };
@@ -203,6 +206,9 @@ export function migrateV1(raw: Record<string, unknown>): Record<string, unknown>
     ...raw,
     version: 2,
     view,
+    // The Data tab was a face of the live session; a reader who left the page
+    // on it finds their rows in the panel, open over the live view.
+    dataOpen: tab === 'data',
     footer: { open: dock.open, tab: dock.tab },
     layout: { sourceWidth: DEFAULT_SOURCE_WIDTH, ratios },
   };
@@ -312,6 +318,7 @@ export function normalize(raw: unknown): { envelope: PlaygroundEnvelope; note: S
       // A view this code does not have falls back like any other unrecognised
       // value rather than resetting anything.
       view: VIEWS.includes(body.view as View) ? (body.view as View) : 'schematic',
+      dataOpen: body.dataOpen === true,
       footer: normalizeFooter(body.footer),
       ws: normalizeWorkspace(body.ws),
     },

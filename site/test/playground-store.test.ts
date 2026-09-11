@@ -89,12 +89,13 @@ describe('playground store', () => {
   test('defaults and round-trip', () => {
     const env = defaultEnvelope();
     expect(Object.keys(env).sort()).toEqual(
-      ['activeFile', 'activeId', 'footer', 'layout', 'scratch', 'settings', 'version', 'view', 'ws'].sort(),
+      ['activeFile', 'activeId', 'dataOpen', 'footer', 'layout', 'scratch', 'settings', 'version', 'view', 'ws'].sort(),
     );
     expect(env.version).toBe(2);
     expect(env.settings.truthTableCap).toBe(12);
     expect(env.settings.format).toBe('json');
     expect(env.view).toBe('schematic');
+    expect(env.dataOpen).toBe(false);
     expect(env.footer).toEqual({ open: false, tab: 'diagnostics' });
     expect(env.layout).toEqual({ sourceWidth: 480, ratios: {} });
     // The reader's own projects open; every catalogue group starts shut, and
@@ -131,8 +132,11 @@ describe('playground store', () => {
     expect(envelope.settings.truthTableCap).toBe(10);
     expect(envelope.settings.romImages).toEqual({ code: '0a0b' });
     expect(envelope.ws).toEqual({ expanded: ['yours', 'introduction'] });
-    // The Data tab was a face of the live session, so it lands on the live view.
+    // The Data tab was a face of the live session, so it lands on the live
+    // view, with the panel open over it.
     expect(envelope.view).toBe('live');
+    expect(envelope.dataOpen).toBe(true);
+    expect(normalize({ ...raw, tab: 'simulate' }).envelope.dataOpen).toBe(false);
     expect(envelope.footer).toEqual({ open: true, tab: 'settings' });
     // The main splitter's share is gone; the drawer's rides through.
     expect(envelope.layout).toEqual({ sourceWidth: 480, ratios: { drawer: 0.7 } });
@@ -207,6 +211,9 @@ describe('playground store', () => {
     expect(normalize({ ...defaultEnvelope(), view: 'nope' }).envelope.view).toBe('schematic');
     expect(normalize({ ...defaultEnvelope(), view: 'data' }).envelope.view).toBe('schematic');
     expect(normalize({ ...defaultEnvelope(), view: 'truth' }).envelope.view).toBe('truth');
+    // The panel's flag is a boolean or nothing.
+    expect(normalize({ ...defaultEnvelope(), dataOpen: 'yes' }).envelope.dataOpen).toBe(false);
+    expect(normalize({ ...defaultEnvelope(), dataOpen: true }).envelope.dataOpen).toBe(true);
 
     // The footer defaults field by field.
     const noFooter = { ...defaultEnvelope() } as Record<string, unknown>;
