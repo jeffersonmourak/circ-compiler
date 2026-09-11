@@ -118,7 +118,8 @@ describe('renderer pin', () => {
     const gallery = src('components/LiveCanvas.astro');
     const sourceLink = src('scripts/source-link.ts');
     const romImage = src('utils/rom-image.ts');
-    const theme = src('utils/circ-theme.mjs');
+    const skins = src('utils/circ-skins.mjs');
+    const palette = src('utils/circ-palette.mjs');
     for (const [name, text] of [['Playground', playground], ['LiveCanvas', gallery]] as const) {
       expect(`${name}: ${/type CircView = \{/.test(text)}`).toBe(`${name}: false`);
       expect(`${name}: ${/renderCircuit\([\s\S]*?\}\)\) as unknown as/.test(text)}`).toBe(`${name}: false`);
@@ -131,11 +132,11 @@ describe('renderer pin', () => {
     expect(sourceLink).not.toMatch(/^\s+(input|rom|ram): \d+,$/m);
     expect(romImage).not.toMatch(/ROM_KIND|RAM_KIND/);
     // The theme strokes the renderer's trace and styles a bus as a bus.
-    expect(theme).toContain('traceWire(ctx, wire, cell)');
-    expect(theme).toContain('wireStyleOf(value)');
-    expect((theme.match(/^\s+wireBus: /gm) ?? []).length).toBe(2);
+    expect(skins).toContain('traceWire(ctx, wire, cell)');
+    expect(skins).toContain('wireStyleOf(value)');
+    expect((palette.match(/^\s+wireBus: /gm) ?? []).length).toBe(2);
     // …and no longer carries its own copy of the crossing-jump loop.
-    expect(theme).not.toMatch(/wire\.crossings/);
+    expect(skins).not.toMatch(/wire\.crossings/);
   });
 
   test('a theme flip changes a live canvas in place, on both pages', () => {

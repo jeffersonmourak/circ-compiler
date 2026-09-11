@@ -1,15 +1,17 @@
-// A source-text guard, not an import: `circ-theme.mjs` calls `loadAssets()` at
-// module scope and that needs `new Image()`, which `bun test` does not have.
+// A source-text guard over the site's skins and palettes.
 //
 // The property being guarded is easy to lose and invisible until someone
 // points at a gate: the ring around a hovered or highlighted component is
 // drawn by the canvas through one theme hook, for every kind, and no skin
-// draws its own — or a kind gets two rings, or none.
+// draws its own — or a kind gets two rings, or none. What the skins draw is
+// pinned by `circ-skins.test.ts`; this file guards how they are put together.
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const source = readFileSync(resolve(import.meta.dir, '..', 'src', 'utils', 'circ-theme.mjs'), 'utf8');
+const utils = resolve(import.meta.dir, '..', 'src', 'utils');
+const source = readFileSync(resolve(utils, 'circ-skins.mjs'), 'utf8');
+const palette = readFileSync(resolve(utils, 'circ-palette.mjs'), 'utf8');
 
 /** The body of a top-level `const <name> = (…) => {…}` function. */
 function skinBody(name: string): string {
@@ -22,7 +24,7 @@ function skinBody(name: string): string {
 
 /** The skins the site registers, from the object literal itself. */
 function registeredSkins(): string[] {
-  const start = source.indexOf('const skins = {');
+  const start = source.indexOf('export const skins = {');
   const end = source.indexOf('};', start);
   const block = source.slice(start, end);
   return [...block.matchAll(/:\s*(draw[A-Za-z]+)/g)].map((m) => m[1]);
@@ -72,7 +74,7 @@ describe('circ-theme hover', () => {
 
   test('both palettes define the hover colour the ring reads', () => {
     // One per theme; the guard is that neither is missing.
-    expect([...source.matchAll(/inputHover:/g)]).toHaveLength(2);
+    expect([...palette.matchAll(/inputHover:/g)]).toHaveLength(2);
   });
 
   test('a memory is labelled by the renderer, so the canvas and the preview agree', () => {
