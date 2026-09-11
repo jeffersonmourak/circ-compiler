@@ -95,29 +95,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   20.8,
-   20.8,
-   48.4,
-   48.4,
-   2.5
+   23.5,
+   20,
+   43,
+   50,
+   1.6
   ],
   [
    "fill"
@@ -126,14 +126,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.5
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   31.3,
+   35
+  ],
+  [
+   "lineTo",
+   36,
+   35
+  ],
+  [
+   "arcTo",
+   55.1,
+   35,
+   57.3,
+   34,
+   3
+  ],
+  [
+   "lineTo",
+   57.3,
+   34
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   57.3,
+   23.5,
+   5,
+   21,
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 8px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -147,9 +228,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   45,
-   45
+   "0",
+   27.7,
+   35
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.5
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   31.3,
+   55
+  ],
+  [
+   "lineTo",
+   36,
+   55
+  ],
+  [
+   "arcTo",
+   55.1,
+   55,
+   57.3,
+   56,
+   3
+  ],
+  [
+   "lineTo",
+   57.3,
+   56
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   57.3,
+   45.5,
+   5,
+   21,
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   27.7,
+   55
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -305,29 +483,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   29.12,
-   29.12,
-   67.76,
-   67.76,
-   3.5
+   32.9,
+   28,
+   60.2,
+   70,
+   2.24
   ],
   [
    "fill"
@@ -336,14 +514,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.54
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   43.82,
+   49
+  ],
+  [
+   "lineTo",
+   50.4,
+   49
+  ],
+  [
+   "arcTo",
+   77.14,
+   49,
+   80.22,
+   47.7,
+   4.2
+  ],
+  [
+   "lineTo",
+   80.22,
+   47.7
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   80.22,
+   32.9,
+   7,
+   29.6,
+   0.98
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 11px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -357,9 +616,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   63,
-   63
+   "0",
+   38.78,
+   49
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.54
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   43.82,
+   77
+  ],
+  [
+   "lineTo",
+   50.4,
+   77
+  ],
+  [
+   "arcTo",
+   77.14,
+   77,
+   80.22,
+   78.3,
+   4.2
+  ],
+  [
+   "lineTo",
+   80.22,
+   78.3
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   80.22,
+   63.5,
+   7,
+   29.6,
+   0.98
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   38.78,
+   77
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -515,29 +871,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2.88
+   2.4
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   49.92,
-   49.92,
-   116.16,
-   116.16,
-   6
+   56.4,
+   48,
+   103.2,
+   120,
+   3.84
   ],
   [
    "fill"
@@ -546,14 +902,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   2.64
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   75.12,
+   84
+  ],
+  [
+   "lineTo",
+   86.4,
+   84
+  ],
+  [
+   "arcTo",
+   132.24,
+   84,
+   137.52,
+   81.84,
+   7.2
+  ],
+  [
+   "lineTo",
+   137.52,
+   81.84
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   137.52,
+   56.4,
+   12,
+   50.88,
+   1.68
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 18px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -567,9 +1004,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   108,
-   108
+   "0",
+   66.48,
+   84
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   2.64
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   75.12,
+   132
+  ],
+  [
+   "lineTo",
+   86.4,
+   132
+  ],
+  [
+   "arcTo",
+   132.24,
+   132,
+   137.52,
+   134.16,
+   7.2
+  ],
+  [
+   "lineTo",
+   137.52,
+   134.16
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   137.52,
+   108.72,
+   12,
+   50.88,
+   1.68
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 14px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   66.48,
+   132
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -725,29 +1259,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   20.8,
-   20.8,
-   48.4,
-   48.4,
-   2.5
+   23.5,
+   20,
+   43,
+   50,
+   1.6
   ],
   [
    "fill"
@@ -756,14 +1290,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.5
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   31.3,
+   35
+  ],
+  [
+   "lineTo",
+   36,
+   35
+  ],
+  [
+   "arcTo",
+   55.1,
+   35,
+   57.3,
+   34,
+   3
+  ],
+  [
+   "lineTo",
+   57.3,
+   34
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   57.3,
+   23.5,
+   5,
+   21,
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 8px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -777,9 +1392,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   45,
-   45
+   "0",
+   27.7,
+   35
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.5
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   31.3,
+   55
+  ],
+  [
+   "lineTo",
+   36,
+   55
+  ],
+  [
+   "arcTo",
+   55.1,
+   55,
+   57.3,
+   56,
+   3
+  ],
+  [
+   "lineTo",
+   57.3,
+   56
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   57.3,
+   45.5,
+   5,
+   21,
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   27.7,
+   55
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -935,29 +1647,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   29.12,
-   29.12,
-   67.76,
-   67.76,
-   3.5
+   32.9,
+   28,
+   60.2,
+   70,
+   2.24
   ],
   [
    "fill"
@@ -966,14 +1678,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.54
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   43.82,
+   49
+  ],
+  [
+   "lineTo",
+   50.4,
+   49
+  ],
+  [
+   "arcTo",
+   77.14,
+   49,
+   80.22,
+   47.7,
+   4.2
+  ],
+  [
+   "lineTo",
+   80.22,
+   47.7
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   80.22,
+   32.9,
+   7,
+   29.6,
+   0.98
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 11px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -987,9 +1780,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   63,
-   63
+   "0",
+   38.78,
+   49
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.54
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   43.82,
+   77
+  ],
+  [
+   "lineTo",
+   50.4,
+   77
+  ],
+  [
+   "arcTo",
+   77.14,
+   77,
+   80.22,
+   78.3,
+   4.2
+  ],
+  [
+   "lineTo",
+   80.22,
+   78.3
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   80.22,
+   63.5,
+   7,
+   29.6,
+   0.98
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   38.78,
+   77
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -1145,29 +2035,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2.88
+   2.4
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   49.92,
-   49.92,
-   116.16,
-   116.16,
-   6
+   56.4,
+   48,
+   103.2,
+   120,
+   3.84
   ],
   [
    "fill"
@@ -1176,14 +2066,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   2.64
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   75.12,
+   84
+  ],
+  [
+   "lineTo",
+   86.4,
+   84
+  ],
+  [
+   "arcTo",
+   132.24,
+   84,
+   137.52,
+   81.84,
+   7.2
+  ],
+  [
+   "lineTo",
+   137.52,
+   81.84
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   137.52,
+   56.4,
+   12,
+   50.88,
+   1.68
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 18px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -1197,9 +2168,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   108,
-   108
+   "0",
+   66.48,
+   84
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   2.64
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   75.12,
+   132
+  ],
+  [
+   "lineTo",
+   86.4,
+   132
+  ],
+  [
+   "arcTo",
+   132.24,
+   132,
+   137.52,
+   134.16,
+   7.2
+  ],
+  [
+   "lineTo",
+   137.52,
+   134.16
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   137.52,
+   108.72,
+   12,
+   50.88,
+   1.68
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 14px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   66.48,
+   132
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -1355,29 +2423,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   20.8,
-   20.8,
-   48.4,
-   48.4,
-   2.5
+   23.5,
+   20,
+   43,
+   50,
+   1.6
   ],
   [
    "fill"
@@ -1386,14 +2454,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.5
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   31.3,
+   35
+  ],
+  [
+   "lineTo",
+   36,
+   35
+  ],
+  [
+   "arcTo",
+   55.1,
+   35,
+   57.3,
+   34,
+   3
+  ],
+  [
+   "lineTo",
+   57.3,
+   34
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   57.3,
+   23.5,
+   5,
+   21,
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 8px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -1407,9 +2556,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   45,
-   45
+   "0",
+   27.7,
+   35
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.5
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   31.3,
+   55
+  ],
+  [
+   "lineTo",
+   36,
+   55
+  ],
+  [
+   "arcTo",
+   55.1,
+   55,
+   57.3,
+   56,
+   3
+  ],
+  [
+   "lineTo",
+   57.3,
+   56
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   57.3,
+   45.5,
+   5,
+   21,
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   27.7,
+   55
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -1565,29 +2811,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   29.12,
-   29.12,
-   67.76,
-   67.76,
-   3.5
+   32.9,
+   28,
+   60.2,
+   70,
+   2.24
   ],
   [
    "fill"
@@ -1596,14 +2842,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.54
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   43.82,
+   49
+  ],
+  [
+   "lineTo",
+   50.4,
+   49
+  ],
+  [
+   "arcTo",
+   77.14,
+   49,
+   80.22,
+   47.7,
+   4.2
+  ],
+  [
+   "lineTo",
+   80.22,
+   47.7
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   80.22,
+   32.9,
+   7,
+   29.6,
+   0.98
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 11px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -1617,9 +2944,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   63,
-   63
+   "0",
+   38.78,
+   49
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.54
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   43.82,
+   77
+  ],
+  [
+   "lineTo",
+   50.4,
+   77
+  ],
+  [
+   "arcTo",
+   77.14,
+   77,
+   80.22,
+   78.3,
+   4.2
+  ],
+  [
+   "lineTo",
+   80.22,
+   78.3
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   80.22,
+   63.5,
+   7,
+   29.6,
+   0.98
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   38.78,
+   77
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -1775,29 +3199,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2.88
+   2.4
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   49.92,
-   49.92,
-   116.16,
-   116.16,
-   6
+   56.4,
+   48,
+   103.2,
+   120,
+   3.84
   ],
   [
    "fill"
@@ -1806,14 +3230,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   2.64
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   75.12,
+   84
+  ],
+  [
+   "lineTo",
+   86.4,
+   84
+  ],
+  [
+   "arcTo",
+   132.24,
+   84,
+   137.52,
+   81.84,
+   7.2
+  ],
+  [
+   "lineTo",
+   137.52,
+   81.84
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   137.52,
+   56.4,
+   12,
+   50.88,
+   1.68
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 18px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -1827,9 +3332,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   108,
-   108
+   "0",
+   66.48,
+   84
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   2.64
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   75.12,
+   132
+  ],
+  [
+   "lineTo",
+   86.4,
+   132
+  ],
+  [
+   "arcTo",
+   132.24,
+   132,
+   137.52,
+   134.16,
+   7.2
+  ],
+  [
+   "lineTo",
+   137.52,
+   134.16
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   137.52,
+   108.72,
+   12,
+   50.88,
+   1.68
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 14px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   66.48,
+   132
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -1985,29 +3587,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   20.8,
-   20.8,
-   48.4,
-   48.4,
-   2.5
+   23.5,
+   20,
+   43,
+   50,
+   1.6
   ],
   [
    "fill"
@@ -2016,14 +3618,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.5
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   31.3,
+   35
+  ],
+  [
+   "lineTo",
+   36,
+   35
+  ],
+  [
+   "arcTo",
+   55.1,
+   35,
+   57.3,
+   34,
+   3
+  ],
+  [
+   "lineTo",
+   57.3,
+   34
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   57.3,
+   23.5,
+   5,
+   21,
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 8px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -2037,9 +3720,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   45,
-   45
+   "0",
+   27.7,
+   35
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.5
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   31.3,
+   55
+  ],
+  [
+   "lineTo",
+   36,
+   55
+  ],
+  [
+   "arcTo",
+   55.1,
+   55,
+   57.3,
+   56,
+   3
+  ],
+  [
+   "lineTo",
+   57.3,
+   56
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   57.3,
+   45.5,
+   5,
+   21,
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   27.7,
+   55
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -2195,29 +3975,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   29.12,
-   29.12,
-   67.76,
-   67.76,
-   3.5
+   32.9,
+   28,
+   60.2,
+   70,
+   2.24
   ],
   [
    "fill"
@@ -2226,14 +4006,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.54
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   43.82,
+   49
+  ],
+  [
+   "lineTo",
+   50.4,
+   49
+  ],
+  [
+   "arcTo",
+   77.14,
+   49,
+   80.22,
+   47.7,
+   4.2
+  ],
+  [
+   "lineTo",
+   80.22,
+   47.7
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   80.22,
+   32.9,
+   7,
+   29.6,
+   0.98
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 11px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -2247,9 +4108,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   63,
-   63
+   "0",
+   38.78,
+   49
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.54
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   43.82,
+   77
+  ],
+  [
+   "lineTo",
+   50.4,
+   77
+  ],
+  [
+   "arcTo",
+   77.14,
+   77,
+   80.22,
+   78.3,
+   4.2
+  ],
+  [
+   "lineTo",
+   80.22,
+   78.3
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   80.22,
+   63.5,
+   7,
+   29.6,
+   0.98
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   38.78,
+   77
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -2405,29 +4363,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2.88
+   2.4
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   49.92,
-   49.92,
-   116.16,
-   116.16,
-   6
+   56.4,
+   48,
+   103.2,
+   120,
+   3.84
   ],
   [
    "fill"
@@ -2436,14 +4394,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   2.64
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   75.12,
+   84
+  ],
+  [
+   "lineTo",
+   86.4,
+   84
+  ],
+  [
+   "arcTo",
+   132.24,
+   84,
+   137.52,
+   81.84,
+   7.2
+  ],
+  [
+   "lineTo",
+   137.52,
+   81.84
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   137.52,
+   56.4,
+   12,
+   50.88,
+   1.68
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 18px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -2457,9 +4496,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   108,
-   108
+   "0",
+   66.48,
+   84
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   2.64
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   75.12,
+   132
+  ],
+  [
+   "lineTo",
+   86.4,
+   132
+  ],
+  [
+   "arcTo",
+   132.24,
+   132,
+   137.52,
+   134.16,
+   7.2
+  ],
+  [
+   "lineTo",
+   137.52,
+   134.16
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   137.52,
+   108.72,
+   12,
+   50.88,
+   1.68
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 14px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   66.48,
+   132
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -2615,29 +4751,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   20.8,
-   20.8,
-   48.4,
-   48.4,
-   2.5
+   23.5,
+   20,
+   43,
+   50,
+   1.6
   ],
   [
    "fill"
@@ -2646,14 +4782,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.5
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   31.3,
+   35
+  ],
+  [
+   "lineTo",
+   36,
+   35
+  ],
+  [
+   "arcTo",
+   55.1,
+   35,
+   57.3,
+   34,
+   3
+  ],
+  [
+   "lineTo",
+   57.3,
+   34
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   57.3,
+   23.5,
+   5,
+   21,
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 8px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -2667,9 +4884,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   45,
-   45
+   "0",
+   27.7,
+   35
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.5
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   31.3,
+   55
+  ],
+  [
+   "lineTo",
+   36,
+   55
+  ],
+  [
+   "arcTo",
+   55.1,
+   55,
+   57.3,
+   56,
+   3
+  ],
+  [
+   "lineTo",
+   57.3,
+   56
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   57.3,
+   45.5,
+   5,
+   21,
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   27.7,
+   55
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -2825,29 +5139,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   29.12,
-   29.12,
-   67.76,
-   67.76,
-   3.5
+   32.9,
+   28,
+   60.2,
+   70,
+   2.24
   ],
   [
    "fill"
@@ -2856,14 +5170,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.54
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   43.82,
+   49
+  ],
+  [
+   "lineTo",
+   50.4,
+   49
+  ],
+  [
+   "arcTo",
+   77.14,
+   49,
+   80.22,
+   47.7,
+   4.2
+  ],
+  [
+   "lineTo",
+   80.22,
+   47.7
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   80.22,
+   32.9,
+   7,
+   29.6,
+   0.98
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 11px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -2877,9 +5272,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   63,
-   63
+   "0",
+   38.78,
+   49
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.54
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   43.82,
+   77
+  ],
+  [
+   "lineTo",
+   50.4,
+   77
+  ],
+  [
+   "arcTo",
+   77.14,
+   77,
+   80.22,
+   78.3,
+   4.2
+  ],
+  [
+   "lineTo",
+   80.22,
+   78.3
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   80.22,
+   63.5,
+   7,
+   29.6,
+   0.98
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   38.78,
+   77
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -3035,29 +5527,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2.88
+   2.4
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   49.92,
-   49.92,
-   116.16,
-   116.16,
-   6
+   56.4,
+   48,
+   103.2,
+   120,
+   3.84
   ],
   [
    "fill"
@@ -3066,14 +5558,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   2.64
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   75.12,
+   84
+  ],
+  [
+   "lineTo",
+   86.4,
+   84
+  ],
+  [
+   "arcTo",
+   132.24,
+   84,
+   137.52,
+   81.84,
+   7.2
+  ],
+  [
+   "lineTo",
+   137.52,
+   81.84
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   137.52,
+   56.4,
+   12,
+   50.88,
+   1.68
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 18px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -3087,9 +5660,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   108,
-   108
+   "0",
+   66.48,
+   84
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   2.64
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   75.12,
+   132
+  ],
+  [
+   "lineTo",
+   86.4,
+   132
+  ],
+  [
+   "arcTo",
+   132.24,
+   132,
+   137.52,
+   134.16,
+   7.2
+  ],
+  [
+   "lineTo",
+   137.52,
+   134.16
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   137.52,
+   108.72,
+   12,
+   50.88,
+   1.68
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 14px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   66.48,
+   132
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -3245,29 +5915,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   20.8,
-   20.8,
-   48.4,
-   48.4,
-   2.5
+   23.5,
+   20,
+   43,
+   50,
+   1.6
   ],
   [
    "fill"
@@ -3276,14 +5946,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.5
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   31.3,
+   35
+  ],
+  [
+   "lineTo",
+   36,
+   35
+  ],
+  [
+   "arcTo",
+   55.1,
+   35,
+   57.3,
+   34,
+   3
+  ],
+  [
+   "lineTo",
+   57.3,
+   34
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   57.3,
+   23.5,
+   5,
+   21,
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 8px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -3297,9 +6048,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   45,
-   45
+   "0",
+   27.7,
+   35
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.5
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   31.3,
+   55
+  ],
+  [
+   "lineTo",
+   36,
+   55
+  ],
+  [
+   "arcTo",
+   55.1,
+   55,
+   57.3,
+   56,
+   3
+  ],
+  [
+   "lineTo",
+   57.3,
+   56
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   57.3,
+   45.5,
+   5,
+   21,
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   27.7,
+   55
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -3455,29 +6303,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   29.12,
-   29.12,
-   67.76,
-   67.76,
-   3.5
+   32.9,
+   28,
+   60.2,
+   70,
+   2.24
   ],
   [
    "fill"
@@ -3486,14 +6334,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.54
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   43.82,
+   49
+  ],
+  [
+   "lineTo",
+   50.4,
+   49
+  ],
+  [
+   "arcTo",
+   77.14,
+   49,
+   80.22,
+   47.7,
+   4.2
+  ],
+  [
+   "lineTo",
+   80.22,
+   47.7
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   80.22,
+   32.9,
+   7,
+   29.6,
+   0.98
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 11px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -3507,9 +6436,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   63,
-   63
+   "0",
+   38.78,
+   49
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.54
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   43.82,
+   77
+  ],
+  [
+   "lineTo",
+   50.4,
+   77
+  ],
+  [
+   "arcTo",
+   77.14,
+   77,
+   80.22,
+   78.3,
+   4.2
+  ],
+  [
+   "lineTo",
+   80.22,
+   78.3
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   80.22,
+   63.5,
+   7,
+   29.6,
+   0.98
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   38.78,
+   77
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -3665,29 +6691,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2.88
+   2.4
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   49.92,
-   49.92,
-   116.16,
-   116.16,
-   6
+   56.4,
+   48,
+   103.2,
+   120,
+   3.84
   ],
   [
    "fill"
@@ -3696,14 +6722,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   2.64
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   75.12,
+   84
+  ],
+  [
+   "lineTo",
+   86.4,
+   84
+  ],
+  [
+   "arcTo",
+   132.24,
+   84,
+   137.52,
+   81.84,
+   7.2
+  ],
+  [
+   "lineTo",
+   137.52,
+   81.84
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   137.52,
+   56.4,
+   12,
+   50.88,
+   1.68
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 18px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -3717,9 +6824,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   108,
-   108
+   "0",
+   66.48,
+   84
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   2.64
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   75.12,
+   132
+  ],
+  [
+   "lineTo",
+   86.4,
+   132
+  ],
+  [
+   "arcTo",
+   132.24,
+   132,
+   137.52,
+   134.16,
+   7.2
+  ],
+  [
+   "lineTo",
+   137.52,
+   134.16
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   137.52,
+   108.72,
+   12,
+   50.88,
+   1.68
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 14px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   66.48,
+   132
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -3875,29 +7079,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   20.8,
-   20.8,
-   48.4,
-   48.4,
-   2.5
+   23.5,
+   20,
+   43,
+   50,
+   1.6
   ],
   [
    "fill"
@@ -3906,14 +7110,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.5
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   31.3,
+   35
+  ],
+  [
+   "lineTo",
+   36,
+   35
+  ],
+  [
+   "arcTo",
+   55.1,
+   35,
+   57.3,
+   34,
+   3
+  ],
+  [
+   "lineTo",
+   57.3,
+   34
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   57.3,
+   23.5,
+   5,
+   21,
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 8px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -3927,9 +7212,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   45,
-   45
+   "0",
+   27.7,
+   35
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.5
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   31.3,
+   55
+  ],
+  [
+   "lineTo",
+   36,
+   55
+  ],
+  [
+   "arcTo",
+   55.1,
+   55,
+   57.3,
+   56,
+   3
+  ],
+  [
+   "lineTo",
+   57.3,
+   56
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   57.3,
+   45.5,
+   5,
+   21,
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   27.7,
+   55
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -4085,29 +7467,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   29.12,
-   29.12,
-   67.76,
-   67.76,
-   3.5
+   32.9,
+   28,
+   60.2,
+   70,
+   2.24
   ],
   [
    "fill"
@@ -4116,14 +7498,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.54
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   43.82,
+   49
+  ],
+  [
+   "lineTo",
+   50.4,
+   49
+  ],
+  [
+   "arcTo",
+   77.14,
+   49,
+   80.22,
+   47.7,
+   4.2
+  ],
+  [
+   "lineTo",
+   80.22,
+   47.7
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   80.22,
+   32.9,
+   7,
+   29.6,
+   0.98
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 11px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -4137,9 +7600,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   63,
-   63
+   "0",
+   38.78,
+   49
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.54
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   43.82,
+   77
+  ],
+  [
+   "lineTo",
+   50.4,
+   77
+  ],
+  [
+   "arcTo",
+   77.14,
+   77,
+   80.22,
+   78.3,
+   4.2
+  ],
+  [
+   "lineTo",
+   80.22,
+   78.3
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   80.22,
+   63.5,
+   7,
+   29.6,
+   0.98
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   38.78,
+   77
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -4295,29 +7855,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2.88
+   2.4
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   49.92,
-   49.92,
-   116.16,
-   116.16,
-   6
+   56.4,
+   48,
+   103.2,
+   120,
+   3.84
   ],
   [
    "fill"
@@ -4326,14 +7886,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   2.64
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   75.12,
+   84
+  ],
+  [
+   "lineTo",
+   86.4,
+   84
+  ],
+  [
+   "arcTo",
+   132.24,
+   84,
+   137.52,
+   81.84,
+   7.2
+  ],
+  [
+   "lineTo",
+   137.52,
+   81.84
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   137.52,
+   56.4,
+   12,
+   50.88,
+   1.68
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 18px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -4347,9 +7988,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   108,
-   108
+   "0",
+   66.48,
+   84
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   2.64
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   75.12,
+   132
+  ],
+  [
+   "lineTo",
+   86.4,
+   132
+  ],
+  [
+   "arcTo",
+   132.24,
+   132,
+   137.52,
+   134.16,
+   7.2
+  ],
+  [
+   "lineTo",
+   137.52,
+   134.16
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   137.52,
+   108.72,
+   12,
+   50.88,
+   1.68
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 14px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   66.48,
+   132
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -4505,29 +8243,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   20.8,
-   20.8,
-   48.4,
-   48.4,
-   2.5
+   23.5,
+   20,
+   43,
+   50,
+   1.6
   ],
   [
    "fill"
@@ -4536,14 +8274,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.5
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   31.3,
+   35
+  ],
+  [
+   "lineTo",
+   36,
+   35
+  ],
+  [
+   "arcTo",
+   55.1,
+   35,
+   57.3,
+   34,
+   3
+  ],
+  [
+   "lineTo",
+   57.3,
+   34
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   57.3,
+   23.5,
+   5,
+   21,
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 8px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -4557,9 +8376,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   45,
-   45
+   "0",
+   27.7,
+   35
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.5
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   31.3,
+   55
+  ],
+  [
+   "lineTo",
+   36,
+   55
+  ],
+  [
+   "arcTo",
+   55.1,
+   55,
+   57.3,
+   56,
+   3
+  ],
+  [
+   "lineTo",
+   57.3,
+   56
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   57.3,
+   45.5,
+   5,
+   21,
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   27.7,
+   55
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -4715,29 +8631,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   29.12,
-   29.12,
-   67.76,
-   67.76,
-   3.5
+   32.9,
+   28,
+   60.2,
+   70,
+   2.24
   ],
   [
    "fill"
@@ -4746,14 +8662,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.54
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   43.82,
+   49
+  ],
+  [
+   "lineTo",
+   50.4,
+   49
+  ],
+  [
+   "arcTo",
+   77.14,
+   49,
+   80.22,
+   47.7,
+   4.2
+  ],
+  [
+   "lineTo",
+   80.22,
+   47.7
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   80.22,
+   32.9,
+   7,
+   29.6,
+   0.98
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 11px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -4767,9 +8764,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   63,
-   63
+   "0",
+   38.78,
+   49
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.54
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   43.82,
+   77
+  ],
+  [
+   "lineTo",
+   50.4,
+   77
+  ],
+  [
+   "arcTo",
+   77.14,
+   77,
+   80.22,
+   78.3,
+   4.2
+  ],
+  [
+   "lineTo",
+   80.22,
+   78.3
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   80.22,
+   63.5,
+   7,
+   29.6,
+   0.98
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   38.78,
+   77
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -4925,29 +9019,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2.88
+   2.4
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   49.92,
-   49.92,
-   116.16,
-   116.16,
-   6
+   56.4,
+   48,
+   103.2,
+   120,
+   3.84
   ],
   [
    "fill"
@@ -4956,14 +9050,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   2.64
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   75.12,
+   84
+  ],
+  [
+   "lineTo",
+   86.4,
+   84
+  ],
+  [
+   "arcTo",
+   132.24,
+   84,
+   137.52,
+   81.84,
+   7.2
+  ],
+  [
+   "lineTo",
+   137.52,
+   81.84
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   137.52,
+   56.4,
+   12,
+   50.88,
+   1.68
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 18px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -4977,9 +9152,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   108,
-   108
+   "0",
+   66.48,
+   84
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   2.64
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   75.12,
+   132
+  ],
+  [
+   "lineTo",
+   86.4,
+   132
+  ],
+  [
+   "arcTo",
+   132.24,
+   132,
+   137.52,
+   134.16,
+   7.2
+  ],
+  [
+   "lineTo",
+   137.52,
+   134.16
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   137.52,
+   108.72,
+   12,
+   50.88,
+   1.68
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 14px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   66.48,
+   132
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -5135,29 +9407,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   20.8,
-   20.8,
-   48.4,
-   48.4,
-   2.5
+   23.5,
+   20,
+   43,
+   50,
+   1.6
   ],
   [
    "fill"
@@ -5166,14 +9438,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.5
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   31.3,
+   35
+  ],
+  [
+   "lineTo",
+   36,
+   35
+  ],
+  [
+   "arcTo",
+   55.1,
+   35,
+   57.3,
+   34,
+   3
+  ],
+  [
+   "lineTo",
+   57.3,
+   34
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   57.3,
+   23.5,
+   5,
+   21,
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 8px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -5187,9 +9540,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   45,
-   45
+   "0",
+   27.7,
+   35
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.5
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   31.3,
+   55
+  ],
+  [
+   "lineTo",
+   36,
+   55
+  ],
+  [
+   "arcTo",
+   55.1,
+   55,
+   57.3,
+   56,
+   3
+  ],
+  [
+   "lineTo",
+   57.3,
+   56
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   57.3,
+   45.5,
+   5,
+   21,
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   27.7,
+   55
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -5345,29 +9795,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   29.12,
-   29.12,
-   67.76,
-   67.76,
-   3.5
+   32.9,
+   28,
+   60.2,
+   70,
+   2.24
   ],
   [
    "fill"
@@ -5376,14 +9826,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.54
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   43.82,
+   49
+  ],
+  [
+   "lineTo",
+   50.4,
+   49
+  ],
+  [
+   "arcTo",
+   77.14,
+   49,
+   80.22,
+   47.7,
+   4.2
+  ],
+  [
+   "lineTo",
+   80.22,
+   47.7
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   80.22,
+   32.9,
+   7,
+   29.6,
+   0.98
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 11px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -5397,9 +9928,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   63,
-   63
+   "0",
+   38.78,
+   49
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.54
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   43.82,
+   77
+  ],
+  [
+   "lineTo",
+   50.4,
+   77
+  ],
+  [
+   "arcTo",
+   77.14,
+   77,
+   80.22,
+   78.3,
+   4.2
+  ],
+  [
+   "lineTo",
+   80.22,
+   78.3
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   80.22,
+   63.5,
+   7,
+   29.6,
+   0.98
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   38.78,
+   77
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -5555,29 +10183,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2.88
+   2.4
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   49.92,
-   49.92,
-   116.16,
-   116.16,
-   6
+   56.4,
+   48,
+   103.2,
+   120,
+   3.84
   ],
   [
    "fill"
@@ -5586,14 +10214,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   2.64
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   75.12,
+   84
+  ],
+  [
+   "lineTo",
+   86.4,
+   84
+  ],
+  [
+   "arcTo",
+   132.24,
+   84,
+   137.52,
+   81.84,
+   7.2
+  ],
+  [
+   "lineTo",
+   137.52,
+   81.84
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   137.52,
+   56.4,
+   12,
+   50.88,
+   1.68
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 18px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -5607,9 +10316,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   108,
-   108
+   "0",
+   66.48,
+   84
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   2.64
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   75.12,
+   132
+  ],
+  [
+   "lineTo",
+   86.4,
+   132
+  ],
+  [
+   "arcTo",
+   132.24,
+   132,
+   137.52,
+   134.16,
+   7.2
+  ],
+  [
+   "lineTo",
+   137.52,
+   134.16
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   137.52,
+   108.72,
+   12,
+   50.88,
+   1.68
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 14px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   66.48,
+   132
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -5765,29 +10571,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   20.8,
-   20.8,
-   48.4,
-   48.4,
-   2.5
+   23.5,
+   20,
+   43,
+   50,
+   1.6
   ],
   [
    "fill"
@@ -5796,14 +10602,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.5
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   31.3,
+   35
+  ],
+  [
+   "lineTo",
+   36,
+   35
+  ],
+  [
+   "arcTo",
+   55.1,
+   35,
+   57.3,
+   34,
+   3
+  ],
+  [
+   "lineTo",
+   57.3,
+   34
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   57.3,
+   23.5,
+   5,
+   21,
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 8px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -5817,9 +10704,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   45,
-   45
+   "0",
+   27.7,
+   35
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.5
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   31.3,
+   55
+  ],
+  [
+   "lineTo",
+   36,
+   55
+  ],
+  [
+   "arcTo",
+   55.1,
+   55,
+   57.3,
+   56,
+   3
+  ],
+  [
+   "lineTo",
+   57.3,
+   56
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   57.3,
+   45.5,
+   5,
+   21,
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   27.7,
+   55
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -5975,29 +10959,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   29.12,
-   29.12,
-   67.76,
-   67.76,
-   3.5
+   32.9,
+   28,
+   60.2,
+   70,
+   2.24
   ],
   [
    "fill"
@@ -6006,14 +10990,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.54
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   43.82,
+   49
+  ],
+  [
+   "lineTo",
+   50.4,
+   49
+  ],
+  [
+   "arcTo",
+   77.14,
+   49,
+   80.22,
+   47.7,
+   4.2
+  ],
+  [
+   "lineTo",
+   80.22,
+   47.7
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   80.22,
+   32.9,
+   7,
+   29.6,
+   0.98
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 11px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -6027,9 +11092,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   63,
-   63
+   "0",
+   38.78,
+   49
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.54
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   43.82,
+   77
+  ],
+  [
+   "lineTo",
+   50.4,
+   77
+  ],
+  [
+   "arcTo",
+   77.14,
+   77,
+   80.22,
+   78.3,
+   4.2
+  ],
+  [
+   "lineTo",
+   80.22,
+   78.3
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   80.22,
+   63.5,
+   7,
+   29.6,
+   0.98
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   38.78,
+   77
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -6185,29 +11347,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2.88
+   2.4
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   49.92,
-   49.92,
-   116.16,
-   116.16,
-   6
+   56.4,
+   48,
+   103.2,
+   120,
+   3.84
   ],
   [
    "fill"
@@ -6216,14 +11378,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   2.64
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   75.12,
+   84
+  ],
+  [
+   "lineTo",
+   86.4,
+   84
+  ],
+  [
+   "arcTo",
+   132.24,
+   84,
+   137.52,
+   81.84,
+   7.2
+  ],
+  [
+   "lineTo",
+   137.52,
+   81.84
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   137.52,
+   56.4,
+   12,
+   50.88,
+   1.68
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 18px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -6237,9 +11480,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   108,
-   108
+   "0",
+   66.48,
+   84
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   2.64
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   75.12,
+   132
+  ],
+  [
+   "lineTo",
+   86.4,
+   132
+  ],
+  [
+   "arcTo",
+   132.24,
+   132,
+   137.52,
+   134.16,
+   7.2
+  ],
+  [
+   "lineTo",
+   137.52,
+   134.16
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   137.52,
+   108.72,
+   12,
+   50.88,
+   1.68
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 14px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   66.48,
+   132
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -6395,29 +11735,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   20.8,
-   20.8,
-   48.4,
-   48.4,
-   2.5
+   23.5,
+   20,
+   43,
+   50,
+   1.6
   ],
   [
    "fill"
@@ -6426,14 +11766,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.5
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   31.3,
+   35
+  ],
+  [
+   "lineTo",
+   36,
+   35
+  ],
+  [
+   "arcTo",
+   55.1,
+   35,
+   57.3,
+   34,
+   3
+  ],
+  [
+   "lineTo",
+   57.3,
+   34
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   57.3,
+   23.5,
+   5,
+   21,
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 8px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -6447,9 +11868,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   45,
-   45
+   "0",
+   27.7,
+   35
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.5
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   31.3,
+   55
+  ],
+  [
+   "lineTo",
+   36,
+   55
+  ],
+  [
+   "arcTo",
+   55.1,
+   55,
+   57.3,
+   56,
+   3
+  ],
+  [
+   "lineTo",
+   57.3,
+   56
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   57.3,
+   45.5,
+   5,
+   21,
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   27.7,
+   55
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -6605,29 +12123,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   29.12,
-   29.12,
-   67.76,
-   67.76,
-   3.5
+   32.9,
+   28,
+   60.2,
+   70,
+   2.24
   ],
   [
    "fill"
@@ -6636,14 +12154,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.54
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   43.82,
+   49
+  ],
+  [
+   "lineTo",
+   50.4,
+   49
+  ],
+  [
+   "arcTo",
+   77.14,
+   49,
+   80.22,
+   47.7,
+   4.2
+  ],
+  [
+   "lineTo",
+   80.22,
+   47.7
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   80.22,
+   32.9,
+   7,
+   29.6,
+   0.98
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 11px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -6657,9 +12256,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   63,
-   63
+   "0",
+   38.78,
+   49
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.54
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   43.82,
+   77
+  ],
+  [
+   "lineTo",
+   50.4,
+   77
+  ],
+  [
+   "arcTo",
+   77.14,
+   77,
+   80.22,
+   78.3,
+   4.2
+  ],
+  [
+   "lineTo",
+   80.22,
+   78.3
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   80.22,
+   63.5,
+   7,
+   29.6,
+   0.98
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   38.78,
+   77
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -6815,29 +12511,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2.88
+   2.4
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   49.92,
-   49.92,
-   116.16,
-   116.16,
-   6
+   56.4,
+   48,
+   103.2,
+   120,
+   3.84
   ],
   [
    "fill"
@@ -6846,14 +12542,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   2.64
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   75.12,
+   84
+  ],
+  [
+   "lineTo",
+   86.4,
+   84
+  ],
+  [
+   "arcTo",
+   132.24,
+   84,
+   137.52,
+   81.84,
+   7.2
+  ],
+  [
+   "lineTo",
+   137.52,
+   81.84
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   137.52,
+   56.4,
+   12,
+   50.88,
+   1.68
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 18px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -6867,9 +12644,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   108,
-   108
+   "0",
+   66.48,
+   84
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   2.64
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   75.12,
+   132
+  ],
+  [
+   "lineTo",
+   86.4,
+   132
+  ],
+  [
+   "arcTo",
+   132.24,
+   132,
+   137.52,
+   134.16,
+   7.2
+  ],
+  [
+   "lineTo",
+   137.52,
+   134.16
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   137.52,
+   108.72,
+   12,
+   50.88,
+   1.68
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 14px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   66.48,
+   132
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -7025,29 +12899,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   20.8,
-   20.8,
-   48.4,
-   48.4,
-   2.5
+   23.5,
+   20,
+   43,
+   50,
+   1.6
   ],
   [
    "fill"
@@ -7056,14 +12930,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.5
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   31.3,
+   35
+  ],
+  [
+   "lineTo",
+   36,
+   35
+  ],
+  [
+   "arcTo",
+   55.1,
+   35,
+   57.3,
+   34,
+   3
+  ],
+  [
+   "lineTo",
+   57.3,
+   34
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   57.3,
+   23.5,
+   5,
+   21,
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 8px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -7077,9 +13032,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   45,
-   45
+   "0",
+   27.7,
+   35
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.5
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   31.3,
+   55
+  ],
+  [
+   "lineTo",
+   36,
+   55
+  ],
+  [
+   "arcTo",
+   55.1,
+   55,
+   57.3,
+   56,
+   3
+  ],
+  [
+   "lineTo",
+   57.3,
+   56
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   57.3,
+   45.5,
+   5,
+   21,
+   0.7
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   27.7,
+   55
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -7235,29 +13287,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2
+   1.75
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   29.12,
-   29.12,
-   67.76,
-   67.76,
-   3.5
+   32.9,
+   28,
+   60.2,
+   70,
+   2.24
   ],
   [
    "fill"
@@ -7266,14 +13318,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.54
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   43.82,
+   49
+  ],
+  [
+   "lineTo",
+   50.4,
+   49
+  ],
+  [
+   "arcTo",
+   77.14,
+   49,
+   80.22,
+   47.7,
+   4.2
+  ],
+  [
+   "lineTo",
+   80.22,
+   47.7
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   80.22,
+   32.9,
+   7,
+   29.6,
+   0.98
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 11px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -7287,9 +13420,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   63,
-   63
+   "0",
+   38.78,
+   49
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   1.54
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   43.82,
+   77
+  ],
+  [
+   "lineTo",
+   50.4,
+   77
+  ],
+  [
+   "arcTo",
+   77.14,
+   77,
+   80.22,
+   78.3,
+   4.2
+  ],
+  [
+   "lineTo",
+   80.22,
+   78.3
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   80.22,
+   63.5,
+   7,
+   29.6,
+   0.98
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   38.78,
+   77
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -7445,29 +13675,29 @@
   ],
   [
    "set",
-   "strokeStyle",
-   "#e8ddff"
-  ],
-  [
-   "set",
    "fillStyle",
    "#160b26"
   ],
   [
    "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
    "lineWidth",
-   2.88
+   2.4
   ],
   [
    "beginPath"
   ],
   [
    "roundRect",
-   49.92,
-   49.92,
-   116.16,
-   116.16,
-   6
+   56.4,
+   48,
+   103.2,
+   120,
+   3.84
   ],
   [
    "fill"
@@ -7476,14 +13706,95 @@
    "stroke"
   ],
   [
+   "save"
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "set",
+   "lineJoin",
+   "round"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "lineWidth",
+   2.64
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   75.12,
+   84
+  ],
+  [
+   "lineTo",
+   86.4,
+   84
+  ],
+  [
+   "arcTo",
+   132.24,
+   84,
+   137.52,
+   81.84,
+   7.2
+  ],
+  [
+   "lineTo",
+   137.52,
+   81.84
+  ],
+  [
+   "stroke"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   137.52,
+   56.4,
+   12,
+   50.88,
+   1.68
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
   ],
   [
    "set",
    "font",
-   "600 18px ui-monospace, \"JetBrains Mono\", monospace"
+   "600 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -7497,9 +13808,106 @@
   ],
   [
    "fillText",
-   "{·}",
-   108,
-   108
+   "0",
+   66.48,
+   84
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#bea7ff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.8
+  ],
+  [
+   "set",
+   "lineWidth",
+   2.64
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   75.12,
+   132
+  ],
+  [
+   "lineTo",
+   86.4,
+   132
+  ],
+  [
+   "arcTo",
+   132.24,
+   132,
+   137.52,
+   134.16,
+   7.2
+  ],
+  [
+   "lineTo",
+   137.52,
+   134.16
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#bea7ff"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "roundRect",
+   137.52,
+   108.72,
+   12,
+   50.88,
+   1.68
+  ],
+  [
+   "fill"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "font",
+   "600 14px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "1",
+   66.48,
+   132
+  ],
+  [
+   "restore"
   ],
   [
    "set",

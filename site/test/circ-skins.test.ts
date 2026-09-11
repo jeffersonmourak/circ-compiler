@@ -504,6 +504,35 @@ describe('circ-skins', () => {
     expect(ops.some((op) => op[0] === 'fillText' && op[1] === '[8:16]')).toBe(true);
   });
 
+  test('a concat is one band and one numbered lane per operand, fading down the stack', () => {
+    const theme = themeWith(true);
+    for (const n of [2, 3, 4]) {
+      const base = component('concat', n * 4);
+      const c: PlacedComponent = {
+        ...base,
+        height: 2 * n + 1,
+        inPorts: Array.from({ length: n }, (_, i) => ({ portName: `op${i}`, coord: { x: X - 1, y: Y + 1 + 2 * i } })),
+        outPort: { x: X + 5, y: Y + Math.floor((2 * n + 1) / 2) },
+      };
+      const { ctx, ops } = recordingContext(10);
+      skinFor(theme, c)({
+        ctx, theme, cell: 10, component: c, inputSignals: c.inPorts.map(() => 1), outputSignal: 1,
+        inputValues: c.inPorts.map(() => valueOf(1, 4)), outputValue: valueOf(1, n * 4), hovered: false,
+      });
+      // The shell, then one band per operand.
+      expect(ops.filter((op) => op[0] === 'roundRect')).toHaveLength(1 + n);
+      // One lane per operand, each turning once into its band.
+      expect(ops.filter((op) => op[0] === 'arcTo')).toHaveLength(n);
+      // Operand 0 at full strength, then 0.8, 0.6, and never under 0.45.
+      // Each operand sets its alpha then resets to 1: the even entries are the operands'.
+      const alphas = ops.filter((op) => op[0] === 'set' && op[1] === 'globalAlpha').map((op) => op[2]).filter((_, k) => k % 2 === 0);
+      expect(alphas).toEqual(Array.from({ length: n }, (_, i) => Math.max(0.45, 1 - i * 0.2)));
+      // The index glyphs, on each lane's own row.
+      const glyphs = ops.filter((op) => op[0] === 'fillText').map((op) => [op[1], op[3]]);
+      expect(glyphs).toEqual(c.inPorts.map((p, i) => [String(i), p.coord.y * 10 + 5]));
+    }
+  });
+
   test('the NOT gate names itself below its box, like every other part', () => {
     // Before: yOffset = -cell * 15 put the name 0.7 cells above the bottom
     // edge, inside the sprite.

@@ -1012,8 +1012,57 @@ const drawSlice = (args) => {
   nsBitPart(args, nsSliceAsset);
 };
 
+/**
+ * CONCAT — the assembled word as a stack of bands on the output side, one
+ * per operand, with a numbered lane running in from each port so the bit
+ * order is readable rather than implied. Operand 0 sits at the top and the
+ * stack fades downward.
+ */
+function nsConcatAsset(ctx, t, cell, c) {
+  const { y0, h, bx, bw } = nsShell(ctx, t, cell, c);
+  const n = Math.max(1, c.inPorts.length);
+  const barW = cell * 0.5;
+  const barX = bx + bw - cell * 0.42 - barW;
+  const barY = y0 + cell * 0.35;
+  const barH = h - cell * 0.7;
+  const gap = Math.max(1, cell * 0.06);
+  const segH = (barH - gap * (n - 1)) / n;
+  const laneX = bx + cell * 1.25;
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  for (let i = 0; i < n; i++) {
+    const segY = barY + i * (segH + gap);
+    const segMid = segY + segH / 2;
+    const port = c.inPorts[i];
+    const py = port ? port.coord.y * cell + cell / 2 : segMid;
+    ctx.strokeStyle = t.wireBus;
+    ctx.globalAlpha = Math.max(0.45, 1 - i * 0.2);
+    ctx.lineWidth = Math.max(1.5, cell * 0.11);
+    ctx.beginPath();
+    ctx.moveTo(bx + cell * 0.78, py);
+    ctx.lineTo(laneX, py);
+    ctx.arcTo(barX - cell * 0.22, py, barX, segMid, cell * 0.3);
+    ctx.lineTo(barX, segMid);
+    ctx.stroke();
+    ctx.fillStyle = t.wireBus;
+    ctx.beginPath();
+    ctx.roundRect(barX, segY, barW, segH, cell * 0.07);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    // The operand index on the lane's own baseline, left of where the lane
+    // starts, so every index including 0 clears the shell border.
+    ctx.fillStyle = t.labelMuted;
+    ctx.font = nsFont(cell, 600);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(i), bx + cell * 0.42, py);
+  }
+  ctx.restore();
+}
+
 const drawConcat = (args) => {
-  drawBox(args, '{·}', args.theme.colors.stroke);
+  nsBitPart(args, nsConcatAsset);
 };
 
 /** `rom code[8,4]` — the label text comes from the renderer, so the canvas
