@@ -4,7 +4,7 @@
 // keys without pulling sprite loading (which needs `new Image()`) along.
 //
 // These are the design handoff's `nextSiteDark` / `nextSiteLight`
-// (`DOCS/design/circ-site-theme.js`), taken verbatim. The language is the
+// (`DOCS/archive/design/canvas-theme/circ-site-theme.js`), taken verbatim. The language is the
 // site's: orange is HIGH, green is LOW, blue is output, purple is macro,
 // yellow is hover. Four keys are new against the palette the site shipped
 // before — `surface` (the fill inside hollow pins, chips and shells),

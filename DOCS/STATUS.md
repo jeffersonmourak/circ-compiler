@@ -249,3 +249,19 @@ One entry per shipped slice, newest last. The plan is `DOCS/PLANS_PROMPT.md`; th
 **Tests:** renderer `bun test` (203 pass), `bunx tsc --noEmit`; site `bun test` (461 pass), typecheck (0 errors), `bun --bun run build`, `bun run bundle` (ok), result pass
 **Next slice:** Phase 5 slice 1: the walk.
 **Notes:** the same half also shifted clicks on every high-density display since the renderer's first release; a click near a pin's edge landed half a padding off. Nobody noticed at the old 4px default. Both Phase 4 nits were renderer defects the site's theme made visible; neither was in the design.
+
+## 2026-09-10 — Phase 5 — decisions and README reread
+
+**What shipped:** `DOCS/decisions/canvas-theme.md` gains the two entries the Phase 4 review's renderer fixes earned (the junction rule, padding in CSS pixels) and a closing section mapping the plan's sixteen locked decisions onto its entries and naming the follow-ups (the runtime write stamp, the range bar's unjudged design, the caches that never evict). The renderer README reread against the pinned `7ca8593`: `grid` absent, the wire options, `rowGutter`, the fan-out section and `junctionCells` all present and as shipped; nothing to change.
+**Files touched:** `DOCS/decisions/canvas-theme.md`, `DOCS/STATUS.md`
+**Tests:** none (documents); `grep -n grid ~/circus/circ-renderer/README.md` matches only the `padding` row's "canvas grid" and the memory grid, neither a colour key
+**Next slice:** move the handoff.
+**Notes:** every locked decision has an entry; the three unplanned entries and the two renderer fixes are named as such.
+
+## 2026-09-10 — Phase 5 — move the handoff
+
+**What shipped:** `DOCS/design/` moved to `DOCS/archive/design/canvas-theme/` with `git mv`; a row in `DOCS/archive/index.md`; the one source comment that named the old path (`circ-palette.mjs`) updated. The untracked sprite copy under `site/` moved with the directory on disk and stays untracked.
+**Files touched:** `DOCS/archive/design/canvas-theme/*` (renamed), `DOCS/archive/index.md`, `site/src/utils/circ-palette.mjs`, `DOCS/STATUS.md`
+**Tests:** ran `bun test` in `site/` (461 pass) — no test read the handoff path
+**Next slice:** Phase 5 slices 1 and 2, the walk and the hover redraw timing, are the human's; the completion entry follows their notes.
+**Notes:** `DOCS/PLANS_PROMPT.md`, the phase specs and earlier STATUS entries still cite `DOCS/design/...` by line; they are the record of what was read where, and the archive prompt's highlight view will point at the new path.

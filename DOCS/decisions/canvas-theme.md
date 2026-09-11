@@ -137,3 +137,29 @@ The entries below record the decisions of the canvas-theme initiative: the site'
 **Rationale.** The moment a RAM does something a ROM cannot is the one worth a mark, and the port values the canvas already hands the skin are the values the engine reads. Keying on the canvas element keeps the state across a theme flip (the element survives `setTheme`) and drops it with a rebuild.
 
 **Alternatives.** A runtime export for the last write (four layers for one dot; deferred, not refused); diffing the addressed word between draws (a write of the same value is invisible).
+
+### A junction is where the net branches
+
+**Decision.** The renderer marks a fan-out junction on every cell that the union of one source's wire segments leaves in three or more directions (`junctionCells`, exported), never on a cell three or more segments merely touch. A trunk several wires share and a bend they all take are degree two and mark nothing; a tap is three.
+
+**Rationale.** The old rule counted segment touches, so four wires down one trunk marked every trunk cell. Nobody saw it while the default dot was the wire's own colour on the wire; the site's ring showed one on every cell of `slice-and-concat`'s trunks in the Phase 4 review.
+
+**Alternatives.** Filtering on the site (the hook is handed a cell, not the wires); the compiler's render rule as written (`divergeAt`: one wire corners while another passes — equivalent on every corpus fixture, and the degree rule is the shorter statement).
+
+### Padding is CSS pixels on every display
+
+**Decision.** `CircCanvas.resize()` sets the transform as `setTransform(dpr, 0, 0, dpr, pad * dpr, pad * dpr)`. A transform's translation is in device pixels, so the padding scales with the ratio like the axes do; `componentAtEvent` and `boxOf`, which were always in CSS pixels, now agree with the drawing.
+
+**Rationale.** On a 2x display the grid drew half a padding up and left of where the hit-test looked for it, since the renderer's first release. At the old 4px default nobody noticed; at the site's two cells a top-row value chip was cut at the edge and clicks near a pin's edge landed half a padding off. Found in the Phase 4 review, on the reviewer's own display.
+
+**Alternatives.** Doubling the site's padding (papers over the halving and leaves the hit-test wrong); a `padding` option in device pixels (a host thinks in CSS pixels everywhere else).
+
+## Where the sixteen plan decisions landed, and what is left
+
+The locked decisions in `DOCS/PLANS_PROMPT.md` map onto the entries above as follows: 1 → "The design file wins over its README"; 2 → "The palettes are the handoff's"; 3 → "The renderer grows three hooks"; 4 → "No new component kinds"; 5 and 6 → "Two sprites, tinted and measured"; 7 and 8 → "The value pill is one shape"; 9 → "Hover is a ring outside the pin"; 10 and 11 → "The RAM write indicator mirrors the engine's edge rule"; 12 → "A user subcircuit and a memory share one chip"; 13 → "Slice and concat draw the bit field"; 14 → "The theme is three modules"; 15 → "What a skin draws is pinned as an op log"; 16 → "The handoff is tracked beside the plan". Three entries were not planned: the cell-relative strokes, the wire hook, and the gate anatomy are the phases' own; the junction rule and the padding are renderer defects the theme made visible.
+
+Follow-ups, none of them started:
+
+- **The runtime write stamp** (decision 11): a `last_write_time` on `MemoryState`, one export beside `getMemInfo`, a `CircRuntime` accessor. The mirrored edge rule was approved in the Phase 4 review; open this only if it misleads.
+- **The range bar** (decision 13) is the plan's rule, not the designer's; a slice of a word wider than sixteen bits has never been drawn on the site, so nobody has judged it.
+- **The tint and halo caches never evict.** Sizes are cell-derived and colours are palette values, so a page holds a bounded set; a host that changed cell sizes freely would grow them.
