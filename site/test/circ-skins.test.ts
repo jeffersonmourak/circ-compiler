@@ -262,6 +262,55 @@ describe('circ-skins', () => {
     flush(store);
   });
 
+  test('the wire hook rounds corners, keeps them across a crossing, and strokes a bus heavier', () => {
+    const theme = themeWith(true);
+    const seg = (x0: number, y0: number, x1: number, y1: number) => ({ from: { x: x0, y: y0 }, to: { x: x1, y: y1 } });
+    const draw = (segments: RoutedWire['segments'], crossings: RoutedWire['crossings'], sig: Signal, width: number, cell = 20) => {
+      const wire: RoutedWire = { srcId: 1, srcPort: 3, dstId: 2, dstPort: 0, realSrcId: 1, segments, crossings };
+      const { ctx, ops } = recordingContext(cell);
+      theme.wire!({ ctx, theme, cell, wire, signal: sig, value: valueOf(sig, width), conflictTier: 0 });
+      return ops;
+    };
+    const count = (ops: Op[], name: string) => ops.filter((op) => op[0] === name).length;
+    const corner = [seg(0, 0, 4, 0), seg(4, 0, 4, 2), seg(4, 2, 8, 2)];
+
+    // Idle, one bit: one pass, one subpath, a rounded corner at each bend.
+    const idle = draw(corner, [], 0, 1);
+    expect(count(idle, 'stroke')).toBe(1);
+    expect(count(idle, 'moveTo')).toBe(1);
+    expect(count(idle, 'arcTo')).toBe(2);
+    expect(idle.find((op) => op[0] === 'set' && op[1] === 'strokeStyle')![2]).toBe(colorsDark.wireIdle);
+    expect(idle.find((op) => op[0] === 'set' && op[1] === 'lineWidth')![2]).toBe(4);
+
+    // A crossing on the first run is one hop, and the corners stay.
+    const crossed = draw(corner, [{ x: 2, y: 0 }], 0, 1);
+    expect(count(crossed, 'arc')).toBe(1);
+    expect(count(crossed, 'arcTo')).toBe(2);
+    expect(count(crossed, 'moveTo')).toBe(1);
+
+    // Active, one bit: the glow pass first, translucent and wider, then the colour.
+    const active = draw(corner, [], 1, 1);
+    expect(count(active, 'stroke')).toBe(2);
+    const alphas = active.filter((op) => op[0] === 'set' && op[1] === 'globalAlpha').map((op) => op[2]);
+    expect(alphas).toEqual([0.22]);
+    const widths = active.filter((op) => op[0] === 'set' && op[1] === 'lineWidth').map((op) => op[2]);
+    expect(widths).toEqual([14, 4]);
+    expect(count(active, 'save')).toBe(count(active, 'restore'));
+
+    // A bus: 1.5× in wireBus, no glow, and the bit-count slash with its number.
+    const bus = draw([seg(0, 1, 8, 1)], [], 1, 8);
+    expect(count(bus, 'stroke')).toBe(2); // the wire and the slash
+    expect(bus.find((op) => op[0] === 'set' && op[1] === 'strokeStyle')![2]).toBe(colorsDark.wireBus);
+    expect(bus.find((op) => op[0] === 'set' && op[1] === 'lineWidth')![2]).toBe(6);
+    expect(bus.some((op) => op[0] === 'fillText' && op[1] === '8')).toBe(true);
+    expect(count(bus, 'globalAlpha')).toBe(0);
+
+    // A bus with an unknown bit is undefined, not a bus: no slash.
+    const half = draw([seg(0, 1, 8, 1)], [], 2, 8);
+    expect(half.find((op) => op[0] === 'set' && op[1] === 'strokeStyle')![2]).toBe(colorsDark.wireUndefined);
+    expect(half.some((op) => op[0] === 'fillText')).toBe(false);
+  });
+
   test('highlight: the ring for every kind draws as the golden says', () => {
     const theme = themeWith(true);
     for (const kind of KINDS) for (const cell of CELLS) {

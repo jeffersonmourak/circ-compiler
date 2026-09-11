@@ -544,22 +544,66 @@ const drawMemory = (args) => {
  * separate strands rather than fusing at intersections.
  */
 /**
- * A wire in the palette's colour for what it carries. A bus with a defined
- * value is a bus, whatever its bits: the badge above it says the number. The
- * route — every segment, arcing over its crossings — is traced by the
- * renderer's own `traceWire`, the same function its default painter uses, so
- * the site cannot draw a jump anywhere the renderer would not.
+ * A wire in the palette's colour for what it carries, at a weight that
+ * follows the cell. A bus with a defined value is a bus, whatever its bits,
+ * drawn 1.5× heavy with the bit-count slash; an active single bit gets a
+ * soft glow under its colour. The route — every segment, corners rounded,
+ * hops over its crossings — is traced by the renderer's own `traceWire`,
+ * the same function its default painter uses, so the site cannot draw a
+ * jump or a corner anywhere the renderer would not.
  */
-function wireRenderer({ ctx, cell, wire, value, theme }) {
+function drawWire({ ctx, cell, wire, signal, value, theme }) {
+  const t = theme.colors;
   const style = wireStyleOf(value);
-  ctx.strokeStyle = theme.colors[wireColorKey(style)];
-  // A touch heavier for a bus, so it reads as more than one bit.
-  ctx.lineWidth = style === 'bus' ? 6 : 4;
+  const bus = style === 'bus';
+  const width = nsWire(cell) * (bus ? 1.5 : 1);
+  const trace = () => {
+    ctx.beginPath();
+    traceWire(ctx, wire, cell, { arcRadius: cell * 0.4, cornerRadius: cell * 0.6 });
+  };
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  ctx.beginPath();
-  traceWire(ctx, wire, cell);
+  if (signal === 1 && !bus) {
+    // The glow: the same path, wider and translucent, under the colour. Two
+    // explicit strokes rather than a patched `stroke`, so nothing on the
+    // context is touched that `restore` does not put back.
+    ctx.save();
+    ctx.globalAlpha = 0.22;
+    ctx.strokeStyle = t.wireActive;
+    ctx.lineWidth = width + cell * 0.5;
+    trace();
+    ctx.stroke();
+    ctx.restore();
+  }
+  ctx.strokeStyle = t[wireColorKey(style)];
+  ctx.lineWidth = width;
+  trace();
   ctx.stroke();
+  if (bus) nsBusTick(ctx, t, cell, wire, value);
+}
+
+/**
+ * The bit-count slash on a bus — the standard notation the site lacked — on
+ * the first horizontal run two cells or longer, with the width beside it.
+ */
+function nsBusTick(ctx, t, cell, wire, value) {
+  const seg = wire.segments.find((s) => s.from.y === s.to.y && Math.abs(s.to.x - s.from.x) >= 2);
+  if (!seg) return;
+  const mx = ((seg.from.x + seg.to.x) / 2) * cell + cell / 2;
+  const my = seg.from.y * cell + cell / 2;
+  ctx.save();
+  ctx.strokeStyle = t.wireBus;
+  ctx.lineWidth = Math.max(1.5, cell * 0.1);
+  ctx.beginPath();
+  ctx.moveTo(mx - cell * 0.26, my + cell * 0.36);
+  ctx.lineTo(mx + cell * 0.26, my - cell * 0.36);
+  ctx.stroke();
+  ctx.fillStyle = t.wireBus;
+  ctx.font = nsFont(cell, 700);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(String(value.width), mx + cell * 0.55, my - cell * 0.32);
+  ctx.restore();
 }
 
 export const skins = {
@@ -590,7 +634,7 @@ export const sharedRenderers = {
   background: ({ ctx, cell, width, height }) => {
     ctx.clearRect(-4, -4, width * cell + 8, height * cell + 8);
   },
-  wire: wireRenderer,
+  wire: drawWire,
   // No port markers — each skin draws its own tail.
   portMarker: () => {},
   // The ring around a hovered or host-highlighted component, drawn by the

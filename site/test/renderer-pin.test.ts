@@ -158,7 +158,7 @@ describe('renderer pin', () => {
     expect(sourceLink).not.toMatch(/^\s+(input|rom|ram): \d+,$/m);
     expect(romImage).not.toMatch(/ROM_KIND|RAM_KIND/);
     // The theme strokes the renderer's trace and styles a bus as a bus.
-    expect(skins).toContain('traceWire(ctx, wire, cell)');
+    expect(skins).toMatch(/traceWire\(ctx, wire, cell, \{ arcRadius: [^}]*cornerRadius: [^}]*\}\)/);
     expect(skins).toContain('wireStyleOf(value)');
     expect((palette.match(/^\s+wireBus: /gm) ?? []).length).toBe(2);
     // …and no longer carries its own copy of the crossing-jump loop.
