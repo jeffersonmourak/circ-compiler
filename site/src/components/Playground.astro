@@ -118,6 +118,12 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     </nav>
     <section class="pg-editor" id="pg-pane-editor">
       <div class="pg-banner" hidden></div>
+      {/* The file strip (design file: 36px, the open file underlined in the
+          accent). A switch only: rename, delete and reorder are the tree's,
+          and the island fills the tabs from the same state the tree reads. */}
+      <div class="pg-files" role="tablist" aria-label="Files">
+        <button type="button" class="pg-file-add" aria-label="New file">+ file</button>
+      </div>
       <div class="pg-editor-wrap" id="pg-editor-panel" role="tabpanel">
         <div id="pg-editor" class="pg-cm" hidden></div>
         <textarea
@@ -540,6 +546,8 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
   function init(el: HTMLElement) {
     const source = el.querySelector<HTMLTextAreaElement>('#pg-source')!;
     const editorWrap = el.querySelector<HTMLElement>('.pg-editor-wrap')!;
+    const filesEl = el.querySelector<HTMLElement>('.pg-files')!;
+    const fileAdd = el.querySelector<HTMLButtonElement>('.pg-file-add')!;
     const editorHost = el.querySelector<HTMLElement>('#pg-editor')!;
     const status = el.querySelector<HTMLElement>('.pg-status')!;
     const dot = el.querySelector<HTMLElement>('.pg-dot')!;
@@ -1554,15 +1562,49 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         ? `${state.tabs.files[first.index].name}: ${CONFLICT_TEXT[first.reason]}`
         : '';
 
-      // The editor panel is labelled by whichever file row is current.
       const activeRow = tree.querySelector<HTMLElement>('.pg-tree-file[aria-current="true"]');
-      if (activeRow) {
-        activeRow.id = `pg-tree-file-${state.tabs.active}`;
-        editorWrap.setAttribute('aria-labelledby', activeRow.id);
-      } else {
-        editorWrap.removeAttribute('aria-labelledby');
-      }
+      if (activeRow) activeRow.id = `pg-tree-file-${state.tabs.active}`;
+      // The strip reads the same state, and the editor panel is labelled by
+      // its current tab.
+      renderFileTabs();
     }
+
+    // ---- the file strip ----
+    /** One tab per file, in order, the active one selected and the only tab
+     *  stop; rebuilt whole, since a strip of a handful of names is cheap. */
+    function renderFileTabs() {
+      for (const old of filesEl.querySelectorAll('.pg-file')) old.remove();
+      state.tabs.files.forEach((f, i) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'pg-file';
+        b.setAttribute('role', 'tab');
+        b.id = `pg-file-${i}`;
+        b.dataset.file = String(i);
+        const active = i === state.tabs.active;
+        b.setAttribute('aria-selected', String(active));
+        b.setAttribute('aria-controls', 'pg-editor-panel');
+        b.tabIndex = active ? 0 : -1;
+        b.textContent = f.name;
+        b.addEventListener('click', () => showFile(i));
+        filesEl.insertBefore(b, fileAdd);
+      });
+      editorWrap.setAttribute('aria-labelledby', `pg-file-${state.tabs.active}`);
+    }
+    filesEl.addEventListener('keydown', (e) => {
+      const at = state.tabs.active;
+      const last = state.tabs.files.length - 1;
+      const next =
+        e.key === 'ArrowLeft' ? Math.max(0, at - 1)
+        : e.key === 'ArrowRight' ? Math.min(last, at + 1)
+        : e.key === 'Home' ? 0
+        : e.key === 'End' ? last
+        : null;
+      if (next === null || !(e.target as HTMLElement).classList.contains('pg-file')) return;
+      e.preventDefault();
+      showFile(next);
+    });
+    fileAdd.addEventListener('click', addNewFile);
 
     /** Kept for the callers that predate the tree; the tree is the workspace. */
     const renderWorkspace = renderTree;
@@ -1577,9 +1619,15 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
 
     /** Focus the row showing file `index`, which is what every file operation
      *  wants afterwards. */
+    /** Focus follows the file: into the tree's row while the card is open (a
+     *  rename or a delete there keeps the reader where they were), else onto
+     *  the strip's tab. */
     function focusFileTab(index: number) {
-      const at = treeNodes.findIndex((n) => n.kind === 'file' && n.index === index);
-      if (at >= 0) focusNode(at);
+      if (!wsRoot.hidden) {
+        const at = treeNodes.findIndex((n) => n.kind === 'file' && n.index === index);
+        if (at >= 0) { focusNode(at); return; }
+      }
+      filesEl.querySelector<HTMLElement>(`.pg-file[data-file="${index}"]`)?.focus();
     }
 
     /** Enter, Space, or a click. A folder toggles; a project loads; a file

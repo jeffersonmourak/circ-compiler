@@ -191,20 +191,26 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     // …with exactly one of them marked as the file the editor is showing.
     expect(doc.querySelectorAll('.pg-tree-file[aria-current="true"]')).toHaveLength(1);
 
-    // The editor's own file strip is gone: the tree is the only place files
-    // live, which is the whole point of the move.
-    expect(doc.querySelector('.pg-files')).toBeNull();
-    expect(doc.querySelectorAll('.pg-filetab')).toHaveLength(0);
+    // The file strip over the editor lists the same files as the tree, in
+    // order, with the open one selected; it is a switch, so it carries no
+    // rename or delete of its own.
+    const strip = Array.from(doc.querySelectorAll('.pg-files .pg-file'), (b) => (b as { textContent: string }).textContent);
+    const treeFiles = Array.from(files, (r) => (r.querySelector('.pg-tree-label') as { textContent: string } | null)?.textContent ?? '');
+    expect(strip).toEqual(treeFiles);
+    expect(doc.querySelectorAll('.pg-files .pg-file[aria-selected="true"]')).toHaveLength(1);
+    expect(doc.querySelectorAll('.pg-files .pg-tree-action')).toHaveLength(0);
+    expect(doc.querySelector('.pg-files .pg-file-add')?.textContent).toBe('+ file');
 
     // A roving tabindex, so the whole tree is one tab stop rather than 22.
     const stops = Array.from(doc.querySelectorAll('.pg-tree-row')).filter(
       (r) => (r as unknown as { tabIndex: number }).tabIndex === 0,
     );
     expect(stops).toHaveLength(1);
-    // The editor panel is labelled by the current file row, not by a tab.
+    // The editor panel is labelled by the strip's current tab.
     const labelledBy = doc.querySelector('.pg-editor-wrap')?.getAttribute('aria-labelledby') ?? '';
     expect(labelledBy).not.toBe('');
-    expect(doc.querySelector(`#${labelledBy}`)?.classList.contains('pg-tree-file')).toBe(true);
+    expect(doc.querySelector(`#${labelledBy}`)?.classList.contains('pg-file')).toBe(true);
+    expect(doc.querySelector(`#${labelledBy}`)?.getAttribute('aria-selected')).toBe('true');
 
     // The dock: two panels under the editor, diagnostics open and selected.
     const dock = doc.querySelector('.pg-dock') as unknown as { dataset: Record<string, string> } | null;
@@ -334,6 +340,31 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     // The source column is the splitter, in pixels, at the design's default.
     expect((doc.querySelector('.pg-body') as unknown as { style: { getPropertyValue(n: string): string } }).style.getPropertyValue('--pg-source-w')).toBe('480px');
   });
+
+  test('the strip switches files and adds one', () => drive((doc) => {
+    const tabs = () => Array.from(doc.querySelectorAll('.pg-files .pg-file'), (b) => (b as { textContent: string }).textContent);
+    const selected = () => (doc.querySelector('.pg-files .pg-file[aria-selected="true"]') as { textContent: string } | null)?.textContent;
+    const before = tabs();
+    // `+ file` adds a file before the root (the last file is the root) and
+    // selects it; the tree shows the same file.
+    (doc.querySelector('.pg-file-add') as unknown as { click(): void }).click();
+    const after = tabs();
+    expect(after).toHaveLength(before.length + 1);
+    expect(after[after.length - 1]).toBe(before[before.length - 1]);
+    expect(selected()).toBe(after[after.length - 2]);
+    expect((doc.querySelector('.pg-tree-file[aria-current="true"] .pg-tree-label') as { textContent: string } | null)?.textContent).toBe(selected());
+    // Only the selected tab is a tab stop, and a click on another switches.
+    const stops = Array.from(doc.querySelectorAll('.pg-files .pg-file')).filter((b) => (b as unknown as { tabIndex: number }).tabIndex === 0);
+    expect(stops).toHaveLength(1);
+    (doc.querySelectorAll('.pg-files .pg-file')[after.length - 1] as unknown as { click(): void }).click();
+    expect(selected()).toBe(after[after.length - 1]);
+    expect(doc.querySelector('.pg-editor-wrap')?.getAttribute('aria-labelledby')).toBe(`pg-file-${after.length - 1}`);
+    // Leave the project as it was found: the tree's delete, armed then made.
+    const deleteOn = () => doc.querySelector('.pg-tree-file .pg-tree-action[aria-label^="Delete"]') as unknown as { click(): void };
+    deleteOn().click();
+    deleteOn().click();
+    expect(tabs()).toEqual(before);
+  }));
 
   test('the breadcrumb opens the tree and gives focus back', () => drive((doc) => {
     const press = (el: unknown, key: string) =>

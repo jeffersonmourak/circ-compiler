@@ -632,6 +632,40 @@ hr {
   tab-size: 2;
   outline: none;
 }
+/* The file strip over the editor (design file: 36px, mono 11.5px, the open
+   file in --fg under a 2px accent rule, the rest and `+ file` in --muted). */
+.pg-files {
+  display: flex;
+  align-items: stretch;
+  height: 36px;
+  flex: none;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.pg-file,
+.pg-file-add {
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 0 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pg-file:hover,
+.pg-file-add:hover { color: var(--fg); }
+.pg-file[aria-selected='true'] { color: var(--fg); border-bottom-color: var(--accent); }
+.pg-file:focus-visible,
+.pg-file-add:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.pg-file-add { margin-left: auto; }
+
 /* The editing surface: the CodeMirror mount and the fallback textarea share
    one flex column so either one fills the pane. Geometry only — the editor's
    colours come from its own EditorView.theme compartment, never from here. */
