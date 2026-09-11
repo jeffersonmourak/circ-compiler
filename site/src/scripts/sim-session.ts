@@ -19,7 +19,15 @@
 // The runtime is injected: `CircRuntime` on the page, a stub in a test.
 
 import { ComponentKind, widthMask, type BitValue } from 'circ-renderer/topology';
-import { applyRomImages, romPlan, type ApplyResult, type MemorySymbol, type RomImageMap } from '../utils/rom-image.ts';
+import {
+  applyRomImages,
+  imageErrorReason,
+  romPlan,
+  validateImageBytes,
+  type ApplyResult,
+  type MemorySymbol,
+  type RomImageMap,
+} from '../utils/rom-image.ts';
 
 export type PinKind = 'in' | 'out';
 export interface PinRef {
@@ -402,20 +410,21 @@ export class SimSession {
   }
 
   /**
-   * Replace every cell from a raw image. The caller validates the image first
-   * (the executor spells `E_MEMFMT` the compiler's way); a runtime refusal
-   * here is reported as `E_MEMFMT` with the status, which should not happen
-   * after validation.
+   * Replace every cell from a raw image, checked first the way the compiler
+   * checks it: an `E_MEMFMT` carries the reason `--sim` prints after the
+   * path. A runtime refusal after that check should not happen and is
+   * reported with its status.
    */
   loadImage(name: string, bytes: Uint8Array): SimResult<{ mem: MemRef; words: number }> {
     const mem = this.mem(name);
     if (!mem) return fail('E_NOMEM', name);
+    const checked = validateImageBytes(bytes, mem);
+    if (!checked.ok) return fail('E_MEMFMT', imageErrorReason(checked.error, mem));
     const rc = this.rt.loadMemImage(mem.id, bytes);
     if (rc !== 0) return fail('E_MEMFMT', `runtime refused the image (status ${rc})`);
     this.rt.run();
     this.emit({ kind: 'memory', name });
-    const bpw = (mem.width + 7) >> 3;
-    return { ok: true, mem, words: bytes.length / bpw };
+    return { ok: true, mem, words: checked.words };
   }
 
   /** The whole memory as a raw image, `value & defined` per word. */

@@ -119,34 +119,61 @@ export function parseRomImage(text: string, mem: MemorySymbol): RomImageResult {
     for (let i = 0; i < token.length; i += 2) bytes.push(Number.parseInt(token.slice(i, i + 2), 16));
   }
 
+  const out = new Uint8Array(bytes);
+  const checked = validateImageBytes(out, mem);
+  if (!checked.ok) return { ok: false, error: checked.error, message: describeRomError(checked.error) };
+  const hex = Array.from(out, (b) => b.toString(16).padStart(2, '0')).join('');
+  return { ok: true, bytes: out, words: checked.words, hex };
+}
+
+/** The three byte-level refusals of `lib/memimage.zig`'s `validate`, by the compiler's error names. */
+export type ImageByteError = Extract<RomImageError, { kind: 'not_word_multiple' | 'too_many_words' | 'word_exceeds_width' }>;
+
+/**
+ * `lib/memimage.zig`'s `validate` over raw bytes: whole words, then capacity,
+ * then the width of each word, in that order, so the first refusal is the one
+ * the compiler and `--sim` would give. Touches nothing.
+ */
+export function validateImageBytes(
+  bytes: Uint8Array,
+  mem: Pick<MemorySymbol, 'width' | 'addrWidth'>,
+): { ok: true; words: number } | { ok: false; error: ImageByteError } {
   const bpw = bytesPerWord(mem.width);
-  // The compiler's order: whole words, then capacity, then the width of each.
   if (bytes.length % bpw !== 0) {
-    const error: RomImageError = { kind: 'not_word_multiple', bytes: bytes.length, bytesPerWord: bpw };
-    return { ok: false, error, message: describeRomError(error) };
+    return { ok: false, error: { kind: 'not_word_multiple', bytes: bytes.length, bytesPerWord: bpw } };
   }
   const words = bytes.length / bpw;
   const capacity = maxWords(mem.addrWidth);
-  if (words > capacity) {
-    const error: RomImageError = { kind: 'too_many_words', words, capacity };
-    return { ok: false, error, message: describeRomError(error) };
-  }
-  const out = new Uint8Array(bytes);
+  if (words > capacity) return { ok: false, error: { kind: 'too_many_words', words, capacity } };
   const mask = mem.width >= 64 ? (1n << 64n) - 1n : (1n << BigInt(mem.width)) - 1n;
   for (let i = 0; i < words; i += 1) {
-    const word = readWord(out, i, bpw);
+    const word = readWord(bytes, i, bpw);
     if ((word & ~mask) !== 0n) {
-      const error: RomImageError = {
-        kind: 'word_exceeds_width',
-        word: Number(word),
-        dataWidth: mem.width,
-      };
-      return { ok: false, error, message: describeRomError(error) };
+      return { ok: false, error: { kind: 'word_exceeds_width', word: Number(word), dataWidth: mem.width } };
     }
   }
+  return { ok: true, words };
+}
 
-  const hex = Array.from(out, (b) => b.toString(16).padStart(2, '0')).join('');
-  return { ok: true, bytes: out, words, hex };
+/**
+ * The reason `--sim` prints after `err E_MEMFMT <path>: `, word for word from
+ * `writeImageError` in `lib/engine_session.zig`. `too_big` is the CLI's
+ * `FileTooBig` on a read past its 16 MiB cap.
+ */
+export function imageErrorReason(
+  error: ImageByteError | { kind: 'too_big' },
+  mem: Pick<MemorySymbol, 'width'>,
+): string {
+  switch (error.kind) {
+    case 'not_word_multiple':
+      return `length ${error.bytes} is not a multiple of ${error.bytesPerWord} byte(s)`;
+    case 'too_many_words':
+      return `${error.words} words exceed capacity ${error.capacity}`;
+    case 'word_exceeds_width':
+      return `a word has bits set beyond data width ${mem.width}`;
+    case 'too_big':
+      return 'image exceeds 16 MiB';
+  }
 }
 
 // ---------------------------------------------------------------------------
