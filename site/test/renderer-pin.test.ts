@@ -195,7 +195,13 @@ describe('renderer pin', () => {
     // The only renderCircuit call on each page is the first mount. Both pages
     // destructure the import (`const [{ renderCircuit }, ...]`), so the call
     // form is what is counted, not the bare name.
-    for (const [name, source] of [['LiveCanvas', gallery], ['Playground', playground]] as const) {
+    // The gallery renders through `renderCircuit`; the playground builds its
+    // canvas over the session's runtime with `new CircCanvas`, so the runtime
+    // outlives the picture. One call site each, either way.
+    expect([...gallery.matchAll(/await renderCircuit\(/g)].length).toBe(1);
+    expect([...playground.matchAll(/await renderCircuit\(/g)].length).toBe(0);
+    expect([...playground.matchAll(/new Canvas<PaletteKey>\(session\.runtime as CircRuntime, \{/g)].length).toBe(1);
+    for (const [name, source] of [['LiveCanvas', gallery]] as const) {
       expect(`${name}: ${[...source.matchAll(/await renderCircuit\(/g)].length}`).toBe(`${name}: 1`);
     }
   });

@@ -278,6 +278,9 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
   // A VALUE, but from the topology-only entry point: the decoder and its enum,
   // nothing of the canvas, so the eager bundle stays what it was.
   import { ComponentKind } from 'circ-renderer/topology';
+  // The session the faces share. Pulls nothing of the canvas: its imports are
+  // the topology entry point and the rom-image module, both already here.
+  import { SimSession } from '../scripts/sim-session.ts';
   import { joinConflicts, requestFor, rootOf, PLAYGROUND_DIR } from '../utils/split-files.ts';
   import { createSplitter } from '../scripts/splitter.ts';
   import { fnv1a } from '../utils/artifact-hash.ts';
@@ -1449,10 +1452,10 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     const hexOpen = new Set<string>();
 
     /** The running circuit's runtime, or null when nothing is simulating or
-     *  the artifact predates memories. Contents can only be read while the
-     *  Simulate tab has built a view. */
+     *  the artifact predates memories. Contents can be read whenever a
+     *  session exists, whichever face built it. */
     function memHost(): CircRuntime | null {
-      const rt = sim.view?.runtime;
+      const rt = sim.session?.runtime as CircRuntime | undefined;
       return rt && rt.hasMemory ? rt : null;
     }
 
@@ -2046,16 +2049,18 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       renderMemory();
     }
 
-    /** Push every valid image into the running canvas. Called after a rebuild
-     *  and after an edit, because both change what is loaded. */
+    /** Push every valid image into the running circuit: the session's preload
+     *  step, the same one it runs at build and at reset. Called after an edit,
+     *  because that changes what is loaded. */
     function applyToView() {
-      const view = sim.view;
-      if (!view) return;
-      const mems = currentRoms();
-      const plan = romPlan(romImages, mems);
-      const result = applyRomImages(view.runtime, plan, mems);
-      for (const mem of mems) updateRomStatus(mem);
-      if (result.applied.length > 0) view.view.refreshState();
+      const session = sim.session;
+      if (!session) return;
+      const result = session.applyPreloads();
+      for (const mem of currentRoms()) updateRomStatus(mem);
+      if (result.applied.length > 0) {
+        sim.view?.view.refreshState();
+        renderMemory();
+      }
     }
 
     mountSettingsDrawer(el, {
@@ -2751,12 +2756,18 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     // ---- simulate ----
     /** What a root input pin holds: the renderer's own value shape. */
     type PinValue = BitValue;
-    /** The renderer's view over the site's palette. Every method the island
-     *  calls is typed there; the pin test is what makes a missing one loud. */
-    type View = CircView<PaletteKey>;
+    /** The canvas face: the renderer's own view shape minus the runtime,
+     *  which is the session's. `destroy` ends the canvas and not the runtime. */
+    type View = Pick<CircView<PaletteKey>, 'view' | 'canvas' | 'destroy'>;
     const simMount = el.querySelector<HTMLElement>('.pg-sim-mount')!;
     const simNoteBase = 'Click input pins to toggle them; hover one to find it in the source.';
     const sim = {
+      /** One session per artifact: the runtime, the pins and memories by name,
+       *  the listeners. Every face drives and reads through it. */
+      session: null as SimSession | null,
+      /** The bytes the session was built from, so a new artifact is told apart. */
+      sessionBytes: null as Uint8Array | null,
+      unsubscribe: null as null | (() => void),
       view: null as View | null,
       bytes: null as Uint8Array | null,
       renderedHash: -1,
@@ -2771,26 +2782,88 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     const loadRenderer = () => (sim.rendererPromise ??= import('circ-renderer'));
     const loadThemes = () => (sim.themesPromise ??= import('../utils/circ-theme.mjs'));
 
-    function rootInputs(view: View): Map<string, number> {
+    /** Root input names to ids, from the session's own pin table. */
+    function rootInputs(session: SimSession): Map<string, number> {
       const m = new Map<string, number>();
-      for (const c of view.runtime.topology.components) {
-        if (c.kind === ComponentKind.InputPin && c.origin.length === 0) m.set(c.name, c.id);
-      }
+      for (const p of session.pins) if (p.kind === 'in') m.set(p.name, p.id);
       return m;
     }
 
-    async function buildSim() {
-      if (!state.simulateEnabled || !sim.bytes) return;
+    /** End the canvas and the session, in that order: the canvas holds the runtime the session owns. */
+    function dropSession() {
+      sim.unsubscribe?.();
+      sim.unsubscribe = null;
+      sim.view?.destroy();
+      sim.view = null;
+      simMount.innerHTML = '';
+      sim.session?.destroy();
+      sim.session = null;
+      sim.sessionBytes = null;
+    }
+
+    /**
+     * The session for the current artifact, built on first need by whichever
+     * face asks. Loads floating (`noInitialPinDrive`) so a console `reset` is
+     * exactly a fresh `--sim` process, then boots low as the page always has,
+     * then replays the reader's pins by name. Guarded at every await by the
+     * bytes: a newer artifact while this one loads wins.
+     */
+    async function ensureSession(): Promise<SimSession | null> {
+      if (!state.simulateEnabled || !sim.bytes) return null;
       const bytes = sim.bytes;
-      const [{ renderCircuit }, themeMod] = await Promise.all([loadRenderer(), loadThemes()]);
-      if (sim.bytes !== bytes) return;
+      if (sim.session && sim.sessionBytes === bytes) return sim.session;
+      const { CircRuntime: Runtime } = await loadRenderer();
+      if (sim.bytes !== bytes) return null;
+      dropSession();
+      const session = await SimSession.build({
+        bytes,
+        load: (b) => Runtime.loadFromBytes(b, { noInitialPinDrive: true }),
+        roms: currentRoms(),
+        images: romImages,
+        bootLow: true,
+      });
+      if (sim.bytes !== bytes) {
+        session.destroy();
+        return null;
+      }
+      sim.session = session;
+      sim.sessionBytes = bytes;
+      // Replay the reader's pins by name onto the fresh session, value and
+      // all. A pin whose name is gone from the new circuit is forgotten.
+      const ids = rootInputs(session);
+      for (const name of Array.from(sim.pins.keys())) if (!ids.has(name)) sim.pins.delete(name);
+      for (const [name, v] of sim.pins) session.set(name, v.value, v.defined);
+      sim.unsubscribe = session.subscribe((event) => {
+        if (event.kind === 'drive' || event.kind === 'memory') {
+          // Another face drove the circuit: the picture and the dump follow.
+          // Only redrawn while the dump is on screen: each visible word costs
+          // a call across the boundary.
+          sim.view?.view.refreshState();
+          if (memVisible()) renderMemory();
+        } else if (event.kind === 'rebuilt') {
+          // The protocol's reset: a new runtime, so a canvas over the old one
+          // is rebuilt over the new.
+          if (sim.view) void buildCanvas();
+          renderMemory();
+        }
+      });
+      for (const mem of currentRoms()) updateRomStatus(mem);
+      renderMemory();
+      return session;
+    }
+
+    /** The Simulate face: a canvas over the session's runtime. */
+    async function buildCanvas() {
+      const session = await ensureSession();
+      if (!session) return;
+      const [{ CircCanvas: Canvas }, themeMod] = await Promise.all([loadRenderer(), loadThemes()]);
+      if (sim.session !== session) return;
       const { pickTheme, onAssetsReady } = themeMod;
       sim.view?.destroy();
       sim.view = null;
       simMount.innerHTML = '';
       try {
-        const view = await renderCircuit({
-          bytes,
+        const canvas = new Canvas<PaletteKey>(session.runtime as CircRuntime, {
           cell: 14,
           // Two cells: the value chip above a top-row pin reaches 1.42 cells
           // over its box, and it wants air, not a fit to the pixel.
@@ -2801,13 +2874,17 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           layoutOptions: { rowGutter: 2 },
           // onPinChange, not onPinToggle: the older callback collapses any
           // mixed bus to High, so a reader who typed 0x2A and then flipped the
-          // theme would get 0xFF back on the rebuilt canvas.
+          // theme would get 0xFF back on the rebuilt canvas. The canvas drove
+          // the runtime itself; the session tells the other faces.
           onPinChange: (id: number, value: PinValue) => {
-            for (const [name, pid] of rootInputs(view)) if (pid === id) sim.pins.set(name, value);
-            // A changed pin can clock a ram, so whatever the panel is showing
-            // is now a picture of the past. Only redrawn while it is actually
-            // on screen: each visible word costs a call across the boundary.
-            if (memVisible()) renderMemory();
+            const changed: string[] = [];
+            for (const [name, pid] of rootInputs(session)) {
+              if (pid === id) {
+                sim.pins.set(name, value);
+                changed.push(name);
+              }
+            }
+            session.notifyExternal(changed);
           },
           // The base the bus badges are written in and a bare typed value is
           // read in. A change to the setting reaches the live canvas through
@@ -2818,25 +2895,14 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
             markInEditor(id === null ? null : (link.table?.byComponentId.get(id) ?? null));
           },
         });
+        const view: View = { view: canvas, canvas: canvas.canvas, destroy: () => canvas.destroy() };
         sim.view = view;
         // The layout is the only place a collapsed macro box exists, so the
         // join is built from it rather than from the topology.
-        link.table = linkLayout(link.decls, view.view.getLayout());
-        // Images are session state, so a rebuilt canvas starts empty and has
-        // to be re-loaded before the reader sees it.
-        applyToView();
-        // The panel was drawn against no running circuit; there is one now.
-        renderMemory();
-        simMount.appendChild(view.canvas);
+        link.table = linkLayout(link.decls, canvas.getLayout());
+        simMount.appendChild(canvas.canvas);
         simMount.hidden = false;
         simNote.textContent = simNoteBase;
-        // Replay the reader's pins by name onto the fresh instance, value and
-        // all. A pin whose name is gone from the new circuit is forgotten.
-        const ids = rootInputs(view);
-        for (const name of Array.from(sim.pins.keys())) if (!ids.has(name)) sim.pins.delete(name);
-        for (const [name, v] of sim.pins) {
-          view.view.setInputValue(ids.get(name)!, v.value, v.defined);
-        }
         if (!sim.assetsHooked) {
           sim.assetsHooked = true;
           // The theme's sprite sheet finished decoding: the same theme now
@@ -2850,23 +2916,24 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     }
     hooks.onArtifact = (bytes, reason) => {
       sim.bytes = bytes;
+      // A new artifact is a new session; the reader's pins are replayed onto it
+      // by name when a face next asks for it.
+      if (bytes !== sim.sessionBytes) dropSession();
       if (!bytes) {
         link.table = null;
         link.current = null;
-        sim.view?.destroy();
-        sim.view = null;
-        simMount.innerHTML = '';
         simMount.hidden = true;
         simNote.textContent = state.simulateEnabled
           ? (reason === 'files-changed' ? 'Compile a circuit first.' : 'Fix the errors to simulate.')
           : simNote.textContent;
         sim.renderedHash = -1;
+        renderMemory();
         return;
       }
       simNote.textContent = '';
       if (state.tab === 'simulate' && state.artifact && sim.renderedHash !== state.artifact.hash) {
         sim.renderedHash = state.artifact.hash;
-        void buildSim();
+        void buildCanvas();
       }
     };
     const showTabBase = showTab;
@@ -2875,7 +2942,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       b.addEventListener('click', () => {
         if (state.artifact && sim.renderedHash !== state.artifact.hash) {
           sim.renderedHash = state.artifact.hash;
-          void buildSim();
+          void buildCanvas();
         } else if (!state.artifact && !sim.bytes) {
           simNote.textContent = state.simulateEnabled ? 'Compile a circuit first.' : simNote.textContent;
         }
