@@ -11,12 +11,16 @@ import {
   CircCanvas,
   CircRuntime,
   boxOutline,
+  buildLayout,
   defaultColors,
   defaultArcRadius,
   drawLabel,
+  junctionCells,
   memoryLabel,
   traceWire,
   wirePath,
+  type CircTheme,
+  type LayoutOptions,
 } from 'circ-renderer';
 import { ComponentKind as TopologyKind } from 'circ-renderer/topology';
 import { examples } from '../src/content/examples.ts';
@@ -77,6 +81,45 @@ describe('renderer pin', () => {
     // entry point the eager bundle names its kind bytes from.
     for (const fn of [traceWire, wirePath, defaultArcRadius]) expect(typeof fn).toBe('function');
     expect(TopologyKind).toBe(ComponentKind);
+    // Canvas theme, Phase 0: the tracer takes an options object and rounds
+    // corners from it, the layout takes a row gutter, and the fan-out hook
+    // reaches the canvas. Each is what a later phase of the theme draws
+    // through; a renderer pinned before them would draw hard corners, a
+    // clipped value chip and a dot under the site's ring.
+    const traced: string[] = [];
+    const recorder = {
+      moveTo: () => traced.push('moveTo'),
+      lineTo: () => traced.push('lineTo'),
+      arc: () => traced.push('arc'),
+      arcTo: () => traced.push('arcTo'),
+    } as unknown as CanvasPath;
+    const jog = {
+      srcId: 0, srcPort: 3, dstId: 1, dstPort: 0, realSrcId: 0,
+      segments: [{ from: { x: 0, y: 0 }, to: { x: 4, y: 0 } }, { from: { x: 4, y: 0 }, to: { x: 4, y: 4 } }],
+      crossings: [],
+    };
+    traceWire(recorder, jog, 10, { cornerRadius: 4 });
+    expect(traced).toEqual(['moveTo', 'arcTo', 'lineTo']);
+    expect('rowGutter' in ({ rowGutter: 2 } satisfies LayoutOptions)).toBe(true);
+    expect(typeof buildLayout).toBe('function');
+    expect('grid' in defaultColors).toBe(false);
+    expect(({ fanOutMarker: () => {} } satisfies Partial<CircTheme>).fanOutMarker).toBeDefined();
+    // The Phase 4 review's finding: a junction is where the net branches, not
+    // every cell of a trunk several wires share. Four wires down one trunk
+    // with a tap every other cell mark the three taps, and nothing else.
+    const seg = (x0: number, y0: number, x1: number, y1: number) => ({ from: { x: x0, y: y0 }, to: { x: x1, y: y1 } });
+    const wireOf = (segments: ReturnType<typeof seg>[]) => ({ srcId: 1, srcPort: 3, dstId: 2, dstPort: 0, realSrcId: 1, segments, crossings: [] });
+    expect(junctionCells([
+      wireOf([seg(0, 0, 4, 0), seg(4, 0, 4, 6), seg(4, 6, 8, 6)]),
+      wireOf([seg(0, 0, 4, 0), seg(4, 0, 4, 4), seg(4, 4, 8, 4)]),
+      wireOf([seg(0, 0, 4, 0), seg(4, 0, 4, 2), seg(4, 2, 8, 2)]),
+      wireOf([seg(0, 0, 4, 0), seg(4, 0, 8, 0)]),
+    ])).toEqual(['4,0', '4,2', '4,4']);
+    // The Phase 4 review's second finding: the padding came out halved on a
+    // 2x display, because the transform's translation is device pixels. The
+    // fix is in resize(); its shape is the one thing a source read can hold.
+    const canvasSrc = readFileSync(resolve(import.meta.dir, '..', 'node_modules', 'circ-renderer', 'src', 'render', 'canvas.ts'), 'utf8');
+    expect(canvasSrc).toMatch(/setTransform\(dpr, 0, 0, dpr, pad \* dpr, pad \* dpr\)/);
     const pkg = JSON.parse(
       readFileSync(resolve(import.meta.dir, '..', 'node_modules', 'circ-renderer', 'package.json'), 'utf8'),
     ) as { exports: Record<string, string> };
@@ -118,7 +161,8 @@ describe('renderer pin', () => {
     const gallery = src('components/LiveCanvas.astro');
     const sourceLink = src('scripts/source-link.ts');
     const romImage = src('utils/rom-image.ts');
-    const theme = src('utils/circ-theme.mjs');
+    const skins = src('utils/circ-skins.mjs');
+    const palette = src('utils/circ-palette.mjs');
     for (const [name, text] of [['Playground', playground], ['LiveCanvas', gallery]] as const) {
       expect(`${name}: ${/type CircView = \{/.test(text)}`).toBe(`${name}: false`);
       expect(`${name}: ${/renderCircuit\([\s\S]*?\}\)\) as unknown as/.test(text)}`).toBe(`${name}: false`);
@@ -131,11 +175,11 @@ describe('renderer pin', () => {
     expect(sourceLink).not.toMatch(/^\s+(input|rom|ram): \d+,$/m);
     expect(romImage).not.toMatch(/ROM_KIND|RAM_KIND/);
     // The theme strokes the renderer's trace and styles a bus as a bus.
-    expect(theme).toContain('traceWire(ctx, wire, cell)');
-    expect(theme).toContain('wireStyleOf(value)');
-    expect((theme.match(/^\s+wireBus: /gm) ?? []).length).toBe(2);
+    expect(skins).toMatch(/traceWire\(ctx, wire, cell, \{ arcRadius: [^}]*cornerRadius: [^}]*\}\)/);
+    expect(skins).toContain('wireStyleOf(value)');
+    expect((palette.match(/^\s+wireBus: /gm) ?? []).length).toBe(2);
     // …and no longer carries its own copy of the crossing-jump loop.
-    expect(theme).not.toMatch(/wire\.crossings/);
+    expect(skins).not.toMatch(/wire\.crossings/);
   });
 
   test('a theme flip changes a live canvas in place, on both pages', () => {

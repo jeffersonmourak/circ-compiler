@@ -2792,9 +2792,13 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         const view = await renderCircuit({
           bytes,
           cell: 14,
-          padding: 16,
+          // Two cells: the value chip above a top-row pin reaches 1.42 cells
+          // over its box, and it wants air, not a fit to the pixel.
+          padding: Math.ceil(14 * 2),
           interactive: true,
           theme: pickTheme(),
+          // Two free rows between stacked boxes, for the same chip.
+          layoutOptions: { rowGutter: 2 },
           // onPinChange, not onPinToggle: the older callback collapses any
           // mixed bus to High, so a reader who typed 0x2A and then flipped the
           // theme would get 0xFF back on the rebuilt canvas.
