@@ -3,7 +3,8 @@ import { url } from '../utils/url.ts';
 import ThemeToggle from './ThemeToggle.astro';
 import { examples } from '../content/examples.ts';
 import { tour } from '../content/tour.ts';
-import { CATALOGUE_GROUPS, buildCatalogue } from '../utils/playground-store.ts';
+import { buildCatalogue } from '../utils/playground-store.ts';
+import { displayGroups } from '../scripts/ws-tree.ts';
 
 interface Props {
   manifest: { version: string; revision: string; full_version: number };
@@ -15,14 +16,7 @@ const wasmHref = url('/wasm/libcirc.wasm');
 // they cannot drift from each other or from the shipped content.
 const catalogue = buildCatalogue(examples, tour);
 const initial = catalogue[0];
-// Only the groups that actually have rows, so an empty tier renders no heading.
-// The slug is what the heading's id is built from: a group label may contain a
-// space, and an id may not.
-const groups = CATALOGUE_GROUPS.map((group) => ({
-  group,
-  slug: group.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-  items: catalogue.filter((c) => c.group === group),
-})).filter((g) => g.items.length > 0);
+const groups = displayGroups(catalogue, []);
 ---
 <div
   class="pg"
@@ -53,9 +47,8 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
   <header class="pg-nav">
     <div class="pg-nav-left">
       <a class="pg-brand" href={url('/')}>circ</a>
-      {/* The breadcrumb names the open project; Phase 4 makes it the switcher. */}
-      <button type="button" class="pg-crumb" aria-expanded="false" aria-controls="pg-ws">
-        <span class="pg-crumb-group">{initial.group} /</span>
+      <button type="button" class="pg-crumb" aria-expanded="false" aria-controls="pg-switch">
+        <span class="pg-crumb-group">Examples /</span>
         <span class="pg-crumb-name">{initial.label}</span>
         <span class="pg-crumb-chevron" aria-hidden="true">▾</span>
       </button>
@@ -83,32 +76,28 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       <ThemeToggle />
     </div>
   </header>
-  <div class="pg-body">
-    <!-- The workspace tree, as a card under the breadcrumb until Phase 4
-         draws the switcher. Absolutely positioned, so it is never a track of
-         the body grid: the divider's arithmetic, its ResizeObserver and its
-         aria-controls all name exactly the two regions. -->
-    <nav class="pg-ws" id="pg-ws" aria-label="Workspace" hidden>
+  <div class="pg-scrim" aria-hidden="true" hidden></div>
+    <nav class="pg-switch" id="pg-switch" aria-label="Workspace" hidden>
       <label class="pg-switch-search">
         <span aria-hidden="true">⌕</span>
         <input type="search" class="pg-switch-query" aria-label="Find a circuit" placeholder="Find a circuit…" autocomplete="off" spellcheck="false" />
         <kbd aria-hidden="true">⌘K</kbd>
       </label>
-      <div class="pg-ws-body" id="pg-ws-body">
+      <div class="pg-switch-body" id="pg-switch-body">
         {/* The pre-hydration fallback: every project, flat, as ordinary links
             into the picker. The island replaces this whole subtree with a real
             `role=tree` once it runs — expansion state and the open project's
             file children both need the store, which the server does not have.
             Kept rather than shipped empty so the sidebar is never a blank box
             on a slow connection. */}
-        <ul class="pg-ws-fallback">
-          {groups.map(({ group, slug, items }) => (
-            <li class="pg-ws-section">
-              <h2 class="pg-ws-group" id={`pg-ws-h-${slug}`}>{group}</h2>
-              <ul class="pg-ws-list" aria-labelledby={`pg-ws-h-${slug}`}>
-                {items.map((c) => (
+        <ul class="pg-switch-fallback">
+          {groups.map(({ label, id, projects }) => (
+            <li>
+              <h2 class="pg-switch-group" id={`pg-switch-h-${id}`}>{label}</h2>
+              <ul aria-labelledby={`pg-switch-h-${id}`}>
+                {projects.map((c) => (
                   <li>
-                    <button type="button" class="pg-ws-row" data-pick={c.id}>{c.label}</button>
+                    <button type="button" class="pg-switch-row pg-switch-project" data-pick={c.id}>{c.label}</button>
                   </li>
                 ))}
               </ul>
@@ -117,10 +106,13 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         </ul>
         {/* One line under the tree, naming the first file that cannot be
             written back to the combined source. */}
-        <p class="pg-ws-error" role="alert"></p>
+        <p class="pg-switch-error" role="alert"></p>
       </div>
-      <button type="button" class="pg-ws-new" aria-label="New project">+ New project</button>
+      <div class="pg-switch-footer">
+        <button type="button" class="pg-switch-new" aria-label="New circuit">+ New circuit</button>
+      </div>
     </nav>
+  <div class="pg-body">
     <section class="pg-editor" id="pg-pane-editor">
       <div class="pg-banner" hidden></div>
       {/* The file strip (design file: 36px, the open file underlined in the
@@ -563,12 +555,14 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     const hintEl = el.querySelector<HTMLElement>('.pg-hint')!;
     const zoomPct = el.querySelector<HTMLButtonElement>('.pg-zoom-pct')!;
     const zoomFit = el.querySelector<HTMLButtonElement>('.pg-zoom-fit')!;
-    const wsRoot = el.querySelector<HTMLElement>('.pg-ws')!;
+    const wsRoot = el.querySelector<HTMLElement>('.pg-switch')!;
+    const scrim = el.querySelector<HTMLElement>('.pg-scrim')!;
+    const crumbChevron = el.querySelector<HTMLElement>('.pg-crumb-chevron')!;
     const switchQuery = el.querySelector<HTMLInputElement>('.pg-switch-query')!;
     const crumb = el.querySelector<HTMLButtonElement>('.pg-crumb')!;
-    const wsBody = el.querySelector<HTMLElement>('.pg-ws-body')!;
-    const wsNew = el.querySelector<HTMLButtonElement>('.pg-ws-new')!;
-    const wsError = el.querySelector<HTMLElement>('.pg-ws-error')!;
+    const wsBody = el.querySelector<HTMLElement>('.pg-switch-body')!;
+    const wsNew = el.querySelector<HTMLButtonElement>('.pg-switch-new')!;
+    const wsError = el.querySelector<HTMLElement>('.pg-switch-error')!;
     const shareBtn = el.querySelector<HTMLButtonElement>('.pg-share')!;
     const downloadBtn = el.querySelector<HTMLButtonElement>('.pg-download')!;
     const navActions = el.querySelector<HTMLElement>('.pg-nav-right')!;
@@ -1382,6 +1376,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     let treeFocus = 0;
     let treeNodes: readonly TreeNode[] = [];
     let query = '';
+    let searchExpanded = new Set<string>();
 
     /** The tree as data. Rebuilt on every render rather than cached: each of
      *  its inputs — the catalogue, the scratch list, the file set, the
@@ -1406,9 +1401,14 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
 
     /** Open a row and redraw. */
     function expandNode(id: string, open: boolean) {
-      if (expanded.has(id) === open) return;
-      expanded = toggleExpanded(expanded, id);
-      persistExpanded();
+      if (query.trim()) {
+        if (searchExpanded.has(id) === open) return;
+        searchExpanded = toggleExpanded(searchExpanded, id);
+      } else {
+        if (expanded.has(id) === open) return;
+        expanded = toggleExpanded(expanded, id);
+        persistExpanded();
+      }
       renderTree();
     }
 
@@ -1429,7 +1429,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
 
     function badgeEl(severity: 'error' | 'warning', count: number): HTMLElement {
       const badge = document.createElement('span');
-      badge.className = 'pg-tree-badge';
+      badge.className = 'pg-switch-badge';
       badge.dataset.severity = severity;
       badge.textContent = String(count);
       // The accessible name already carries the counts in words.
@@ -1474,19 +1474,35 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       // Search also reaches collapsed groups, without saving an expansion the
       // reader never chose. Clearing it restores the original tree.
       if (query.trim()) input.expanded = new Set([
-        ...expanded, ...input.groups.map((g) => g.id), ...(input.activeId ? [input.activeId] : []),
+        ...input.groups.map((g) => g.id), ...(input.activeId ? [input.activeId] : []),
       ]);
       treeNodes = filterNodes(visibleNodes(input, nowMs()), query);
+      if (query.trim()) {
+        let groupOpen = true;
+        let projectOpen = true;
+        treeNodes = treeNodes.flatMap((node): TreeNode[] => {
+          if (node.kind === 'group') {
+            groupOpen = searchExpanded.has(node.id);
+            return [{ ...node, expanded: groupOpen }];
+          }
+          if (!groupOpen) return [];
+          if (node.kind === 'project') {
+            projectOpen = node.expandable && searchExpanded.has(node.id);
+            return [{ ...node, expanded: projectOpen }];
+          }
+          return projectOpen ? [node] : [];
+        });
+      }
       treeFocus = preferredFocus(treeNodes, wantedId);
 
       const tree = document.createElement('div');
-      tree.className = 'pg-tree';
+      tree.className = 'pg-switch-tree';
       tree.setAttribute('role', 'tree');
       tree.setAttribute('aria-label', 'Projects and files');
 
       treeNodes.forEach((node, i) => {
         const row = document.createElement('div');
-        row.className = `pg-tree-row pg-tree-${node.kind}`;
+        row.className = `pg-switch-row pg-switch-${node.kind}`;
         row.setAttribute('role', 'treeitem');
         row.setAttribute('aria-level', String(node.level));
         row.dataset.node = node.id;
@@ -1506,16 +1522,17 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         // otherwise: a disabled-looking triangle that does nothing is worse
         // than the indent alone.
         const twisty = document.createElement('span');
-        twisty.className = 'pg-tree-twisty';
+        twisty.className = 'pg-switch-twisty';
         twisty.setAttribute('aria-hidden', 'true');
         const openable = node.kind === 'group' || (node.kind === 'project' && node.expandable);
         twisty.textContent = openable ? (node.expanded ? '▾' : '▸') : '';
-        row.appendChild(twisty);
+        if (node.kind !== 'group') row.appendChild(twisty);
 
         const name = document.createElement('span');
-        name.className = 'pg-tree-label';
+        name.className = 'pg-switch-label';
         name.textContent = node.label;
         row.appendChild(name);
+        if (node.kind === 'group') row.appendChild(twisty);
 
         if (node.kind === 'project') {
           row.dataset.pick = node.id;
@@ -1527,17 +1544,23 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           if (node.severity) {
             row.appendChild(badgeEl(node.severity, node.badge));
             parts.push(`${node.badge} ${node.severity}${node.badge === 1 ? '' : 's'}`);
+          } else {
+            const meta = document.createElement('span');
+            meta.className = 'pg-switch-meta';
+            meta.textContent = node.meta;
+            row.appendChild(meta);
+            parts.push(node.meta);
           }
           if (node.editable) {
             const actions = document.createElement('span');
-            actions.className = 'pg-tree-actions';
+            actions.className = 'pg-switch-actions';
             const id = node.id;
             const label = node.label;
-            actions.appendChild(iconButton('pg-tree-action', '✎', `Rename ${label}`, () => startRenameProject(id)));
+            actions.appendChild(iconButton('pg-switch-action', '✎', `Rename ${label}`, () => startRenameProject(id)));
             actions.appendChild(
-              iconButton('pg-tree-action', '⧉', `Duplicate ${label}`, () => duplicateProject(id)),
+              iconButton('pg-switch-action', '⧉', `Duplicate ${label}`, () => duplicateProject(id)),
             );
-            const del = iconButton('pg-tree-action', '×', `Delete ${label}`, () => armOrDeleteProject(id));
+            const del = iconButton('pg-switch-action', '×', `Delete ${label}`, () => armOrDeleteProject(id));
             if (confirmProject === id) {
               del.dataset.confirm = 'true';
               del.setAttribute('aria-label', `Delete ${label}? Activate again to confirm`);
@@ -1546,7 +1569,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
             row.appendChild(actions);
           }
           if (node.active) {
-            const add = iconButton('pg-tree-action pg-tree-add', '＋', 'Add a file', addNewFile);
+            const add = iconButton('pg-switch-action pg-switch-add', '＋', 'Add a file', addNewFile);
             row.appendChild(add);
           }
         }
@@ -1560,7 +1583,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           }
           if (node.root) {
             const chip = document.createElement('span');
-            chip.className = 'pg-tree-root';
+            chip.className = 'pg-switch-root';
             chip.textContent = 'root';
             chip.setAttribute('aria-hidden', 'true');
             row.appendChild(chip);
@@ -1574,7 +1597,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           }
           if (node.conflict) {
             const mark = document.createElement('span');
-            mark.className = 'pg-tree-conflict';
+            mark.className = 'pg-switch-conflict';
             mark.textContent = '⚠';
             mark.setAttribute('aria-hidden', 'true');
             row.appendChild(mark);
@@ -1587,12 +1610,12 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           // way a project is rather than only through F2 — which is reachable
           // but undiscoverable, and unusable without a keyboard.
           const fileActions = document.createElement('span');
-          fileActions.className = 'pg-tree-actions';
+          fileActions.className = 'pg-switch-actions';
           fileActions.appendChild(
-            iconButton('pg-tree-action', '✎', `Rename ${node.label}`, () => startRename(fileIndex)),
+            iconButton('pg-switch-action', '✎', `Rename ${node.label}`, () => startRename(fileIndex)),
           );
           fileActions.appendChild(
-            iconButton('pg-tree-action', '×', `Delete ${node.label}`, () => armOrDelete(fileIndex)),
+            iconButton('pg-switch-action', '×', `Delete ${node.label}`, () => armOrDelete(fileIndex)),
           );
           row.appendChild(fileActions);
 
@@ -1629,18 +1652,18 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         // a row that failed to render. Only "Yours" can be empty today.
         if (node.kind === 'group' && node.expanded && node.count === 0) {
           const empty = document.createElement('div');
-          empty.className = 'pg-ws-empty';
+          empty.className = 'pg-switch-empty';
           empty.textContent = 'Edit an example to start your own.';
           tree.appendChild(empty);
         }
       });
 
-      wsBody.querySelector('.pg-tree')?.remove();
-      wsBody.querySelector('.pg-ws-fallback')?.remove();
+      wsBody.querySelector('.pg-switch-tree')?.remove();
+      wsBody.querySelector('.pg-switch-fallback')?.remove();
       wsBody.insertBefore(tree, wsError);
       if (treeNodes.length === 0) {
         const empty = document.createElement('p');
-        empty.className = 'pg-ws-empty';
+        empty.className = 'pg-switch-empty';
         empty.textContent = 'No circuits found.';
         tree.appendChild(empty);
       }
@@ -1652,8 +1675,8 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         ? `${state.tabs.files[first.index].name}: ${CONFLICT_TEXT[first.reason]}`
         : '';
 
-      const activeRow = tree.querySelector<HTMLElement>('.pg-tree-file[aria-current="true"]');
-      if (activeRow) activeRow.id = `pg-tree-file-${state.tabs.active}`;
+      const activeRow = tree.querySelector<HTMLElement>('.pg-switch-file[aria-current="true"]');
+      if (activeRow) activeRow.id = `pg-switch-file-${state.tabs.active}`;
       // The strip reads the same state, and the editor panel is labelled by
       // its current tab.
       renderFileTabs();
@@ -1701,10 +1724,12 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
 
     function focusNode(index: number) {
       treeFocus = Math.max(0, Math.min(index, treeNodes.length - 1));
-      for (const row of wsBody.querySelectorAll<HTMLElement>('.pg-tree-row')) {
+      for (const row of wsBody.querySelectorAll<HTMLElement>('.pg-switch-row')) {
         row.tabIndex = Number(row.dataset.index) === treeFocus ? 0 : -1;
       }
-      wsBody.querySelector<HTMLElement>(`.pg-tree-row[data-index="${treeFocus}"]`)?.focus();
+      const row = wsBody.querySelector<HTMLElement>(`.pg-switch-row[data-index="${treeFocus}"]`);
+      row?.focus();
+      row?.scrollIntoView({ block: 'nearest' });
     }
 
     /** Focus the row showing file `index`, which is what every file operation
@@ -1742,13 +1767,19 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           return;
         }
         loadProject(node.id);
+        closeSwitcher();
         return;
       }
       showFile(node.index);
+      closeSwitcher();
     }
 
     wsBody.addEventListener('keydown', (e) => {
-      const row = (e.target as HTMLElement).closest<HTMLElement>('.pg-tree-row');
+      const target = e.target as HTMLElement;
+      // Nested controls own Enter and Space. Tab reaches the focused row's
+      // actions; arrows, F2 and Delete remain the tree's shortcuts.
+      if (target.closest('button, input')) return;
+      const row = target.closest<HTMLElement>('.pg-switch-row');
       if (!row) return;
       const index = Number(row.dataset.index);
       const node = treeNodes[index];
@@ -1793,7 +1824,10 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       // a rename input, and the arrows must still move the caret in the editor.
       e.preventDefault();
       if (move.kind === 'focus') focusNode(move.index);
-      else expandNode(move.id, move.kind === 'expand');
+      else {
+        expandNode(move.id, move.kind === 'expand');
+        focusNode(treeFocus);
+      }
     });
 
     // ---- project operations ----
@@ -1832,11 +1866,11 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     /** Swaps the row's label for an input. Escape reverts; a blur commits. */
     function startRenameProject(id: string) {
       const current = store.envelope.scratch.find((p) => p.id === id);
-      const row = wsBody.querySelector<HTMLElement>(`.pg-tree-row[data-node="${CSS.escape(id)}"]`);
-      const nameEl = row?.querySelector<HTMLElement>('.pg-tree-label');
+      const row = wsBody.querySelector<HTMLElement>(`.pg-switch-row[data-node="${CSS.escape(id)}"]`);
+      const nameEl = row?.querySelector<HTMLElement>('.pg-switch-label');
       if (!current || !row || !nameEl) return;
       const input = document.createElement('input');
-      input.className = 'pg-ws-input';
+      input.className = 'pg-switch-input';
       input.value = current.name;
       input.setAttribute('aria-label', 'Project name');
       let done = false;
@@ -1863,13 +1897,20 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     wsNew.addEventListener('click', newProject);
     switchQuery.addEventListener('input', () => {
       query = switchQuery.value;
+      const input = treeInput();
+      searchExpanded = new Set([
+        ...expanded, ...input.groups.map((g) => g.id), ...(input.activeId ? [input.activeId] : []),
+      ]);
       renderTree();
     });
     switchQuery.addEventListener('keydown', (e) => {
       if (e.isComposing || (e.key !== 'ArrowDown' && e.key !== 'Enter')) return;
       e.preventDefault();
       const matches = treeNodes.filter((n) => n.kind === 'project');
-      if (e.key === 'Enter' && matches.length === 1) loadProject(matches[0].id);
+      if (e.key === 'Enter' && matches.length === 1) {
+        loadProject(matches[0].id);
+        closeSwitcher();
+      }
       else focusNode(0);
     });
 
@@ -1877,34 +1918,74 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     // The tree opens under the breadcrumb and closes on Escape, on a click
     // outside it, or on the breadcrumb again; focus goes back to the button
     // it came from. Nothing else on the bench moves when it opens.
-    const wsOpen = () => crumb.getAttribute('aria-expanded') === 'true';
-    function setWsOpen(open: boolean, opts: { focus?: boolean } = {}) {
-      if (open === wsOpen()) return;
+    function openSwitcher() {
+      setSwitcherOpen(true);
+      switchQuery.focus();
+      switchQuery.select();
+    }
+    function closeSwitcher(opts: { focus?: boolean } = {}) { setSwitcherOpen(false, opts); }
+    function setSwitcherOpen(open: boolean, opts: { focus?: boolean } = {}) {
+      if (open === !wsRoot.hidden) return;
       crumb.setAttribute('aria-expanded', String(open));
+      crumbChevron.textContent = open ? '▴' : '▾';
       wsRoot.hidden = !open;
+      scrim.hidden = !open;
       if (open) {
+        renderTree();
         document.addEventListener('pointerdown', onOutsidePointer, true);
-        document.addEventListener('keydown', onWsKey, true);
-        if (opts.focus !== false) focusNode(treeFocus);
+        document.addEventListener('keydown', onSwitcherKey, true);
       } else {
         document.removeEventListener('pointerdown', onOutsidePointer, true);
-        document.removeEventListener('keydown', onWsKey, true);
+        document.removeEventListener('keydown', onSwitcherKey, true);
+        query = '';
+        switchQuery.value = '';
+        renderTree();
         if (opts.focus !== false) crumb.focus();
       }
     }
     function onOutsidePointer(e: Event) {
       const t = e.target as Node | null;
       if (t && (wsRoot.contains(t) || crumb.contains(t))) return;
-      setWsOpen(false, { focus: false });
+      closeSwitcher({ focus: t === scrim || wsRoot.contains(document.activeElement) });
     }
-    function onWsKey(e: KeyboardEvent) {
+    function onSwitcherKey(e: KeyboardEvent) {
       if (e.key !== 'Escape') return;
       // A rename input owns its own Escape; the card closes on the next one.
-      if ((e.target as HTMLElement | null)?.classList.contains('pg-ws-input')) return;
+      if ((e.target as HTMLElement | null)?.classList.contains('pg-switch-input')) return;
       e.preventDefault();
-      setWsOpen(false);
+      e.stopPropagation();
+      closeSwitcher();
     }
-    crumb.addEventListener('click', () => setWsOpen(!wsOpen()));
+    crumb.addEventListener('click', () => wsRoot.hidden ? openSwitcher() : closeSwitcher());
+    scrim.addEventListener('click', () => closeSwitcher());
+    const nav = el.querySelector<HTMLElement>('.pg-nav')!;
+    new ResizeObserver(() => {
+      const height = nav.getBoundingClientRect().height;
+      if (height > 0) el.style.setProperty('--pg-nav-h', `${height}px`);
+    }).observe(nav);
+    document.addEventListener('keydown', (e) => {
+      if (e.isComposing || e.altKey || e.shiftKey || !(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'k') return;
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('input, textarea') && target !== switchQuery && !target.closest('.pg-cm')) return;
+      e.preventDefault();
+      openSwitcher();
+    });
+    // The popover is non-modal. Leaving it by Tab closes it without stealing
+    // focus from the next bench control.
+    wsRoot.addEventListener('focusout', (e) => {
+      const next = e.relatedTarget as Node | null;
+      if (next && !wsRoot.contains(next) && !crumb.contains(next)) closeSwitcher({ focus: false });
+    });
+    wsBody.addEventListener('focusin', (e) => {
+      const row = (e.target as HTMLElement).closest<HTMLElement>('.pg-switch-row');
+      if (!row) return;
+      treeFocus = Number(row.dataset.index);
+      for (const candidate of wsBody.querySelectorAll<HTMLElement>('.pg-switch-row')) {
+        const active = candidate === row;
+        candidate.tabIndex = active ? 0 : -1;
+        for (const action of candidate.querySelectorAll<HTMLButtonElement>('button')) action.tabIndex = active ? 0 : -1;
+      }
+    });
 
     // ---- share ----
     /** Copy `text`, or fall back to a focused read-only input the reader can
@@ -2895,11 +2976,11 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
      *  Escape reverts, and a blur commits only if the name is legal. */
     function startRename(index: number) {
       disarm();
-      const tab = wsBody.querySelector<HTMLElement>(`.pg-tree-file[data-file="${index}"]`);
-      const nameEl = tab?.querySelector<HTMLElement>('.pg-tree-label');
+      const tab = wsBody.querySelector<HTMLElement>(`.pg-switch-file[data-file="${index}"]`);
+      const nameEl = tab?.querySelector<HTMLElement>('.pg-switch-label');
       if (!tab || !nameEl) return;
       const input = document.createElement('input');
-      input.className = 'pg-ws-input';
+      input.className = 'pg-switch-input';
       input.value = state.tabs.files[index].name;
       input.setAttribute('aria-label', 'File name');
       input.setAttribute('aria-invalid', 'false');

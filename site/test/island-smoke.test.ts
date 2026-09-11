@@ -181,40 +181,40 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
 
     // The workspace is a tree, and the server-rendered fallback list is gone.
     const catalogue = buildCatalogue(examples, tour);
-    expect(doc.querySelector('.pg-tree')?.getAttribute('role')).toBe('tree');
-    expect(doc.querySelector('.pg-ws-fallback')).toBeNull();
+    expect(doc.querySelector('.pg-switch-tree')?.getAttribute('role')).toBe('tree');
+    expect(doc.querySelector('.pg-switch-fallback')).toBeNull();
 
     // One row per group, plus the projects of whichever groups are open. Every
     // group is shut on a fresh envelope except "Yours" and the one holding the
     // project that loaded, so this is far fewer rows than the flat list was.
     const groupRows = Array.from(
-      doc.querySelectorAll('.pg-tree-group .pg-tree-label'),
+      doc.querySelectorAll('.pg-switch-group .pg-switch-label'),
       (n) => (n as { textContent: string }).textContent,
     );
     expect(groupRows).toEqual(['Tour', 'Examples', 'Mine']);
-    expect(doc.querySelectorAll('.pg-tree-project').length).toBe(catalogue.length);
+    expect(doc.querySelectorAll('.pg-switch-project').length).toBe(catalogue.length);
 
     // The default pick is open, revealed inside its group, and showing files.
-    const openProject = doc.querySelector('.pg-tree-project[aria-current="true"]')!;
+    const openProject = doc.querySelector('.pg-switch-project[aria-current="true"]')!;
     expect(openProject).not.toBeNull();
     expect(openProject.getAttribute('aria-expanded')).toBe('true');
-    const files = doc.querySelectorAll('.pg-tree-file');
+    const files = doc.querySelectorAll('.pg-switch-file');
     expect(files.length).toBeGreaterThanOrEqual(1);
     // …with exactly one of them marked as the file the editor is showing.
-    expect(doc.querySelectorAll('.pg-tree-file[aria-current="true"]')).toHaveLength(1);
+    expect(doc.querySelectorAll('.pg-switch-file[aria-current="true"]')).toHaveLength(1);
 
     // The file strip over the editor lists the same files as the tree, in
     // order, with the open one selected; it is a switch, so it carries no
     // rename or delete of its own.
     const strip = Array.from(doc.querySelectorAll('.pg-files .pg-file'), (b) => (b as { textContent: string }).textContent);
-    const treeFiles = Array.from(files, (r) => (r.querySelector('.pg-tree-label') as { textContent: string } | null)?.textContent ?? '');
+    const treeFiles = Array.from(files, (r) => (r.querySelector('.pg-switch-label') as { textContent: string } | null)?.textContent ?? '');
     expect(strip).toEqual(treeFiles);
     expect(doc.querySelectorAll('.pg-files .pg-file[aria-selected="true"]')).toHaveLength(1);
-    expect(doc.querySelectorAll('.pg-files .pg-tree-action')).toHaveLength(0);
+    expect(doc.querySelectorAll('.pg-files .pg-switch-action')).toHaveLength(0);
     expect(doc.querySelector('.pg-files .pg-file-add')?.textContent).toBe('+ file');
 
     // A roving tabindex, so the whole tree is one tab stop rather than 22.
-    const stops = Array.from(doc.querySelectorAll('.pg-tree-row')).filter(
+    const stops = Array.from(doc.querySelectorAll('.pg-switch-row')).filter(
       (r) => (r as unknown as { tabIndex: number }).tabIndex === 0,
     );
     expect(stops).toHaveLength(1);
@@ -364,9 +364,9 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
       doc.querySelector('.pg-body')?.children ?? [],
       (c) => (c as { className: string }).className,
     );
-    expect(regions).toEqual(['pg-ws', 'pg-editor', 'pg-splitter', 'pg-output']);
-    expect(doc.querySelector('.pg-ws')?.hasAttribute('hidden')).toBe(true);
-    expect(doc.querySelector('.pg-ws-toggle')).toBeNull();
+    expect(regions).toEqual(['pg-editor', 'pg-splitter', 'pg-output']);
+    expect(doc.querySelector('.pg-switch')?.hasAttribute('hidden')).toBe(true);
+    expect(doc.querySelector('.pg-ws')).toBeNull();
     // The source column is the splitter, in pixels, at the design's default.
     expect((doc.querySelector('.pg-body') as unknown as { style: { getPropertyValue(n: string): string } }).style.getPropertyValue('--pg-source-w')).toBe('480px');
   });
@@ -382,7 +382,7 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(after).toHaveLength(before.length + 1);
     expect(after[after.length - 1]).toBe(before[before.length - 1]);
     expect(selected()).toBe(after[after.length - 2]);
-    expect((doc.querySelector('.pg-tree-file[aria-current="true"] .pg-tree-label') as { textContent: string } | null)?.textContent).toBe(selected() ?? '');
+    expect((doc.querySelector('.pg-switch-file[aria-current="true"] .pg-switch-label') as { textContent: string } | null)?.textContent).toBe(selected() ?? '');
     // Only the selected tab is a tab stop, and a click on another switches.
     const stops = Array.from(doc.querySelectorAll('.pg-files .pg-file')).filter((b) => (b as unknown as { tabIndex: number }).tabIndex === 0);
     expect(stops).toHaveLength(1);
@@ -390,7 +390,7 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(selected()).toBe(after[after.length - 1]);
     expect(doc.querySelector('.pg-editor-wrap')?.getAttribute('aria-labelledby')).toBe(`pg-file-${after.length - 1}`);
     // Leave the project as it was found: the tree's delete, armed then made.
-    const deleteOn = () => doc.querySelector('.pg-tree-file .pg-tree-action[aria-label^="Delete"]') as unknown as { click(): void };
+    const deleteOn = () => doc.querySelector('.pg-switch-file .pg-switch-action[aria-label^="Delete"]') as unknown as { click(): void };
     deleteOn().click();
     deleteOn().click();
     expect(tabs()).toEqual(before);
@@ -469,7 +469,7 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     });
   });
 
-  test('the breadcrumb opens the tree and gives focus back', () => drive((doc) => {
+  test('the breadcrumb opens the switcher without reflow and gives focus back', () => drive((doc) => {
     const press = (el: unknown, key: string) =>
       (el as { dispatchEvent(e: unknown): void }).dispatchEvent(
         new (globalThis as unknown as { KeyboardEvent: new (t: string, o: unknown) => unknown })
@@ -478,16 +478,77 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     const body = doc.querySelector('.pg-body') as unknown as { style: { getPropertyValue(n: string): string } };
     const crumb = doc.querySelector('.pg-crumb') as unknown as { click(): void; getAttribute(n: string): string | null };
     const before = body.style.getPropertyValue('--pg-source-w');
+    const editor = doc.querySelector('.pg-editor') as unknown as HTMLElement;
+    const width = editor.offsetWidth;
     crumb.click();
     expect(crumb.getAttribute('aria-expanded')).toBe('true');
-    expect(doc.querySelector('.pg-ws')?.hasAttribute('hidden')).toBe(false);
+    expect(doc.querySelector('.pg-switch')?.hasAttribute('hidden')).toBe(false);
+    expect(doc.querySelector('.pg-scrim')?.hasAttribute('hidden')).toBe(false);
+    expect(doc.activeElement === doc.querySelector('.pg-switch-query')).toBe(true);
+    expect(doc.querySelector('.pg-crumb-chevron')?.textContent).toBe('▴');
     // Opening the card moves nothing on the bench.
     expect(body.style.getPropertyValue('--pg-source-w')).toBe(before);
-    press(doc.querySelector('.pg-tree-row'), 'Escape');
+    expect(editor.offsetWidth).toBe(width);
+    press(doc.querySelector('.pg-switch-query'), 'Escape');
     expect(crumb.getAttribute('aria-expanded')).toBe('false');
-    expect(doc.querySelector('.pg-ws')?.hasAttribute('hidden')).toBe(true);
+    expect(doc.querySelector('.pg-switch')?.hasAttribute('hidden')).toBe(true);
+    expect(doc.querySelector('.pg-scrim')?.hasAttribute('hidden')).toBe(true);
     expect((doc as unknown as { activeElement: unknown }).activeElement).toBe(crumb);
     expect(body.style.getPropertyValue('--pg-source-w')).toBe(before);
+    expect(editor.offsetWidth).toBe(width);
+  }));
+
+  test('both search shortcuts work from the editor and yield to a text field', () => drive((doc) => {
+    const content = doc.querySelector('.cm-content') as unknown as HTMLElement;
+    const field = doc.querySelector('.pg-switch-query') as unknown as HTMLInputElement;
+    const popup = doc.querySelector('.pg-switch') as unknown as HTMLElement;
+    for (const modifier of ['metaKey', 'ctrlKey']) {
+      content.focus();
+      const key = new KeyboardEvent('keydown', { key: 'k', [modifier]: true, bubbles: true, cancelable: true });
+      content.dispatchEvent(key);
+      expect(key.defaultPrevented).toBe(true);
+      expect(popup.hidden).toBe(false);
+      expect(doc.activeElement === doc.querySelector('.pg-switch-query')).toBe(true);
+      (doc.querySelector('.pg-scrim') as unknown as HTMLElement).click();
+      expect(popup.hidden).toBe(true);
+    }
+    const other = doc.querySelector('.pg-console-in') as unknown as HTMLInputElement;
+    const key = new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true, cancelable: true });
+    other.dispatchEvent(key);
+    expect(key.defaultPrevented).toBe(false);
+    expect(popup.hidden).toBe(true);
+    expect(field.value).toBe('');
+  }));
+
+  test('Enter selects a sole search match; arrows walk several matches', () => drive((doc) => {
+    const click = (selector: string) => (doc.querySelector(selector) as unknown as HTMLElement).click();
+    const previous = doc.querySelector('.pg-switch-project[aria-current="true"]')!.getAttribute('data-pick')!;
+    const field = doc.querySelector('.pg-switch-query') as unknown as HTMLInputElement;
+    const popup = doc.querySelector('.pg-switch') as unknown as HTMLElement;
+    const press = (target: unknown, key: string) => (target as HTMLElement).dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+    const search = (value: string) => { field.value = value; field.dispatchEvent(new Event('input', { bubbles: true })); };
+    click('.pg-crumb');
+    search('ripple');
+    press(field, 'Enter');
+    expect(popup.hidden).toBe(false);
+    expect(doc.activeElement?.getAttribute('data-node')).toBe('examples');
+    press(doc.activeElement, 'ArrowLeft');
+    expect(doc.querySelectorAll('.pg-switch-project')).toHaveLength(0);
+    expect(doc.activeElement?.getAttribute('aria-expanded')).toBe('false');
+    press(doc.activeElement, 'ArrowRight');
+    press(doc.activeElement, 'ArrowRight');
+    expect(doc.activeElement?.getAttribute('data-pick')).toBe('example:two-bit-adder');
+    press(doc.activeElement, 'Enter');
+    expect(popup.hidden).toBe(true);
+    expect(doc.querySelector('.pg-crumb-name')?.textContent).toBe('2-bit ripple-carry adder');
+    click('.pg-crumb');
+    search('4-bit ripple');
+    press(field, 'Enter');
+    expect(popup.hidden).toBe(true);
+    expect(doc.querySelector('.pg-crumb-name')?.textContent).toBe('4-bit ripple-carry adder');
+    click('.pg-crumb');
+    click(`.pg-switch-project[data-pick="${previous}"]`);
+    expect(popup.hidden).toBe(true);
   }));
 
   test('the footer opens on the counts and on the gear, and remembers which', () => drive((doc) => {
@@ -636,7 +697,8 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
   }));
 
   test('search finds a project in a collapsed group and restores the tree', () => drive((doc) => {
-    const group = () => doc.querySelector('.pg-tree-group[data-node="examples"]') as unknown as HTMLElement;
+    (doc.querySelector('.pg-crumb') as unknown as HTMLElement).click();
+    const group = () => doc.querySelector('.pg-switch-group[data-node="examples"]') as unknown as HTMLElement;
     group().click();
     expect(group().getAttribute('aria-expanded')).toBe('false');
     const field = doc.querySelector('.pg-switch-query') as unknown as HTMLInputElement;
@@ -645,21 +707,23 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
       field.dispatchEvent(new Event('input', { bubbles: true }));
     };
     search('  4-BIT RIPPLE ');
-    expect(doc.querySelectorAll('.pg-tree-project')).toHaveLength(1);
-    expect(doc.querySelector('.pg-tree-project')?.getAttribute('data-pick')).toBe('example:four-bit-adder');
+    expect(doc.querySelectorAll('.pg-switch-project')).toHaveLength(1);
+    expect(doc.querySelector('.pg-switch-project')?.getAttribute('data-pick')).toBe('example:four-bit-adder');
     field.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
     expect(doc.activeElement?.getAttribute('data-node')).toBe('examples');
     search('does not exist');
-    expect(doc.querySelectorAll('.pg-tree-row')).toHaveLength(0);
-    expect(doc.querySelector('.pg-ws-empty')?.textContent).toBe('No circuits found.');
+    expect(doc.querySelectorAll('.pg-switch-row')).toHaveLength(0);
+    expect(doc.querySelector('.pg-switch-empty')?.textContent).toBe('No circuits found.');
     search('');
     expect(group().getAttribute('aria-expanded')).toBe('false');
     group().click();
+    (doc.querySelector('.pg-crumb') as unknown as HTMLElement).click();
   }));
 
   test('a group collapses and reopens, taking its projects with it', () => drive((doc) => {
-    const rows = () => Array.from(doc.querySelectorAll('.pg-tree-row'));
-    const openGroup = doc.querySelector('.pg-tree-group[aria-expanded="true"]') as unknown as
+    (doc.querySelector('.pg-crumb') as unknown as HTMLElement).click();
+    const rows = () => Array.from(doc.querySelectorAll('.pg-switch-row'));
+    const openGroup = doc.querySelector('.pg-switch-group[aria-expanded="true"]') as unknown as
       { click(): void; getAttribute(n: string): string | null };
     const before = rows().length;
 
@@ -668,7 +732,7 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     // Shutting a group removes its projects — and the open project's files
     // with them — rather than leaving hidden rows the arrow keys could reach.
     expect(shut).toBeLessThan(before);
-    expect(doc.querySelector('.pg-tree-group[aria-expanded="true"]')).not.toBe(openGroup);
+    expect(doc.querySelector('.pg-switch-group[aria-expanded="true"]')).not.toBe(openGroup);
 
     openGroup.click();
     expect(rows().length).toBe(before);
@@ -677,61 +741,67 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     // Still exactly one tab stop after two redraws.
     const stops = rows().filter((r) => (r as unknown as { tabIndex: number }).tabIndex === 0);
     expect(stops).toHaveLength(1);
+    (doc.querySelector('.pg-crumb') as unknown as HTMLElement).click();
   }));
 
   test('files are added, switched and deleted from the tree', () => drive((doc) => {
     // Everything here used to live on the strip above the editor. This is the
     // proof that moving it did not quietly drop half of it.
-    const fileRows = () => Array.from(doc.querySelectorAll('.pg-tree-file'));
+    (doc.querySelector('.pg-crumb') as unknown as HTMLElement).click();
+    const fileRows = () => Array.from(doc.querySelectorAll('.pg-switch-file'));
     const labelOf = (r: unknown): string =>
       (r as { querySelector(s: string): { textContent: string } | null })
-        .querySelector('.pg-tree-label')?.textContent ?? '';
+        .querySelector('.pg-switch-label')?.textContent ?? '';
     const click = (el: unknown) => (el as { click(): void }).click();
 
     expect(fileRows()).toHaveLength(1);
     const firstName = labelOf(fileRows()[0]);
 
     // The ＋ on the open project row is the add-file control the strip had.
-    const add = doc.querySelector('.pg-tree-project[aria-current="true"] .pg-tree-add');
+    const add = doc.querySelector('.pg-switch-project[aria-current="true"] .pg-switch-add');
     expect(add).not.toBeNull();
     click(add);
     expect(fileRows()).toHaveLength(2);
 
     // The last file is the root, and only it carries the chip.
-    const roots = fileRows().filter((r) => (r as unknown as Element).querySelector('.pg-tree-root'));
+    const roots = fileRows().filter((r) => (r as unknown as Element).querySelector('.pg-switch-root'));
     expect(roots).toHaveLength(1);
     expect(labelOf(roots[0])).toBe(labelOf(fileRows()[1]));
     // Adding a file selects it, and exactly one row is ever current.
-    expect(doc.querySelectorAll('.pg-tree-file[aria-current="true"]')).toHaveLength(1);
+    expect(doc.querySelectorAll('.pg-switch-file[aria-current="true"]')).toHaveLength(1);
 
     // A new file is inserted BEFORE the root, so the root stays last and the
     // original file is still the one the compiler starts from.
     expect(labelOf(fileRows()[1])).toBe(firstName);
     // Switching files by clicking a row.
     click(fileRows()[1]);
-    expect(labelOf(doc.querySelector('.pg-tree-file[aria-current="true"]'))).toBe(firstName);
+    expect(labelOf(doc.querySelector('.pg-switch-file[aria-current="true"]'))).toBe(firstName);
+    expect(doc.querySelector('.pg-switch')?.hasAttribute('hidden')).toBe(true);
+    click(doc.querySelector('.pg-crumb'));
 
     // Delete is two presses, as it was on the strip: the first only arms. The
     // button is named rather than taken by position — a file row carries a
     // rename control too, and "the first action" is not a stable thing to mean.
-    const deleteOn = (sel: string) => doc.querySelector(`${sel} .pg-tree-action[aria-label^="Delete"]`);
-    click(deleteOn('.pg-tree-file'));
+    const deleteOn = (sel: string) => doc.querySelector(`${sel} .pg-switch-action[aria-label^="Delete"]`);
+    click(deleteOn('.pg-switch-file'));
     expect(fileRows()).toHaveLength(2);
-    expect(doc.querySelector('.pg-tree-file[data-confirm="true"]')).not.toBeNull();
-    click(deleteOn('.pg-tree-file[data-confirm="true"]'));
+    expect(doc.querySelector('.pg-switch-file[data-confirm="true"]')).not.toBeNull();
+    click(deleteOn('.pg-switch-file[data-confirm="true"]'));
     expect(fileRows()).toHaveLength(1);
 
     // …and the last remaining file refuses to go, so a project always has one.
-    click(deleteOn('.pg-tree-file'));
-    click(deleteOn('.pg-tree-file'));
+    click(deleteOn('.pg-switch-file'));
+    click(deleteOn('.pg-switch-file'));
+    click(doc.querySelector('.pg-crumb'));
     expect(fileRows()).toHaveLength(1);
   }));
 
   test('a file is renamed from the tree, and a bad name is refused', () => drive((doc) => {
-    const fileRows = () => Array.from(doc.querySelectorAll('.pg-tree-file'));
+    (doc.querySelector('.pg-crumb') as unknown as HTMLElement).click();
+    const fileRows = () => Array.from(doc.querySelectorAll('.pg-switch-file'));
     const labelOf = (r: unknown): string =>
       (r as { querySelector(s: string): { textContent: string } | null })
-        .querySelector('.pg-tree-label')?.textContent ?? '';
+        .querySelector('.pg-switch-label')?.textContent ?? '';
     const click = (el: unknown) => (el as { click(): void }).click();
     const press = (el: unknown, key: string) =>
       (el as { dispatchEvent(e: unknown): void }).dispatchEvent(
@@ -740,12 +810,12 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
       );
 
     const before = labelOf(fileRows()[0]);
-    const renameBtn = doc.querySelector('.pg-tree-file .pg-tree-action[aria-label^="Rename"]');
+    const renameBtn = doc.querySelector('.pg-switch-file .pg-switch-action[aria-label^="Rename"]');
     expect(renameBtn).not.toBeNull();
 
     // The label is swapped for an input carrying the current name.
     click(renameBtn);
-    let input = doc.querySelector('.pg-tree-file .pg-ws-input') as unknown as
+    let input = doc.querySelector('.pg-switch-file .pg-switch-input') as unknown as
       { value: string; getAttribute(n: string): string | null; blur(): void };
     expect(input).not.toBeNull();
     expect(input.value).toBe(before);
@@ -753,30 +823,80 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     // A name the marker format cannot represent is refused in place: the input
     // stays, and the reason lands in the tree's error line.
     input.value = 'not a file name!';
-    press(doc.querySelector('.pg-tree-file .pg-ws-input'), 'Enter');
-    expect(doc.querySelector('.pg-tree-file .pg-ws-input')).not.toBeNull();
-    expect(doc.querySelector('.pg-ws-error')?.textContent ?? '').not.toBe('');
+    press(doc.querySelector('.pg-switch-file .pg-switch-input'), 'Enter');
+    expect(doc.querySelector('.pg-switch-file .pg-switch-input')).not.toBeNull();
+    expect(doc.querySelector('.pg-switch-error')?.textContent ?? '').not.toBe('');
     expect(labelOf(fileRows()[0])).toBe('');
 
     // Escape reverts, leaving the original name and clearing the complaint.
-    press(doc.querySelector('.pg-tree-file .pg-ws-input'), 'Escape');
-    expect(doc.querySelector('.pg-tree-file .pg-ws-input')).toBeNull();
+    press(doc.querySelector('.pg-switch-file .pg-switch-input'), 'Escape');
+    expect(doc.querySelector('.pg-switch-file .pg-switch-input')).toBeNull();
     expect(labelOf(fileRows()[0])).toBe(before);
-    expect(doc.querySelector('.pg-ws-error')?.textContent ?? '').toBe('');
+    expect(doc.querySelector('.pg-switch-error')?.textContent ?? '').toBe('');
 
     // A legal name commits, and the row shows it.
-    click(doc.querySelector('.pg-tree-file .pg-tree-action[aria-label^="Rename"]'));
-    input = doc.querySelector('.pg-tree-file .pg-ws-input') as never;
+    click(doc.querySelector('.pg-switch-file .pg-switch-action[aria-label^="Rename"]'));
+    input = doc.querySelector('.pg-switch-file .pg-switch-input') as never;
     input.value = 'renamed.circ';
-    press(doc.querySelector('.pg-tree-file .pg-ws-input'), 'Enter');
-    expect(doc.querySelector('.pg-tree-file .pg-ws-input')).toBeNull();
+    press(doc.querySelector('.pg-switch-file .pg-switch-input'), 'Enter');
+    expect(doc.querySelector('.pg-switch-file .pg-switch-input')).toBeNull();
     expect(labelOf(fileRows()[0])).toBe('renamed.circ');
 
     // F2 opens the same editor, so the keyboard path did not go away.
     press(fileRows()[0], 'F2');
-    expect(doc.querySelector('.pg-tree-file .pg-ws-input')).not.toBeNull();
-    press(doc.querySelector('.pg-tree-file .pg-ws-input'), 'Escape');
+    expect(doc.querySelector('.pg-switch-file .pg-switch-input')).not.toBeNull();
+    press(doc.querySelector('.pg-switch-file .pg-switch-input'), 'Escape');
+    click(doc.querySelector('.pg-crumb'));
     expect(labelOf(fileRows()[0])).toBe('renamed.circ');
+  }));
+
+  test('scratch row actions remain keyboard-reachable through rename, duplicate and delete', () => drive((doc) => {
+    const click = (selector: string) => (doc.querySelector(selector) as unknown as HTMLElement).click();
+    const current = () => doc.querySelector('.pg-switch-project[aria-current="true"]') as unknown as HTMLElement;
+    const press = (target: HTMLElement, key: string) => {
+      const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+      target.dispatchEvent(event);
+      return event;
+    };
+    click('.pg-crumb');
+    const previous = current().dataset.pick!;
+    click('.pg-switch-new');
+    if (doc.querySelector('.pg-switch')!.hasAttribute('hidden')) click('.pg-crumb');
+    const id = current().dataset.pick!;
+    expect(id.startsWith('scratch:')).toBe(true);
+    const name = current().querySelector('.pg-switch-label')!.textContent!;
+    current().focus();
+    expect(current().querySelector<HTMLButtonElement>('.pg-switch-action')!.tabIndex).toBe(0);
+    press(current(), 'F2');
+    const rename = doc.querySelector('.pg-switch-input') as unknown as HTMLInputElement;
+    const shortcut = new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true, cancelable: true });
+    rename.dispatchEvent(shortcut);
+    expect(shortcut.defaultPrevented).toBe(false);
+    expect(doc.activeElement === doc.querySelector('.pg-switch-input')).toBe(true);
+    rename.value = 'Keyboard project';
+    press(rename, 'Enter');
+    expect(doc.querySelector('.pg-crumb-name')?.textContent).toBe('Keyboard project');
+    const duplicate = current().querySelector<HTMLButtonElement>('[aria-label^="Duplicate"]')!;
+    duplicate.focus();
+    expect(press(duplicate, 'Enter').defaultPrevented).toBe(false);
+    duplicate.click();
+    const duplicateId = current().dataset.pick!;
+    expect(duplicateId).not.toBe(id);
+    expect(current().querySelector('.pg-switch-label')?.textContent).toBe('Keyboard project 2');
+    current().querySelector<HTMLButtonElement>('[aria-label^="Delete"]')!.click();
+    expect(current().querySelector('[data-confirm="true"]')).not.toBeNull();
+    current().querySelector<HTMLButtonElement>('[aria-label^="Delete"]')!.click();
+    expect(doc.querySelector(`.pg-switch-project[data-pick="${duplicateId}"]`)).toBeNull();
+    click(`.pg-switch-project[data-pick="${id}"]`);
+    click('.pg-crumb');
+    press(current(), 'F2');
+    const restoreName = doc.querySelector('.pg-switch-input') as unknown as HTMLInputElement;
+    restoreName.value = name;
+    press(restoreName, 'Enter');
+    current().querySelector<HTMLButtonElement>('[aria-label^="Delete"]')!.click();
+    current().querySelector<HTMLButtonElement>('[aria-label^="Delete"]')!.click();
+    click(`.pg-switch-project[data-pick="${previous}"]`);
+    if (!doc.querySelector('.pg-switch')!.hasAttribute('hidden')) click('.pg-crumb');
   }));
 
   test('the memory grid refuses a bad word without closing, and Load image opens', () => drive((doc) => {

@@ -1939,18 +1939,24 @@ a.install-line:hover {
    rather than blanked — cleared only when the file set itself changes. */
 .pg-output[data-stale] { opacity: 0.55; transition: opacity 120ms ease; }
 
-/* The workspace tree as a card under the breadcrumb (design file 3a: 340px,
-   the pane surface, an 8px radius and a deep shadow). Absolutely positioned
-   in the body, so opening it moves nothing else on the bench. Phase 4 draws
-   the switcher inside this card; until then it is today's tree. */
-.pg-ws {
+/* Board 3a. Both overlays are out of flow; the bench keeps its tracks. */
+[data-layout='app'] .pg { position: relative; }
+[data-layout='app'] .pg-scrim {
   position: absolute;
-  top: 8px;
+  inset: var(--pg-nav-h, 48px) 0 0;
+  z-index: 30;
+  background: color-mix(in srgb, var(--fg) 18%, transparent);
+}
+[data-layout='app']:where([data-theme='dark'] *) .pg-scrim,
+[data-layout='app'][data-theme='dark'] .pg-scrim { background: color-mix(in srgb, var(--bg) 45%, transparent); }
+[data-layout='app'] .pg-switch {
+  position: absolute;
+  top: calc(var(--pg-nav-h, 48px) + 8px);
   left: 82px;
-  z-index: 20;
+  z-index: 40;
   width: 340px;
   max-width: calc(100% - 16px);
-  max-height: calc(100% - 16px);
+  max-height: calc(100dvh - var(--pg-nav-h, 48px) - 16px);
   background: var(--pane-bg);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -1960,157 +1966,126 @@ a.install-line:hover {
   flex-direction: column;
   min-width: 0;
 }
-.pg-ws[hidden] { display: none; }
-.pg-ws-body { overflow-y: auto; padding: 0.35rem 0; flex: 1; min-height: 0; }
-/* ---------- the workspace explorer ----------
-   One tree, three levels. Indentation comes from a --depth custom property the
-   island sets per row, so a level is one number rather than a selector per
-   depth, and the hit target still spans the full width at every level. */
-.pg-tree { display: flex; flex-direction: column; }
-.pg-tree-row {
+[data-layout='app'] .pg-switch[hidden],
+[data-layout='app'] .pg-scrim[hidden] { display: none; }
+[data-layout='app'] .pg-switch-body { overflow-y: auto; padding: 2px 0 6px; flex: 1; min-height: 0; max-height: 460px; }
+[data-layout='app'] .pg-switch-search,
+[data-layout='app'] .pg-switch-footer { flex: none; }
+[data-layout='app'] .pg-switch-tree { display: flex; flex-direction: column; }
+[data-layout='app'] .pg-switch-row {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: 6px;
   width: 100%;
   min-width: 0;
-  padding: 0.22rem 0.4rem 0.22rem calc(0.35rem + var(--depth, 0) * 0.85rem);
+  padding: 6px 12px;
   font-family: var(--font-mono);
-  font-size: 0.78rem;
-  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--fg);
   cursor: pointer;
   user-select: none;
   border-left: 2px solid transparent;
 }
-.pg-tree-row:hover { background: var(--pane-label-bg); color: var(--fg); }
-.pg-tree-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.pg-tree-group { color: var(--fg); letter-spacing: 0.04em; text-transform: uppercase; font-size: 0.7rem; }
-/* The open project, and the file inside it the editor is showing. The bar is
-   what the editor's tab strip used to say by being selected. */
-.pg-tree-row[aria-current='true'] { color: var(--accent); }
-.pg-tree-file[aria-current='true'] {
+[data-layout='app'] .pg-switch-project { padding-left: 26px; position: relative; }
+[data-layout='app'] .pg-switch-file { padding-left: 40px; }
+[data-layout='app'] .pg-switch-row:hover { background: var(--pane-label-bg); }
+[data-layout='app'] .pg-switch-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+[data-layout='app'] .pg-switch-group { padding: 10px 12px 4px; margin: 0; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; font: 10.5px var(--font-mono); }
+[data-layout='app'] .pg-switch-row[aria-current='true'] { color: var(--accent); }
+[data-layout='app'] .pg-switch-file[aria-current='true'] {
   background: var(--pane-label-bg);
   border-left-color: var(--accent);
 }
-.pg-tree-twisty {
-  flex: 0 0 0.75rem;
-  font-size: 0.6rem;
+[data-layout='app'] .pg-switch-twisty {
+  flex: none;
+  font-size: 10px;
   line-height: 1;
   color: var(--muted);
 }
-.pg-tree-label {
+[data-layout='app'] .pg-switch-project > .pg-switch-twisty { position: absolute; left: 12px; }
+[data-layout='app'] .pg-switch-file > .pg-switch-twisty { display: none; }
+[data-layout='app'] .pg-switch-label {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.pg-tree-root {
-  font-size: 0.6rem;
+[data-layout='app'] .pg-switch-root {
+  font-size: 9.5px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--muted);
   border: 1px solid var(--border);
   border-radius: 3px;
-  padding: 0 0.2rem;
+  padding: 0 3px;
 }
-/* The badge that used to sit on the editor tab. It is the reason a project can
-   be collapsed safely: shut, the project row still carries its files' worst. */
-.pg-tree-badge {
+[data-layout='app'] .pg-switch-meta { margin-left: auto; color: var(--muted); font-size: 10.5px; white-space: nowrap; }
+[data-layout='app'] .pg-switch-badge {
   flex: 0 0 auto;
-  font-size: 0.65rem;
-  line-height: 1;
-  padding: 0.1rem 0.3rem;
+  font-size: 10.5px;
+  padding: 1px 6px;
   border-radius: 999px;
-  border: 1px solid var(--border);
-  color: var(--muted);
+  background: var(--bg);
+  color: var(--accent);
 }
-.pg-tree-badge[data-severity='error'] { color: var(--danger); border-color: var(--danger); }
-.pg-tree-conflict { color: var(--accent); font-size: 0.72rem; }
+[data-layout='app'] .pg-switch-badge[data-severity='error'] { color: var(--danger); }
+[data-layout='app'] .pg-switch-conflict { color: var(--accent); font-size: 11.5px; }
 /* Row controls stay hidden until the row is hovered or holds focus, so a tree
    of twenty projects is not a wall of glyphs. `focus-within` is what keeps
    them reachable with a keyboard. */
-.pg-tree-actions { display: none; gap: 0.05rem; }
-.pg-tree-row > .pg-tree-action { display: none; }
-.pg-tree-row:hover .pg-tree-actions,
-.pg-tree-row:focus-within .pg-tree-actions,
-.pg-tree-row:hover > .pg-tree-action,
-.pg-tree-row:focus-within > .pg-tree-action { display: flex; }
-.pg-tree-action {
+[data-layout='app'] .pg-switch-actions { display: none; gap: 1px; flex: none; }
+[data-layout='app'] .pg-switch-row > .pg-switch-action { display: none; }
+[data-layout='app'] .pg-switch-row:hover .pg-switch-actions,
+[data-layout='app'] .pg-switch-row:focus-within .pg-switch-actions,
+[data-layout='app'] .pg-switch-row:hover > .pg-switch-action,
+[data-layout='app'] .pg-switch-row:focus-within > .pg-switch-action { display: flex; }
+[data-layout='app'] .pg-switch-action {
   border: 0;
   background: none;
   color: var(--muted);
-  font-size: 0.75rem;
+  font: 12px var(--font-mono);
   line-height: 1;
-  padding: 0.1rem 0.2rem;
+  padding: 2px 3px;
   cursor: pointer;
 }
-.pg-tree-action:hover { color: var(--fg); }
-.pg-tree-row[data-confirm='true'] { border-left-color: var(--danger); }
+[data-layout='app'] .pg-switch-action:hover { color: var(--fg); }
+[data-layout='app'] .pg-switch-action:focus-visible { outline: 1px solid var(--accent); }
+[data-layout='app'] .pg-switch-row[data-confirm='true'] { border-left-color: var(--danger); }
 /* An armed row shows its controls whether or not it is hovered — the reader
    has to be able to reach the second press. The wrapper has to be shown too:
    a `display: flex` child of a `display: none` parent is still not rendered. */
-.pg-tree-row[data-confirm='true'] .pg-tree-actions { display: flex; }
-.pg-tree-row[data-confirm='true'] > .pg-tree-action,
-.pg-tree-row[data-confirm='true'] .pg-tree-action[aria-label^='Delete'] {
+[data-layout='app'] .pg-switch-row[data-confirm='true'] .pg-switch-actions,
+[data-layout='app'] .pg-switch-actions:has([data-confirm='true']) { display: flex; }
+[data-layout='app'] .pg-switch-row[data-confirm='true'] > .pg-switch-action,
+[data-layout='app'] .pg-switch-action[data-confirm='true'],
+[data-layout='app'] .pg-switch-row[data-confirm='true'] .pg-switch-action[aria-label^='Delete'] {
   display: flex;
   color: var(--danger);
 }
-.pg-tree-row[data-drop='true'] { background: var(--pane-label-bg); box-shadow: inset 0 -2px 0 var(--accent); }
-.pg-ws-error { color: var(--danger); font-size: 0.72rem; margin: 0.3rem 0.5rem 0; }
-.pg-ws-error:empty { display: none; }
-
-.pg-ws-section { margin: 0 0 0.4rem; }
-.pg-ws-group {
-  margin: 0;
-  padding: 0.25rem 0.6rem;
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  font-weight: 400;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.pg-ws-list { list-style: none; margin: 0; padding: 0; }
-.pg-ws-row {
-  display: block;
-  width: 100%;
-  text-align: left;
+[data-layout='app'] .pg-switch-row[data-drop='true'] { background: var(--pane-label-bg); box-shadow: inset 0 -2px 0 var(--accent); }
+[data-layout='app'] .pg-switch-error { color: var(--danger); font: 11.5px var(--font-mono); margin: 4px 12px; }
+[data-layout='app'] .pg-switch-error:empty { display: none; }
+[data-layout='app'] .pg-switch-fallback,
+[data-layout='app'] .pg-switch-fallback ul { list-style: none; margin: 0; padding: 0; }
+[data-layout='app'] .pg-switch-empty { color: var(--muted); font: 11.5px var(--font-mono); margin: 0; padding: 6px 12px; }
+[data-layout='app'] .pg-switch-footer { display: flex; justify-content: space-between; gap: 12px; padding: 10px 12px; border-top: 1px solid var(--border); }
+[data-layout='app'] .pg-switch-footer button {
   border: 0;
-  border-left: 2px solid transparent;
-  background: none;
-  color: var(--fg);
-  font-size: 0.8rem;
-  padding: 0.22rem 0.6rem;
-  cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.pg-ws-row:hover { background: var(--pane-label-bg); }
-.pg-ws-row[aria-current='true'] {
-  border-left-color: var(--accent);
-  color: var(--accent);
-}
-.pg-ws-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.pg-ws-empty { color: var(--muted); font-size: 0.72rem; padding: 0.2rem 0.4rem 0.35rem 1.2rem; }
-.pg-ws-new {
-  border: 0;
-  border-top: 1px solid var(--border);
   background: none;
   color: var(--accent);
   font-family: var(--font-mono);
-  font-size: 0.75rem;
-  line-height: 1;
+  font-size: 11.5px;
   text-align: left;
-  padding: 0.55rem 0.75rem;
+  padding: 0;
   cursor: pointer;
 }
-.pg-ws-new:hover { color: var(--fg); }
-.pg-ws { position: relative; }
-.pg-ws-input {
+[data-layout='app'] .pg-switch-footer button:hover { color: var(--fg); }
+[data-layout='app'] .pg-switch-input {
   flex: 1;
   min-width: 0;
-  font-size: 0.8rem;
+  font-size: 12px;
   font-family: inherit;
   border: 1px solid var(--accent);
   background: var(--bg);
@@ -2380,8 +2355,10 @@ a.install-line:hover {
   }
   /* Stacked: the regions become bands, and the card spans the width. */
   [data-layout='app'] .pg-body { grid-template-columns: 1fr; }
-  [data-layout='app'] .pg-ws { left: 8px; right: 8px; width: auto; max-height: 24rem; }
-  [data-layout='app'] .pg-ws-body { max-height: 20rem; }
+  [data-layout='app'] .pg { grid-template-rows: auto minmax(0, 1fr) var(--pg-term-h, 40px) auto; }
+  [data-layout='app'] .pg-nav { height: auto; min-height: 48px; flex-wrap: wrap; padding: 8px 12px; }
+  [data-layout='app'] .pg-nav-left { gap: 12px; max-width: 100%; flex-wrap: wrap; }
+  [data-layout='app'] .pg-switch { left: 0; right: 0; width: auto; max-width: 100%; }
 }
 
 /* "Open in playground" — a plain link, no script, on the gallery
