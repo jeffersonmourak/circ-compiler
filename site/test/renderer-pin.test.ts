@@ -115,11 +115,12 @@ describe('renderer pin', () => {
       wireOf([seg(0, 0, 4, 0), seg(4, 0, 4, 2), seg(4, 2, 8, 2)]),
       wireOf([seg(0, 0, 4, 0), seg(4, 0, 8, 0)]),
     ])).toEqual(['4,0', '4,2', '4,4']);
-    // The Phase 4 review's second finding: the padding came out halved on a
-    // 2x display, because the transform's translation is device pixels. The
-    // fix is in resize(); its shape is the one thing a source read can hold.
+    // The canvas theme's second review finding: the padding came out halved
+    // on a 2x display, because a transform's translation is device pixels.
+    // Since 2.3.0-alpha.4 the transform also carries the view's scale and
+    // offset; the property held is that the offset is multiplied by the ratio.
     const canvasSrc = readFileSync(resolve(import.meta.dir, '..', 'node_modules', 'circ-renderer', 'src', 'render', 'canvas.ts'), 'utf8');
-    expect(canvasSrc).toMatch(/setTransform\(dpr, 0, 0, dpr, pad \* dpr, pad \* dpr\)/);
+    expect(canvasSrc).toMatch(/setTransform\(dpr \* scale, 0, 0, dpr \* scale, x \* dpr, y \* dpr\)/);
     const pkg = JSON.parse(
       readFileSync(resolve(import.meta.dir, '..', 'node_modules', 'circ-renderer', 'package.json'), 'utf8'),
     ) as { exports: Record<string, string> };

@@ -960,7 +960,7 @@ describe('circ-skins', () => {
   test('background clears rather than fills, so the pane shows through', () => {
     const theme = themeWith(true);
     const { ctx, ops } = recordingContext(14);
-    theme.background!({ ctx, theme, cell: 14, width: 10, height: 4 });
+    theme.background!({ ctx, theme, cell: 14, width: 10, height: 4, view: { scale: 1, x: 0, y: 0 }, viewport: { width: 168, height: 84 } });
     expect(ops.map((op) => op[0])).toEqual(['clearRect']);
     expect(ops.some((op) => op[0] === 'fillRect')).toBe(false);
   });
