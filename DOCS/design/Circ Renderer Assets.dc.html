@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<![CDATA[<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    body { margin: 0; background: #f8f9fa; -webkit-font-smoothing: antialiased; }
+    a { color: #1971c2; text-decoration: none; }
+    a:hover { color: #212529; text-decoration: underline; }
+  </style>
+</helmet>
+<div ref="{{ rootRef }}" style="font-family: 'IBM Plex Sans', system-ui, sans-serif; color: #212529; background: #f8f9fa; padding: 48px 40px 96px; display: flex; flex-direction: column; gap: 56px; max-width: 1320px; margin: 0 auto;">
+
+  <header style="display: flex; flex-direction: column; gap: 20px;">
+    <div style="display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;">
+      <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #868e96;">circ-renderer</span>
+      <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: #adb5bd;">v2.0.0-alpha.1</span>
+    </div>
+    <h1 style="margin: 0; font-size: 40px; line-height: 1.1; font-weight: 600; letter-spacing: -0.02em; max-width: 20ch;">Asset extraction</h1>
+    <p style="margin: 0; max-width: 62ch; font-size: 16px; line-height: 1.6; color: #495057; text-wrap: pretty;">Every drawable the renderer produces, redrawn here from the same Canvas&nbsp;2D paths as <code style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 14px; background: #eceef0; padding: 1px 5px; border-radius: 3px;">src/render/skins.ts</code> and <code style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 14px; background: #eceef0; padding: 1px 5px; border-radius: 3px;">src/render/canvas.ts</code> — same constants, same draw order. Nothing below is a redraw by eye.</p>
+    <div style="display: flex; gap: 24px; flex-wrap: wrap; align-items: center; padding-top: 8px; border-top: 1px solid #e9ecef; margin-top: 8px;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #868e96;">theme</span>
+        <div style="display: flex; gap: 2px; background: #eceef0; padding: 2px; border-radius: 6px;">
+          <button onClick="{{ setLight }}" style="{{ lightBtn }}">light</button>
+          <button onClick="{{ setDark }}" style="{{ darkBtn }}">dark</button>
+        </div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #868e96;">cell</span>
+        <input type="range" min="12" max="28" step="2" value="{{ cell }}" onChange="{{ onCell }}" style="width: 140px; accent-color: #1971c2;" />
+        <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: #495057; min-width: 34px;">{{ cellLabel }}</span>
+      </div>
+    </div>
+  </header>
+
+  <section style="display: flex; flex-direction: column; gap: 18px;">
+    <div style="display: flex; align-items: baseline; gap: 12px;">
+      <h2 style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #212529;">01 — Color tokens</h2>
+      <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #adb5bd;">utils/theme.ts</span>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 1px; background: #e9ecef; border: 1px solid #e9ecef; border-radius: 6px; overflow: hidden;">
+      <sc-for list="{{ tokens }}" as="tok" hint-placeholder-count="14">
+        <div style="background: #ffffff; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; gap: 6px;">
+            <div style="{{ tok.lightSwatch }}"></div>
+            <div style="{{ tok.darkSwatch }}"></div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 3px;">
+            <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; font-weight: 600; color: #212529;">{{ tok.key }}</span>
+            <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #868e96;">{{ tok.light }} · {{ tok.dark }}</span>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+    <p style="margin: 0; font-size: 13px; line-height: 1.6; color: #868e96; max-width: 74ch;">Left swatch is <code style="font-family: 'JetBrains Mono', ui-monospace, monospace;">defaultColors</code>, right is the README's slate override. <code style="font-family: 'JetBrains Mono', ui-monospace, monospace;">grid</code> and <code style="font-family: 'JetBrains Mono', ui-monospace, monospace;">labelMuted</code> are declared but never read by the default skins.</p>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 18px;">
+    <div style="display: flex; align-items: baseline; gap: 12px;">
+      <h2 style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #212529;">02 — Components</h2>
+      <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #adb5bd;">render/skins.ts · defaultSkins</span>
+    </div>
+    <div style="border: 1px solid #e9ecef; border-radius: 6px; overflow: hidden; background: #ffffff;">
+      <div style="display: grid; grid-template-columns: minmax(0, 200px) repeat(3, minmax(0, 1fr)); background: #f1f3f5; border-bottom: 1px solid #e9ecef;">
+        <div style="padding: 10px 16px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #868e96;">kind</div>
+        <div style="padding: 10px 16px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #868e96;">idle · 0</div>
+        <div style="padding: 10px 16px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #868e96;">active · 1</div>
+        <div style="padding: 10px 16px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #868e96;">hover</div>
+      </div>
+      <sc-for list="{{ rows }}" as="row" hint-placeholder-count="9">
+        <div style="display: grid; grid-template-columns: minmax(0, 200px) repeat(3, minmax(0, 1fr)); border-bottom: 1px solid #f1f3f5; align-items: stretch;">
+          <div style="padding: 18px 16px; display: flex; flex-direction: column; gap: 6px; border-right: 1px solid #f1f3f5;">
+            <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; font-weight: 600; color: #212529;">{{ row.kind }}</span>
+            <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #868e96;">{{ row.size }}</span>
+            <span style="font-size: 12px; line-height: 1.5; color: #868e96; text-wrap: pretty;">{{ row.note }}</span>
+          </div>
+          <sc-for list="{{ row.cells }}" as="cellSpec" hint-placeholder-count="3">
+            <div style="padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; justify-content: center; border-right: 1px solid #f1f3f5; min-width: 0; overflow: auto;">
+              <canvas data-scene="{{ cellSpec.scene }}"></canvas>
+              <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10px; color: #adb5bd;">{{ cellSpec.caption }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </sc-for>
+      <div style="display: grid; grid-template-columns: minmax(0, 200px) minmax(0, 1fr); align-items: center;">
+        <div style="padding: 18px 16px; display: flex; flex-direction: column; gap: 6px; border-right: 1px solid #f1f3f5;">
+          <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; font-weight: 600; color: #212529;">wire</span>
+          <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #868e96;">0 × 0 cells</span>
+        </div>
+        <div style="padding: 18px 16px; font-size: 13px; color: #868e96;">No skin — wires are collapsed in layout stage 1 and never drawn as a component.</div>
+      </div>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 18px;">
+    <div style="display: flex; align-items: baseline; gap: 12px;">
+      <h2 style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #212529;">03 — Wires, ports &amp; marks</h2>
+      <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #adb5bd;">render/canvas.ts</span>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1px; background: #e9ecef; border: 1px solid #e9ecef; border-radius: 6px; overflow: hidden;">
+      <sc-for list="{{ marks }}" as="mk" hint-placeholder-count="8">
+        <div style="background: #ffffff; padding: 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; overflow: auto;">
+          <canvas data-scene="{{ mk.scene }}"></canvas>
+          <div style="display: flex; flex-direction: column; gap: 3px;">
+            <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; font-weight: 600; color: #212529;">{{ mk.name }}</span>
+            <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; line-height: 1.5; color: #868e96;">{{ mk.spec }}</span>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 18px;">
+    <div style="display: flex; align-items: baseline; gap: 12px;">
+      <h2 style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #212529;">04 — Geometry</h2>
+      <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #adb5bd;">layout/sizing.ts · layout/place.ts</span>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 28px;">
+      <div style="display: flex; flex-direction: column; gap: 0; border: 1px solid #e9ecef; border-radius: 6px; overflow: hidden; background: #ffffff;">
+        <sc-for list="{{ geometry }}" as="g" hint-placeholder-count="10">
+          <div style="display: flex; gap: 16px; padding: 9px 14px; border-bottom: 1px solid #f1f3f5; align-items: baseline;">
+            <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11.5px; color: #868e96; flex: 0 0 120px;">{{ g.k }}</span>
+            <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11.5px; color: #212529; min-width: 0;">{{ g.v }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        <p style="margin: 0; font-size: 13px; line-height: 1.65; color: #495057; text-wrap: pretty;">Pin boxes grow with their label — <code style="font-family: 'JetBrains Mono', ui-monospace, monospace;">max(5, name.length + 4)</code> cells wide. Everything else is fixed except <code style="font-family: 'JetBrains Mono', ui-monospace, monospace;">concat</code> and <code style="font-family: 'JetBrains Mono', ui-monospace, monospace;">subcircuit</code>, which grow vertically by input count.</p>
+        <div style="display: flex; flex-direction: column; gap: 10px; padding: 16px; border: 1px solid #e9ecef; border-radius: 6px; background: #ffffff; overflow: auto;">
+          <canvas data-scene="card:input_pin:0:a"></canvas>
+          <canvas data-scene="card:input_pin:0:enable"></canvas>
+          <canvas data-scene="card:concat:0:3"></canvas>
+          <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10px; color: #adb5bd;">5 × 3 · 10 × 3 · concat with 3 operands, 5 × 7</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 18px;">
+    <div style="display: flex; align-items: baseline; gap: 12px;">
+      <h2 style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #212529;">05 — Demo circuit</h2>
+      <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #adb5bd;">cell 16 · a &amp; b → NOT → LED, plus an 8-bit bus tap</span>
+    </div>
+    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+      <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #868e96;">inputs</span>
+      <button onClick="{{ toggleA }}" style="{{ pinABtn }}">a = {{ aVal }}</button>
+      <button onClick="{{ toggleB }}" style="{{ pinBBtn }}">b = {{ bVal }}</button>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 28px;">
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #868e96;">current</span>
+        <div style="border: 1px solid #e9ecef; border-radius: 6px; padding: 18px; background: #ffffff; overflow: auto;">
+          <canvas data-scene="demo:current"></canvas>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #1971c2;">proposed</span>
+        <div style="border: 1px solid #d0e2f2; border-radius: 6px; padding: 18px; background: #ffffff; overflow: auto;">
+          <canvas data-scene="demo:next"></canvas>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 18px;">
+    <div style="display: flex; align-items: baseline; gap: 12px;">
+      <h2 style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #212529;">06 — What the proposal changes</h2>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 28px; align-items: start;">
+      <div style="display: flex; flex-direction: column; gap: 0; border: 1px solid #e9ecef; border-radius: 6px; overflow: hidden; background: #ffffff;">
+        <sc-for list="{{ gaps }}" as="gap" hint-placeholder-count="7">
+          <div style="padding: 14px 16px; border-bottom: 1px solid #f1f3f5; display: flex; flex-direction: column; gap: 5px;">
+            <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; font-weight: 600; color: #212529;">{{ gap.title }}</span>
+            <span style="font-size: 13px; line-height: 1.55; color: #495057; text-wrap: pretty;">{{ gap.body }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 16px;">
+        <p style="margin: 0; font-size: 13px; line-height: 1.65; color: #495057; text-wrap: pretty;">ANSI silhouettes for gates, IEC rectangles for the wide/bus parts, on the same cell grid. Signal moves out of the body fill and onto the boundary — wire, port dot and a glow edge — so a gate still reads as its own shape when it goes high.</p>
+        <div style="display: flex; flex-direction: column; gap: 14px; padding: 18px; border: 1px solid #d0e2f2; border-radius: 6px; background: #ffffff; overflow: auto;">
+          <canvas data-scene="next:concat"></canvas>
+          <canvas data-scene="next:subcircuit"></canvas>
+          <span style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10px; color: #adb5bd;">the two parts the demo doesn't cover, restyled</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer style="border-top: 1px solid #e9ecef; padding-top: 20px; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; line-height: 1.8; color: #adb5bd;">
+    <div>source · <a href="https://github.com/jeffersonmourak/circ-renderer">jeffersonmourak/circ-renderer</a> @ main</div>
+    <div>read · src/render/skins.ts · src/render/canvas.ts · src/utils/theme.ts · src/layout/sizing.ts · src/layout/place.ts · src/layout/types.ts · src/wasm/topology.ts</div>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;light&quot;,&quot;tsType&quot;:&quot;\&quot;light\&quot; | \&quot;dark\&quot;&quot;},&quot;cell&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;min&quot;:12,&quot;max&quot;:28,&quot;step&quot;:2,&quot;default&quot;:16,&quot;unit&quot;:&quot;px&quot;,&quot;tsType&quot;:&quot;number&quot;},&quot;pinA&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;pinB&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { theme: null, cell: null, a: null, b: null, lib: null };
+
+  get theme() { return this.state.theme ?? this.props.theme ?? "light"; }
+  get cell() { return this.state.cell ?? this.props.cell ?? 16; }
+  get a() { return this.state.a ?? this.props.pinA ?? true; }
+  get b() { return this.state.b ?? this.props.pinB ?? false; }
+
+  rootRef = React.createRef();
+
+  async componentDidMount() {
+    const [skins, scenes] = await Promise.all([
+      import("./circ-skins.js?v=3"),
+      import("./circ-scenes.js?v=3"),
+    ]);
+    this.setState({ lib: { skins, scenes } }, () => this.paint());
+  }
+
+  componentDidUpdate() { this.paint(); }
+
+  paint() {
+    const lib = this.state.lib;
+    const root = this.rootRef.current;
+    if (!lib || !root) return;
+    const { renderScene, val, undef } = lib.skins;
+    const { cardScene, markScene, demoScene } = lib.scenes;
+    const theme = this.theme;
+    const cell = this.cell;
+
+    for (const canvas of root.querySelectorAll("canvas[data-scene]")) {
+      const spec = canvas.getAttribute("data-scene");
+      if (!spec) continue;
+      const [group, ...rest] = spec.split(":");
+      let scene = null, style = "current", c = cell;
+
+      if (group === "card") {
+        const [kind, sig, extra] = rest;
+        scene = cardScene(kind, this.cardOpts(kind, Number(sig), extra, lib));
+      } else if (group === "hover") {
+        const [kind] = rest;
+        scene = cardScene(kind, { ...this.cardOpts(kind, 0, null, lib), hovered: true });
+      } else if (group === "mark") {
+        const [which, tone] = rest;
+        const value = tone === "bus" ? val(0xa5, 8) : tone === "undef" ? undef(1) : val(tone === "active" ? 1 : 0, 1);
+        scene = markScene(which, { value });
+      } else if (group === "demo") {
+        style = rest[0];
+        scene = demoScene({ a: this.a ? 1 : 0, b: this.b ? 1 : 0 });
+      } else if (group === "next") {
+        style = "next";
+        scene = cardScene(rest[0], this.cardOpts(rest[0], 0, null, lib));
+      }
+      if (!scene) continue;
+      renderScene(canvas, { ...scene, cell: c, theme, style });
+    }
+  }
+
+  cardOpts(kind, signal, extra, lib) {
+    const base = { signal, id: 0 };
+    switch (kind) {
+      case "input_pin":
+        if (extra === "bus") return { ...base, name: "data", bitWidth: 8, signal: 1 };
+        return { ...base, name: extra || "a" };
+      case "output_pin": return { ...base, name: "q" };
+      case "slice": return { ...base, slice: { lo: 0, hi: 4 } };
+      case "concat": return { ...base, operands: extra ? Number(extra) : 2 };
+      case "subcircuit": return { ...base, name: "u1", subcircuit: "adder", macroInputs: 2 };
+      default: return base;
+    }
+  }
+
+  btn(active, accent) {
+    return {
+      font: "500 12px 'JetBrains Mono', ui-monospace, monospace",
+      padding: "5px 12px",
+      border: "none",
+      borderRadius: "4px",
+      cursor: "pointer",
+      background: active ? (accent || "#212529") : "transparent",
+      color: active ? "#ffffff" : "#868e96",
+    };
+  }
+
+  pinBtn(on) {
+    return {
+      font: "500 12px 'JetBrains Mono', ui-monospace, monospace",
+      padding: "6px 14px",
+      borderRadius: "5px",
+      cursor: "pointer",
+      border: `1px solid ${on ? "#28a745" : "#dee2e6"}`,
+      background: on ? "#28a745" : "#ffffff",
+      color: on ? "#ffffff" : "#495057",
+    };
+  }
+
+  renderVals() {
+    const light = {
+      background: "#f8f9fa", grid: "#e9ecef", stroke: "#212529", fillIdle: "#ffffff",
+      fillActive: "#28a745", fillUndefined: "#adb5bd", wireIdle: "#495057", wireActive: "#28a745",
+      wireUndefined: "#ced4da", wireBus: "#1971c2", busLabel: "#1971c2", label: "#212529",
+      labelMuted: "#868e96", macro: "#6f42c1",
+    };
+    const dark = {
+      ...light, background: "#0f172a", stroke: "#94a3b8", fillIdle: "#1e293b", fillActive: "#22d3ee",
+      fillUndefined: "#334155", wireIdle: "#475569", wireActive: "#22d3ee", wireUndefined: "#334155",
+      label: "#e2e8f0", labelMuted: "#64748b", macro: "#a78bfa", grid: "#1e293b",
+    };
+    const sw = (hex) => ({
+      width: "26px", height: "26px", borderRadius: "4px", background: hex,
+      boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.12)",
+    });
+    const tokens = Object.keys(light).map((k) => ({
+      key: k, light: light[k], dark: dark[k],
+      lightSwatch: sw(light[k]), darkSwatch: sw(dark[k]),
+    }));
+
+    const cap = { 0: "outputSignal 0 → fillIdle", 1: "outputSignal 1 → fillActive" };
+    const row = (kind, size, note, opts = {}) => ({
+      kind, size, note,
+      cells: [
+        { scene: `card:${kind}:0${opts.extra ? ":" + opts.extra : ""}`, caption: opts.cap0 ?? cap[0] },
+        { scene: `card:${kind}:1${opts.extra ? ":" + opts.extra : ""}`, caption: opts.cap1 ?? cap[1] },
+        { scene: `hover:${kind}`, caption: opts.capH ?? "no delta" },
+      ],
+    });
+
+    const rows = [
+      row("input_pin", "max(5, name+4) × 3", "Rounded box, name centred. The only clickable component.", { extra: "a", capH: "no delta — cursor: pointer only" }),
+      row("output_pin", "max(5, name+4) × 3", "Same box, coloured from inputSignals[0].", { cap0: "inputSignals[0] 0", cap1: "inputSignals[0] 1" }),
+      row("not_gate", "5 × 3", "Triangle to 0.78w, bubble r = min(cell×0.3, h×0.18)."),
+      row("and_gate", "5 × 5", "D-shape via one bezier. Ports a at y+1, b at y+3, out at y+2."),
+      row("led", "5 × 3", "Circle r = min(w,h)×0.4. High adds a 0.5-alpha ring at r×1.4.", { cap0: "inputSignals[0] 0", cap1: "inputSignals[0] 1 + glow ring" }),
+      row("slice", "max(5, label+2) × 3", "Box labelled [lo] or [lo:hi] from the CIRF v02 aux."),
+      row("concat", "5 × (2n+1)", "Box labelled {·}. One stacked op port per operand."),
+      row("subcircuit", "max(8, label+2) × (2n+1)", "Macro border, label <sub>:<name>.", { cap0: "always fillUndefined", cap1: "identical — no signal state" }),
+    ];
+
+    const marks = [
+      { scene: "mark:wire:idle", name: "wire · idle", spec: "wireIdle · lw max(1, cell×0.18)" },
+      { scene: "mark:wire:active", name: "wire · active", spec: "wireActive · lw max(1, cell×0.18)" },
+      { scene: "mark:wire:undef", name: "wire · undefined", spec: "wireUndefined · lw max(1, cell×0.18)" },
+      { scene: "mark:wire:bus", name: "wire · bus", spec: "wireBus · lw cell×0.28 · width > 1" },
+      { scene: "mark:corner:active", name: "corner", spec: "lineJoin round · H then V then H segments" },
+      { scene: "mark:crossing:active", name: "crossing hop", spec: "arc r = cell×0.4, drawn above the line" },
+      { scene: "mark:fanout:active", name: "fan-out dot", spec: "r = cell×0.18 where ≥ 3 segment touches land" },
+      { scene: "card:input_pin:1:bus", name: "bus badge", spec: "0xNN above the box at y×cell − cell×0.15" },
+    ];
+
+    const geometry = [
+      { k: "cell (default)", v: "12 px · padding 4 px · DPR-scaled" },
+      { k: "box border", v: "lw max(1, cell × 0.12), inset lw/2" },
+      { k: "box radius", v: "min(cell × 0.4, w/2, h/2)" },
+      { k: "macro radius", v: "cell × 0.25" },
+      { k: "wire", v: "lw max(1, cell × 0.18) · bus cell × 0.28" },
+      { k: "crossing arc", v: "r = cell × 0.4" },
+      { k: "source marker", v: "circle r cell × 0.18, fill background, lw cell × 0.14" },
+      { k: "dest marker", v: "filled triangle, size cell × 0.32, tip at (x+1) × cell" },
+      { k: "fan-out dot", v: "r = cell × 0.18" },
+      { k: "port offset", v: "one cell outside the box border" },
+      { k: "gutters", v: "COL_GUTTER 5 · ROW_GUTTER 1" },
+      { k: "font", v: "500 8px JetBrains Mono — fixed, not cell-relative" },
+    ];
+
+    const gaps = [
+      { title: "Signal destroys the silhouette", body: "Active floods the whole body with fillActive, so a high AND gate and a high pin read as the same green blob — the shape that identifies the part is exactly what the signal paints over." },
+      { title: "Labels don't scale", body: "theme.font is a literal 8px, so at cell 16 a 48px-tall box holds 8px text. The cell-relative fallback only fires when font is unset." },
+      { title: "hovered goes nowhere", body: "Every skin receives it; no default skin draws it. Hover is a cursor change only, and only on input pins." },
+      { title: "Subcircuit has no state", body: "drawSubcircuit hardcodes fill(theme, 2), so a macro box looks undefined even when its inner gates have settled." },
+      { title: "Dark theme leaves the bus behind", body: "The README override spreads defaultColors, so wireBus and busLabel stay #1971c2 — 3.56:1 on #0f172a. Fine for the wire as a graphic, a fail for the 8px badge text sitting on it." },
+      { title: "Dark active labels are unreadable", body: "label #e2e8f0 on the dark fillActive #22d3ee is 1.47:1. Every high pin, slice and concat label in the dark theme is effectively invisible — the worst contrast in either palette." },
+      { title: "Bus badge has no plate", body: "Bare text 0.15 cells above the box, so it collides with any wire routed along the row above." },
+      { title: "Two gates only", body: "NOT and AND. No OR / NAND / XOR family, so anything else has to arrive as a subcircuit box." },
+    ];
+
+    return {
+      rootRef: this.rootRef,
+      tokens, rows, marks, geometry, gaps,
+      cell: this.cell,
+      cellLabel: `${this.cell}px`,
+      aVal: this.a ? 1 : 0,
+      bVal: this.b ? 1 : 0,
+      lightBtn: this.btn(this.theme === "light"),
+      darkBtn: this.btn(this.theme === "dark", "#0f172a"),
+      pinABtn: this.pinBtn(this.a),
+      pinBBtn: this.pinBtn(this.b),
+      setLight: () => this.setState({ theme: "light" }),
+      setDark: () => this.setState({ theme: "dark" }),
+      toggleA: () => this.setState({ a: !this.a }),
+      toggleB: () => this.setState({ b: !this.b }),
+      onCell: (e) => this.setState({ cell: Number(e.target.value) }),
+    };
+  }
+}
+</script>
+</body>
+</html>
