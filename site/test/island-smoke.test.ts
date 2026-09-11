@@ -16,6 +16,9 @@ import { tour } from '../src/content/tour.ts';
 import { resolve } from 'node:path';
 import { Window } from 'happy-dom';
 import type { SimSession } from '../src/scripts/sim-session.ts';
+import type { LibcircClient, LibcircVersion, WorkerReply } from '../src/scripts/libcirc-client.ts';
+import { callOp, callVersion, instantiateLibcirc } from '../src/scripts/libcirc-abi.ts';
+import { toSource, type FileTabsState } from '../src/scripts/file-tabs.ts';
 
 const SITE = resolve(import.meta.dir, '..');
 const DIST = resolve(SITE, 'dist');
@@ -1568,5 +1571,114 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     // sizes to its content unless something gives it a height.
     expect(declarationsOf("[data-layout='app'] .pg-editor .pg-cm .cm-editor {")).toContain('height: 100%');
     expect(declarationsOf("[data-layout='app'] .pg-editor .pg-cm .cm-scroller {")).toContain('overflow: auto');
+  }));
+
+  test('file selection rebuilds the active circuit and rejects late parent replies', async () => driveAsync(async (doc) => {
+    const island = (doc.querySelector('.pg') as unknown as { __playground: {
+      state: { tabs: FileTabsState; version: LibcircVersion | null; artifact: { hash: number; bytes: Uint8Array } | null; analysis: { symbols: { name: string }[] } | null };
+      compiler: LibcircClient;
+      hooks: { onArtifact(bytes: Uint8Array | null, reason: string): void; copySource(what: string): Promise<string> | null };
+      flushPipeline(): Promise<void>; getSession(): Promise<SimSession | null>;
+    } }).__playground;
+    const wasm = await instantiateLibcirc(readFileSync(resolve(SITE, 'public/wasm/libcirc.wasm')));
+    const decoder = new TextDecoder();
+    const originalInit = island.compiler.init;
+    const originalCall = island.compiler.call;
+    const originalVersion = island.state.version;
+    const originalId = doc.querySelector('.pg-switch-project[aria-current="true"]')!.getAttribute('data-pick')!;
+    const click = (selector: string) => (doc.querySelector(selector) as unknown as HTMLElement).click();
+    const choose = (id: string) => {
+      if (doc.querySelector('.pg-switch')!.hasAttribute('hidden')) click('.pg-crumb');
+      click(`.pg-switch-project[data-pick="${id}"]`);
+    };
+    const requests: { op: string; root: string; files: string[] }[] = [];
+    const held: { op: string; release(): void }[] = [];
+    let holdParent = false;
+    let pendingParent: Promise<void> | null = null;
+    island.compiler.init = async () => JSON.parse(decoder.decode(callVersion(wasm).bytes));
+    island.compiler.call = async (op, request) => {
+      requests.push({ op, root: request.root, files: Object.keys(request.files) });
+      const out = callOp(wasm, op, request);
+      const reply: WorkerReply = op === 'compile' && out.status === 0
+        ? { id: requests.length, op, status: 0, bytes: out.bytes }
+        : { id: requests.length, op, status: out.status, text: decoder.decode(out.bytes) };
+      if (holdParent && request.root === '/playground/root.circ') {
+        return new Promise((resolve) => held.push({ op, release: () => resolve(reply) }));
+      }
+      return reply;
+    };
+    island.state.version = null;
+    try {
+      choose('tour:6');
+      await island.flushPipeline();
+      expect(island.state.tabs.files.map((f) => f.name)).toEqual(['half_adder.circ', 'root.circ']);
+      expect(island.state.tabs.active).toBe(1);
+      const parent = await island.getSession();
+      expect(parent!.pins.filter((p) => p.kind === 'in').map((p) => p.name)).toEqual(['a', 'b', 'cin']);
+      parent!.set('a', 1n);
+      expect(doc.querySelector('.pg-preview')?.textContent).toContain('ha1');
+
+      holdParent = true;
+      pendingParent = island.flushPipeline();
+      await new Promise((r) => setTimeout(r, 0));
+      expect(held.map((h) => h.op).sort()).toEqual(['analyze', 'compile']);
+      click('.pg-file[data-file="0"]');
+      expect(parent!.isAlive).toBe(false);
+      expect(island.state.artifact).toBeNull();
+      expect((doc.querySelector('.pg-download') as unknown as HTMLButtonElement).disabled).toBe(true);
+      expect(doc.querySelector('.pg-preview')?.textContent).toBe('');
+      await island.flushPipeline();
+      const childHash = island.state.artifact!.hash;
+      const child = await island.getSession();
+      expect(child!.pins.filter((p) => p.kind === 'in').map((p) => p.name)).toEqual(['a', 'b']);
+      expect(child!.get('a')).toMatchObject({ ok: true, value: { value: 0n } });
+      expect(doc.querySelector('.pg-console-title')?.textContent).toBe('circ-compile half_adder.circ --sim');
+      expect(doc.querySelector('.pg-download .pg-action-label')?.textContent).toBe('half-adder.wasm');
+      expect(doc.querySelector('.pg-preview')?.textContent).not.toContain('ha1');
+      expect(toSource(island.state.tabs)).toBe(tour[5].source);
+      window.dispatchEvent(new Event('pagehide'));
+      expect(JSON.parse(localStorage.getItem(STORE_KEY)!).activeFile).toBe('half_adder.circ');
+
+      holdParent = false;
+      for (const reply of held.splice(0)) reply.release();
+      await pendingParent;
+      expect(island.state.artifact!.hash).toBe(childHash);
+      expect(island.state.analysis!.symbols.some((s) => s.name === 'cin')).toBe(false);
+      expect(doc.querySelector('.pg-preview')?.textContent).not.toContain('ha1');
+      expect(child!.isAlive).toBe(true);
+      click('.pg-view-tab[data-view="truth"]');
+      await island.flushPipeline();
+      expect(doc.querySelector('.pg-truth-chip')?.textContent).toContain('2 input bits');
+      expect(Array.from(doc.querySelectorAll('.pg-table th[data-symbol-name]'), (th) => th.getAttribute('data-symbol-name'))).toEqual(['a', 'b', 'sum', 'carry']);
+      expect(doc.querySelectorAll('.pg-table tbody tr')).toHaveLength(4);
+      const header = doc.querySelector('.pg-table th[data-symbol-name="a"]') as unknown as HTMLElement;
+      header.dispatchEvent(new Event('pointerenter'));
+      expect(doc.querySelector('.cm-circ-linked')?.textContent).toBe('a');
+      header.dispatchEvent(new Event('pointerleave'));
+      expect((await island.hooks.copySource('csv'))?.split('\n')[0]).toBe('a,b,sum,carry');
+      child!.set('a', 1n); child!.set('b', 1n);
+      expect(child!.get('carry')).toMatchObject({ ok: true, value: { value: 1n } });
+      const childRequests = requests.filter((r) => r.root === '/playground/half_adder.circ');
+      expect(new Set(childRequests.map((r) => r.op))).toEqual(new Set(['analyze', 'compile', 'preview', 'truth_table']));
+      for (const request of childRequests) expect(request.files).toEqual(['/playground/half_adder.circ', '/playground/root.circ']);
+
+      click('.pg-file[data-file="1"]');
+      expect(child!.isAlive).toBe(false);
+      await island.flushPipeline();
+      expect((await island.getSession())!.pins.filter((p) => p.kind === 'in').map((p) => p.name)).toEqual(['a', 'b', 'cin']);
+      expect(doc.querySelector('.pg-console-title')?.textContent).toBe('circ-compile root.circ --sim');
+    } finally {
+      holdParent = false;
+      for (const reply of held.splice(0)) reply.release();
+      await pendingParent;
+      click('.pg-view-tab[data-view="schematic"]');
+      choose(originalId);
+      await island.flushPipeline();
+      island.hooks.onArtifact(null, 'files-changed');
+      island.state.artifact = null;
+      island.state.version = originalVersion;
+      island.compiler.init = originalInit;
+      island.compiler.call = originalCall;
+    }
   }));
 });

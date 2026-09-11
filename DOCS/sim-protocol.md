@@ -231,7 +231,8 @@ browser having no process, no working directory and no stdin.
   time the Live view, Data panel or a Truth-table action needs the compiled
   circuit's runtime, and again
   after every `reset`, whichever face caused it. Its `<file>` is the root
-  file's name. Its `warnings` count and `diag` lines come from the analysis
+  file's name, which is the selected editor file in a multi-file project.
+  Its `warnings` count and `diag` lines come from the analysis
   the page ran on the same source.
 - **The log records every face.** A pin clicked on the canvas, a value typed
   in the Data panel, a cell written or a memory cleared in the memory panel, and a
@@ -283,3 +284,8 @@ highlights its word in the grid. Close folds the drawer; Escape in a nonempty
 prompt clears the line, and Escape in an empty prompt folds it.
 Schematic hides the whole console/memory row. Returning to Live or Truth
 restores its previous open/closed state and height.
+
+Selecting another source file starts a fresh circuit and console for that
+file. Its sibling files remain available for imports, so an imported circuit
+can be exercised on its own. Pin and memory-image state are reset on this
+switch; changing only the output view keeps the same session.

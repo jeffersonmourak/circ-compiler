@@ -145,6 +145,16 @@ describe('isFileName', () => {
 });
 
 describe('requestFor', () => {
+  test('an explicit entry point keeps the sibling overlay and file order', () => {
+    const files = splitFiles(tour[5].source);
+    const before = joinFiles(files);
+    const request = requestFor(files, { color: 'never' }, 'half_adder.circ');
+    expect(request.root).toBe('/playground/half_adder.circ');
+    expect(request.files).toEqual(requestFor(files).files);
+    expect(request.options).toEqual({ color: 'never' });
+    expect(requestFor(files).root).toBe('/playground/root.circ');
+    expect(joinFiles(files)).toBe(before);
+  });
   test('accepts a startLine-free file array', () => {
     const split = splitFiles(tour[5].source);
     const bare = split.map((f) => named(f.name, f.body));

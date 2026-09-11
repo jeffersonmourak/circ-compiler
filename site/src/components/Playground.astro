@@ -579,6 +579,8 @@ const groups = displayGroups(catalogue, []);
       analyzedDoc: null as number | null,
       /** The file NAME list as of the outputs currently on screen. */
       renderedFiles: [] as string[],
+      /** The file whose circuit is being analyzed and simulated. */
+      circuitFile: null as string | null,
       stale: false,
       /** The pipeline's single source of truth: the file set and which tab is
        *  visible. The combined string is never stored — it is computed on
@@ -596,6 +598,9 @@ const groups = displayGroups(catalogue, []);
       version: null as LibcircVersion | null,
       simulateEnabled: true,
     };
+    function activeRequest(options?: Record<string, unknown>) {
+      return requestFor(state.tabs.files, options, activeFile(state.tabs).name);
+    }
     /** The Truth view's table on screen, and how it came to be. Declared
      *  here, beside the state, because the gate reads it at boot. */
     const truth = {
@@ -609,6 +614,7 @@ const groups = displayGroups(catalogue, []);
     // Slice 8 attaches the simulator here.
     const hooks = {
       onDataOpen: null as null | (() => void),
+      onCircuitChanged: null as null | (() => void),
       onArtifact: null as null | ((bytes: Uint8Array | null, reason: 'built' | 'files-changed') => void),
       /** The Live view was shown: build or note. Set once the simulator is
        *  wired, which is after the restore from the envelope runs — a restore
@@ -631,6 +637,8 @@ const groups = displayGroups(catalogue, []);
     (el as any).__playground = {
       state,
       hooks,
+      compiler: client,
+      flushPipeline: () => flushPipeline(),
       renderMemory: () => renderMemory({ force: true }),
       refreshActions: () => hooks.refreshActions?.(),
       setStale: (stale: boolean) => setStale(stale),
@@ -799,7 +807,7 @@ const groups = displayGroups(catalogue, []);
     function renderDataCount() {
       const a = state.analysis;
       dataCount.textContent = a
-        ? pinCountLabel(a.symbols, rootFileId(a.files, rootPathFor(rootOf(state.tabs.files).name)))
+        ? pinCountLabel(a.symbols, rootFileId(a.files, rootPathFor(activeFile(state.tabs).name)))
         : '';
     }
 
@@ -987,6 +995,8 @@ const groups = displayGroups(catalogue, []);
       consoleClear();
       consoleState.history = new HistoryRing();
       consoleState.fresh = true;
+      consoleTitle.textContent = `circ-compile ${activeFile(state.tabs).name} --sim`;
+      termTitle.textContent = consoleTitle.textContent;
     }
 
     /** The prompt follows the session: live with one, shut without. */
@@ -1001,7 +1011,7 @@ const groups = displayGroups(catalogue, []);
 
     /** The lines `--sim` prints first, with the root file as the name the CLI was given. */
     function consoleHandshake(session: SimSession) {
-      const root = rootOf(state.tabs.files).name;
+      const root = activeFile(state.tabs).name;
       consoleTitle.textContent = `circ-compile ${root} --sim`;
       termTitle.textContent = consoleTitle.textContent;
       consoleState.fresh = false;
@@ -1143,19 +1153,18 @@ const groups = displayGroups(catalogue, []);
         return;
       }
       const decl = link.decls.find((d) => d.name === link_.name && d.kind === link_.kind);
-      const rootIdx = rootIndex(state.tabs);
-      if (!decl || state.tabs.active !== rootIdx) {
+      const file = activeFile(state.tabs);
+      if (!decl) {
         editor.setLinkHighlight(null);
-        simNote.textContent = `${link_.name} is declared in ${state.tabs.files[rootIdx]?.name ?? 'the root file'}.`;
+        simNote.textContent = `${link_.name} is not declared in ${file.name}.`;
         return;
       }
-      const files = state.tabs.files;
-      const body = files[rootIdx].body;
+      const body = file.body;
       const index = indexDoc(body);
       const span = rangeToSpan(
         index,
-        [{ name: files[rootIdx].name, body, startLine: 0 }],
-        { files: [{ file_id: decl.fileId, path: rootPathFor(files[rootIdx].name) }], diagnostics: [], symbols: [], references: [] } as Analysis,
+        [{ name: file.name, body, startLine: 0 }],
+        { files: [{ file_id: decl.fileId, path: rootPathFor(file.name) }], diagnostics: [], symbols: [], references: [] } as Analysis,
         decl.fileId,
         decl.range,
       );
@@ -1326,7 +1335,7 @@ const groups = displayGroups(catalogue, []);
       editor?.setDocuments(state.tabs.files.map((f) => f.body), state.tabs.active);
       if (store.envelope.activeId !== id) {
         setDataOpen(false, { focus: false });
-        consoleNewSession();
+        state.circuitFile = null;
       }
       store.update((draft) => {
         draft.activeId = id;
@@ -2175,6 +2184,7 @@ const groups = displayGroups(catalogue, []);
       if (idKind(id) === 'scratch') return store.envelope.scratch.find((p) => p.id === id)?.name ?? 'circuit';
       return catalogue.find((c) => c.id === id)?.label ?? 'circuit';
     }
+    const artifactLabel = () => state.tabs.files.length > 1 ? activeFile(state.tabs).name.replace(/\.circ$/, '') : activeLabel();
 
     /**
      * The button follows the artifact: disabled with no build, and with a
@@ -2186,13 +2196,13 @@ const groups = displayGroups(catalogue, []);
       downloadBtn.disabled = !a;
       // The button says what it would save: the artifact's name, and its
       // size beside it in the muted tone. With no build it is the bare verb.
-      downloadLabel.textContent = a ? artifactFileName(activeLabel()) : 'Download';
+      downloadLabel.textContent = a ? artifactFileName(artifactLabel()) : 'Download';
       downloadMeta.textContent = a ? formatBytes(a.size) : '';
       downloadBtn.title = !a
         ? 'Compile a circuit first'
         : state.stale
-          ? `Download the last good build, ${artifactFileName(activeLabel())} (${formatBytes(a.size)}) — the source has changed since it was built`
-          : `Download ${artifactFileName(activeLabel())} (${formatBytes(a.size)})`;
+          ? `Download the last good build, ${artifactFileName(artifactLabel())} (${formatBytes(a.size)}) — the source has changed since it was built`
+          : `Download ${artifactFileName(artifactLabel())} (${formatBytes(a.size)})`;
       if (state.stale && a) downloadBtn.dataset.stale = '';
       else delete downloadBtn.dataset.stale;
     }
@@ -2217,7 +2227,7 @@ const groups = displayGroups(catalogue, []);
     downloadBtn.addEventListener('click', () => {
       const a = state.artifact;
       if (!a) return;
-      const name = artifactFileName(activeLabel());
+      const name = artifactFileName(artifactLabel());
       downloadBytes(name, a.bytes, 'application/wasm');
       flash(downloadBtn, 'Saved');
       status.textContent = state.stale
@@ -2234,7 +2244,7 @@ const groups = displayGroups(catalogue, []);
     const currentRoms = (): MemorySymbol[] => {
       const a = state.analysis;
       if (!a) return [];
-      return romSymbols(a.symbols, rootFileId(a.files, rootPathFor(rootOf(state.tabs.files).name)));
+      return romSymbols(a.symbols, rootFileId(a.files, rootPathFor(activeFile(state.tabs).name)));
     };
     const preloads = () => preloadsFor(romImages, currentRoms());
 
@@ -3057,10 +3067,12 @@ const groups = displayGroups(catalogue, []);
         return;
       }
       state.tabs = next;
+      store.update((draft) => { draft.activeFile = activeFile(state.tabs).name; });
+      schedule();
       editor?.showDocument(state.tabs.active);
       renderTree();
       focusFileTab(state.tabs.active);
-      // No schedule(): the source did not change, only which file is visible.
+      // Selecting a file changes the circuit, not the project or file order.
     }
 
 
@@ -3191,26 +3203,66 @@ const groups = displayGroups(catalogue, []);
     // ---- editor ----
     // The textarea is the fallback editing surface: it edits and compiles on
     // its own, and it is removed from the DOM only once CodeMirror has mounted.
+    function readFallbackSource() {
+      const selected = activeFile(state.tabs).name;
+      const tabs = fromSource(source.value);
+      const index = tabs.files.findIndex((f) => f.name === selected);
+      state.tabs = selectTab(tabs, index >= 0 ? index : rootIndex(tabs));
+    }
     source.addEventListener('keydown', (e) => {
       if (e.key === 'Tab') {
         e.preventDefault();
         source.setRangeText('  ', source.selectionStart, source.selectionEnd, 'end');
-        state.tabs = fromSource(source.value);
+        readFallbackSource();
         schedule();
       }
     });
-    /** Every edit arms both stages: the fast one paints squiggles, the slow one
-     *  builds. They never wait on each other. */
+    /** Edits debounce both stages. A new file or project changes the circuit
+     *  immediately, so its old outputs and pending replies are discarded. */
     function schedule() {
       state.doc += 1;
+      const changedCircuit = state.circuitFile !== activeFile(state.tabs).name;
+      const names = state.tabs.files.map((f) => f.name);
+      if (changedCircuit || outputsShouldClear(state.renderedFiles, names)) {
+        // Selection invalidates in-flight replies immediately, before any
+        // debounce can let the previous file's artifact arrive.
+        analyzeStage.claim();
+        buildStage.claim();
+        state.circuitFile = activeFile(state.tabs).name;
+        if (changedCircuit) {
+          consoleNewSession();
+          hooks.onCircuitChanged?.();
+          romImages.clear(); romImplied.clear(); imageFiles.clear();
+          memWindows.clear(); hexOpen.clear();
+        }
+        state.analysis = null;
+        state.analyzedDoc = null;
+        state.diagnostics = [];
+        state.mapped = [];
+        link.decls = []; link.table = null; link.current = null;
+        editor?.setLinkHighlight(null);
+        state.tabs.files.forEach((_, i) => editor?.setDiagnosticsFor(i, []));
+        pipe.errors = 0; pipe.warnings = 0; pipe.failure = null;
+        markOutputs(names, true);
+        renderDiagnostics(); renderDataCount(); renderMemory();
+        void flushPipeline();
+        return;
+      }
       state.stale = true;
       analyzeStage.schedule((seq) => void runAnalyze(seq));
       buildStage.schedule((seq) => void runBuild(seq));
     }
+    async function flushPipeline(): Promise<void> {
+      let analysis: Promise<void> | undefined;
+      let build: Promise<void> | undefined;
+      analyzeStage.flush((seq) => { analysis = runAnalyze(seq); });
+      buildStage.flush((seq) => { build = runBuild(seq); });
+      await Promise.all([analysis, build]);
+    }
     // The fallback surface edits the COMBINED text; re-splitting on every
     // keystroke keeps one model for both surfaces.
     source.addEventListener('input', () => {
-      state.tabs = fromSource(source.value);
+      readFallbackSource();
       persistSource();
       schedule();
     });
@@ -3259,10 +3311,7 @@ const groups = displayGroups(catalogue, []);
         preferences: store.envelope.editor,
         ariaLabel: 'circ source',
         onCursor: (index, line, col, lineText) => {
-          // Only the root file's declarations are drawn, so a cursor in a
-          // sibling tab resolves to nothing rather than to the wrong box.
-          const isRoot = index === rootIndex(state.tabs);
-          setCurrentDeclaration(isRoot ? declarationAt(link.decls, line, col, lineText) : null);
+          setCurrentDeclaration(index === state.tabs.active ? declarationAt(link.decls, line, col, lineText) : null);
         },
         onChange: (doc, index) => {
           state.tabs = setBody(state.tabs, index, doc);
@@ -3334,17 +3383,20 @@ const groups = displayGroups(catalogue, []);
       renderStatus();
     }
 
-    /** Dim the outputs, or clear them outright when the FILE SET changed —
-     *  the only case where the last good preview, table and canvas describe a
-     *  project that no longer exists. */
-    function markOutputs(nextFiles: string[]) {
-      if (outputsShouldClear(state.renderedFiles, nextFiles)) {
+    /** Clear outputs when files change or a caller selects another circuit.
+     *  Body edits within the same target may keep the last good build. */
+    function markOutputs(nextFiles: string[], force = false) {
+      if (force || outputsShouldClear(state.renderedFiles, nextFiles)) {
         state.renderedFiles = nextFiles;
         state.artifact = null;
         state.stale = false;
+        pipe.stale = false;
         pipe.artifactBytes = null;
         previewEl.textContent = '';
+        renderSizeLine();
         tableEl.innerHTML = '';
+        truth.table = null; truth.filtered = false;
+        truth.unknownBits = undefined; truth.lastMs = null;
         outputPane.removeAttribute('data-stale');
         hooks.onArtifact?.(null, 'files-changed');
         hooks.refreshActions?.();
@@ -3369,7 +3421,7 @@ const groups = displayGroups(catalogue, []);
       const snapshot = snapshotBodies();
       setBusy(true, pipe.building);
 
-      const an = await client.call('analyze', requestFor(state.tabs.files));
+      const an = await client.call('analyze', activeRequest());
       if (!analyzeStage.isCurrent(seq)) return;
       if (an.status !== 0) {
         pipe.failure = `analyze failed: ${an.error ?? an.status}`;
@@ -3384,7 +3436,7 @@ const groups = displayGroups(catalogue, []);
       const openId = store.envelope.activeId;
       if (openId) remembered.set(openId, sumCounts(countsByFile(state.tabs.files, state.analysis)));
       renderTree();
-      link.decls = declsFor(state.analysis, rootPathFor(rootOf(state.tabs.files).name));
+      link.decls = declsFor(state.analysis, rootPathFor(activeFile(state.tabs).name));
       renderRoms();
 
       const errors = state.diagnostics.filter((d) => d.severity === 'error').length;
@@ -3412,7 +3464,7 @@ const groups = displayGroups(catalogue, []);
 
       const snapshot = snapshotBodies();
       setBusy(pipe.analyzing, true);
-      const c = await client.call('compile', requestFor(state.tabs.files));
+      const c = await client.call('compile', activeRequest());
       if (!buildStage.isCurrent(seq)) return;
 
       if (c.status === 0 && c.bytes) {
@@ -3451,7 +3503,7 @@ const groups = displayGroups(catalogue, []);
 
     async function runPreview(seq: number) {
       if (!state.tabs.files.length || !state.version) return;
-      const r = await client.call('preview', requestFor(state.tabs.files, optionsFor('preview', settings())));
+      const r = await client.call('preview', activeRequest(optionsFor('preview', settings())));
       // The follow-on call re-checks the SAME stage: this is the guard the
       // langlang playground omits on its second stage.
       if (!buildStage.isCurrent(seq)) return;
@@ -3492,7 +3544,7 @@ const groups = displayGroups(catalogue, []);
     function rootInputBits(): number | null {
       const a = state.analysis;
       if (!a) return null;
-      const rootId = rootFileId(a.files, rootPathFor(rootOf(state.tabs.files).name));
+      const rootId = rootFileId(a.files, rootPathFor(activeFile(state.tabs).name));
       // Null stays null: a 0 here would read as "no input bits" and silently
       // switch off the only defence against an enumeration that cannot be
       // stopped once it has started.
@@ -3520,9 +3572,11 @@ const groups = displayGroups(catalogue, []);
 
     /** The tint follows the session, never the click (decision 11). */
     async function refreshTruthTint() {
-      if (!truth.table) return;
+      const table = truth.table;
+      if (!table) return;
       const { liveRowIndex } = await loadTruthView();
-      const at = liveRowIndex(truth.table, inputPins());
+      if (truth.table !== table) return;
+      const at = liveRowIndex(table, inputPins());
       for (const tr of tableEl.querySelectorAll<HTMLElement>('tr[data-row]')) {
         if (Number(tr.dataset.row) === at) tr.setAttribute('aria-current', 'true');
         else tr.removeAttribute('aria-current');
@@ -3534,13 +3588,15 @@ const groups = displayGroups(catalogue, []);
     async function driveTruthRow(row: number) {
       const table = truth.table;
       if (!table) return;
+      const seq = buildStage.seq;
       const session = await ensureSession();
+      if (!buildStage.isCurrent(seq) || truth.table !== table) return;
       if (!session) {
         status.textContent = state.simulateEnabled ? 'Compile a circuit first.' : 'Simulate is disabled.';
         return;
       }
       const [{ driveRow }, { describeError }] = await Promise.all([loadTruthView(), loadDataView()]);
-      if (sim.session !== session) return;
+      if (sim.session !== session || !buildStage.isCurrent(seq) || truth.table !== table) return;
       const r = driveRow(session, table, row);
       if (!r.ok) {
         status.textContent = describeError(r.code, r.arg);
@@ -3555,8 +3611,9 @@ const groups = displayGroups(catalogue, []);
 
     /** Draw the rows: headers that light the schematic and the editor, cells
      *  by value in the reader's base, rows that drive. */
-    async function renderTruth(table: TruthRows) {
+    async function renderTruth(table: TruthRows, seq = buildStage.seq) {
       const { cellText } = await loadTruthView();
+      if (!buildStage.isCurrent(seq)) return;
       truth.table = table;
       tableEl.innerHTML = '';
       // Plain elements rather than `insertRow`/`insertCell`: the same DOM,
@@ -3634,7 +3691,7 @@ const groups = displayGroups(catalogue, []);
         await runTruthOverCap(seq);
         return;
       }
-      const r = await client.call('truth_table', requestFor(state.tabs.files, optionsFor('truth_table', settings(), preloads())));
+      const r = await client.call('truth_table', activeRequest(optionsFor('truth_table', settings(), preloads())));
       if (!buildStage.isCurrent(seq)) return;
       if (r.status !== 0) {
         // A refusal leaves the last good table on screen; the reason goes to
@@ -3709,7 +3766,7 @@ const groups = displayGroups(catalogue, []);
         return loadTruthView().then((m) => (what === 'markdown' ? m.toMarkdown : m.toCsv)(table, settings().valueFormat));
       }
       return client
-        .call('truth_table', requestFor(state.tabs.files, optionsFor('truth_table', settings(), preloads(), what)))
+        .call('truth_table', activeRequest(optionsFor('truth_table', settings(), preloads(), what)))
         .then((r) => (r.status === 0 ? r.text! : ''));
     }
 
@@ -3808,9 +3865,7 @@ const groups = displayGroups(catalogue, []);
           btn.addEventListener('click', () => {
             if (editor) {
               if (tab !== state.tabs.active) {
-                state.tabs = selectTab(state.tabs, tab);
-                editor.showDocument(tab);
-                renderTree();
+                showFile(tab);
               }
               editor.select(from, to);
             } else {
@@ -3824,7 +3879,7 @@ const groups = displayGroups(catalogue, []);
           const show = () => {
             const line = m.line;
             const file = state.tabs.files[tab];
-            const decl = file
+            const decl = file && tab === state.tabs.active
               ? declarationAt(link.decls, line, m.column, file.body.split('\n')[line - 1] ?? '')
               : null;
             if (decl) highlightByName(decl.name);
@@ -4188,8 +4243,9 @@ const groups = displayGroups(catalogue, []);
 
     /** Open the Data tab on the session, building it on first need. */
     async function showData() {
+      const bytes = sim.bytes;
       const session = await ensureSession();
-      if (!state.dataOpen) return;
+      if (!state.dataOpen || sim.bytes !== bytes) return;
       if (!session) {
         if (!dataNote.textContent) dataNote.textContent = state.simulateEnabled ? 'Compile a circuit first.' : dataNote.textContent;
         dataFooter.hidden = true;
@@ -4331,6 +4387,7 @@ const groups = displayGroups(catalogue, []);
       void session.reset().finally(() => { dataReset.disabled = false; });
     });
 
+    hooks.onCircuitChanged = () => { sim.pins.clear(); };
     hooks.onDataOpen = () => { void showData(); };
     hooks.onLive = () => {
       if (state.artifact && sim.renderedHash !== state.artifact.hash) {

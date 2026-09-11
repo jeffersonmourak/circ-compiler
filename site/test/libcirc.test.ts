@@ -9,6 +9,10 @@ import { examples } from '../src/content/examples.ts';
 import { tour } from '../src/content/tour.ts';
 import { splitFiles, requestFor } from '../src/utils/split-files.ts';
 import { fromSource, toSource } from '../src/scripts/file-tabs.ts';
+import { CircRuntime, buildLayout } from 'circ-renderer';
+import { SimSession } from '../src/scripts/sim-session.ts';
+import { declsFor, linkLayout, type LayoutLike } from '../src/scripts/source-link.ts';
+import type { Analysis } from '../src/scripts/circ-diagnostics.ts';
 
 const skip = process.env.SKIP_LIBCIRC_TEST === '1';
 const wasmPath = resolve(import.meta.dir, '..', 'public', 'wasm', 'libcirc.wasm');
@@ -98,6 +102,49 @@ describe.skipIf(skip)('libcirc.wasm', () => {
     const mod = await WebAssembly.compile(out.bytes);
     expect(WebAssembly.Module.customSections(mod, 'circ.topology.v0.min').length).toBe(1);
     expect(WebAssembly.Module.customSections(mod, 'circ.topology.v0.full').length).toBe(1);
+  });
+
+  test('each file is an independent circuit with its own layout, inputs and source links', async () => {
+    const w = await lib();
+    const files = splitFiles(tour[5].source);
+    for (const file of files) {
+      const request = requestFor(files, undefined, file.name);
+      const analysis = callOp(w, 'analyze', request);
+      expect(analysis.status).toBe(0);
+      const decls = declsFor(JSON.parse(text(analysis.bytes)) as Analysis, request.root);
+      const out = callOp(w, 'compile', request);
+      expect(out.status).toBe(0);
+      const runtime = await CircRuntime.loadFromBytes(out.bytes, { noInitialPinDrive: true });
+      const links = linkLayout(decls, buildLayout(runtime.topology, {}) as unknown as LayoutLike);
+      expect(links.unlinked).toEqual([]);
+      const child = file.name === 'half_adder.circ';
+      expect(links.byName.has('ha1')).toBe(!child);
+      expect(links.byName.has('carry')).toBe(child);
+      const session = await SimSession.build({ bytes: out.bytes, load: async () => runtime, bootLow: true });
+      try {
+        expect(session.pins.filter((p) => p.kind === 'in').map((p) => p.name)).toEqual(child ? ['a', 'b'] : ['a', 'b', 'cin']);
+        expect(session.set('a', 1n).ok).toBe(true);
+        expect(session.set('b', 1n).ok).toBe(true);
+        expect(session.get('sum')).toMatchObject({ ok: true, value: { value: 0n, defined: 1n } });
+        expect(session.get(child ? 'carry' : 'cout')).toMatchObject({ ok: true, value: { value: 1n, defined: 1n } });
+        if (child) expect(session.set('cin', 1n)).toMatchObject({ ok: false, code: 'E_NOPIN' });
+      } finally { session.destroy(); }
+    }
+  });
+
+  test('an active imported file resolves its own siblings without compiling a broken parent', async () => {
+    const w = await lib();
+    const files = [
+      { name: 'leaf.circ', body: 'input x\nnot inv(in=x)\noutput y(in=inv.out)\n' },
+      { name: 'child.circ', body: 'import leaf "leaf.circ"\ninput a\nleaf stage(x=a)\noutput result(in=stage.y)\n' },
+      { name: 'main.circ', body: 'not broken(\n' },
+    ];
+    expect(callOp(w, 'compile', requestFor(files)).status).toBe(1);
+    const request = requestFor(files, { format: 'json' }, 'child.circ');
+    expect(callOp(w, 'compile', requestFor(files, undefined, 'child.circ')).status).toBe(0);
+    const table = callOp(w, 'truth_table', request);
+    expect(table.status).toBe(0);
+    expect(JSON.parse(text(table.bytes))).toMatchObject({ inputs: ['a'], outputs: ['result'], rows: [{ in: [0], out: [1] }, { in: [1], out: [0] }] });
   });
 
   test('a broken source yields status 1 with a syntax diagnostic', async () => {

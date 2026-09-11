@@ -193,3 +193,13 @@ The console fills the drawer when no memory is declared. Otherwise a hairline se
 **Rationale.** Editor appearance and indentation are reader preferences, not compiler options. Keeping them separate avoids accidental recompilation, while compartment updates preserve the file registry and each file's history.
 
 **Alternatives.** Rebuilding the editor (loses file state and undo); changing only the active document (preferences revert on a file switch); storing them among compiler settings (invites unrelated compile requests).
+
+### The active editor file is the playground entry point
+
+**Decision.** Selecting a file compiles and simulates that file as an independent circuit. Every playground request names the active file as `root` and retains all project files in the import overlay. Analysis, Schematic, Truth and its copies, root pin/memory counts, source highlighting, console titles and multi-file artifact names follow that entry point. File selection is saved in the existing `activeFile` field. The last-file marker remains the project's default entry for first opening and source interchange; selecting another file never reorders or rewrites the source.
+
+A changed entry point invalidates both pipeline sequences immediately, clears the previous outputs and diagnostics, and starts fresh analysis and compilation. Its simulation and console start fresh too, including pin replay and memory-image state, so equally named pins or memories cannot leak between files. Body edits within the same target retain the existing debounce and last-good-build behavior. Diagnostic navigation uses the same file-selection path. Async Truth rendering, tinting and row activation check that their table or sequence still belongs to the active target after awaiting modules.
+
+**Rationale.** A canvas fixed to the last file made imported files readable but not independently testable. The compiler already accepts an explicit entry point with a sibling overlay. The page must change its runtime and source-link context together, and reject delayed replies from the previous file, or the editor and canvas can silently describe different circuits.
+
+**Alternatives.** Reordering files when selected (changes the shared project); compiling only the selected body (breaks sibling imports); keeping the previous circuit until the next build (leaves unrelated pins interactive); selecting an instance inside the parent's runtime (one source file can have several instances, and file selection does not identify one).

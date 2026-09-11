@@ -129,6 +129,7 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - The memory grid marks the address net's value (topology addr source, unknown/implied/addressed/editing states, wide-word scrolling, image provenance)
 - Memory controls reuse the settings and session paths (delegated base radios, existing image/write actions, redraw on jump, panel-named protocol copy)
 - Editor preferences reconfigure every file (saved wrapping, font size and tab/indent size; preserved text, selection and undo; no compile on preference changes)
+- The active editor file is the playground entry point (sibling imports retained, matching canvas/pins/source links, immediate invalidation of previous-file replies)
 
 ## Conventions
 

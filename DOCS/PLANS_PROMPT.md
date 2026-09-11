@@ -118,6 +118,8 @@ Add an entry here during execution whenever a non-obvious constraint surfaces â€
 
 - For small updates and minor fixes, the human asked to use the existing tests/build checks rather than restarting the Chrome setup. Reserve browser automation for visual checks that need it, such as the final sweep.
 - After the settings review, the footer holds Compile and Editor only. Schematic owns its preview controls, Truth owns the input-bit cap, and Data/memory own the value base. Editor preferences live in their own envelope field and never schedule a compile.
+- After the multi-file review, playground requests use the active editor file as their entry point while retaining every sibling for imports. Source-file switches immediately invalidate both stages and reset circuit state; output-view switches still reuse the current sequence. The last file remains the default entry for project interchange.
+- Clearing a circuit can invalidate a Truth table while a dynamic import is pending. Recheck table identity or the build sequence after each await, including tint updates and row activation.
 
 - `island-smoke.test.ts` reaches 61 `.pg-*` selectors and ids by name. Every slice that renames or removes markup updates the walk in the same slice; a green `bun test` without a fresh `bun --bun run build` proves nothing about the island (the smoke skips without `dist/`).
 - `Playground.astro`'s `init` reads elements once by selector at the top (`el.querySelector`); an element moved out of the island's root (the nav, once `Base.astro` yields it) must still be inside the element `init` receives, or be handed in. Keep the bench's whole frame inside the island's root element.
