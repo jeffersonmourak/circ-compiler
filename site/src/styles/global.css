@@ -1317,6 +1317,9 @@ span.pg-diag-pos { color: var(--muted); cursor: default; }
 .pg-drawer-splitter:focus-visible::before { background: var(--accent); }
 .pg-drawer-splitter:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .pg-drawer-splitter[hidden] { display: none; }
+[data-layout='app'] .pg-term { position: relative; overflow: visible; }
+[data-layout='app'] .pg-drawer-splitter { position: absolute; top: -4px; left: 0; right: 0; height: 8px; z-index: 10; }
+[data-layout='app'] .pg-drawer-close { border: 0; background: transparent; color: var(--muted); font: 12px var(--font-mono); padding: 2px 4px; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   .pg-drawer-splitter::before { transition: none; }
 }

@@ -257,7 +257,7 @@ const groups = displayGroups(catalogue, []);
       or Memory. The drawer itself is the element it was under the output
       pane; only its row changed. */}
   <div class="pg-term" data-open="false">
-    <div class="pg-term-line">
+    <div class="pg-term-line" tabindex="0" role="group" aria-label="Session console and memory">
       <span class="pg-term-title">circ-compile main.circ --sim</span>
       <span class="pg-term-prompt" aria-hidden="true">&gt;</span>
       <span class="pg-term-cmd"></span>
@@ -339,6 +339,7 @@ const groups = displayGroups(catalogue, []);
                 <button type="button" class="pg-console-btn" data-console="script" title="Copy the commands, as a --sim script">Copy script</button>
                 <button type="button" class="pg-console-btn" data-console="log" title="Copy the whole log">Copy log</button>
               </span>
+              <button type="button" class="pg-drawer-close" aria-label="Close drawer">▾</button>
             </div>
             <p class="pg-console-note">Compile a circuit first.</p>
             <pre class="pg-console-log" aria-live="polite" aria-label="Console transcript"></pre>
@@ -907,6 +908,8 @@ const groups = displayGroups(catalogue, []);
     // stored: the drawer is only ever a face on the current session.
     /** The drawer's divider, created with the main one once the panes exist. */
     let drawerSplitter: ReturnType<typeof createSplitter> | null = null;
+    const drawerClose = el.querySelector<HTMLButtonElement>('.pg-drawer-close')!;
+    const termLine = el.querySelector<HTMLElement>('.pg-term-line')!;
     function currentDrawerTab(): DrawerTab {
       const selected = drawerTabs.find((b) => b.getAttribute('aria-selected') === 'true');
       return (selected?.dataset.drawer as DrawerTab) ?? 'console';
@@ -924,7 +927,7 @@ const groups = displayGroups(catalogue, []);
      *  the drawer; in its own row the drawer has no neighbour to share with.
      *  Hidden until Phase 6 turns it into the row's height. */
     function refreshDrawerSeparator() {
-      drawerSeparator.hidden = true;
+      drawerSeparator.hidden = drawer.dataset.open !== 'true';
       drawerSplitter?.refresh();
     }
 
@@ -933,11 +936,21 @@ const groups = displayGroups(catalogue, []);
     function setDrawerOpen(open: boolean) {
       term.dataset.open = String(open);
       drawer.dataset.open = String(open);
-      el.style.setProperty('--pg-term-h', open ? '320px' : '');
+      el.style.setProperty('--pg-term-h', open ? 'var(--pg-drawer-h, 320px)' : '');
       drawerToggle.setAttribute('aria-expanded', String(open));
       refreshDrawerSeparator();
       if (open && memVisible()) renderMemory();
+      if (!open && (drawer.contains(document.activeElement) || document.activeElement === drawerSeparator)) termOpeners[0]?.focus();
     }
+    drawerClose.addEventListener('click', () => setDrawerOpen(false));
+    const openConsole = () => {
+      selectDrawerTab('console');
+      setDrawerOpen(true);
+      (consoleIn.disabled ? drawerClose : consoleIn).focus();
+    };
+    termLine.addEventListener('focusin', (e) => { if (e.target === termLine) openConsole(); });
+    termLine.addEventListener('click', (e) => { if (!(e.target as HTMLElement).closest('button')) openConsole(); });
+    consoleIn.addEventListener('focus', () => { if (drawer.dataset.open !== 'true') setDrawerOpen(true); });
 
     /** The closed line: the last command and its reply, off the transcript. */
     function renderTermLine() {
@@ -1147,8 +1160,10 @@ const groups = displayGroups(catalogue, []);
         consoleClear();
       } else if (e.key === 'Escape') {
         e.preventDefault();
+        const empty = consoleIn.value === '';
         consoleIn.value = '';
         consoleState.history.reset();
+        if (empty) setDrawerOpen(false);
       }
     });
     // A terminal takes the caret wherever you click in it, unless you are
@@ -3046,16 +3061,23 @@ const groups = displayGroups(catalogue, []);
     // drawer takes the rest. Declared after the drawer's handlers, which read
     // it through `refreshDrawerSeparator` only once it exists.
     drawerSplitter = createSplitter({
-      container: outputPane,
+      container: el,
       separator: drawerSeparator,
-      property: '--pg-split-drawer',
+      property: '--pg-drawer-h',
+      unit: 'px',
+      pane: 'second',
       orientation: 'horizontal',
-      minPanePx: 96,
-      minRatio: 0.2,
-      maxRatio: 0.85,
-      initial: store.envelope.layout.ratios.drawer ?? 0.62,
-      labels: ['output', 'drawer'],
-      onCommit: (ratio) => store.update((draft) => { draft.layout.ratios.drawer = ratio; }),
+      minPx: 160,
+      maxReservePx: 200,
+      initial: store.envelope.drawerHeight,
+      labels: ['bench', 'drawer'],
+      measure: () => {
+        const frame = el.getBoundingClientRect();
+        const nav = el.querySelector<HTMLElement>('.pg-nav')!.getBoundingClientRect().height;
+        const footer = el.querySelector<HTMLElement>('.pg-statusline')!.getBoundingClientRect().height;
+        return { start: frame.top + nav, size: Math.max(0, frame.height - nav - footer) };
+      },
+      onCommit: (height) => store.update((draft) => { draft.drawerHeight = height; }),
     });
     refreshDrawerSeparator();
 

@@ -265,3 +265,11 @@ Rolling log of shipped slices. Newest at the bottom. The plan is `DOCS/PLANS_PRO
 **Tests:** Added separate-minimum and DOM-backed lower-pane cases, including resize without commit and restored intent. All four gates pass: 598 tests; `/playground` 128.7 KB raw / 44.8 KB gzip.
 **Next slice:** Drawer height and open/close gestures.
 **Notes:** The phase spec predates Phase 0's `unit: 'px'` implementation. Extended that API with `pane` and `measure` instead of introducing the spec's parallel `pixels` mode or changing existing callback shapes. Existing ratio and source-column tests pass unchanged.
+
+## 2026-09-11 — Phase 6 — Drawer height and gestures
+
+**What shipped:** The open row reads `--pg-drawer-h`, default 320px, from the version-2 envelope's `drawerHeight`. The divider sizes the lower pane of the frame, excluding nav and status chrome, and leaves 200px above a minimum 160px drawer. Focus or a click on the closed line opens the console; Close folds it. Escape clears a nonempty prompt and resets history, then closes on an empty prompt. The old drawer ratio is dropped on read.
+**Files touched:** `site/src/components/Playground.astro`, `site/src/styles/global.css`, `site/src/utils/playground-store.ts`, `site/test/{playground-store,island-smoke}.test.ts`, `DOCS/STATUS.md`
+**Tests:** Added height defaults/migration and a real-session drawer walk proving focus, persistence and the two Escape gestures. Typecheck/build pass; all 600 tests pass across the full run and corrected smoke rerun; `/playground` 129.6 KB raw / 45.1 KB gzip.
+**Next slice:** The console header and removal of the tab strip.
+**Notes:** Focus return goes to the Console button rather than the focus-to-open line, avoiding an immediate reopen. The drawer's height field follows the active phase spec; later viewport changes only clamp the rendering. The old tab strip remains for this slice.

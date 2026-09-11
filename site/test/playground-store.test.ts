@@ -89,7 +89,7 @@ describe('playground store', () => {
   test('defaults and round-trip', () => {
     const env = defaultEnvelope();
     expect(Object.keys(env).sort()).toEqual(
-      ['activeFile', 'activeId', 'dataOpen', 'dataPanel', 'footer', 'layout', 'scratch', 'settings', 'version', 'view', 'ws'].sort(),
+      ['activeFile', 'activeId', 'dataOpen', 'dataPanel', 'drawerHeight', 'footer', 'layout', 'scratch', 'settings', 'version', 'view', 'ws'].sort(),
     );
     expect(env.version).toBe(2);
     expect(env.settings.truthTableCap).toBe(12);
@@ -97,6 +97,7 @@ describe('playground store', () => {
     expect(env.view).toBe('schematic');
     expect(env.dataOpen).toBe(false);
     expect(env.dataPanel).toEqual({});
+    expect(env.drawerHeight).toBe(320);
     expect(env.footer).toEqual({ open: false, tab: 'diagnostics' });
     expect(env.layout).toEqual({ sourceWidth: 480, ratios: {} });
     // The reader's own projects open; every catalogue group starts shut, and
@@ -127,6 +128,15 @@ describe('playground store', () => {
     expect(invalid.envelope.dataPanel).toEqual(raw.dataPanel);
     expect(invalid.envelope.scratch).toEqual(raw.scratch);
     expect(invalid.note).toBeNull();
+  });
+
+  test('drawer height keeps intent and replaces the old share', () => {
+    for (const drawerHeight of [160, 480, 2000]) expect(normalize({ ...defaultEnvelope(), drawerHeight }).envelope.drawerHeight).toBe(drawerHeight);
+    for (const drawerHeight of [undefined, null, -1, 0, Infinity, '480']) expect(normalize({ ...defaultEnvelope(), drawerHeight }).envelope.drawerHeight).toBe(320);
+    const migrated = normalize({ version: 1, layout: { ratios: { drawer: 0.62 } } });
+    expect(migrated.envelope.drawerHeight).toBe(320);
+    expect(migrated.envelope.layout.ratios).toEqual({});
+    expect(migrated.note).toBeNull();
   });
 
   test('unknown keys are dropped', () => {
@@ -161,7 +171,8 @@ describe('playground store', () => {
     expect(normalize({ ...raw, tab: 'simulate' }).envelope.dataOpen).toBe(false);
     expect(envelope.footer).toEqual({ open: true, tab: 'settings' });
     // The main splitter's share is gone; the drawer's rides through.
-    expect(envelope.layout).toEqual({ sourceWidth: 480, ratios: { drawer: 0.7 } });
+    expect(envelope.layout).toEqual({ sourceWidth: 480, ratios: {} });
+    expect(envelope.drawerHeight).toBe(320);
     expect('tab' in envelope).toBe(false);
     expect('dock' in envelope).toBe(false);
     // The rest of the map, and a version-1 body with nothing but its version.

@@ -103,6 +103,8 @@ export interface PlaygroundEnvelope {
   dataOpen: boolean;
   /** Last committed position per project, in canvas-region CSS pixels. */
   dataPanel: Record<PickId, PanelPos>;
+  /** Open drawer height in CSS pixels; clamped on render, not on read. */
+  drawerHeight: number;
   footer: FooterState;
   ws: WorkspaceState;
 }
@@ -164,6 +166,7 @@ export function defaultEnvelope(): PlaygroundEnvelope {
     view: 'schematic',
     dataOpen: false,
     dataPanel: {},
+    drawerHeight: 320,
     footer: { ...DEFAULT_FOOTER },
     ws: { expanded: [...DEFAULT_WS.expanded] },
   };
@@ -294,6 +297,7 @@ function normalizeRatios(raw: unknown): Record<string, number> {
   const out: Record<string, number> = {};
   if (!isObject(raw)) return out;
   for (const [key, value] of Object.entries(raw)) {
+    if (key === 'drawer') continue; // The old share has no pixel meaning.
     if (typeof value === 'number' && Number.isFinite(value) && value > 0 && value < 1) {
       out[key] = value;
     }
@@ -339,6 +343,7 @@ export function normalize(raw: unknown): { envelope: PlaygroundEnvelope; note: S
       view: VIEWS.includes(body.view as View) ? (body.view as View) : 'schematic',
       dataOpen: body.dataOpen === true,
       dataPanel: normalizeDataPanel(body.dataPanel, ids),
+      drawerHeight: typeof body.drawerHeight === 'number' && Number.isFinite(body.drawerHeight) && body.drawerHeight > 0 ? body.drawerHeight : 320,
       footer: normalizeFooter(body.footer),
       ws: normalizeWorkspace(body.ws),
     },

@@ -807,6 +807,7 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     const open = (name: string) => doc.querySelector(`.pg-term-open[data-term="${name}"]`) as unknown as { click(): void };
     const toggle = doc.querySelector('.pg-drawer-toggle') as unknown as { click(): void };
     const consoleTab = doc.querySelector('.pg-drawer-tab[data-drawer="console"]') as unknown as { click(): void };
+    (doc.querySelector('.pg-drawer-close') as unknown as HTMLElement).click();
 
     // Whatever the view, the row is there and shut.
     const view = (name: string) => doc.querySelector(`.pg-view-tab[data-view="${name}"]`) as unknown as { click(): void };
@@ -827,9 +828,8 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     open('console').click();
     expect(term.dataset.open).toBe('true');
     expect(drawer.dataset.open).toBe('true');
-    expect(frame.style.getPropertyValue('--pg-term-h')).toBe('320px');
-    // The old divider has no neighbour in this row; Phase 6 gives it the height.
-    expect(separator.hasAttribute('hidden')).toBe(true);
+    expect(frame.style.getPropertyValue('--pg-term-h')).toBe('var(--pg-drawer-h, 320px)');
+    expect(separator.hasAttribute('hidden')).toBe(false);
     // The drawer bar's toggle closes it, and the frame's row goes back.
     toggle.click();
     expect(term.dataset.open).toBe('false');
@@ -842,6 +842,48 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     // Memory is inert until the circuit declares one.
     open('memory').click();
     expect(term.dataset.open).toBe('false');
+  }));
+
+  test('the drawer grows on focus, saves its height and closes only after clearing the prompt', async () => driveAsync(async (doc) => {
+    const island = (doc.querySelector('.pg') as unknown as { __playground: {
+      hooks: { onArtifact(bytes: Uint8Array | null, reason: string): void }; getSession(): Promise<SimSession | null>;
+    } }).__playground;
+    const drawer = doc.querySelector('.pg-drawer') as unknown as HTMLElement;
+    const input = doc.querySelector('.pg-console-in') as unknown as HTMLInputElement;
+    const separator = doc.querySelector('.pg-drawer-splitter') as unknown as HTMLElement;
+    const close = doc.querySelector('.pg-drawer-close') as unknown as HTMLButtonElement;
+    const press = (el: HTMLElement, key: string) => el.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+    try {
+      island.hooks.onArtifact(new Uint8Array(readFileSync(resolve(SITE, 'public/wasm/half-adder.wasm'))), 'compiled');
+      await island.getSession();
+      (doc.querySelector('.pg-term-line') as unknown as HTMLElement).focus();
+      expect(drawer.dataset.open).toBe('true');
+      expect(separator.hidden).toBe(false);
+      expect(doc.activeElement === doc.querySelector('.pg-console-in')).toBe(true);
+      press(separator, 'ArrowUp');
+      window.dispatchEvent(new Event('pagehide'));
+      expect(JSON.parse(localStorage.getItem(STORE_KEY)!).drawerHeight).toBe(336);
+      input.value = 'set a 1';
+      (doc.querySelector('.pg-console-form') as unknown as HTMLElement).dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await new Promise((r) => setTimeout(r, 0));
+      press(input, 'ArrowUp');
+      expect(input.value).toBe('set a 1');
+      press(input, 'Escape');
+      expect(input.value).toBe('');
+      expect(drawer.dataset.open).toBe('true');
+      press(input, 'ArrowDown');
+      expect(input.value).toBe('');
+      press(input, 'Escape');
+      expect(drawer.dataset.open).toBe('false');
+      expect(separator.hidden).toBe(true);
+      input.focus();
+      expect(drawer.dataset.open).toBe('true');
+      close.click();
+      expect(drawer.dataset.open).toBe('false');
+    } finally {
+      close.click();
+      island.hooks.onArtifact(null, 'files-changed');
+    }
   }));
 
   test('search finds a project in a collapsed group and restores the tree', () => drive((doc) => {
