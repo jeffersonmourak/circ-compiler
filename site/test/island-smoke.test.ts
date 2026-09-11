@@ -352,7 +352,7 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(after).toHaveLength(before.length + 1);
     expect(after[after.length - 1]).toBe(before[before.length - 1]);
     expect(selected()).toBe(after[after.length - 2]);
-    expect((doc.querySelector('.pg-tree-file[aria-current="true"] .pg-tree-label') as { textContent: string } | null)?.textContent).toBe(selected());
+    expect((doc.querySelector('.pg-tree-file[aria-current="true"] .pg-tree-label') as { textContent: string } | null)?.textContent).toBe(selected() ?? '');
     // Only the selected tab is a tab stop, and a click on another switches.
     const stops = Array.from(doc.querySelectorAll('.pg-files .pg-file')).filter((b) => (b as unknown as { tabIndex: number }).tabIndex === 0);
     expect(stops).toHaveLength(1);
