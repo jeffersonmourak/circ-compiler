@@ -1,10 +1,10 @@
 # Archived plan: playground-driver
 
-**Canonical commit:** `4a38c333a05ab4b3bb7932bf499fa3384040e342` (`4a38c33 docs: sign off the playground driver plan`)
+**Canonical commit:** `8afb9e6d3677e81cf1da3685c06bcc690d622aad` (`8afb9e6 docs: sign off the playground driver plan`)
 **Archived on:** 2026-09-11
 **Plan duration:** 2026-09-11 → 2026-09-11
 
-> This file is a highlight view. The full plan prompt, every phase plan, and every STATUS entry are preserved in the commit referenced above. Check that commit out (`git show 4a38c333a05ab4b3bb7932bf499fa3384040e342:DOCS/PLANS_PROMPT.md`, `…:DOCS/PLANS/PHASE_2_the_protocol.md`, `…:DOCS/STATUS.md`, etc.) when you need the unabridged source.
+> This file is a highlight view. The full plan prompt, every phase plan, and every STATUS entry are preserved in the commit referenced above. Check that commit out (`git show 8afb9e6d3677e81cf1da3685c06bcc690d622aad:DOCS/PLANS_PROMPT.md`, `…:DOCS/PLANS/PHASE_2_the_protocol.md`, `…:DOCS/STATUS.md`, etc.) when you need the unabridged source.
 
 ## Goal & scope
 
