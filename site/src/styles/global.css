@@ -34,6 +34,9 @@
   --accent: #6e49ab;
   --accent-soft: #8a6dc4;
   --code-bg: #e8def0;
+  /* The playground's terminal: an `ok` reply, and the brightest line (an echo). */
+  --term-ok: #3f7d5c;
+  --term-echo: #2d2140;
   --pane-bg: #f4eefb;
   --pane-label-bg: #ebe4f5;
   --danger: #a83737;
@@ -64,6 +67,8 @@
   --accent: #b097d1;
   --accent-soft: #c8b3e0;
   --code-bg: #1f1438;
+  --term-ok: #8fd3a8;
+  --term-echo: #ece4f8;
   --pane-bg: #0c0517;
   --pane-label-bg: #13091f;
   --danger: #ff6b8a;
@@ -1143,17 +1148,62 @@ hr {
 @media (prefers-reduced-motion: reduce) {
   .pg-drawer-splitter::before { transition: none; }
 }
-/* The console: a scrollback and a one-line prompt, in the protocol's own
-   monospace. Line kinds are colours only; the text is the executor's. */
+/* The console: an editor's terminal. A surface in the code-block colour, a
+   bar naming the command it runs with its actions, the log, and a prompt
+   that is one line of the same text with a glyph in front. Line kinds are
+   colours only; the text is the executor's. */
 .pg-console {
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  padding: 0.35rem 0.65rem 0.5rem;
+  border-radius: 4px;
+  background: var(--code-bg);
   font-family: var(--font-mono-strict);
   font-size: 0.8rem;
   line-height: 1.5;
+  color: var(--fg);
+  cursor: text;
 }
+.pg-console:focus-within { box-shadow: inset 0 0 0 1px var(--accent); }
+.pg-console-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex: 0 0 auto;
+  margin: 0 0 0.35rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  cursor: default;
+}
+.pg-console-title {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.pg-console-actions { display: flex; gap: 0.15rem; flex: 0 0 auto; }
+.pg-console-btn {
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  padding: 0.15rem 0.5rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pg-console-btn:hover { color: var(--fg); background: color-mix(in srgb, var(--fg) 8%, transparent); }
+.pg-console-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
 .pg-console-note { margin: 0 0 0.4rem; color: var(--muted); font-family: var(--font-mono); font-size: 0.8rem; }
 .pg-console-note[hidden] { display: none; }
 .pg-console-log {
@@ -1165,30 +1215,37 @@ hr {
   overflow-wrap: anywhere;
   font: inherit;
   color: var(--fg);
+  user-select: text;
+  scrollbar-width: thin;
 }
+.pg-console-line[data-kind="reply"] { color: var(--fg); }
+.pg-console-line[data-kind="reply"][data-ok] { color: var(--term-ok); }
 .pg-console-line[data-kind="err"] { color: var(--danger); }
-.pg-console-line[data-kind="echo"] { color: var(--accent); }
+.pg-console-line[data-kind="echo"] { color: var(--term-echo); }
+.pg-console-line[data-kind="echo"]::first-letter { color: var(--accent); }
 .pg-console-line[data-kind="note"] { color: var(--muted); }
+.pg-console-line[data-origin="page"] { opacity: 0.8; }
 .pg-console-form {
   display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin: 0.4rem 0 0;
-  padding-top: 0.4rem;
-  border-top: 1px solid var(--border);
+  align-items: baseline;
+  gap: 0.45rem;
+  flex: 0 0 auto;
+  margin: 0.15rem 0 0;
 }
-.pg-console-prompt { color: var(--accent); }
+.pg-console-prompt { color: var(--accent); font-weight: 600; }
 .pg-console-in {
   flex: 1;
   min-width: 0;
   font: inherit;
-  padding: 0.15rem 0.4rem;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--bg);
-  color: var(--fg);
+  color: var(--term-echo);
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  caret-color: var(--accent);
 }
-.pg-console-in:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.pg-console-in::placeholder { color: var(--muted); opacity: 0.7; }
+.pg-console-in:focus { outline: none; }
 .pg-console-in:disabled { opacity: 0.6; cursor: not-allowed; }
 .pg-drawer-panel[data-drawer-panel="console"] { display: flex; flex-direction: column; }
 .pg-drawer-panel[data-drawer-panel="console"][hidden] { display: none; }

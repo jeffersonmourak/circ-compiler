@@ -49,3 +49,19 @@ One entry per shipped slice, newest last. The plan is `DOCS/PLANS_PROMPT.md`; th
 **Tests:** added three (a whole session's log → its script, every line parsing as a command or a comment but the `help` echo; an empty log; `Transcript.lines` is `text` split); ran `bun test test/console.test.ts` (13 pass), `bun --bun run typecheck` (0 errors), result pass
 **Next slice:** the bar.
 **Notes:** none.
+
+## 2026-09-11 — Phase 1 — the bar
+
+**What shipped:** the `.pg-console-bar` above the log in `Playground.astro`: a title reading `circ-compile <root>.circ --sim`, refreshed with every handshake, and at the right Clear (`consoleClear`, then focus), Copy script (`scriptOf` over the transcript) and Copy log (the whole text). Copies go through `navigator.clipboard.writeText`, guarded: the status span says `Copied <n> command line(s).` or `Copied the log, <n> line(s).`, with the 2,000-line cap named when it was hit, or `Clipboard unavailable; select the log and copy it.`; never a throw.
+**Files touched:** `site/src/components/Playground.astro`, `site/test/island-smoke.test.ts`, `DOCS/STATUS.md`
+**Tests:** smoke asserts the title's shape and the three buttons in order, and a drive case (Clear on an empty log is harmless; Copy script answers in the status span after the clipboard's microtask); ran `bun test` (532 pass), `bun --bun run typecheck` (0 errors), `bun --bun run build`, result pass
+**Next slice:** the surface.
+**Notes:** happy-dom has a `navigator.clipboard` whose `writeText` resolves, so the smoke case waits a tick and accepts either sentence.
+
+## 2026-09-11 — Phase 1 — the surface
+
+**What shipped:** the terminal look: `--term-ok` (`#3f7d5c` light, `#8fd3a8` dark) and `--term-echo` (`#2d2140` light, `#ece4f8` dark) beside the other tokens; `.pg-console` on `--code-bg` with a rounded edge and an inset accent ring while focused; the bar's title in `--muted` and its buttons styled as the dock's toggle; the log wrapping and selectable with a thin scrollbar; `ok` replies in `--term-ok` (`data-ok` on the span), errors in `--danger`, echoes in `--term-echo` with the `>` in `--accent`, comments in `--muted`, page-originated lines at 0.8 opacity; the prompt one line with a bold accent glyph and a borderless transparent input whose caret is the accent. Behaviour: the log follows a new line only when it was at the end (a line and a half's slack), and always on a submit or a handshake; a click anywhere in the panel that is not a button, an input or a selection focuses the prompt; `Escape` clears the line and resets the history cursor.
+**Files touched:** `site/src/styles/global.css`, `site/src/components/Playground.astro`, `DOCS/STATUS.md`
+**Tests:** ran `bun test` (532 pass), `bun --bun run typecheck` (0 errors), `bun --bun run build`, `bun run bundle` (`/playground` 107.6 KB raw / 38.2 KB gzip, ok; +1.5 KB raw over Phase 0 for the bar's handlers, the scroll lock and the focus), result pass
+**Next slice:** the document and the decisions.
+**Notes:** the scroll lock reads `scrollHeight`, `scrollTop` and `clientHeight`, all zero in happy-dom, so the log counts as at its end there and the smoke cases see every line. The colours are the human's to judge in both themes.
