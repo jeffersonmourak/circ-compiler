@@ -41,3 +41,19 @@ One entry per shipped slice, newest last. The plan is `DOCS/PLANS_PROMPT.md`; th
 **Tests:** none (review)
 **Next slice:** Phase 1 slice 1: the tab value.
 **Notes:** decisions 1, 3, 8 and 9 go into `DOCS/decisions/playground.md` with Phase 1's entry, so the doc is written once per phase pair rather than mid-phase.
+
+## 2026-09-11 — Phase 1 — the tab value
+
+**What shipped:** `OutputTab` and `OUTPUT_TABS` gain `'data'`; `normalize` keeps it and still falls an unknown tab back to `preview`.
+**Files touched:** `site/src/utils/playground-store.ts`, `site/test/playground-store.test.ts`, `DOCS/STATUS.md`
+**Tests:** extended the fallback case (`'data'` survives, `'console'` falls back); ran `bun test test/playground-store.test.ts`, result pass
+**Next slice:** rows and edits.
+**Notes:** none.
+
+## 2026-09-11 — Phase 1 — rows and edits
+
+**What shipped:** `site/src/scripts/data-view.ts`: `rowsFor` (one row per root pin, `formatPinValue` in the reader's base, a one-bit signal for the toggle), `editRow` (`parsePinValue` then `session.set`; a parse failure is the renderer's reason and drives nothing), `toggleRow` (unknown → 1 → 0 → 1 on a one-bit input; a bus is told to type), `describeError` (a sentence per protocol code). `site/test/data-view.test.ts` over the session on the stub runtime.
+**Files touched:** `site/src/scripts/data-view.ts`, `site/test/data-view.test.ts`, `DOCS/STATUS.md`
+**Tests:** added five (rows before any drive; the three bases and a half-known value; edits in each base and `?`; refusals drive nothing; the toggle; every code has a sentence); ran `bun test test/data-view.test.ts` (10 pass), typecheck (0 errors), result pass
+**Next slice:** the panel.
+**Notes:** two corrections to the spec, from the renderer's own parser: a typed value is wholly known — `parsePinValue` refuses `x` bits, as the bus dialog always has — so the spec's "`x` bits become mask bits" does not hold and the test asserts the refusal instead; and a half-known value is written `10xx` with no prefix. `data-view.ts` imports the renderer's index for the two value helpers, so the island must import it dynamically (slice 3), never statically.
