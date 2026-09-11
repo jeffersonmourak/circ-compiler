@@ -33,3 +33,35 @@ The entries below record the decisions of the canvas-theme initiative: the site'
 **Rationale.** Every phase cites the design file by line; a reference that is not in the tree cannot be cited. The sprite copy would be a second source of truth for the same bytes.
 
 **Alternatives.** Keeping the handoff outside the repository (uncitable); committing it under `site/` (it is not shipped and must not be).
+
+### The design file wins over its README
+
+**Decision.** Where `DOCS/design/README.md` and `DOCS/design/circ-site-theme.js` disagree, the code is the value ported, and STATUS names it. Four disagreements found: the wire corner radius (README `cell × 0.4`, code `cornerR = cell * 0.6`, taken 0.6), the wire weight (README `max(2, cell × 0.16)`, code `nsWire = max(2, cell × 0.2)`, taken 0.2), the hover ring offset (README `r + 0.32`, code `r + cell * 0.38`), and the sprite halo padding (README `HALO_PAD = 0.18`, code `0.14`). The last two land in Phases 2 and 3.
+
+**Rationale.** The README says the JS file is the source of truth and the sheet was rendered from it; the values a reviewer approved on the sheet are the code's. A number copied from prose would be a value nobody saw drawn.
+
+**Alternatives.** Taking the README's numbers (unrendered); asking per value (four questions for one rule).
+
+### The palettes are the handoff's, verbatim, minus one key
+
+**Decision.** `circ-palette.mjs` holds `nextSiteDark` and `nextSiteLight` from the design file as `colorsDark` and `colorsLight`, 27 keys each: the site's 24 plus `surface`, `spriteInk`, `wireBus` and `busLabel`, minus `grid`. Two semantics moved with them: dark `labelOnComponent` is the pane's ink (`#0c0517`) rather than white, and dark `wireIdle` is `#4c3a6b` rather than `#dee2e6`. A test holds both palettes to the same key set and asserts dark `wireIdle` is darker than `label`.
+
+**Rationale.** `wireBus` and `busLabel` were always read by the renderer and never defined by the site, so every bus badge fell back to the library's `#1971c2`; `surface` and `spriteInk` are what the hollow pins and tinted sprites of the later phases fill with. White on the new HIGH orange is 2.9:1 and the pane's ink is 7.6:1. Idle wires were the brightest thing on the dark pane.
+
+**Alternatives.** Adding only the four keys to the old palettes (keeps the idle-over-active inversion); keeping `grid` for a future background (five initiatives have not wanted one).
+
+### Every stroke follows the cell, and a skin's colour is a palette value
+
+**Decision.** `nsWire(cell) = max(2, cell × 0.2)` is the wire and tail weight, 1.5× for a bus; the terminal dot is 0.24 cells; a name sits 0.16 cells under its box; fonts come from `nsFont(cell, weight)`, 0.6 cells and never under 9px. Two source guards in `circ-skins.test.ts` hold this: no `lineWidth = <digit>` in `circ-skins.mjs`, and every `fillStyle` or `strokeStyle` a skin sets during the golden run is a value of one of the two palettes.
+
+**Rationale.** The site drew every wire and tail at 4px whatever the cell, so they were hairlines at cell 24 and swamped the sprites at cell 10; the NOT label's `−cell × 15` offset was the same class of literal. A colour literal in a skin is a colour the theme flip cannot reach.
+
+**Alternatives.** A per-cell lookup table (three cell sizes today, any tomorrow); guarding by review (the 4px lasted four initiatives).
+
+### The wire hook traces through the renderer, corners included
+
+**Decision.** `drawWire` strokes `traceWire(ctx, wire, cell, { arcRadius: cell * 0.4, cornerRadius: cell * 0.6 })` in `theme.colors[wireColorKey(wireStyleOf(value))]` at `nsWire` weight; an active single bit is stroked twice, first at `+0.5 cell` width and alpha 0.22 as a glow under the colour; a bus gets `nsBusTick`, the slash and bit count on its first horizontal run of two cells or more. A fan-out junction is `drawFanOut` through `fanOutMarker`: a 0.3-cell disc in the wire colour, a 0.13-cell centre cut with `destination-out`, inside `save`/`restore`.
+
+**Rationale.** The renderer's tracer is the one place a jump or a corner is decided; a copy of that loop on the site is what the playground carried before and what silently drifted. The glow as two explicit strokes, not the design harness's patched `ctx.fill`, keeps every context change inside a `save`/`restore` the op-log test can see. The knock-out rather than a background fill is what a transparent canvas needs.
+
+**Alternatives.** Porting `drawWireNextSite` as written (a second tracer); `shadowBlur` per frame for the glow (the design's own performance note rules it out).

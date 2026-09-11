@@ -49,3 +49,35 @@ One entry per shipped slice, newest last. The plan is `DOCS/PLANS_PROMPT.md`; th
 **Tests:** ran `bun test` (428 pass, 0 skip), `bun --bun run typecheck` (0 errors), `bun --bun run build`, `bun run bundle` (every route ok; the lazy theme chunk unchanged at 28.4 KB raw / 17.2 KB gzip), result pass
 **Next slice:** Phase 1 slice 1: the new palettes in `circ-palette.mjs`.
 **Notes:** the `bun add` left the nested `node_modules/vite/node_modules/esbuild` without a working platform binary (its `bin/esbuild` died with signal 9 and `astro check` and `astro build` reported "The service was stopped"); `bun install --force` restored it with no lockfile change. If a gate fails that way after a pin bump, that is the fix. The eleven island-smoke tests that were skipped in earlier runs ran this time because `dist/` existed from the build.
+
+## 2026-09-10 — Phase 1 — the new palettes
+
+**What shipped:** `circ-palette.mjs` swapped to the handoff's `nextSiteDark`/`nextSiteLight` (27 keys, `grid` gone; `surface`, `spriteInk`, `wireBus`, `busLabel` added; dark `labelOnComponent` and `wireIdle` moved). Commit `875558c`.
+**Files touched:** `site/src/utils/circ-palette.mjs`, `site/test/circ-skins.test.ts`, `site/test/fixtures/skins/*.json`
+**Tests:** added `both palettes define the same keys, and none of them is grid`, `idle wires are quieter than active ones in dark mode`; ran `bun test` (430 pass), `bun --bun run typecheck` (0 errors), result pass
+**Next slice:** shared helpers and tails.
+**Notes:** every skin golden changed by colour strings only (checked: the diff's changed lines are all hex or hsl values).
+
+## 2026-09-10 — Phase 1 — cell-relative tails, dots and names
+
+**What shipped:** `nsFont`, `nsWire`, `wireColour`, `nsTail` (1.5× and `wireBus` for a bus port), `nsDot` (0.24 cell), `nsName` replacing `drawTailLine`, `drawTailDot`, `drawNameBelow` in every skin; the NOT label below its box; every skin destructures `inputValues` for its input tails' widths. Commit `bced638`.
+**Files touched:** `site/src/utils/circ-skins.mjs`, `site/test/circ-skins.test.ts`, `site/test/fixtures/skins/*.json`
+**Tests:** added `no skin sets a literal stroke width`, `every colour a skin sets comes from the palette`, `a bus tail is heavier and in the bus colour`, `the NOT gate names itself below its box, like every other part`; ran `bun test` (434 pass), typecheck (0 errors), result pass
+**Next slice:** the wire hook.
+**Notes:** the remaining fonts inside pins, gates and boxes are still the old per-skin strings; they go with each skin's rewrite in Phases 2–4.
+
+## 2026-09-10 — Phase 1 — the wire hook
+
+**What shipped:** `drawWire` on `traceWire` with `{ arcRadius: 0.4 cell, cornerRadius: 0.6 cell }`, `nsWire` weight, 1.5× `wireBus` for a bus with `nsBusTick`, a two-stroke glow under an active single bit; `renderer-pin.test.ts` matches the options-object call. Commit `a46e4df`.
+**Files touched:** `site/src/utils/circ-skins.mjs`, `site/test/circ-skins.test.ts`, `site/test/fixtures/skins/wire.json`, `site/test/renderer-pin.test.ts`
+**Tests:** added `the wire hook rounds corners, keeps them across a crossing, and strokes a bus heavier` (idle, crossed, active, bus, half-defined bus); ran `bun test` (435 pass), typecheck (0 errors), result pass
+**Next slice:** the fan-out ring.
+**Notes:** the Phase 1 spec's `TODO(phase1)` on `nsGlow` is resolved as two explicit strokes; the right-to-left hop case is covered by the renderer's own tracer test from Phase 0, so no site case was added.
+
+## 2026-09-10 — Phase 1 — the fan-out ring
+
+**What shipped:** `drawFanOut` wired as `fanOutMarker`: 0.3-cell disc in the wire colour, 0.13-cell `destination-out` knock-out, inside `save`/`restore`. Commit (see `git log`, "a fan-out junction is a ring the pane shows through").
+**Files touched:** `site/src/utils/circ-skins.mjs`, `site/test/circ-skins.test.ts`, `site/test/fixtures/skins/fanout.json`
+**Tests:** added `fan-out: a ring in the wire colour with the centre knocked out to alpha` (three cells × three signals × two widths, colour per case, composite mode restored last); ran `bun test` (436 pass), typecheck (0 errors), `bun --bun run build`, `bun run bundle` (every route ok; theme chunk 29.9 KB raw / 17.8 KB gzip, up 1.5 KB raw on the wire and junction code), result pass
+**Next slice:** gallery review (the human): `slice-and-concat`, `four-bit-adder`, `sr-latch`, `fan-out` in both modes at `cell` 10, 14, 24.
+**Notes:** the first `UPDATE_GOLDENS` run of the fan-out test died on a float-rounding assertion halfway through the loop and left `fanout.json` partial; the recorder rounds to three decimals and an expectation must round the same way. Decisions 1 and 2 recorded in `DOCS/decisions/canvas-theme.md`, with the four README/file disagreements now known.
