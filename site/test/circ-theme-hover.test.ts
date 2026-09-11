@@ -45,29 +45,33 @@ describe('circ-theme hover', () => {
   });
 
   test('the ring is drawn once, by the canvas, through the highlight hook', () => {
-    // The theme hands the canvas its ring; no skin draws its own. Before
+    // The theme hands the canvas its mark; no skin draws its own. Before
     // this, five skins each drew a ring and four kinds drew none, and a
     // reader pointing at a rom in the editor saw nothing light up.
-    expect(source).toMatch(/highlight:\s*\(\{[^}]*\}\)\s*=>\s*drawHoverRing\(/);
+    expect(source).toMatch(/highlight:\s*drawHighlight,/);
     for (const name of registeredSkins()) {
-      expect(`${name}: ${skinBody(name).includes('drawHoverRing(')}`).toBe(`${name}: false`);
+      const body = skinBody(name);
+      expect(`${name}: ${body.includes('drawHighlight(') || body.includes('nsHoverRing(')}`).toBe(`${name}: false`);
     }
-    // Exactly one caller of the helper in the whole file: the hook.
-    expect([...source.matchAll(/drawHoverRing\(ctx/g)]).toHaveLength(1);
+    // Exactly one caller of the pin ring in the whole file: the hook.
+    expect([...source.matchAll(/(?<!function )nsHoverRing\(ctx/g)]).toHaveLength(1);
   });
 
-  test('a skin may still react to hovered on its own, and the input pin does', () => {
-    // The ring is uniform; a pin changing its own fill is an extra the canvas
-    // leaves open. Both paths stay, which is what kept this skin unchanged.
-    const body = skinBody('drawInputPin');
-    expect(body).toMatch(/if \(hovered\)/);
-    expect(body).toContain('theme.colors.inputHover');
+  test('no skin changes its own look on hover', () => {
+    // Hover used to swap an input pin's fill for yellow, which hid the value
+    // the reader was about to toggle. The mark is a ring outside the pin now,
+    // and the fill says the state whether or not the pointer is there.
+    for (const name of registeredSkins()) {
+      const body = skinBody(name);
+      expect(`${name}: ${/\bhovered\b/.test(body.slice(body.indexOf('=>')))}`).toBe(`${name}: false`);
+      expect(`${name}: ${body.includes('inputHover')}`).toBe(`${name}: false`);
+    }
   });
 
-  test('the ring helper uses the hover colour and restores the context', () => {
-    const helper = skinBody('drawHoverRing');
-    expect(helper).toContain('theme.colors.inputHover');
-    // A skin that leaves stroke state behind corrupts everything drawn after.
+  test('the highlight hook uses the hover colour and restores the context', () => {
+    const helper = skinBody('drawHighlight');
+    expect(helper).toContain('t.inputHover');
+    // A hook that leaves stroke state behind corrupts everything drawn after.
     expect(helper).toContain('ctx.save()');
     expect(helper).toContain('ctx.restore()');
   });

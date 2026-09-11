@@ -239,34 +239,49 @@ function spriteForSubcircuit(type) {
 }
 
 /**
- * A ring around a component's box, drawn when the pointer is over it or when
- * the host highlighted it — the canvas feeds both through the same `hovered`
- * flag, so one branch covers an editor cursor and a mouse alike.
+ * The mark on a hovered or host-highlighted component, drawn by the canvas
+ * after every skin — the pointer and an editor cursor come through the same
+ * hook. A pin gets a circle outside its own, so the state it shows stays
+ * visible under the mark; every other kind gets a ring around its box.
  *
- * A ring rather than a fill: every skin below already uses fill and stroke to
- * say what the component IS and what it is DOING, and a highlight must not
+ * A ring rather than a fill: every skin already uses fill and stroke to say
+ * what the component IS and what it is DOING, and a highlight must not
  * overwrite either.
  */
-const drawHoverRing = (ctx, cell, component, theme) => {
-  const pad = cell * 0.18;
-  const x = component.x * cell - pad;
-  const y = component.y * cell - pad;
-  const w = component.width * cell + pad * 2;
-  const h = component.height * cell + pad * 2;
-  const r = Math.min(cell * 0.4, w / 2, h / 2);
-  ctx.save();
-  ctx.strokeStyle = theme.colors.inputHover;
-  ctx.lineWidth = Math.max(1, cell * 0.09);
+function nsHoverRing(ctx, cell, cx, cy, r, t) {
+  ctx.strokeStyle = t.inputHover;
+  ctx.lineWidth = Math.max(2, cell * 0.13);
   ctx.beginPath();
-  if (typeof ctx.roundRect === 'function') ctx.roundRect(x, y, w, h, r);
-  else ctx.rect(x, y, w, h);
+  ctx.arc(cx, cy, r + cell * 0.38, 0, Math.PI * 2);
   ctx.stroke();
+}
+
+const drawHighlight = ({ ctx, cell, component, theme }) => {
+  const t = theme.colors;
+  const kind = component.kind.tag === 'primitive' ? component.kind.kind : null;
+  const w = component.width * cell;
+  const h = component.height * cell;
+  ctx.save();
+  if (kind === ComponentKind.InputPin || kind === ComponentKind.OutputPin) {
+    nsHoverRing(ctx, cell, component.x * cell + w / 2, component.y * cell + h / 2, pinRadius(cell, w, h), t);
+  } else {
+    const pad = cell * 0.18;
+    const x = component.x * cell - pad;
+    const y = component.y * cell - pad;
+    const r = Math.min(cell * 0.4, (w + pad * 2) / 2, (h + pad * 2) / 2);
+    ctx.strokeStyle = t.inputHover;
+    ctx.lineWidth = Math.max(1, cell * 0.09);
+    ctx.beginPath();
+    if (typeof ctx.roundRect === 'function') ctx.roundRect(x, y, w + pad * 2, h + pad * 2, r);
+    else ctx.rect(x, y, w + pad * 2, h + pad * 2);
+    ctx.stroke();
+  }
   ctx.restore();
 };
 
 /* ───── skins ──────────────────────────────────────────────────────── */
 
-const drawInputPin = ({ ctx, cell, component, outputSignal, hovered, theme }) => {
+const drawInputPin = ({ ctx, cell, component, outputSignal, theme }) => {
   const t = theme.colors;
   const x = component.x * cell;
   const y = component.y * cell;
@@ -295,13 +310,15 @@ const drawInputPin = ({ ctx, cell, component, outputSignal, hovered, theme }) =>
       on ? t.labelOnComponent : t.label
     );
   }
-  let fill = on ? t.inputOn : t.inputOff;
-  let border = on ? t.inputBorderOn : t.inputBorderOff;
-  if (hovered) {
-    fill = theme.colors.inputHover;
-    border = theme.colors.inputHover;
-  }
-  nsPinCircle(ctx, cell, x, y, w, h, on, undef_, fill, border, t, component.name);
+  // Hover is the canvas's ring, drawn after this through the highlight hook;
+  // the fill stays what the state says, so the value about to be toggled is
+  // never hidden under the mark.
+  nsPinCircle(
+    ctx, cell, x, y, w, h, on, undef_,
+    on ? t.inputOn : t.inputOff,
+    on ? t.inputBorderOn : t.inputBorderOff,
+    t, component.name
+  );
   nsDot(ctx, cell, tailEdge, portY, outputSignal, t);
 };
 
@@ -774,5 +791,5 @@ export const sharedRenderers = {
   // The ring around a hovered or host-highlighted component, drawn by the
   // canvas after every skin. One hook, every kind — including the four above
   // that used to fall through to defaults that never read `hovered`.
-  highlight: ({ ctx, cell, component, theme }) => drawHoverRing(ctx, cell, component, theme),
+  highlight: drawHighlight,
 };

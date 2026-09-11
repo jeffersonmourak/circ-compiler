@@ -461,14 +461,29 @@ describe('circ-skins', () => {
     flush(store);
   });
 
-  test('highlight: the ring for every kind draws as the golden says', () => {
+  test('highlight: a circle for a pin, a rounded box for every other kind, as the golden says', () => {
     const theme = themeWith(true);
+    const r3 = (n: number) => Math.round(n * 1000) / 1000;
     for (const kind of KINDS) for (const cell of CELLS) {
       const c = component(kind, 1);
       const { ctx, ops } = recordingContext(cell);
       theme.highlight!({ ctx, theme, cell, component: c, reason: 'hover' });
       expect(balanced(ops)).toBe(true);
       checkGolden('highlight', `${kind}.c${cell}`, ops, store);
+      expect(ops.find((op) => op[0] === 'set' && op[1] === 'strokeStyle')![2]).toBe(colorsDark.inputHover);
+      const w = c.width * cell, h = c.height * cell;
+      if (kind === 'input_pin' || kind === 'output_pin') {
+        // Outside the pin's own circle by 0.38 cells, so the state stays visible.
+        const arc = ops.find((op) => op[0] === 'arc')!;
+        expect(arc).toBeDefined();
+        expect(ops.some((op) => op[0] === 'roundRect')).toBe(false);
+        expect(arc[3]).toBe(r3(Math.min(w, h) / 2 - 0.08 * cell + 0.38 * cell));
+      } else {
+        const box = ops.find((op) => op[0] === 'roundRect')!;
+        expect(box).toBeDefined();
+        expect(ops.some((op) => op[0] === 'arc')).toBe(false);
+        expect(box[3]).toBe(r3(w + 0.36 * cell));
+      }
     }
     flush(store);
   });
