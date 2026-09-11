@@ -115,7 +115,7 @@ describe('app layout', () => {
     // than tracks. `island-smoke` checks tracks against the rendered DOM,
     // which is the real invariant; this is the build-free half of it, and it
     // runs in every slice rather than only after `bun --bun run build`.
-    for (const [container, fills] of [['main', '.pg'], ['.pg', '.pg-panes']] as const) {
+    for (const [container, fills] of [['main', '.pg'], ['.pg', '.pg-body']] as const) {
       const block = declarations(`[data-layout='app'] ${container} {`);
       expect(block).toContain('min-height: 0');
       const child = declarations(`[data-layout='app'] ${fills} {`);
@@ -155,6 +155,10 @@ describe('app layout', () => {
     const pg = block.slice(0, block.indexOf('}'));
     expect(pg).toContain('grid-template-rows: 48px minmax(0, 1fr) 24px');
     expect(pg).toContain('min-height: 0');
+    const bodyAt = block.indexOf("[data-layout='app'] .pg-body {");
+    const body = block.slice(bodyAt, block.indexOf('}', bodyAt));
+    expect(body).toContain('min-height: 0');
+    expect(body).toContain('grid-template-columns: var(--pg-source-w, 480px) 1px minmax(0, 1fr)');
   });
 
   test('the viewport lock has a 100vh fallback before 100dvh', () => {

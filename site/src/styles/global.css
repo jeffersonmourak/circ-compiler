@@ -40,6 +40,8 @@
   --pane-bg: #f4eefb;
   --pane-label-bg: #ebe4f5;
   --danger: #a83737;
+  /* The canvas region's dot grid: --fg at the design file's 14% (18% dark). */
+  --pg-dot: rgba(68, 56, 86, 0.14);
 
   --font-prose: 'Ronzino', ui-sans-serif, system-ui, -apple-system, "Segoe UI",
     Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -72,6 +74,7 @@
   --pane-bg: #0c0517;
   --pane-label-bg: #13091f;
   --danger: #ff6b8a;
+  --pg-dot: rgba(192, 171, 218, 0.18);
 
   color-scheme: dark;
 }
@@ -554,23 +557,40 @@ hr {
   font-size: 0.9rem;
 }
 .pg-banner[hidden] { display: none; }
-.pg-panes {
+.pg-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 1rem;
   align-items: stretch;
 }
 @media (max-width: 800px) {
-  .pg-panes { grid-template-columns: 1fr; }
+  .pg-body { grid-template-columns: 1fr; }
 }
+/* The two regions of the bench: the source on the pane surface, the canvas on
+   the page's own with a dot grid, and no border on either — the hairline
+   between them is the divider. */
 .pg-editor, .pg-output {
-  background: var(--pane-bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   min-height: 24rem;
+  min-width: 0;
+}
+.pg-editor { background: var(--pane-bg); }
+.pg-output {
+  position: relative;
+  background: var(--bg);
+  /* The dot grid sits under the region's content, never over it. */
+  isolation: isolate;
+}
+.pg-output::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: radial-gradient(var(--pg-dot) 1px, transparent 1px);
+  background-size: 18px 18px;
 }
 .pg-pane-label {
   font-family: var(--font-mono);
@@ -1730,32 +1750,29 @@ a.install-line:hover {
    rather than blanked — cleared only when the file set itself changes. */
 .pg-output[data-stale] { opacity: 0.55; transition: opacity 120ms ease; }
 
-/* The workspace sidebar: a sibling of the two panes, never a track inside
-   them. Static appearance here; the workbench geometry is in the app block. */
+/* The workspace tree as a card under the breadcrumb (design file 3a: 340px,
+   the pane surface, an 8px radius and a deep shadow). Absolutely positioned
+   in the body, so opening it moves nothing else on the bench. Phase 4 draws
+   the switcher inside this card; until then it is today's tree. */
 .pg-ws {
+  position: absolute;
+  top: 8px;
+  left: 82px;
+  z-index: 20;
+  width: 340px;
+  max-width: calc(100% - 16px);
+  max-height: calc(100% - 16px);
   background: var(--pane-bg);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
   overflow: hidden;
   display: flex;
   flex-direction: column;
   min-width: 0;
 }
-.pg-ws-toggle {
-  width: 100%;
-  text-align: left;
-  border: 0;
-  border-bottom: 1px solid var(--border);
-  background: var(--pane-label-bg);
-  color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  padding: 0.35rem 0.6rem;
-  cursor: pointer;
-}
-.pg-ws-toggle:hover { color: var(--fg); }
+.pg-ws[hidden] { display: none; }
 .pg-ws-body { overflow-y: auto; padding: 0.35rem 0; flex: 1; min-height: 0; }
-.pg-ws[data-collapsed] .pg-ws-body { display: none; }
 /* ---------- the workspace explorer ----------
    One tree, three levels. Indentation comes from a --depth custom property the
    island sets per row, so a level is one number rather than a selector per
@@ -1888,15 +1905,15 @@ a.install-line:hover {
 .pg-ws-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .pg-ws-empty { color: var(--muted); font-size: 0.72rem; padding: 0.2rem 0.4rem 0.35rem 1.2rem; }
 .pg-ws-new {
-  position: absolute;
-  top: 0.15rem;
-  right: 0.3rem;
   border: 0;
+  border-top: 1px solid var(--border);
   background: none;
-  color: var(--muted);
-  font-size: 0.95rem;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
   line-height: 1;
-  padding: 0.15rem 0.3rem;
+  text-align: left;
+  padding: 0.55rem 0.75rem;
   cursor: pointer;
 }
 .pg-ws-new:hover { color: var(--fg); }
@@ -2062,42 +2079,36 @@ a.install-line:hover {
   50% { opacity: 0.35; }
 }
 
-[data-layout='app'] .pg-panes {
+[data-layout='app'] .pg-body {
   /* The frame's body row; it must be allowed to shrink to the track. */
   min-height: 0;
-  /* Sidebar, then the editor's share of what the two panes have left after the
-     divider itself, so the tracks always sum to exactly 100%. */
-  --pg-split-w: 8px;
-  --pg-ws-w: 13rem;
-  grid-template-columns:
-    var(--pg-ws-w)
-    minmax(0, calc(var(--pg-split-main, 0.5) * (100% - var(--pg-ws-w) - var(--pg-split-w))))
-    var(--pg-split-w)
-    minmax(0, 1fr);
+  /* The card under the breadcrumb is positioned against this. */
+  position: relative;
+  /* Source · hairline · canvas (design file: `480px 1px minmax(0, 1fr)`). The
+     source column is the reader's splitter, in pixels. */
+  grid-template-columns: var(--pg-source-w, 480px) 1px minmax(0, 1fr);
   gap: 0;
 }
-[data-layout='app'] .pg-panes:has(.pg-ws[data-collapsed]) { --pg-ws-w: 7.5rem; }
-[data-layout='app'] .pg-ws { min-height: 0; border-radius: 6px 0 0 6px; border-right: 0; }
-[data-layout='app'] .pg-editor { border-radius: 0; }
+/* The hairline is the divider. One pixel wide in the grid; its hit target is
+   a wider invisible band, so it can still be grabbed. */
 .pg-splitter {
   align-self: stretch;
-  background: transparent;
+  background: var(--border);
   border: 0;
   cursor: col-resize;
   /* Or a touch drag is stolen by the page's own scrolling. */
   touch-action: none;
   position: relative;
+  z-index: 10;
+  transition: background 120ms ease;
 }
 .pg-splitter::before {
   content: '';
   position: absolute;
-  inset: 0 3px;
-  background: var(--border);
-  border-radius: 1px;
-  transition: background 120ms ease;
+  inset: 0 -4px;
 }
-.pg-splitter:hover::before,
-.pg-splitter:focus-visible::before { background: var(--accent); }
+.pg-splitter:hover,
+.pg-splitter:focus-visible { background: var(--accent); }
 .pg-splitter:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .pg-splitter[hidden] { display: none; }
 [data-layout='app'] .pg-editor,
@@ -2127,11 +2138,10 @@ a.install-line:hover {
   [data-layout='app'] .pg-output {
     min-height: 60vh;
   }
-  /* Stacked: the sidebar becomes a band above the panes rather than a column. */
-  [data-layout='app'] .pg-panes { grid-template-columns: 1fr; }
-  [data-layout='app'] .pg-ws { border-radius: 6px; border-right: 1px solid var(--border); }
-  [data-layout='app'] .pg-ws-body { max-height: 12rem; }
-  [data-layout='app'] .pg-editor { border-radius: 6px; }
+  /* Stacked: the regions become bands, and the card spans the width. */
+  [data-layout='app'] .pg-body { grid-template-columns: 1fr; }
+  [data-layout='app'] .pg-ws { left: 8px; right: 8px; width: auto; max-height: 24rem; }
+  [data-layout='app'] .pg-ws-body { max-height: 20rem; }
 }
 
 /* "Open in playground" — a plain link, no script, on the gallery

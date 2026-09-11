@@ -4,11 +4,15 @@
 // test can reach: the DOM half is pointer capture and attribute writes, which
 // no headless runner can exercise.
 //
-// The rendered position is one CSS custom property holding a unitless fraction
-// in (0, 1) — the first pane's share of the space left over after the divider's
-// own width. One grid rule reads it. A percentage that ignored the divider
-// would sum past 100% and, under the app layout's `overflow: hidden` body,
-// clip invisibly rather than raise a scrollbar.
+// The rendered position is one CSS custom property, and one grid rule reads
+// it. In the ratio unit it holds a unitless fraction in (0, 1) — the first
+// pane's share of the space left over after the divider's own width. A
+// percentage that ignored the divider would sum past 100% and, under the app
+// layout's `overflow: hidden` body, clip invisibly rather than raise a
+// scrollbar. In the pixel unit it holds the first pane's width in CSS pixels,
+// which is how the bench's source column is drawn (design file: `480px 1px
+// minmax(0, 1fr)`): the reader's intent is a width, and a narrower window
+// borrows from it rather than overwriting it.
 
 export interface SplitterBounds {
   min: number;
@@ -23,12 +27,21 @@ export interface SplitterOptions {
   property?: string;
   /** The divider's own orientation: 'vertical' is a bar between left and right. */
   orientation?: 'vertical' | 'horizontal';
-  /** Hard minimum for either pane, in px. */
+  /** What the property holds: a share of the container, or the first pane's
+   *  width in pixels. `initial`, `onChange` and `onCommit` speak that unit. */
+  unit?: 'ratio' | 'px';
+  /** Hard minimum for either pane, in px (the ratio unit). */
   minPanePx?: number;
   minRatio?: number;
   maxRatio?: number;
   step?: number;
   coarseStep?: number;
+  /** The pixel unit's bounds: the first pane never below `minPx`, the second
+   *  never below `maxReservePx`. */
+  minPx?: number;
+  maxReservePx?: number;
+  stepPx?: number;
+  coarseStepPx?: number;
   initial?: number;
   label?: string;
   labels?: [string, string];
@@ -53,14 +66,71 @@ export interface SplitterHandle {
 const DEFAULTS = {
   property: '--pg-split-main',
   orientation: 'vertical' as const,
+  unit: 'ratio' as const,
   minPanePx: 240,
   minRatio: 0.2,
   maxRatio: 0.8,
   step: 0.02,
   coarseStep: 0.1,
+  minPx: 320,
+  maxReservePx: 480,
+  stepPx: 16,
+  coarseStepPx: 64,
   initial: 0.5,
   labels: ['editor', 'output'] as [string, string],
 };
+
+// ---------------------------------------------------------------------------
+// The pixel unit.
+// ---------------------------------------------------------------------------
+
+export function clampPx(px: number, bounds: SplitterBounds): number {
+  if (!Number.isFinite(px)) return bounds.min;
+  return Math.min(bounds.max, Math.max(bounds.min, Math.round(px)));
+}
+
+/**
+ * The usable widths at this container size: from `minPx` up to whatever
+ * leaves `maxReservePx` for the far pane. A container too narrow for both
+ * collapses the range to `minPx`, so the far pane is what gives, and the
+ * bounds never invert. A zero size (nothing laid out yet) is not a narrow
+ * window: the intent renders as asked, and the ResizeObserver re-clamps once
+ * there is a size to clamp to — so the first paint is the reader's width, not
+ * the minimum.
+ */
+export function pxBounds(sizePx: number, o: { minPx: number; maxReservePx: number }): SplitterBounds {
+  if (!Number.isFinite(sizePx) || sizePx <= 0) return { min: o.minPx, max: Number.POSITIVE_INFINITY };
+  const max = Math.floor(sizePx - o.maxReservePx);
+  return max < o.minPx ? { min: o.minPx, max: o.minPx } : { min: o.minPx, max };
+}
+
+/** Where a pointer sits, in pixels from the container's near edge. */
+export function pxFromPointer(startPx: number, clientPx: number): number {
+  const raw = clientPx - startPx;
+  return Number.isFinite(raw) ? Math.max(0, raw) : 0;
+}
+
+/** The pixel twin of `stepRatio`: the same keys, the same `null` for a key
+ *  that is not part of the contract. */
+export function stepPx(
+  px: number,
+  ev: { key: string; shiftKey?: boolean },
+  o: {
+    orientation: 'vertical' | 'horizontal';
+    stepPx: number;
+    coarseStepPx: number;
+    bounds: SplitterBounds;
+  },
+): number | null {
+  const delta = ev.shiftKey ? o.coarseStepPx : o.stepPx;
+  const decrease = o.orientation === 'vertical' ? 'ArrowLeft' : 'ArrowUp';
+  const increase = o.orientation === 'vertical' ? 'ArrowRight' : 'ArrowDown';
+  if (ev.key === decrease) return clampPx(px - delta, o.bounds);
+  if (ev.key === increase) return clampPx(px + delta, o.bounds);
+  if (ev.key === 'Home') return o.bounds.min;
+  if (ev.key === 'End') return o.bounds.max;
+  return null;
+}
 
 export function clampRatio(ratio: number, bounds: SplitterBounds): number {
   if (!Number.isFinite(ratio)) return bounds.min;
@@ -148,17 +218,26 @@ export function createSplitter(options: SplitterOptions): SplitterHandle {
     return o.orientation === 'vertical' ? rect.left : rect.top;
   };
 
+  const px = o.unit === 'px';
+  const boundsAt = (size: number): SplitterBounds => (px ? pxBounds(size, o) : effectiveBounds(size, o));
+  const clamp = (value: number, b: SplitterBounds): number => (px ? clampPx(value, b) : clampRatio(value, b));
+
   let intent = o.initial;
-  let bounds = effectiveBounds(sizeOf(), o);
-  let rendered = clampRatio(intent, bounds);
+  let bounds = boundsAt(sizeOf());
+  let rendered = clamp(intent, bounds);
   let dragFrom: number | null = null;
   let pointerId: number | null = null;
 
   const render = () => {
-    bounds = effectiveBounds(sizeOf(), o);
-    rendered = clampRatio(intent, bounds);
-    container.style.setProperty(o.property, String(rendered));
-    const aria = ariaValues(rendered, bounds, o.labels);
+    const size = sizeOf();
+    bounds = boundsAt(size);
+    rendered = clamp(intent, bounds);
+    container.style.setProperty(o.property, px ? `${rendered}px` : String(rendered));
+    // The accessible value is a share of the container in either unit, so a
+    // screen reader hears the same sentence whatever the property holds.
+    const aria = px && size > 0
+      ? ariaValues(rendered / size, { min: bounds.min / size, max: Math.min(1, bounds.max / size) }, o.labels)
+      : ariaValues(px ? 0 : rendered, px ? { min: 0, max: 1 } : bounds, o.labels);
     separator.setAttribute('aria-valuenow', String(aria.now));
     separator.setAttribute('aria-valuemin', String(aria.min));
     separator.setAttribute('aria-valuemax', String(aria.max));
@@ -185,7 +264,8 @@ export function createSplitter(options: SplitterOptions): SplitterHandle {
   const onPointerMove = (e: PointerEvent) => {
     if (dragFrom === null || e.pointerId !== pointerId) return;
     const client = o.orientation === 'vertical' ? e.clientX : e.clientY;
-    apply(clampRatio(ratioFromPointer(startOf(), sizeOf(), client), bounds), false);
+    const raw = px ? pxFromPointer(startOf(), client) : ratioFromPointer(startOf(), sizeOf(), client);
+    apply(clamp(raw, bounds), false);
   };
 
   const endDrag = (commit: boolean) => {
@@ -211,12 +291,9 @@ export function createSplitter(options: SplitterOptions): SplitterHandle {
       endDrag(false);
       return;
     }
-    const next = stepRatio(rendered, e, {
-      orientation: o.orientation,
-      step: o.step,
-      coarseStep: o.coarseStep,
-      bounds,
-    });
+    const next = px
+      ? stepPx(rendered, e, { orientation: o.orientation, stepPx: o.stepPx, coarseStepPx: o.coarseStepPx, bounds })
+      : stepRatio(rendered, e, { orientation: o.orientation, step: o.step, coarseStep: o.coarseStep, bounds });
     if (next === null) return; // not ours: the key keeps its browser meaning
     e.preventDefault();
     apply(next, true);

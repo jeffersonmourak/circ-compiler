@@ -54,7 +54,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     <div class="pg-nav-left">
       <a class="pg-brand" href={url('/')}>circ</a>
       {/* The breadcrumb names the open project; Phase 4 makes it the switcher. */}
-      <button type="button" class="pg-crumb">
+      <button type="button" class="pg-crumb" aria-expanded="false" aria-controls="pg-ws">
         <span class="pg-crumb-group">{initial.group} /</span>
         <span class="pg-crumb-name">{initial.label}</span>
         <span class="pg-crumb-chevron" aria-hidden="true">▾</span>
@@ -83,18 +83,12 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       <ThemeToggle />
     </div>
   </header>
-  <div class="pg-panes">
-    <!-- A sibling of the two panes, never a track inside them: the divider's
-         arithmetic, its ResizeObserver and its aria-controls all name exactly
-         the editor and output panes. -->
-    <nav class="pg-ws" aria-label="Workspace">
-      <button
-        type="button"
-        class="pg-ws-toggle"
-        aria-expanded="true"
-        aria-controls="pg-ws-body"
-      >Workspace</button>
-      <button type="button" class="pg-ws-new" aria-label="New project">+</button>
+  <div class="pg-body">
+    <!-- The workspace tree, as a card under the breadcrumb until Phase 4
+         draws the switcher. Absolutely positioned, so it is never a track of
+         the body grid: the divider's arithmetic, its ResizeObserver and its
+         aria-controls all name exactly the two regions. -->
+    <nav class="pg-ws" id="pg-ws" aria-label="Workspace" hidden>
       <div class="pg-ws-body" id="pg-ws-body">
         {/* The pre-hydration fallback: every project, flat, as ordinary links
             into the picker. The island replaces this whole subtree with a real
@@ -120,6 +114,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
             written back to the combined source. */}
         <p class="pg-ws-error" role="alert"></p>
       </div>
+      <button type="button" class="pg-ws-new" aria-label="New project">+ New project</button>
     </nav>
     <section class="pg-editor" id="pg-pane-editor">
       <div class="pg-banner" hidden></div>
@@ -541,7 +536,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     // blank the output pane.
     const tabs = Array.from(el.querySelectorAll<HTMLButtonElement>('.pg-tabs [role=tab]'));
     const wsRoot = el.querySelector<HTMLElement>('.pg-ws')!;
-    const wsToggle = el.querySelector<HTMLButtonElement>('.pg-ws-toggle')!;
+    const crumb = el.querySelector<HTMLButtonElement>('.pg-crumb')!;
     const wsBody = el.querySelector<HTMLElement>('.pg-ws-body')!;
     const wsNew = el.querySelector<HTMLButtonElement>('.pg-ws-new')!;
     const wsError = el.querySelector<HTMLElement>('.pg-ws-error')!;
@@ -1674,11 +1669,38 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
 
     wsNew.addEventListener('click', newProject);
 
-    wsToggle.addEventListener('click', () => {
-      const open = wsToggle.getAttribute('aria-expanded') === 'true';
-      wsToggle.setAttribute('aria-expanded', String(!open));
-      wsRoot.toggleAttribute('data-collapsed', open);
-    });
+    // ---- the workspace card ----
+    // The tree opens under the breadcrumb and closes on Escape, on a click
+    // outside it, or on the breadcrumb again; focus goes back to the button
+    // it came from. Nothing else on the bench moves when it opens.
+    const wsOpen = () => crumb.getAttribute('aria-expanded') === 'true';
+    function setWsOpen(open: boolean, opts: { focus?: boolean } = {}) {
+      if (open === wsOpen()) return;
+      crumb.setAttribute('aria-expanded', String(open));
+      wsRoot.hidden = !open;
+      if (open) {
+        document.addEventListener('pointerdown', onOutsidePointer, true);
+        document.addEventListener('keydown', onWsKey, true);
+        if (opts.focus !== false) focusNode(treeFocus);
+      } else {
+        document.removeEventListener('pointerdown', onOutsidePointer, true);
+        document.removeEventListener('keydown', onWsKey, true);
+        if (opts.focus !== false) crumb.focus();
+      }
+    }
+    function onOutsidePointer(e: Event) {
+      const t = e.target as Node | null;
+      if (t && (wsRoot.contains(t) || crumb.contains(t))) return;
+      setWsOpen(false, { focus: false });
+    }
+    function onWsKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      // A rename input owns its own Escape; the card closes on the next one.
+      if ((e.target as HTMLElement | null)?.classList.contains('pg-ws-input')) return;
+      e.preventDefault();
+      setWsOpen(false);
+    }
+    crumb.addEventListener('click', () => setWsOpen(!wsOpen()));
 
     // ---- share ----
     /** Copy `text`, or fall back to a focused read-only input the reader can
@@ -2544,16 +2566,25 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     }
 
     // ---- the pane divider ----
-    const panes = el.querySelector<HTMLElement>('.pg-panes')!;
+    // The source column's width in pixels (design file: `480px 1px
+    // minmax(0, 1fr)`). Not persisted yet: the envelope's `ratios` accepts
+    // only a fraction, and Phase 1 moves the schema once, to `sourceWidth`.
+    const body = el.querySelector<HTMLElement>('.pg-body')!;
     const separator = el.querySelector<HTMLElement>('.pg-splitter')!;
     const splitter = createSplitter({
-      container: panes,
+      container: body,
       separator,
-      initial: store.envelope.layout.ratios.main ?? 0.5,
-      labels: ['editor', 'output'],
+      unit: 'px',
+      property: '--pg-source-w',
+      initial: 480,
+      minPx: 320,
+      maxReservePx: 480,
+      stepPx: 16,
+      coarseStepPx: 64,
+      labels: ['source', 'canvas'],
       // Only a drag, a key or a double-click persists; a window resize
       // re-clamps what is rendered and never commits.
-      onCommit: (ratio) => store.update((draft) => { draft.layout.ratios.main = ratio; }),
+      onCommit: () => { /* Phase 1: draft.layout.sourceWidth */ },
     });
 
     // Below the breakpoint the panes stack, so the divider means nothing: it

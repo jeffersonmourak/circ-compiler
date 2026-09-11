@@ -4,9 +4,13 @@
 import { describe, expect, test } from 'bun:test';
 import {
   ariaValues,
+  clampPx,
   clampRatio,
   effectiveBounds,
+  pxBounds,
+  pxFromPointer,
   ratioFromPointer,
+  stepPx,
   stepRatio,
   type SplitterBounds,
 } from '../src/scripts/splitter.ts';
@@ -117,5 +121,50 @@ describe('splitter', () => {
       max: 50,
       text: 'a 50%, b 50%',
     });
+  });
+
+  // The pixel unit: the bench's source column.
+  const pxOpts = { minPx: 320, maxReservePx: 480 };
+
+  test('clampPx holds the bounds and rounds to whole pixels', () => {
+    const b: SplitterBounds = { min: 320, max: 960 };
+    expect(clampPx(100, b)).toBe(320);
+    expect(clampPx(2000, b)).toBe(960);
+    expect(clampPx(480.4, b)).toBe(480);
+    // A NaN width must not reach a CSS custom property.
+    expect(clampPx(Number.NaN, b)).toBe(320);
+  });
+
+  test('pixel bounds reserve the far pane', () => {
+    // 1440 wide: the source may grow until 480px is left for the canvas.
+    expect(pxBounds(1440, pxOpts)).toEqual({ min: 320, max: 960 });
+    // Too narrow for both minimums: the range collapses to the source's, so
+    // the canvas is what gives, and the bounds never invert.
+    expect(pxBounds(700, pxOpts)).toEqual({ min: 320, max: 320 });
+    expect(pxBounds(800, pxOpts)).toEqual({ min: 320, max: 320 });
+    expect(pxBounds(801, pxOpts)).toEqual({ min: 320, max: 321 });
+    // Nothing laid out yet: the intent stands, until the observer sees a size.
+    expect(pxBounds(0, pxOpts)).toEqual({ min: 320, max: Number.POSITIVE_INFINITY });
+    expect(pxBounds(Number.NaN, pxOpts)).toEqual({ min: 320, max: Number.POSITIVE_INFINITY });
+    expect(clampPx(480, pxBounds(0, pxOpts))).toBe(480);
+  });
+
+  test('pxFromPointer is the distance from the near edge, never negative', () => {
+    expect(pxFromPointer(100, 580)).toBe(480);
+    expect(pxFromPointer(100, 40)).toBe(0);
+    expect(pxFromPointer(100, Number.NaN)).toBe(0);
+  });
+
+  test('the keyboard contract, pixels', () => {
+    const o = { orientation: 'vertical' as const, stepPx: 16, coarseStepPx: 64, bounds: { min: 320, max: 960 } };
+    expect(stepPx(480, { key: 'ArrowRight' }, o)).toBe(496);
+    expect(stepPx(480, { key: 'ArrowRight', shiftKey: true }, o)).toBe(544);
+    expect(stepPx(480, { key: 'ArrowLeft' }, o)).toBe(464);
+    expect(stepPx(330, { key: 'ArrowLeft', shiftKey: true }, o)).toBe(320);
+    expect(stepPx(480, { key: 'Home' }, o)).toBe(320);
+    expect(stepPx(480, { key: 'End' }, o)).toBe(960);
+    // The wrong axis keeps its browser meaning.
+    expect(stepPx(480, { key: 'ArrowUp' }, o)).toBeNull();
+    expect(stepPx(480, { key: 'a' }, o)).toBeNull();
   });
 });

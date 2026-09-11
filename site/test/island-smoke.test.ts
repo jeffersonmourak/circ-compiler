@@ -312,16 +312,43 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     // The banner lives inside the source pane, not among the frame's rows.
     expect(doc.querySelector('.pg-editor > .pg-banner')).not.toBeNull();
 
-    // The workbench furniture, and the panes grid in order.
+    // The workbench furniture, and the body grid in order: the tree's card
+    // first (hidden, and positioned out of the grid), then source, hairline,
+    // canvas.
     expect(doc.querySelector('.pg-splitter')).not.toBeNull();
     expect(doc.querySelector('.pg-settings')).not.toBeNull();
     // happy-dom's Element is structurally its own; `className` is all this needs.
-    const panes = Array.from(
-      doc.querySelector('.pg-panes')?.children ?? [],
+    const regions = Array.from(
+      doc.querySelector('.pg-body')?.children ?? [],
       (c) => (c as { className: string }).className,
     );
-    expect(panes).toEqual(['pg-ws', 'pg-editor', 'pg-splitter', 'pg-output']);
+    expect(regions).toEqual(['pg-ws', 'pg-editor', 'pg-splitter', 'pg-output']);
+    expect(doc.querySelector('.pg-ws')?.hasAttribute('hidden')).toBe(true);
+    expect(doc.querySelector('.pg-ws-toggle')).toBeNull();
+    // The source column is the splitter, in pixels, at the design's default.
+    expect((doc.querySelector('.pg-body') as unknown as { style: { getPropertyValue(n: string): string } }).style.getPropertyValue('--pg-source-w')).toBe('480px');
   });
+
+  test('the breadcrumb opens the tree and gives focus back', () => drive((doc) => {
+    const press = (el: unknown, key: string) =>
+      (el as { dispatchEvent(e: unknown): void }).dispatchEvent(
+        new (globalThis as unknown as { KeyboardEvent: new (t: string, o: unknown) => unknown })
+          .KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }),
+      );
+    const body = doc.querySelector('.pg-body') as unknown as { style: { getPropertyValue(n: string): string } };
+    const crumb = doc.querySelector('.pg-crumb') as unknown as { click(): void; getAttribute(n: string): string | null };
+    const before = body.style.getPropertyValue('--pg-source-w');
+    crumb.click();
+    expect(crumb.getAttribute('aria-expanded')).toBe('true');
+    expect(doc.querySelector('.pg-ws')?.hasAttribute('hidden')).toBe(false);
+    // Opening the card moves nothing on the bench.
+    expect(body.style.getPropertyValue('--pg-source-w')).toBe(before);
+    press(doc.querySelector('.pg-tree-row'), 'Escape');
+    expect(crumb.getAttribute('aria-expanded')).toBe('false');
+    expect(doc.querySelector('.pg-ws')?.hasAttribute('hidden')).toBe(true);
+    expect((doc as unknown as { activeElement: unknown }).activeElement).toBe(crumb);
+    expect(body.style.getPropertyValue('--pg-source-w')).toBe(before);
+  }));
 
   test('the dock collapses and reopens, and remembers which panel', () => drive((doc) => {
     // The playground module is imported once per process, so this reuses the
@@ -791,7 +818,7 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
 
     const chain: [string, string][] = [
       ['main', '.pg'],
-      ['.pg', '.pg-panes'],
+      ['.pg', '.pg-body'],
     ];
 
     for (const [selector, fills] of chain) {
