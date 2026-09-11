@@ -169,6 +169,10 @@ describe('playground store', () => {
 
     // A bad tab falls back.
     expect(normalize({ ...defaultEnvelope(), tab: 'nope' }).envelope.tab).toBe('preview');
+    // The Data tab is an output tab; a name that is not one — the console is
+    // a drawer under two tabs, never a tab of its own — falls back too.
+    expect(normalize({ ...defaultEnvelope(), tab: 'data' }).envelope.tab).toBe('data');
+    expect(normalize({ ...defaultEnvelope(), tab: 'console' }).envelope.tab).toBe('preview');
     // …and so does the one written by every envelope from before diagnostics
     // left the output pane. This is the real migration, and it is not a reset:
     // the scratch projects in that same envelope must survive it.

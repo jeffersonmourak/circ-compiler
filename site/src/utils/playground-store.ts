@@ -27,7 +27,7 @@ export const WRITE_DEBOUNCE_MS = 500;
  * beside the settings rather than competing with the preview for the pane a
  * reader is watching.
  */
-export type OutputTab = 'preview' | 'truth' | 'simulate';
+export type OutputTab = 'preview' | 'truth' | 'simulate' | 'data';
 
 /** The editor dock's panels. `memory` only exists while the circuit declares
  *  a rom or a ram; a stored `memory` for a circuit that has none is treated
@@ -118,7 +118,7 @@ export interface TimerLike {
   clearTimeout(id: number): void;
 }
 
-const OUTPUT_TABS: readonly OutputTab[] = ['preview', 'truth', 'simulate'];
+const OUTPUT_TABS: readonly OutputTab[] = ['preview', 'truth', 'simulate', 'data'];
 const DOCK_TABS: readonly DockTab[] = ['diagnostics', 'settings', 'memory'];
 // Shut. The dock holds diagnostics, and the explorer now carries the per-file
 // error badge, so a reader sees that something is wrong without it — opening it
