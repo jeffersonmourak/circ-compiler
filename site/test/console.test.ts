@@ -1,6 +1,6 @@
 // The console's pure parts, over plain values.
 import { describe, expect, test } from 'bun:test';
-import { HistoryRing, LOAD_REFUSAL, MemoryTabFiles, SAVE_REFUSAL, Transcript, commandFor, helpLines, promptEcho } from '../src/scripts/console.ts';
+import { HistoryRing, LOAD_REFUSAL, MemoryTabFiles, SAVE_REFUSAL, Transcript, commandFor, helpLines, promptEcho, scriptOf } from '../src/scripts/console.ts';
 import { parseLine } from '../src/scripts/sim-protocol.ts';
 import type { SessionEvent } from '../src/scripts/sim-session.ts';
 
@@ -61,6 +61,72 @@ describe('the transcript keeps its newest lines', () => {
     t.clear();
     expect(t.text).toBe('');
     expect(t.length).toBe(0);
+  });
+
+  test('the lines are the text, split', () => {
+    const t = new Transcript(3);
+    t.append(['a', 'b', 'c', 'd']);
+    expect(t.lines).toEqual(['b', 'c', 'd']);
+    expect(t.lines).toEqual(t.text.split('\n'));
+  });
+});
+
+describe('a script is the commands and the comments, nothing else', () => {
+  test('echoes lose their mark, comments stay, replies go, order is kept', () => {
+    const log = [
+      'ready proto=1 pins=3 warnings=0',
+      'pin a in 1',
+      'pin b in 1',
+      'pin out out 1',
+      '> set a 1',
+      'ok',
+      '# a comment the reader typed',
+      '> dump all',
+      'vals 3',
+      'a 0x1 0x1',
+      'b 0x0 0x0',
+      'out 0x0 0x0',
+      '> set zz 1',
+      'err E_NOPIN zz',
+      '> mem code 0 2',
+      'cells 2',
+      '0x0 0x10 0xff',
+      '0x1 0x21 0xff',
+      '# code: image from the Memory tab, 4 words',
+      '> reset',
+      'ok',
+      'ready proto=1 pins=3 warnings=0',
+      'pin a in 1',
+      'diag warning W001 main.circ:2:1 unused',
+      '> help',
+      '# values: decimal, 0x, 0o or 0b, with _ between digits; replies are 0x hex',
+      '> quit',
+      'ok bye',
+      '# session ended',
+    ];
+    expect(scriptOf(log)).toEqual([
+      'set a 1',
+      '# a comment the reader typed',
+      'dump all',
+      'set zz 1',
+      'mem code 0 2',
+      '# code: image from the Memory tab, 4 words',
+      'reset',
+      'help',
+      '# values: decimal, 0x, 0o or 0b, with _ between digits; replies are 0x hex',
+      'quit',
+      '# session ended',
+    ]);
+    // Every line but the help echo parses as a command or a comment.
+    for (const line of scriptOf(log)) {
+      const r = parseLine(line);
+      expect(r.ok || r.reason === 'empty' || line === 'help').toBe(true);
+    }
+  });
+
+  test('an empty log is an empty script', () => {
+    expect(scriptOf([])).toEqual([]);
+    expect(scriptOf(['ok', 'ready proto=1 pins=0 warnings=0'])).toEqual([]);
   });
 });
 

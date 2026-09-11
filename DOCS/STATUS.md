@@ -41,3 +41,11 @@ One entry per shipped slice, newest last. The plan is `DOCS/PLANS_PROMPT.md`; th
 **Tests:** none (review)
 **Next slice:** Phase 1 slice 1: `scriptOf`.
 **Notes:** none.
+
+## 2026-09-11 — Phase 1 — `scriptOf`
+
+**What shipped:** `console.ts`: `scriptOf(lines)` keeps an echo without its `> ` and a `#` comment as it is, and drops every reply — `ok…`, `err…`, the handshake, a counted block's header and records; `Transcript.lines` exposes the buffer for it (the field is now `buf`).
+**Files touched:** `site/src/scripts/console.ts`, `site/test/console.test.ts`, `DOCS/STATUS.md`
+**Tests:** added three (a whole session's log → its script, every line parsing as a command or a comment but the `help` echo; an empty log; `Transcript.lines` is `text` split); ran `bun test test/console.test.ts` (13 pass), `bun --bun run typecheck` (0 errors), result pass
+**Next slice:** the bar.
+**Notes:** none.

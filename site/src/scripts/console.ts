@@ -59,31 +59,36 @@ export class HistoryRing {
 
 /** The scrollback: the newest `cap` lines, joined for a `<pre>`. */
 export class Transcript {
-  private lines: string[] = [];
+  private buf: string[] = [];
 
   constructor(readonly cap = 2000) {}
 
   append(lines: readonly string[]): void {
     if (lines.length === 0) return;
-    this.lines.push(...lines);
-    if (this.lines.length > this.cap) this.lines.splice(0, this.lines.length - this.cap);
+    this.buf.push(...lines);
+    if (this.buf.length > this.cap) this.buf.splice(0, this.buf.length - this.cap);
   }
 
   clear(): void {
-    this.lines = [];
+    this.buf = [];
   }
 
   get length(): number {
-    return this.lines.length;
+    return this.buf.length;
   }
 
   get text(): string {
-    return this.lines.join('\n');
+    return this.buf.join('\n');
+  }
+
+  /** The lines as they are, for `scriptOf`. */
+  get lines(): readonly string[] {
+    return this.buf;
   }
 
   /** The last line, for the status announcement. */
   get last(): string | null {
-    return this.lines.length === 0 ? null : this.lines[this.lines.length - 1];
+    return this.buf.length === 0 ? null : this.buf[this.buf.length - 1];
   }
 }
 
@@ -108,6 +113,21 @@ export class MemoryTabFiles implements FileSource {
 
 /** How a submitted line appears in the scrollback, so it cannot read as a reply. */
 export const promptEcho = (line: string): string => `> ${line}`;
+
+/**
+ * The lines `--sim` accepts from a log: an echo without its `> `, a comment
+ * as it is, and nothing of a reply — `ok…`, `err…`, `ready`, `pin`, `diag`,
+ * a counted block's header and its records. The log itself is a transcript;
+ * this is the script that would reproduce it.
+ */
+export function scriptOf(lines: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const line of lines) {
+    if (line.startsWith('> ')) out.push(line.slice(2));
+    else if (line.startsWith('# ')) out.push(line);
+  }
+  return out;
+}
 
 /** The browser's one extra verb. */
 export const HELP_VERB = 'help';
