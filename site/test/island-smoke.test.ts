@@ -240,6 +240,14 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(doc.querySelector('[data-drawer-panel="memory"]')?.hasAttribute('hidden')).toBe(true);
     expect(doc.querySelector('.pg-mem')?.textContent).toBe('');
     expect(doc.querySelector('.pg-dock .pg-mem')).toBeNull();
+    // The console: a scrollback and a prompt, shut until a session exists,
+    // with the same sentence Simulate shows for why.
+    expect(doc.querySelector('[data-drawer-panel="console"] .pg-console-log')).not.toBeNull();
+    const prompt = doc.querySelector('.pg-console-in') as unknown as { disabled: boolean } | null;
+    expect(prompt?.disabled).toBe(true);
+    expect(doc.querySelector('.pg-console-note')?.hasAttribute('hidden')).toBe(false);
+    expect(doc.querySelector('.pg-console-note')?.textContent).toBe('Compile a circuit first.');
+    expect(doc.querySelector('.pg-console-log')?.textContent).toBe('');
     // The rom image boxes left Settings for it, and left nothing behind.
     expect(doc.querySelector('[data-dock-panel="settings"] .pg-rom-group')).toBeNull();
     expect(doc.querySelector('[data-dock-panel="settings"] .pg-rom-box')).toBeNull();

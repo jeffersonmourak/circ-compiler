@@ -282,7 +282,29 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
             data-drawer-panel="console"
             role="tabpanel"
             aria-labelledby="pg-drawer-tab-console"
-          ></div>
+          >
+            {/* The --sim protocol at a prompt. Every line in the log is the
+                executor's reply, the echo of a submitted line (`> …`) or a
+                comment (`# …`) the protocol ignores, so the log pastes into a
+                script. The note shows why there is nothing to drive. */}
+            <div class="pg-console">
+              <p class="pg-console-note">Compile a circuit first.</p>
+              <pre class="pg-console-log" aria-live="polite" aria-label="Console transcript"></pre>
+              <form class="pg-console-form">
+                <span class="pg-console-prompt" aria-hidden="true">&gt;</span>
+                <input
+                  class="pg-console-in"
+                  type="text"
+                  spellcheck="false"
+                  autocomplete="off"
+                  autocapitalize="off"
+                  aria-label="Protocol command; help lists them"
+                  placeholder="help"
+                  disabled
+                />
+              </form>
+            </div>
+          </div>
           <div
             class="pg-drawer-panel"
             id="pg-drawer-panel-memory"
@@ -337,6 +359,11 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
   // The session the faces share. Pulls nothing of the canvas: its imports are
   // the topology entry point and the rom-image module, both already here.
   import { SimSession } from '../scripts/sim-session.ts';
+  // The console over the session: the grammar and the reply strings of
+  // `--sim`, and the prompt's own memory. Small, and the session already
+  // pulls their one shared dependency, so they ride in the eager bundle.
+  import { execute, handshake } from '../scripts/sim-executor.ts';
+  import { HELP_VERB, HistoryRing, MemoryTabFiles, Transcript, helpLines, promptEcho } from '../scripts/console.ts';
   import { joinConflicts, requestFor, rootOf, PLAYGROUND_DIR } from '../utils/split-files.ts';
   import { createSplitter } from '../scripts/splitter.ts';
   import { fnv1a } from '../utils/artifact-hash.ts';
@@ -502,6 +529,10 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     const drawerTabs = Array.from(el.querySelectorAll<HTMLButtonElement>('.pg-drawer-tabs [role=tab]'));
     const drawerPanels = Array.from(el.querySelectorAll<HTMLElement>('.pg-drawer-panel'));
     const drawerToggle = el.querySelector<HTMLButtonElement>('.pg-drawer-toggle')!;
+    const consoleNote = el.querySelector<HTMLElement>('.pg-console-note')!;
+    const consoleLog = el.querySelector<HTMLElement>('.pg-console-log')!;
+    const consoleForm = el.querySelector<HTMLFormElement>('.pg-console-form')!;
+    const consoleIn = el.querySelector<HTMLInputElement>('.pg-console-in')!;
     const memTab = el.querySelector<HTMLButtonElement>('.pg-drawer-tab[data-drawer="memory"]')!;
     const memCount = el.querySelector<HTMLElement>('.pg-drawer-count')!;
     const memPanel = el.querySelector<HTMLElement>('.pg-mem')!;
@@ -726,6 +757,107 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       });
     }
     drawerToggle.addEventListener('click', () => setDrawerOpen(drawer.dataset.open !== 'true'));
+
+    // ---- the console ----
+    // One transcript and one history whichever output tab is open: the drawer
+    // is one element, and it drives one session.
+    const consoleState = {
+      transcript: new Transcript(),
+      history: new HistoryRing(),
+      files: new MemoryTabFiles(),
+      /** A line is running: the prompt waits, and a `rebuilt` waits for its reply. */
+      busy: false,
+      /** The session was rebuilt while a line ran; announce it after the reply. */
+      rebuilt: false,
+    };
+
+    /** What kind of line this is, for the stylesheet only; the text is untouched. */
+    function consoleKind(line: string): string {
+      if (line.startsWith('err ')) return 'err';
+      if (line.startsWith('> ')) return 'echo';
+      if (line.startsWith('# ')) return 'note';
+      return 'reply';
+    }
+
+    function consoleAppend(lines: readonly string[]) {
+      if (lines.length === 0) return;
+      consoleState.transcript.append(lines);
+      for (const line of lines) {
+        const row = document.createElement('span');
+        row.className = 'pg-console-line';
+        row.dataset.kind = consoleKind(line);
+        row.textContent = `${line}\n`;
+        consoleLog.appendChild(row);
+      }
+      while (consoleLog.childElementCount > consoleState.transcript.cap) consoleLog.firstElementChild?.remove();
+      consoleLog.scrollTop = consoleLog.scrollHeight;
+    }
+
+    function consoleClear() {
+      consoleState.transcript.clear();
+      consoleLog.innerHTML = '';
+    }
+
+    /** The prompt follows the session: live with one, shut without. */
+    function refreshConsoleGate() {
+      const live = sim.session !== null && sim.session.isAlive;
+      consoleIn.disabled = !live || consoleState.busy;
+      consoleNote.hidden = live;
+    }
+
+    /** The lines `--sim` prints first, with the root file as the name the CLI was given. */
+    function consoleHandshake(session: SimSession) {
+      consoleAppend(handshake(session, rootOf(state.tabs.files).name));
+    }
+
+    async function consoleSubmit(line: string) {
+      const session = sim.session;
+      if (!session || consoleState.busy) return;
+      consoleState.history.push(line);
+      consoleAppend([promptEcho(line)]);
+      if (line.trim() === HELP_VERB) {
+        consoleAppend(helpLines());
+        return;
+      }
+      consoleState.busy = true;
+      refreshConsoleGate();
+      try {
+        const replies = await execute(session, consoleState.files, line);
+        consoleAppend(replies);
+        if (replies.length > 0) status.textContent = replies[replies.length - 1];
+      } finally {
+        consoleState.busy = false;
+        if (consoleState.rebuilt) {
+          consoleState.rebuilt = false;
+          if (sim.session) {
+            consoleAppend(['# reset']);
+            consoleHandshake(sim.session);
+          }
+        }
+        refreshConsoleGate();
+      }
+    }
+
+    consoleForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const line = consoleIn.value;
+      consoleIn.value = '';
+      void consoleSubmit(line).then(() => {
+        if (!consoleIn.disabled) consoleIn.focus();
+      });
+    });
+    consoleIn.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        const next = e.key === 'ArrowUp' ? consoleState.history.up() : consoleState.history.down();
+        if (next === null) return;
+        e.preventDefault();
+        consoleIn.value = next;
+        consoleIn.setSelectionRange(next.length, next.length);
+      } else if (e.key === 'l' && e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault();
+        consoleClear();
+      }
+    });
 
     // ---- source linking ----
     // `decls` refreshes on every analysis; `table` only when a new artifact is
@@ -2985,6 +3117,11 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         load: (b) => Runtime.loadFromBytes(b, { noInitialPinDrive: true }),
         roms: currentRoms(),
         images: romImages,
+        // The handshake's `diag warning` lines, from the analysis this
+        // artifact was built beside; `--sim` prints its own the same way.
+        warnings: state.mapped
+          .filter((m) => m.severity === 'warning')
+          .map((m) => ({ code: m.code, file: m.fileName, line: m.line, col: m.column, message: m.message })),
         bootLow: true,
       });
       if (sim.bytes !== bytes) {
@@ -2993,6 +3130,10 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       }
       sim.session = session;
       sim.sessionBytes = bytes;
+      // The console's handshake, before the replay below: the replayed pins
+      // are the page's state, silent like the boot, not lines of the session.
+      consoleHandshake(session);
+      refreshConsoleGate();
       // Replay the reader's pins by name onto the fresh session, value and
       // all. A pin whose name is gone from the new circuit is forgotten.
       const ids = rootInputs(session);
@@ -3012,6 +3153,16 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           if (sim.view) void buildCanvas();
           if (state.tab === 'data') renderData();
           renderMemory();
+          // The console says so after the reply that caused it, or at once
+          // when another face reset the session.
+          if (consoleState.busy) consoleState.rebuilt = true;
+          else {
+            consoleAppend(['# reset']);
+            consoleHandshake(session);
+          }
+        } else if (event.kind === 'destroyed') {
+          consoleAppend(['# session ended']);
+          refreshConsoleGate();
         }
       });
       for (const mem of currentRoms()) updateRomStatus(mem);
@@ -3228,6 +3379,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           ? (reason === 'files-changed' ? 'Compile a circuit first.' : 'Fix the errors to simulate.')
           : simNote.textContent;
         dataNote.textContent = simNote.textContent;
+        consoleNote.textContent = simNote.textContent;
         dataHead.hidden = true;
         dataEl.hidden = true;
         dataEl.innerHTML = '';

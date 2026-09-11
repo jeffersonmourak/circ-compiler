@@ -1143,6 +1143,55 @@ hr {
 @media (prefers-reduced-motion: reduce) {
   .pg-drawer-splitter::before { transition: none; }
 }
+/* The console: a scrollback and a one-line prompt, in the protocol's own
+   monospace. Line kinds are colours only; the text is the executor's. */
+.pg-console {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  font-family: var(--font-mono-strict);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+.pg-console-note { margin: 0 0 0.4rem; color: var(--muted); font-family: var(--font-mono); font-size: 0.8rem; }
+.pg-console-note[hidden] { display: none; }
+.pg-console-log {
+  flex: 1;
+  min-height: 3rem;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  color: var(--fg);
+}
+.pg-console-line[data-kind="err"] { color: var(--danger); }
+.pg-console-line[data-kind="echo"] { color: var(--accent); }
+.pg-console-line[data-kind="note"] { color: var(--muted); }
+.pg-console-form {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.4rem 0 0;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--border);
+}
+.pg-console-prompt { color: var(--accent); }
+.pg-console-in {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  padding: 0.15rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+}
+.pg-console-in:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.pg-console-in:disabled { opacity: 0.6; cursor: not-allowed; }
+.pg-drawer-panel[data-drawer-panel="console"] { display: flex; flex-direction: column; }
+.pg-drawer-panel[data-drawer-panel="console"][hidden] { display: none; }
 
 /* Source linking: the span in the editor the canvas is pointing at. A
    background, not a border, so it never shifts the text by a pixel. */
