@@ -333,49 +333,6 @@ function nsValuePill(ctx, t, cell, cx, bottomY, text, mode, fill, ink) {
 const pinRadius = (cell, w, h) => Math.min(w, h) / 2 - cell * 0.08;
 
 /**
- * Compute where a square sprite would land inside a box of (w × h),
- * preserving aspect ratio (size = min(w, h), centered). Used by skins
- * to anchor tails at the sprite's actual silhouette rather than at the
- * box border.
- */
-function spriteRect(x, y, w, h) {
-  const size = Math.min(w, h);
-  const cx = x + w / 2;
-  const cy = y + h / 2;
-  return { left: cx - size / 2, right: cx + size / 2, size, cx, cy };
-}
-
-/**
- * Draw a sprite into the component box, preserving aspect ratio. The
- * blog's PNGs are drawn with the gate pointing UP, so we rotate 90°
- * clockwise to match the layout's left-to-right flow.
- */
-function drawSprite(ctx, img, x, y, w, h) {
-  const rect = spriteRect(x, y, w, h);
-  ctx.save();
-  ctx.translate(rect.cx, rect.cy);
-  ctx.rotate(Math.PI / 2);
-  ctx.drawImage(img, -rect.size / 2, -rect.size / 2, rect.size, rect.size);
-  ctx.restore();
-}
-
-/**
- * Per-subcircuit-type sprite map. Builtin macros (and/nand/or/xor/not)
- * render with their primitive sprite so the macro reads as a familiar
- * gate; everything else falls back to a labeled box.
- */
-function spriteForSubcircuit(type) {
-  switch (type.toLowerCase()) {
-    case 'and':  return sprite('AND');
-    case 'nand': return sprite('NAND');
-    case 'or':   return sprite('OR');
-    case 'xor':  return sprite('XOR');
-    case 'not':  return sprite('NOT');
-    default:     return undefined;
-  }
-}
-
-/**
  * The mark on a hovered or host-highlighted component, drawn by the canvas
  * after every skin — the pointer and an editor cursor come through the same
  * hook. A pin gets a circle outside its own, so the state it shows stays
@@ -842,21 +799,30 @@ const drawAnd = (args) => {
   nsGate(args, RECIPES.and);
 };
 
-const drawSubcircuit = ({ ctx, cell, component, inputSignals, inputValues, outputSignal, theme, hovered }) => {
+/**
+ * A subcircuit has two faces. A builtin macro (and, nand, or, nor, xor,
+ * xnor, not) IS a gate: it takes the gate recipe on a virtual 5-wide box
+ * centred in the macro box, so the symbol, slots and bubble match the
+ * primitive exactly, and the tails run longer to reach the real ports.
+ * Anything else is the labelled box, until Phase 4 gives it a chip.
+ */
+const drawSubcircuit = (args) => {
+  const { ctx, cell, component, inputSignals, inputValues, outputSignal, theme } = args;
+  const subcircuit = component.kind.tag === 'subcircuit' ? component.kind.subcircuit : '';
+  const recipe = RECIPES[subcircuit.toLowerCase()];
+  if (recipe) {
+    const virt = { ...component, x: component.x + (component.width - 5) / 2, width: 5 };
+    nsGate({ ...args, component: virt }, { ...recipe, portsFrom: component });
+    return;
+  }
+
   const x0 = component.x * cell;
   const y0 = component.y * cell;
   const w = component.width * cell;
   const h = component.height * cell;
-  const subcircuit = component.kind.tag === 'subcircuit'
-    ? component.kind.subcircuit
-    : '';
-  const sprite = spriteForSubcircuit(subcircuit);
-  const usingSprite = !!sprite;
-
   const gap = cell * 0.45;
-  const rect = spriteRect(x0, y0, w, h);
-  const leftEdge = (usingSprite ? rect.left : x0 + w * 0.08) - gap;
-  const rightEdge = (usingSprite ? rect.right : x0 + w * 0.92) + gap;
+  const leftEdge = x0 + w * 0.08 - gap;
+  const rightEdge = x0 + w * 0.92 + gap;
 
   const inDotYs = [];
   for (let i = 0; i < component.inPorts.length; i++) {
@@ -870,24 +836,20 @@ const drawSubcircuit = ({ ctx, cell, component, inputSignals, inputValues, outpu
   const outDotY = component.outPort.y * cell + cell / 2;
   nsTail(ctx, cell, rightEdge, component.outPort.x * cell + cell / 2, outDotY, outputSignal, theme.colors, (component.bitWidth ?? 1) > 1);
 
-  if (usingSprite) {
-    drawSprite(ctx, sprite, x0, y0, w, h);
-  } else {
-    ctx.strokeStyle = theme.colors.macro;
-    ctx.fillStyle = theme.colors.fillIdle;
-    ctx.lineWidth = Math.max(2, cell * 0.12);
-    const r = cell * 0.25;
-    const bw = w - cell * 0.16, bh = h - cell * 0.16;
-    ctx.beginPath();
-    ctx.roundRect(x0 + cell * 0.08, y0 + cell * 0.08, bw, bh, r);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = theme.colors.label;
-    ctx.font = `600 ${Math.round(cell * 0.75)}px ui-monospace, "JetBrains Mono", monospace`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(subcircuit, x0 + w / 2, y0 + h / 2);
-  }
+  ctx.strokeStyle = theme.colors.macro;
+  ctx.fillStyle = theme.colors.fillIdle;
+  ctx.lineWidth = Math.max(2, cell * 0.12);
+  const r = cell * 0.25;
+  const bw = w - cell * 0.16, bh = h - cell * 0.16;
+  ctx.beginPath();
+  ctx.roundRect(x0 + cell * 0.08, y0 + cell * 0.08, bw, bh, r);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = theme.colors.label;
+  ctx.font = `600 ${Math.round(cell * 0.75)}px ui-monospace, "JetBrains Mono", monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(subcircuit, x0 + w / 2, y0 + h / 2);
 
   for (let i = 0; i < component.inPorts.length; i++) {
     nsDot(ctx, cell, leftEdge, inDotYs[i], inputSignals[i] ?? 2, theme.colors);
@@ -895,7 +857,6 @@ const drawSubcircuit = ({ ctx, cell, component, inputSignals, inputValues, outpu
   nsDot(ctx, cell, rightEdge, outDotY, outputSignal, theme.colors);
 
   nsName(ctx, cell, component.name, x0, y0, w, h, theme.colors.labelMuted);
-
 };
 
 /**

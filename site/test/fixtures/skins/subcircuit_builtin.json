@@ -20,7 +20,7 @@
   ],
   [
    "moveTo",
-   35.5,
+   40,
    35
   ],
   [
@@ -51,7 +51,7 @@
   ],
   [
    "moveTo",
-   35.5,
+   40,
    55
   ],
   [
@@ -82,7 +82,7 @@
   ],
   [
    "moveTo",
-   94.5,
+   90,
    45
   ],
   [
@@ -97,8 +97,52 @@
    "save"
   ],
   [
+   "set",
+   "strokeStyle",
+   "#e8ddff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.94
+  ],
+  [
+   "set",
+   "lineWidth",
+   2
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   48.9,
+   30.469
+  ],
+  [
+   "quadraticCurveTo",
+   56.65,
+   45,
+   48.9,
+   59.531
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "translate",
-   65,
+   65.831,
    45
   ],
   [
@@ -107,11 +151,43 @@
   ],
   [
    "drawImage",
-   "sprite:XOR",
-   -25,
-   -25,
-   50,
-   50
+   "canvas:100x100",
+   -24.219,
+   -24.219,
+   48.438,
+   48.438
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
+  ],
+  [
+   "set",
+   "font",
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "=1",
+   62.925,
+   36.281
   ],
   [
    "restore"
@@ -126,7 +202,7 @@
   ],
   [
    "arc",
-   35.5,
+   40,
    35,
    2.4,
    0,
@@ -145,7 +221,7 @@
   ],
   [
    "arc",
-   35.5,
+   40,
    55,
    2.4,
    0,
@@ -164,7 +240,7 @@
   ],
   [
    "arc",
-   94.5,
+   90,
    45,
    2.4,
    0,
@@ -221,7 +297,7 @@
   ],
   [
    "moveTo",
-   49.7,
+   56,
    49
   ],
   [
@@ -252,7 +328,7 @@
   ],
   [
    "moveTo",
-   49.7,
+   56,
    77
   ],
   [
@@ -283,7 +359,7 @@
   ],
   [
    "moveTo",
-   132.3,
+   126,
    63
   ],
   [
@@ -298,8 +374,52 @@
    "save"
   ],
   [
+   "set",
+   "strokeStyle",
+   "#e8ddff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.94
+  ],
+  [
+   "set",
+   "lineWidth",
+   2.8
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   68.46,
+   42.656
+  ],
+  [
+   "quadraticCurveTo",
+   79.31,
+   63,
+   68.46,
+   83.344
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "translate",
-   91,
+   92.164,
    63
   ],
   [
@@ -308,11 +428,43 @@
   ],
   [
    "drawImage",
-   "sprite:XOR",
-   -35,
-   -35,
-   70,
-   70
+   "canvas:100x100",
+   -33.906,
+   -33.906,
+   67.813,
+   67.813
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
+  ],
+  [
+   "set",
+   "font",
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "=1",
+   88.095,
+   50.794
   ],
   [
    "restore"
@@ -327,7 +479,7 @@
   ],
   [
    "arc",
-   49.7,
+   56,
    49,
    3.36,
    0,
@@ -346,7 +498,7 @@
   ],
   [
    "arc",
-   49.7,
+   56,
    77,
    3.36,
    0,
@@ -365,7 +517,7 @@
   ],
   [
    "arc",
-   132.3,
+   126,
    63,
    3.36,
    0,
@@ -422,7 +574,7 @@
   ],
   [
    "moveTo",
-   85.2,
+   96,
    84
   ],
   [
@@ -453,7 +605,7 @@
   ],
   [
    "moveTo",
-   85.2,
+   96,
    132
   ],
   [
@@ -484,7 +636,7 @@
   ],
   [
    "moveTo",
-   226.8,
+   216,
    108
   ],
   [
@@ -499,8 +651,52 @@
    "save"
   ],
   [
+   "set",
+   "strokeStyle",
+   "#e8ddff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.94
+  ],
+  [
+   "set",
+   "lineWidth",
+   4.8
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   117.36,
+   73.125
+  ],
+  [
+   "quadraticCurveTo",
+   135.96,
+   108,
+   117.36,
+   142.875
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "translate",
-   156,
+   157.995,
    108
   ],
   [
@@ -509,11 +705,43 @@
   ],
   [
    "drawImage",
-   "sprite:XOR",
-   -60,
-   -60,
-   120,
-   120
+   "canvas:100x100",
+   -58.125,
+   -58.125,
+   116.25,
+   116.25
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
+  ],
+  [
+   "set",
+   "font",
+   "700 14px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "=1",
+   151.02,
+   87.075
   ],
   [
    "restore"
@@ -528,7 +756,7 @@
   ],
   [
    "arc",
-   85.2,
+   96,
    84,
    5.76,
    0,
@@ -547,7 +775,7 @@
   ],
   [
    "arc",
-   85.2,
+   96,
    132,
    5.76,
    0,
@@ -566,7 +794,7 @@
   ],
   [
    "arc",
-   226.8,
+   216,
    108,
    5.76,
    0,
@@ -623,7 +851,7 @@
   ],
   [
    "moveTo",
-   35.5,
+   40,
    35
   ],
   [
@@ -654,7 +882,7 @@
   ],
   [
    "moveTo",
-   35.5,
+   40,
    55
   ],
   [
@@ -685,7 +913,7 @@
   ],
   [
    "moveTo",
-   94.5,
+   90,
    45
   ],
   [
@@ -700,8 +928,52 @@
    "save"
   ],
   [
+   "set",
+   "strokeStyle",
+   "#e8ddff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.94
+  ],
+  [
+   "set",
+   "lineWidth",
+   2
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   48.9,
+   30.469
+  ],
+  [
+   "quadraticCurveTo",
+   56.65,
+   45,
+   48.9,
+   59.531
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "translate",
-   65,
+   65.831,
    45
   ],
   [
@@ -710,11 +982,43 @@
   ],
   [
    "drawImage",
-   "sprite:XOR",
-   -25,
-   -25,
-   50,
-   50
+   "canvas:100x100",
+   -24.219,
+   -24.219,
+   48.438,
+   48.438
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
+  ],
+  [
+   "set",
+   "font",
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "=1",
+   62.925,
+   36.281
   ],
   [
    "restore"
@@ -729,7 +1033,7 @@
   ],
   [
    "arc",
-   35.5,
+   40,
    35,
    2.4,
    0,
@@ -748,7 +1052,7 @@
   ],
   [
    "arc",
-   35.5,
+   40,
    55,
    2.4,
    0,
@@ -767,7 +1071,7 @@
   ],
   [
    "arc",
-   94.5,
+   90,
    45,
    2.4,
    0,
@@ -824,7 +1128,7 @@
   ],
   [
    "moveTo",
-   49.7,
+   56,
    49
   ],
   [
@@ -855,7 +1159,7 @@
   ],
   [
    "moveTo",
-   49.7,
+   56,
    77
   ],
   [
@@ -886,7 +1190,7 @@
   ],
   [
    "moveTo",
-   132.3,
+   126,
    63
   ],
   [
@@ -901,8 +1205,52 @@
    "save"
   ],
   [
+   "set",
+   "strokeStyle",
+   "#e8ddff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.94
+  ],
+  [
+   "set",
+   "lineWidth",
+   2.8
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   68.46,
+   42.656
+  ],
+  [
+   "quadraticCurveTo",
+   79.31,
+   63,
+   68.46,
+   83.344
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "translate",
-   91,
+   92.164,
    63
   ],
   [
@@ -911,11 +1259,43 @@
   ],
   [
    "drawImage",
-   "sprite:XOR",
-   -35,
-   -35,
-   70,
-   70
+   "canvas:100x100",
+   -33.906,
+   -33.906,
+   67.813,
+   67.813
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
+  ],
+  [
+   "set",
+   "font",
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "=1",
+   88.095,
+   50.794
   ],
   [
    "restore"
@@ -930,7 +1310,7 @@
   ],
   [
    "arc",
-   49.7,
+   56,
    49,
    3.36,
    0,
@@ -949,7 +1329,7 @@
   ],
   [
    "arc",
-   49.7,
+   56,
    77,
    3.36,
    0,
@@ -968,7 +1348,7 @@
   ],
   [
    "arc",
-   132.3,
+   126,
    63,
    3.36,
    0,
@@ -1025,7 +1405,7 @@
   ],
   [
    "moveTo",
-   85.2,
+   96,
    84
   ],
   [
@@ -1056,7 +1436,7 @@
   ],
   [
    "moveTo",
-   85.2,
+   96,
    132
   ],
   [
@@ -1087,7 +1467,7 @@
   ],
   [
    "moveTo",
-   226.8,
+   216,
    108
   ],
   [
@@ -1102,8 +1482,52 @@
    "save"
   ],
   [
+   "set",
+   "strokeStyle",
+   "#e8ddff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.94
+  ],
+  [
+   "set",
+   "lineWidth",
+   4.8
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   117.36,
+   73.125
+  ],
+  [
+   "quadraticCurveTo",
+   135.96,
+   108,
+   117.36,
+   142.875
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "translate",
-   156,
+   157.995,
    108
   ],
   [
@@ -1112,11 +1536,43 @@
   ],
   [
    "drawImage",
-   "sprite:XOR",
-   -60,
-   -60,
-   120,
-   120
+   "canvas:100x100",
+   -58.125,
+   -58.125,
+   116.25,
+   116.25
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
+  ],
+  [
+   "set",
+   "font",
+   "700 14px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "=1",
+   151.02,
+   87.075
   ],
   [
    "restore"
@@ -1131,7 +1587,7 @@
   ],
   [
    "arc",
-   85.2,
+   96,
    84,
    5.76,
    0,
@@ -1150,7 +1606,7 @@
   ],
   [
    "arc",
-   85.2,
+   96,
    132,
    5.76,
    0,
@@ -1169,7 +1625,7 @@
   ],
   [
    "arc",
-   226.8,
+   216,
    108,
    5.76,
    0,
@@ -1226,7 +1682,7 @@
   ],
   [
    "moveTo",
-   35.5,
+   40,
    35
   ],
   [
@@ -1257,7 +1713,7 @@
   ],
   [
    "moveTo",
-   35.5,
+   40,
    55
   ],
   [
@@ -1288,7 +1744,7 @@
   ],
   [
    "moveTo",
-   94.5,
+   90,
    45
   ],
   [
@@ -1303,8 +1759,71 @@
    "save"
   ],
   [
+   "set",
+   "globalAlpha",
+   0.55
+  ],
+  [
+   "drawImage",
+   "canvas:43x91",
+   40.9,
+   22.469,
+   21.038,
+   45.063
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#fd7e14"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.92
+  ],
+  [
+   "set",
+   "lineWidth",
+   2
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   48.9,
+   30.469
+  ],
+  [
+   "quadraticCurveTo",
+   56.65,
+   45,
+   48.9,
+   59.531
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "translate",
-   65,
+   65.831,
    45
   ],
   [
@@ -1312,12 +1831,62 @@
    1.571
   ],
   [
+   "set",
+   "globalAlpha",
+   0.55
+  ],
+  [
    "drawImage",
-   "sprite:XOR",
-   -25,
-   -25,
-   50,
-   50
+   "canvas:128x128",
+   -31,
+   -31,
+   62,
+   62
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "drawImage",
+   "canvas:100x100",
+   -24.219,
+   -24.219,
+   48.438,
+   48.438
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
+  ],
+  [
+   "set",
+   "font",
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "=1",
+   62.925,
+   36.281
   ],
   [
    "restore"
@@ -1332,7 +1901,7 @@
   ],
   [
    "arc",
-   35.5,
+   40,
    35,
    2.4,
    0,
@@ -1351,7 +1920,7 @@
   ],
   [
    "arc",
-   35.5,
+   40,
    55,
    2.4,
    0,
@@ -1370,7 +1939,7 @@
   ],
   [
    "arc",
-   94.5,
+   90,
    45,
    2.4,
    0,
@@ -1427,7 +1996,7 @@
   ],
   [
    "moveTo",
-   49.7,
+   56,
    49
   ],
   [
@@ -1458,7 +2027,7 @@
   ],
   [
    "moveTo",
-   49.7,
+   56,
    77
   ],
   [
@@ -1489,7 +2058,7 @@
   ],
   [
    "moveTo",
-   132.3,
+   126,
    63
   ],
   [
@@ -1504,8 +2073,71 @@
    "save"
   ],
   [
+   "set",
+   "globalAlpha",
+   0.55
+  ],
+  [
+   "drawImage",
+   "canvas:59x127",
+   57.26,
+   31.456,
+   29.453,
+   63.088
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#fd7e14"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.92
+  ],
+  [
+   "set",
+   "lineWidth",
+   2.8
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   68.46,
+   42.656
+  ],
+  [
+   "quadraticCurveTo",
+   79.31,
+   63,
+   68.46,
+   83.344
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "translate",
-   91,
+   92.164,
    63
   ],
   [
@@ -1513,12 +2145,62 @@
    1.571
   ],
   [
+   "set",
+   "globalAlpha",
+   0.55
+  ],
+  [
    "drawImage",
-   "sprite:XOR",
-   -35,
-   -35,
-   70,
-   70
+   "canvas:128x128",
+   -43.4,
+   -43.4,
+   86.8,
+   86.8
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "drawImage",
+   "canvas:100x100",
+   -33.906,
+   -33.906,
+   67.813,
+   67.813
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
+  ],
+  [
+   "set",
+   "font",
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "=1",
+   88.095,
+   50.794
   ],
   [
    "restore"
@@ -1533,7 +2215,7 @@
   ],
   [
    "arc",
-   49.7,
+   56,
    49,
    3.36,
    0,
@@ -1552,7 +2234,7 @@
   ],
   [
    "arc",
-   49.7,
+   56,
    77,
    3.36,
    0,
@@ -1571,7 +2253,7 @@
   ],
   [
    "arc",
-   132.3,
+   126,
    63,
    3.36,
    0,
@@ -1628,7 +2310,7 @@
   ],
   [
    "moveTo",
-   85.2,
+   96,
    84
   ],
   [
@@ -1659,7 +2341,7 @@
   ],
   [
    "moveTo",
-   85.2,
+   96,
    132
   ],
   [
@@ -1690,7 +2372,7 @@
   ],
   [
    "moveTo",
-   226.8,
+   216,
    108
   ],
   [
@@ -1705,8 +2387,71 @@
    "save"
   ],
   [
+   "set",
+   "globalAlpha",
+   0.55
+  ],
+  [
+   "drawImage",
+   "canvas:101x217",
+   98.16,
+   53.925,
+   50.49,
+   108.15
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#fd7e14"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.92
+  ],
+  [
+   "set",
+   "lineWidth",
+   4.8
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   117.36,
+   73.125
+  ],
+  [
+   "quadraticCurveTo",
+   135.96,
+   108,
+   117.36,
+   142.875
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "translate",
-   156,
+   157.995,
    108
   ],
   [
@@ -1714,12 +2459,62 @@
    1.571
   ],
   [
+   "set",
+   "globalAlpha",
+   0.55
+  ],
+  [
    "drawImage",
-   "sprite:XOR",
-   -60,
-   -60,
-   120,
-   120
+   "canvas:128x128",
+   -74.4,
+   -74.4,
+   148.8,
+   148.8
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "drawImage",
+   "canvas:100x100",
+   -58.125,
+   -58.125,
+   116.25,
+   116.25
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
+  ],
+  [
+   "set",
+   "font",
+   "700 14px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "=1",
+   151.02,
+   87.075
   ],
   [
    "restore"
@@ -1734,7 +2529,7 @@
   ],
   [
    "arc",
-   85.2,
+   96,
    84,
    5.76,
    0,
@@ -1753,7 +2548,7 @@
   ],
   [
    "arc",
-   85.2,
+   96,
    132,
    5.76,
    0,
@@ -1772,7 +2567,7 @@
   ],
   [
    "arc",
-   226.8,
+   216,
    108,
    5.76,
    0,
@@ -1829,7 +2624,7 @@
   ],
   [
    "moveTo",
-   35.5,
+   40,
    35
   ],
   [
@@ -1860,7 +2655,7 @@
   ],
   [
    "moveTo",
-   35.5,
+   40,
    55
   ],
   [
@@ -1891,7 +2686,7 @@
   ],
   [
    "moveTo",
-   94.5,
+   90,
    45
   ],
   [
@@ -1906,8 +2701,71 @@
    "save"
   ],
   [
+   "set",
+   "globalAlpha",
+   0.55
+  ],
+  [
+   "drawImage",
+   "canvas:43x91",
+   40.9,
+   22.469,
+   21.038,
+   45.063
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#fd7e14"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.92
+  ],
+  [
+   "set",
+   "lineWidth",
+   2
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   48.9,
+   30.469
+  ],
+  [
+   "quadraticCurveTo",
+   56.65,
+   45,
+   48.9,
+   59.531
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "translate",
-   65,
+   65.831,
    45
   ],
   [
@@ -1915,12 +2773,62 @@
    1.571
   ],
   [
+   "set",
+   "globalAlpha",
+   0.55
+  ],
+  [
    "drawImage",
-   "sprite:XOR",
-   -25,
-   -25,
-   50,
-   50
+   "canvas:128x128",
+   -31,
+   -31,
+   62,
+   62
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "drawImage",
+   "canvas:100x100",
+   -24.219,
+   -24.219,
+   48.438,
+   48.438
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
+  ],
+  [
+   "set",
+   "font",
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "=1",
+   62.925,
+   36.281
   ],
   [
    "restore"
@@ -1935,7 +2843,7 @@
   ],
   [
    "arc",
-   35.5,
+   40,
    35,
    2.4,
    0,
@@ -1954,7 +2862,7 @@
   ],
   [
    "arc",
-   35.5,
+   40,
    55,
    2.4,
    0,
@@ -1973,7 +2881,7 @@
   ],
   [
    "arc",
-   94.5,
+   90,
    45,
    2.4,
    0,
@@ -2030,7 +2938,7 @@
   ],
   [
    "moveTo",
-   49.7,
+   56,
    49
   ],
   [
@@ -2061,7 +2969,7 @@
   ],
   [
    "moveTo",
-   49.7,
+   56,
    77
   ],
   [
@@ -2092,7 +3000,7 @@
   ],
   [
    "moveTo",
-   132.3,
+   126,
    63
   ],
   [
@@ -2107,8 +3015,71 @@
    "save"
   ],
   [
+   "set",
+   "globalAlpha",
+   0.55
+  ],
+  [
+   "drawImage",
+   "canvas:59x127",
+   57.26,
+   31.456,
+   29.453,
+   63.088
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#fd7e14"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.92
+  ],
+  [
+   "set",
+   "lineWidth",
+   2.8
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   68.46,
+   42.656
+  ],
+  [
+   "quadraticCurveTo",
+   79.31,
+   63,
+   68.46,
+   83.344
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "translate",
-   91,
+   92.164,
    63
   ],
   [
@@ -2116,12 +3087,62 @@
    1.571
   ],
   [
+   "set",
+   "globalAlpha",
+   0.55
+  ],
+  [
    "drawImage",
-   "sprite:XOR",
-   -35,
-   -35,
-   70,
-   70
+   "canvas:128x128",
+   -43.4,
+   -43.4,
+   86.8,
+   86.8
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "drawImage",
+   "canvas:100x100",
+   -33.906,
+   -33.906,
+   67.813,
+   67.813
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
+  ],
+  [
+   "set",
+   "font",
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "=1",
+   88.095,
+   50.794
   ],
   [
    "restore"
@@ -2136,7 +3157,7 @@
   ],
   [
    "arc",
-   49.7,
+   56,
    49,
    3.36,
    0,
@@ -2155,7 +3176,7 @@
   ],
   [
    "arc",
-   49.7,
+   56,
    77,
    3.36,
    0,
@@ -2174,7 +3195,7 @@
   ],
   [
    "arc",
-   132.3,
+   126,
    63,
    3.36,
    0,
@@ -2231,7 +3252,7 @@
   ],
   [
    "moveTo",
-   85.2,
+   96,
    84
   ],
   [
@@ -2262,7 +3283,7 @@
   ],
   [
    "moveTo",
-   85.2,
+   96,
    132
   ],
   [
@@ -2293,7 +3314,7 @@
   ],
   [
    "moveTo",
-   226.8,
+   216,
    108
   ],
   [
@@ -2308,8 +3329,71 @@
    "save"
   ],
   [
+   "set",
+   "globalAlpha",
+   0.55
+  ],
+  [
+   "drawImage",
+   "canvas:101x217",
+   98.16,
+   53.925,
+   50.49,
+   108.15
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#fd7e14"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.92
+  ],
+  [
+   "set",
+   "lineWidth",
+   4.8
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   117.36,
+   73.125
+  ],
+  [
+   "quadraticCurveTo",
+   135.96,
+   108,
+   117.36,
+   142.875
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "translate",
-   156,
+   157.995,
    108
   ],
   [
@@ -2317,12 +3401,62 @@
    1.571
   ],
   [
+   "set",
+   "globalAlpha",
+   0.55
+  ],
+  [
    "drawImage",
-   "sprite:XOR",
-   -60,
-   -60,
-   120,
-   120
+   "canvas:128x128",
+   -74.4,
+   -74.4,
+   148.8,
+   148.8
+  ],
+  [
+   "set",
+   "globalAlpha",
+   1
+  ],
+  [
+   "drawImage",
+   "canvas:100x100",
+   -58.125,
+   -58.125,
+   116.25,
+   116.25
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
+  ],
+  [
+   "set",
+   "font",
+   "700 14px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "=1",
+   151.02,
+   87.075
   ],
   [
    "restore"
@@ -2337,7 +3471,7 @@
   ],
   [
    "arc",
-   85.2,
+   96,
    84,
    5.76,
    0,
@@ -2356,7 +3490,7 @@
   ],
   [
    "arc",
-   85.2,
+   96,
    132,
    5.76,
    0,
@@ -2375,7 +3509,7 @@
   ],
   [
    "arc",
-   226.8,
+   216,
    108,
    5.76,
    0,
@@ -2432,7 +3566,7 @@
   ],
   [
    "moveTo",
-   35.5,
+   40,
    35
   ],
   [
@@ -2463,7 +3597,7 @@
   ],
   [
    "moveTo",
-   35.5,
+   40,
    55
   ],
   [
@@ -2494,7 +3628,7 @@
   ],
   [
    "moveTo",
-   94.5,
+   90,
    45
   ],
   [
@@ -2509,8 +3643,52 @@
    "save"
   ],
   [
+   "set",
+   "strokeStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.5
+  ],
+  [
+   "set",
+   "lineWidth",
+   2
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   48.9,
+   30.469
+  ],
+  [
+   "quadraticCurveTo",
+   56.65,
+   45,
+   48.9,
+   59.531
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "translate",
-   65,
+   65.831,
    45
   ],
   [
@@ -2519,11 +3697,43 @@
   ],
   [
    "drawImage",
-   "sprite:XOR",
-   -25,
-   -25,
-   50,
-   50
+   "canvas:100x100",
+   -24.219,
+   -24.219,
+   48.438,
+   48.438
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
+  ],
+  [
+   "set",
+   "font",
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "=1",
+   62.925,
+   36.281
   ],
   [
    "restore"
@@ -2538,7 +3748,7 @@
   ],
   [
    "arc",
-   35.5,
+   40,
    35,
    2.4,
    0,
@@ -2557,7 +3767,7 @@
   ],
   [
    "arc",
-   35.5,
+   40,
    55,
    2.4,
    0,
@@ -2576,7 +3786,7 @@
   ],
   [
    "arc",
-   94.5,
+   90,
    45,
    2.4,
    0,
@@ -2633,7 +3843,7 @@
   ],
   [
    "moveTo",
-   49.7,
+   56,
    49
   ],
   [
@@ -2664,7 +3874,7 @@
   ],
   [
    "moveTo",
-   49.7,
+   56,
    77
   ],
   [
@@ -2695,7 +3905,7 @@
   ],
   [
    "moveTo",
-   132.3,
+   126,
    63
   ],
   [
@@ -2710,8 +3920,52 @@
    "save"
   ],
   [
+   "set",
+   "strokeStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.5
+  ],
+  [
+   "set",
+   "lineWidth",
+   2.8
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   68.46,
+   42.656
+  ],
+  [
+   "quadraticCurveTo",
+   79.31,
+   63,
+   68.46,
+   83.344
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "translate",
-   91,
+   92.164,
    63
   ],
   [
@@ -2720,11 +3974,43 @@
   ],
   [
    "drawImage",
-   "sprite:XOR",
-   -35,
-   -35,
-   70,
-   70
+   "canvas:100x100",
+   -33.906,
+   -33.906,
+   67.813,
+   67.813
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
+  ],
+  [
+   "set",
+   "font",
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "=1",
+   88.095,
+   50.794
   ],
   [
    "restore"
@@ -2739,7 +4025,7 @@
   ],
   [
    "arc",
-   49.7,
+   56,
    49,
    3.36,
    0,
@@ -2758,7 +4044,7 @@
   ],
   [
    "arc",
-   49.7,
+   56,
    77,
    3.36,
    0,
@@ -2777,7 +4063,7 @@
   ],
   [
    "arc",
-   132.3,
+   126,
    63,
    3.36,
    0,
@@ -2834,7 +4120,7 @@
   ],
   [
    "moveTo",
-   85.2,
+   96,
    84
   ],
   [
@@ -2865,7 +4151,7 @@
   ],
   [
    "moveTo",
-   85.2,
+   96,
    132
   ],
   [
@@ -2896,7 +4182,7 @@
   ],
   [
    "moveTo",
-   226.8,
+   216,
    108
   ],
   [
@@ -2911,8 +4197,52 @@
    "save"
   ],
   [
+   "set",
+   "strokeStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.5
+  ],
+  [
+   "set",
+   "lineWidth",
+   4.8
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   117.36,
+   73.125
+  ],
+  [
+   "quadraticCurveTo",
+   135.96,
+   108,
+   117.36,
+   142.875
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "translate",
-   156,
+   157.995,
    108
   ],
   [
@@ -2921,11 +4251,43 @@
   ],
   [
    "drawImage",
-   "sprite:XOR",
-   -60,
-   -60,
-   120,
-   120
+   "canvas:100x100",
+   -58.125,
+   -58.125,
+   116.25,
+   116.25
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
+  ],
+  [
+   "set",
+   "font",
+   "700 14px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "=1",
+   151.02,
+   87.075
   ],
   [
    "restore"
@@ -2940,7 +4302,7 @@
   ],
   [
    "arc",
-   85.2,
+   96,
    84,
    5.76,
    0,
@@ -2959,7 +4321,7 @@
   ],
   [
    "arc",
-   85.2,
+   96,
    132,
    5.76,
    0,
@@ -2978,7 +4340,7 @@
   ],
   [
    "arc",
-   226.8,
+   216,
    108,
    5.76,
    0,
@@ -3035,7 +4397,7 @@
   ],
   [
    "moveTo",
-   35.5,
+   40,
    35
   ],
   [
@@ -3066,7 +4428,7 @@
   ],
   [
    "moveTo",
-   35.5,
+   40,
    55
   ],
   [
@@ -3097,7 +4459,7 @@
   ],
   [
    "moveTo",
-   94.5,
+   90,
    45
   ],
   [
@@ -3112,8 +4474,52 @@
    "save"
   ],
   [
+   "set",
+   "strokeStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.5
+  ],
+  [
+   "set",
+   "lineWidth",
+   2
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   48.9,
+   30.469
+  ],
+  [
+   "quadraticCurveTo",
+   56.65,
+   45,
+   48.9,
+   59.531
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "translate",
-   65,
+   65.831,
    45
   ],
   [
@@ -3122,11 +4528,43 @@
   ],
   [
    "drawImage",
-   "sprite:XOR",
-   -25,
-   -25,
-   50,
-   50
+   "canvas:100x100",
+   -24.219,
+   -24.219,
+   48.438,
+   48.438
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
+  ],
+  [
+   "set",
+   "font",
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "=1",
+   62.925,
+   36.281
   ],
   [
    "restore"
@@ -3141,7 +4579,7 @@
   ],
   [
    "arc",
-   35.5,
+   40,
    35,
    2.4,
    0,
@@ -3160,7 +4598,7 @@
   ],
   [
    "arc",
-   35.5,
+   40,
    55,
    2.4,
    0,
@@ -3179,7 +4617,7 @@
   ],
   [
    "arc",
-   94.5,
+   90,
    45,
    2.4,
    0,
@@ -3236,7 +4674,7 @@
   ],
   [
    "moveTo",
-   49.7,
+   56,
    49
   ],
   [
@@ -3267,7 +4705,7 @@
   ],
   [
    "moveTo",
-   49.7,
+   56,
    77
   ],
   [
@@ -3298,7 +4736,7 @@
   ],
   [
    "moveTo",
-   132.3,
+   126,
    63
   ],
   [
@@ -3313,8 +4751,52 @@
    "save"
   ],
   [
+   "set",
+   "strokeStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.5
+  ],
+  [
+   "set",
+   "lineWidth",
+   2.8
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   68.46,
+   42.656
+  ],
+  [
+   "quadraticCurveTo",
+   79.31,
+   63,
+   68.46,
+   83.344
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "translate",
-   91,
+   92.164,
    63
   ],
   [
@@ -3323,11 +4805,43 @@
   ],
   [
    "drawImage",
-   "sprite:XOR",
-   -35,
-   -35,
-   70,
-   70
+   "canvas:100x100",
+   -33.906,
+   -33.906,
+   67.813,
+   67.813
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
+  ],
+  [
+   "set",
+   "font",
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "=1",
+   88.095,
+   50.794
   ],
   [
    "restore"
@@ -3342,7 +4856,7 @@
   ],
   [
    "arc",
-   49.7,
+   56,
    49,
    3.36,
    0,
@@ -3361,7 +4875,7 @@
   ],
   [
    "arc",
-   49.7,
+   56,
    77,
    3.36,
    0,
@@ -3380,7 +4894,7 @@
   ],
   [
    "arc",
-   132.3,
+   126,
    63,
    3.36,
    0,
@@ -3437,7 +4951,7 @@
   ],
   [
    "moveTo",
-   85.2,
+   96,
    84
   ],
   [
@@ -3468,7 +4982,7 @@
   ],
   [
    "moveTo",
-   85.2,
+   96,
    132
   ],
   [
@@ -3499,7 +5013,7 @@
   ],
   [
    "moveTo",
-   226.8,
+   216,
    108
   ],
   [
@@ -3514,8 +5028,52 @@
    "save"
   ],
   [
+   "set",
+   "strokeStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.5
+  ],
+  [
+   "set",
+   "lineWidth",
+   4.8
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   117.36,
+   73.125
+  ],
+  [
+   "quadraticCurveTo",
+   135.96,
+   108,
+   117.36,
+   142.875
+  ],
+  [
+   "stroke"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "translate",
-   156,
+   157.995,
    108
   ],
   [
@@ -3524,11 +5082,43 @@
   ],
   [
    "drawImage",
-   "sprite:XOR",
-   -60,
-   -60,
-   120,
-   120
+   "canvas:100x100",
+   -58.125,
+   -58.125,
+   116.25,
+   116.25
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
+  ],
+  [
+   "set",
+   "font",
+   "700 14px ui-monospace, \"JetBrains Mono\", monospace"
+  ],
+  [
+   "set",
+   "textAlign",
+   "center"
+  ],
+  [
+   "set",
+   "textBaseline",
+   "middle"
+  ],
+  [
+   "fillText",
+   "=1",
+   151.02,
+   87.075
   ],
   [
    "restore"
@@ -3543,7 +5133,7 @@
   ],
   [
    "arc",
-   85.2,
+   96,
    84,
    5.76,
    0,
@@ -3562,7 +5152,7 @@
   ],
   [
    "arc",
-   85.2,
+   96,
    132,
    5.76,
    0,
@@ -3581,7 +5171,7 @@
   ],
   [
    "arc",
-   226.8,
+   216,
    108,
    5.76,
    0,
@@ -3638,7 +5228,7 @@
   ],
   [
    "moveTo",
-   22.7,
+   40,
    35
   ],
   [
@@ -3669,7 +5259,7 @@
   ],
   [
    "moveTo",
-   22.7,
+   40,
    55
   ],
   [
@@ -3700,7 +5290,7 @@
   ],
   [
    "moveTo",
-   107.3,
+   90,
    45
   ],
   [
@@ -3712,14 +5302,17 @@
    "stroke"
   ],
   [
-   "set",
-   "strokeStyle",
-   "#bea7ff"
+   "save"
   ],
   [
    "set",
-   "fillStyle",
-   "#160b26"
+   "strokeStyle",
+   "#e8ddff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.94
   ],
   [
    "set",
@@ -3727,31 +5320,94 @@
    2
   ],
   [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
    "beginPath"
   ],
   [
-   "roundRect",
-   20.8,
-   20.8,
-   88.4,
-   48.4,
-   2.5
+   "moveTo",
+   48.9,
+   30.469
   ],
   [
-   "fill"
+   "quadraticCurveTo",
+   48.9,
+   45,
+   48.9,
+   59.531
   ],
   [
    "stroke"
   ],
   [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#e8ddff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.94
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   51.3,
+   30.469
+  ],
+  [
+   "quadraticCurveTo",
+   66.8,
+   30.469,
+   82.3,
+   45
+  ],
+  [
+   "quadraticCurveTo",
+   66.8,
+   59.531,
+   51.3,
+   59.531
+  ],
+  [
+   "quadraticCurveTo",
+   59.05,
+   45,
+   51.3,
+   30.469
+  ],
+  [
+   "closePath"
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
   ],
   [
    "set",
    "font",
-   "600 8px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -3765,9 +5421,12 @@
   ],
   [
    "fillText",
-   "xor",
-   65,
-   45
+   "=1",
+   62.925,
+   36.281
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -3779,7 +5438,7 @@
   ],
   [
    "arc",
-   22.7,
+   40,
    35,
    2.4,
    0,
@@ -3798,7 +5457,7 @@
   ],
   [
    "arc",
-   22.7,
+   40,
    55,
    2.4,
    0,
@@ -3817,7 +5476,7 @@
   ],
   [
    "arc",
-   107.3,
+   90,
    45,
    2.4,
    0,
@@ -3874,7 +5533,7 @@
   ],
   [
    "moveTo",
-   31.78,
+   56,
    49
   ],
   [
@@ -3905,7 +5564,7 @@
   ],
   [
    "moveTo",
-   31.78,
+   56,
    77
   ],
   [
@@ -3936,7 +5595,7 @@
   ],
   [
    "moveTo",
-   150.22,
+   126,
    63
   ],
   [
@@ -3948,46 +5607,112 @@
    "stroke"
   ],
   [
-   "set",
-   "strokeStyle",
-   "#bea7ff"
+   "save"
   ],
   [
    "set",
-   "fillStyle",
-   "#160b26"
+   "strokeStyle",
+   "#e8ddff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.94
   ],
   [
    "set",
    "lineWidth",
-   2
+   2.8
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
   ],
   [
    "beginPath"
   ],
   [
-   "roundRect",
-   29.12,
-   29.12,
-   123.76,
-   67.76,
-   3.5
+   "moveTo",
+   68.46,
+   42.656
   ],
   [
-   "fill"
+   "quadraticCurveTo",
+   68.46,
+   63,
+   68.46,
+   83.344
   ],
   [
    "stroke"
   ],
   [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#e8ddff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.94
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   71.82,
+   42.656
+  ],
+  [
+   "quadraticCurveTo",
+   93.52,
+   42.656,
+   115.22,
+   63
+  ],
+  [
+   "quadraticCurveTo",
+   93.52,
+   83.344,
+   71.82,
+   83.344
+  ],
+  [
+   "quadraticCurveTo",
+   82.67,
+   63,
+   71.82,
+   42.656
+  ],
+  [
+   "closePath"
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
   ],
   [
    "set",
    "font",
-   "600 11px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -4001,9 +5726,12 @@
   ],
   [
    "fillText",
-   "xor",
-   91,
-   63
+   "=1",
+   88.095,
+   50.794
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -4015,7 +5743,7 @@
   ],
   [
    "arc",
-   31.78,
+   56,
    49,
    3.36,
    0,
@@ -4034,7 +5762,7 @@
   ],
   [
    "arc",
-   31.78,
+   56,
    77,
    3.36,
    0,
@@ -4053,7 +5781,7 @@
   ],
   [
    "arc",
-   150.22,
+   126,
    63,
    3.36,
    0,
@@ -4110,7 +5838,7 @@
   ],
   [
    "moveTo",
-   54.48,
+   96,
    84
   ],
   [
@@ -4141,7 +5869,7 @@
   ],
   [
    "moveTo",
-   54.48,
+   96,
    132
   ],
   [
@@ -4172,7 +5900,7 @@
   ],
   [
    "moveTo",
-   257.52,
+   216,
    108
   ],
   [
@@ -4184,46 +5912,112 @@
    "stroke"
   ],
   [
-   "set",
-   "strokeStyle",
-   "#bea7ff"
+   "save"
   ],
   [
    "set",
-   "fillStyle",
-   "#160b26"
+   "strokeStyle",
+   "#e8ddff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.94
   ],
   [
    "set",
    "lineWidth",
-   2.88
+   4.8
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
   ],
   [
    "beginPath"
   ],
   [
-   "roundRect",
-   49.92,
-   49.92,
-   212.16,
-   116.16,
-   6
+   "moveTo",
+   117.36,
+   73.125
   ],
   [
-   "fill"
+   "quadraticCurveTo",
+   117.36,
+   108,
+   117.36,
+   142.875
   ],
   [
    "stroke"
   ],
   [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#e8ddff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.94
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   123.12,
+   73.125
+  ],
+  [
+   "quadraticCurveTo",
+   160.32,
+   73.125,
+   197.52,
+   108
+  ],
+  [
+   "quadraticCurveTo",
+   160.32,
+   142.875,
+   123.12,
+   142.875
+  ],
+  [
+   "quadraticCurveTo",
+   141.72,
+   108,
+   123.12,
+   73.125
+  ],
+  [
+   "closePath"
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
   ],
   [
    "set",
    "font",
-   "600 18px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -4237,9 +6031,12 @@
   ],
   [
    "fillText",
-   "xor",
-   156,
-   108
+   "=1",
+   151.02,
+   87.075
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -4251,7 +6048,7 @@
   ],
   [
    "arc",
-   54.48,
+   96,
    84,
    5.76,
    0,
@@ -4270,7 +6067,7 @@
   ],
   [
    "arc",
-   54.48,
+   96,
    132,
    5.76,
    0,
@@ -4289,7 +6086,7 @@
   ],
   [
    "arc",
-   257.52,
+   216,
    108,
    5.76,
    0,
@@ -4346,7 +6143,7 @@
   ],
   [
    "moveTo",
-   22.7,
+   40,
    35
   ],
   [
@@ -4377,7 +6174,7 @@
   ],
   [
    "moveTo",
-   22.7,
+   40,
    55
   ],
   [
@@ -4408,7 +6205,7 @@
   ],
   [
    "moveTo",
-   107.3,
+   90,
    45
   ],
   [
@@ -4420,14 +6217,17 @@
    "stroke"
   ],
   [
-   "set",
-   "strokeStyle",
-   "#bea7ff"
+   "save"
   ],
   [
    "set",
-   "fillStyle",
-   "#160b26"
+   "strokeStyle",
+   "#e8ddff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.94
   ],
   [
    "set",
@@ -4435,31 +6235,94 @@
    2
   ],
   [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
    "beginPath"
   ],
   [
-   "roundRect",
-   20.8,
-   20.8,
-   88.4,
-   48.4,
-   2.5
+   "moveTo",
+   48.9,
+   30.469
   ],
   [
-   "fill"
+   "quadraticCurveTo",
+   48.9,
+   45,
+   48.9,
+   59.531
   ],
   [
    "stroke"
   ],
   [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#e8ddff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.94
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   51.3,
+   30.469
+  ],
+  [
+   "quadraticCurveTo",
+   66.8,
+   30.469,
+   82.3,
+   45
+  ],
+  [
+   "quadraticCurveTo",
+   66.8,
+   59.531,
+   51.3,
+   59.531
+  ],
+  [
+   "quadraticCurveTo",
+   59.05,
+   45,
+   51.3,
+   30.469
+  ],
+  [
+   "closePath"
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
   ],
   [
    "set",
    "font",
-   "600 8px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -4473,9 +6336,12 @@
   ],
   [
    "fillText",
-   "xor",
-   65,
-   45
+   "=1",
+   62.925,
+   36.281
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -4487,7 +6353,7 @@
   ],
   [
    "arc",
-   22.7,
+   40,
    35,
    2.4,
    0,
@@ -4506,7 +6372,7 @@
   ],
   [
    "arc",
-   22.7,
+   40,
    55,
    2.4,
    0,
@@ -4525,7 +6391,7 @@
   ],
   [
    "arc",
-   107.3,
+   90,
    45,
    2.4,
    0,
@@ -4582,7 +6448,7 @@
   ],
   [
    "moveTo",
-   31.78,
+   56,
    49
   ],
   [
@@ -4613,7 +6479,7 @@
   ],
   [
    "moveTo",
-   31.78,
+   56,
    77
   ],
   [
@@ -4644,7 +6510,7 @@
   ],
   [
    "moveTo",
-   150.22,
+   126,
    63
   ],
   [
@@ -4656,46 +6522,112 @@
    "stroke"
   ],
   [
-   "set",
-   "strokeStyle",
-   "#bea7ff"
+   "save"
   ],
   [
    "set",
-   "fillStyle",
-   "#160b26"
+   "strokeStyle",
+   "#e8ddff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.94
   ],
   [
    "set",
    "lineWidth",
-   2
+   2.8
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
   ],
   [
    "beginPath"
   ],
   [
-   "roundRect",
-   29.12,
-   29.12,
-   123.76,
-   67.76,
-   3.5
+   "moveTo",
+   68.46,
+   42.656
   ],
   [
-   "fill"
+   "quadraticCurveTo",
+   68.46,
+   63,
+   68.46,
+   83.344
   ],
   [
    "stroke"
   ],
   [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#e8ddff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.94
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   71.82,
+   42.656
+  ],
+  [
+   "quadraticCurveTo",
+   93.52,
+   42.656,
+   115.22,
+   63
+  ],
+  [
+   "quadraticCurveTo",
+   93.52,
+   83.344,
+   71.82,
+   83.344
+  ],
+  [
+   "quadraticCurveTo",
+   82.67,
+   63,
+   71.82,
+   42.656
+  ],
+  [
+   "closePath"
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
   ],
   [
    "set",
    "font",
-   "600 11px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -4709,9 +6641,12 @@
   ],
   [
    "fillText",
-   "xor",
-   91,
-   63
+   "=1",
+   88.095,
+   50.794
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -4723,7 +6658,7 @@
   ],
   [
    "arc",
-   31.78,
+   56,
    49,
    3.36,
    0,
@@ -4742,7 +6677,7 @@
   ],
   [
    "arc",
-   31.78,
+   56,
    77,
    3.36,
    0,
@@ -4761,7 +6696,7 @@
   ],
   [
    "arc",
-   150.22,
+   126,
    63,
    3.36,
    0,
@@ -4818,7 +6753,7 @@
   ],
   [
    "moveTo",
-   54.48,
+   96,
    84
   ],
   [
@@ -4849,7 +6784,7 @@
   ],
   [
    "moveTo",
-   54.48,
+   96,
    132
   ],
   [
@@ -4880,7 +6815,7 @@
   ],
   [
    "moveTo",
-   257.52,
+   216,
    108
   ],
   [
@@ -4892,46 +6827,112 @@
    "stroke"
   ],
   [
-   "set",
-   "strokeStyle",
-   "#bea7ff"
+   "save"
   ],
   [
    "set",
-   "fillStyle",
-   "#160b26"
+   "strokeStyle",
+   "#e8ddff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.94
   ],
   [
    "set",
    "lineWidth",
-   2.88
+   4.8
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
   ],
   [
    "beginPath"
   ],
   [
-   "roundRect",
-   49.92,
-   49.92,
-   212.16,
-   116.16,
-   6
+   "moveTo",
+   117.36,
+   73.125
   ],
   [
-   "fill"
+   "quadraticCurveTo",
+   117.36,
+   108,
+   117.36,
+   142.875
   ],
   [
    "stroke"
   ],
   [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#e8ddff"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.94
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   123.12,
+   73.125
+  ],
+  [
+   "quadraticCurveTo",
+   160.32,
+   73.125,
+   197.52,
+   108
+  ],
+  [
+   "quadraticCurveTo",
+   160.32,
+   142.875,
+   123.12,
+   142.875
+  ],
+  [
+   "quadraticCurveTo",
+   141.72,
+   108,
+   123.12,
+   73.125
+  ],
+  [
+   "closePath"
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
   ],
   [
    "set",
    "font",
-   "600 18px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -4945,9 +6946,12 @@
   ],
   [
    "fillText",
-   "xor",
-   156,
-   108
+   "=1",
+   151.02,
+   87.075
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -4959,7 +6963,7 @@
   ],
   [
    "arc",
-   54.48,
+   96,
    84,
    5.76,
    0,
@@ -4978,7 +6982,7 @@
   ],
   [
    "arc",
-   54.48,
+   96,
    132,
    5.76,
    0,
@@ -4997,7 +7001,7 @@
   ],
   [
    "arc",
-   257.52,
+   216,
    108,
    5.76,
    0,
@@ -5054,7 +7058,7 @@
   ],
   [
    "moveTo",
-   22.7,
+   40,
    35
   ],
   [
@@ -5085,7 +7089,7 @@
   ],
   [
    "moveTo",
-   22.7,
+   40,
    55
   ],
   [
@@ -5116,7 +7120,7 @@
   ],
   [
    "moveTo",
-   107.3,
+   90,
    45
   ],
   [
@@ -5128,14 +7132,36 @@
    "stroke"
   ],
   [
-   "set",
-   "strokeStyle",
-   "#bea7ff"
+   "save"
   ],
   [
    "set",
-   "fillStyle",
-   "#160b26"
+   "globalAlpha",
+   0.55
+  ],
+  [
+   "drawImage",
+   "canvas:32x91",
+   40.9,
+   22.469,
+   16,
+   45.063
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#fd7e14"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.92
   ],
   [
    "set",
@@ -5143,31 +7169,94 @@
    2
   ],
   [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
    "beginPath"
   ],
   [
-   "roundRect",
-   20.8,
-   20.8,
-   88.4,
-   48.4,
-   2.5
+   "moveTo",
+   48.9,
+   30.469
   ],
   [
-   "fill"
+   "quadraticCurveTo",
+   48.9,
+   45,
+   48.9,
+   59.531
   ],
   [
    "stroke"
   ],
   [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#fd7e14"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.92
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   51.3,
+   30.469
+  ],
+  [
+   "quadraticCurveTo",
+   66.8,
+   30.469,
+   82.3,
+   45
+  ],
+  [
+   "quadraticCurveTo",
+   66.8,
+   59.531,
+   51.3,
+   59.531
+  ],
+  [
+   "quadraticCurveTo",
+   59.05,
+   45,
+   51.3,
+   30.469
+  ],
+  [
+   "closePath"
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
   ],
   [
    "set",
    "font",
-   "600 8px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -5181,9 +7270,12 @@
   ],
   [
    "fillText",
-   "xor",
-   65,
-   45
+   "=1",
+   62.925,
+   36.281
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -5195,7 +7287,7 @@
   ],
   [
    "arc",
-   22.7,
+   40,
    35,
    2.4,
    0,
@@ -5214,7 +7306,7 @@
   ],
   [
    "arc",
-   22.7,
+   40,
    55,
    2.4,
    0,
@@ -5233,7 +7325,7 @@
   ],
   [
    "arc",
-   107.3,
+   90,
    45,
    2.4,
    0,
@@ -5290,7 +7382,7 @@
   ],
   [
    "moveTo",
-   31.78,
+   56,
    49
   ],
   [
@@ -5321,7 +7413,7 @@
   ],
   [
    "moveTo",
-   31.78,
+   56,
    77
   ],
   [
@@ -5352,7 +7444,7 @@
   ],
   [
    "moveTo",
-   150.22,
+   126,
    63
   ],
   [
@@ -5364,46 +7456,131 @@
    "stroke"
   ],
   [
-   "set",
-   "strokeStyle",
-   "#bea7ff"
+   "save"
   ],
   [
    "set",
-   "fillStyle",
-   "#160b26"
+   "globalAlpha",
+   0.55
+  ],
+  [
+   "drawImage",
+   "canvas:45x127",
+   57.26,
+   31.456,
+   22.4,
+   63.088
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#fd7e14"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.92
   ],
   [
    "set",
    "lineWidth",
-   2
+   2.8
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
   ],
   [
    "beginPath"
   ],
   [
-   "roundRect",
-   29.12,
-   29.12,
-   123.76,
-   67.76,
-   3.5
+   "moveTo",
+   68.46,
+   42.656
   ],
   [
-   "fill"
+   "quadraticCurveTo",
+   68.46,
+   63,
+   68.46,
+   83.344
   ],
   [
    "stroke"
   ],
   [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#fd7e14"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.92
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   71.82,
+   42.656
+  ],
+  [
+   "quadraticCurveTo",
+   93.52,
+   42.656,
+   115.22,
+   63
+  ],
+  [
+   "quadraticCurveTo",
+   93.52,
+   83.344,
+   71.82,
+   83.344
+  ],
+  [
+   "quadraticCurveTo",
+   82.67,
+   63,
+   71.82,
+   42.656
+  ],
+  [
+   "closePath"
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
   ],
   [
    "set",
    "font",
-   "600 11px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -5417,9 +7594,12 @@
   ],
   [
    "fillText",
-   "xor",
-   91,
-   63
+   "=1",
+   88.095,
+   50.794
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -5431,7 +7611,7 @@
   ],
   [
    "arc",
-   31.78,
+   56,
    49,
    3.36,
    0,
@@ -5450,7 +7630,7 @@
   ],
   [
    "arc",
-   31.78,
+   56,
    77,
    3.36,
    0,
@@ -5469,7 +7649,7 @@
   ],
   [
    "arc",
-   150.22,
+   126,
    63,
    3.36,
    0,
@@ -5526,7 +7706,7 @@
   ],
   [
    "moveTo",
-   54.48,
+   96,
    84
   ],
   [
@@ -5557,7 +7737,7 @@
   ],
   [
    "moveTo",
-   54.48,
+   96,
    132
   ],
   [
@@ -5588,7 +7768,7 @@
   ],
   [
    "moveTo",
-   257.52,
+   216,
    108
   ],
   [
@@ -5600,46 +7780,131 @@
    "stroke"
   ],
   [
-   "set",
-   "strokeStyle",
-   "#bea7ff"
+   "save"
   ],
   [
    "set",
-   "fillStyle",
-   "#160b26"
+   "globalAlpha",
+   0.55
+  ],
+  [
+   "drawImage",
+   "canvas:77x217",
+   98.16,
+   53.925,
+   38.4,
+   108.15
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#fd7e14"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.92
   ],
   [
    "set",
    "lineWidth",
-   2.88
+   4.8
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
   ],
   [
    "beginPath"
   ],
   [
-   "roundRect",
-   49.92,
-   49.92,
-   212.16,
-   116.16,
-   6
+   "moveTo",
+   117.36,
+   73.125
   ],
   [
-   "fill"
+   "quadraticCurveTo",
+   117.36,
+   108,
+   117.36,
+   142.875
   ],
   [
    "stroke"
   ],
   [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#fd7e14"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.92
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   123.12,
+   73.125
+  ],
+  [
+   "quadraticCurveTo",
+   160.32,
+   73.125,
+   197.52,
+   108
+  ],
+  [
+   "quadraticCurveTo",
+   160.32,
+   142.875,
+   123.12,
+   142.875
+  ],
+  [
+   "quadraticCurveTo",
+   141.72,
+   108,
+   123.12,
+   73.125
+  ],
+  [
+   "closePath"
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
   ],
   [
    "set",
    "font",
-   "600 18px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -5653,9 +7918,12 @@
   ],
   [
    "fillText",
-   "xor",
-   156,
-   108
+   "=1",
+   151.02,
+   87.075
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -5667,7 +7935,7 @@
   ],
   [
    "arc",
-   54.48,
+   96,
    84,
    5.76,
    0,
@@ -5686,7 +7954,7 @@
   ],
   [
    "arc",
-   54.48,
+   96,
    132,
    5.76,
    0,
@@ -5705,7 +7973,7 @@
   ],
   [
    "arc",
-   257.52,
+   216,
    108,
    5.76,
    0,
@@ -5762,7 +8030,7 @@
   ],
   [
    "moveTo",
-   22.7,
+   40,
    35
   ],
   [
@@ -5793,7 +8061,7 @@
   ],
   [
    "moveTo",
-   22.7,
+   40,
    55
   ],
   [
@@ -5824,7 +8092,7 @@
   ],
   [
    "moveTo",
-   107.3,
+   90,
    45
   ],
   [
@@ -5836,14 +8104,36 @@
    "stroke"
   ],
   [
-   "set",
-   "strokeStyle",
-   "#bea7ff"
+   "save"
   ],
   [
    "set",
-   "fillStyle",
-   "#160b26"
+   "globalAlpha",
+   0.55
+  ],
+  [
+   "drawImage",
+   "canvas:32x91",
+   40.9,
+   22.469,
+   16,
+   45.063
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#fd7e14"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.92
   ],
   [
    "set",
@@ -5851,31 +8141,94 @@
    2
   ],
   [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
    "beginPath"
   ],
   [
-   "roundRect",
-   20.8,
-   20.8,
-   88.4,
-   48.4,
-   2.5
+   "moveTo",
+   48.9,
+   30.469
   ],
   [
-   "fill"
+   "quadraticCurveTo",
+   48.9,
+   45,
+   48.9,
+   59.531
   ],
   [
    "stroke"
   ],
   [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#fd7e14"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.92
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   51.3,
+   30.469
+  ],
+  [
+   "quadraticCurveTo",
+   66.8,
+   30.469,
+   82.3,
+   45
+  ],
+  [
+   "quadraticCurveTo",
+   66.8,
+   59.531,
+   51.3,
+   59.531
+  ],
+  [
+   "quadraticCurveTo",
+   59.05,
+   45,
+   51.3,
+   30.469
+  ],
+  [
+   "closePath"
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
   ],
   [
    "set",
    "font",
-   "600 8px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -5889,9 +8242,12 @@
   ],
   [
    "fillText",
-   "xor",
-   65,
-   45
+   "=1",
+   62.925,
+   36.281
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -5903,7 +8259,7 @@
   ],
   [
    "arc",
-   22.7,
+   40,
    35,
    2.4,
    0,
@@ -5922,7 +8278,7 @@
   ],
   [
    "arc",
-   22.7,
+   40,
    55,
    2.4,
    0,
@@ -5941,7 +8297,7 @@
   ],
   [
    "arc",
-   107.3,
+   90,
    45,
    2.4,
    0,
@@ -5998,7 +8354,7 @@
   ],
   [
    "moveTo",
-   31.78,
+   56,
    49
   ],
   [
@@ -6029,7 +8385,7 @@
   ],
   [
    "moveTo",
-   31.78,
+   56,
    77
   ],
   [
@@ -6060,7 +8416,7 @@
   ],
   [
    "moveTo",
-   150.22,
+   126,
    63
   ],
   [
@@ -6072,46 +8428,131 @@
    "stroke"
   ],
   [
-   "set",
-   "strokeStyle",
-   "#bea7ff"
+   "save"
   ],
   [
    "set",
-   "fillStyle",
-   "#160b26"
+   "globalAlpha",
+   0.55
+  ],
+  [
+   "drawImage",
+   "canvas:45x127",
+   57.26,
+   31.456,
+   22.4,
+   63.088
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#fd7e14"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.92
   ],
   [
    "set",
    "lineWidth",
-   2
+   2.8
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
   ],
   [
    "beginPath"
   ],
   [
-   "roundRect",
-   29.12,
-   29.12,
-   123.76,
-   67.76,
-   3.5
+   "moveTo",
+   68.46,
+   42.656
   ],
   [
-   "fill"
+   "quadraticCurveTo",
+   68.46,
+   63,
+   68.46,
+   83.344
   ],
   [
    "stroke"
   ],
   [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#fd7e14"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.92
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   71.82,
+   42.656
+  ],
+  [
+   "quadraticCurveTo",
+   93.52,
+   42.656,
+   115.22,
+   63
+  ],
+  [
+   "quadraticCurveTo",
+   93.52,
+   83.344,
+   71.82,
+   83.344
+  ],
+  [
+   "quadraticCurveTo",
+   82.67,
+   63,
+   71.82,
+   42.656
+  ],
+  [
+   "closePath"
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
   ],
   [
    "set",
    "font",
-   "600 11px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -6125,9 +8566,12 @@
   ],
   [
    "fillText",
-   "xor",
-   91,
-   63
+   "=1",
+   88.095,
+   50.794
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -6139,7 +8583,7 @@
   ],
   [
    "arc",
-   31.78,
+   56,
    49,
    3.36,
    0,
@@ -6158,7 +8602,7 @@
   ],
   [
    "arc",
-   31.78,
+   56,
    77,
    3.36,
    0,
@@ -6177,7 +8621,7 @@
   ],
   [
    "arc",
-   150.22,
+   126,
    63,
    3.36,
    0,
@@ -6234,7 +8678,7 @@
   ],
   [
    "moveTo",
-   54.48,
+   96,
    84
   ],
   [
@@ -6265,7 +8709,7 @@
   ],
   [
    "moveTo",
-   54.48,
+   96,
    132
   ],
   [
@@ -6296,7 +8740,7 @@
   ],
   [
    "moveTo",
-   257.52,
+   216,
    108
   ],
   [
@@ -6308,46 +8752,131 @@
    "stroke"
   ],
   [
-   "set",
-   "strokeStyle",
-   "#bea7ff"
+   "save"
   ],
   [
    "set",
-   "fillStyle",
-   "#160b26"
+   "globalAlpha",
+   0.55
+  ],
+  [
+   "drawImage",
+   "canvas:77x217",
+   98.16,
+   53.925,
+   38.4,
+   108.15
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "strokeStyle",
+   "#fd7e14"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.92
   ],
   [
    "set",
    "lineWidth",
-   2.88
+   4.8
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
   ],
   [
    "beginPath"
   ],
   [
-   "roundRect",
-   49.92,
-   49.92,
-   212.16,
-   116.16,
-   6
+   "moveTo",
+   117.36,
+   73.125
   ],
   [
-   "fill"
+   "quadraticCurveTo",
+   117.36,
+   108,
+   117.36,
+   142.875
   ],
   [
    "stroke"
   ],
   [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#fd7e14"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.92
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   123.12,
+   73.125
+  ],
+  [
+   "quadraticCurveTo",
+   160.32,
+   73.125,
+   197.52,
+   108
+  ],
+  [
+   "quadraticCurveTo",
+   160.32,
+   142.875,
+   123.12,
+   142.875
+  ],
+  [
+   "quadraticCurveTo",
+   141.72,
+   108,
+   123.12,
+   73.125
+  ],
+  [
+   "closePath"
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
   ],
   [
    "set",
    "font",
-   "600 18px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -6361,9 +8890,12 @@
   ],
   [
    "fillText",
-   "xor",
-   156,
-   108
+   "=1",
+   151.02,
+   87.075
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -6375,7 +8907,7 @@
   ],
   [
    "arc",
-   54.48,
+   96,
    84,
    5.76,
    0,
@@ -6394,7 +8926,7 @@
   ],
   [
    "arc",
-   54.48,
+   96,
    132,
    5.76,
    0,
@@ -6413,7 +8945,7 @@
   ],
   [
    "arc",
-   257.52,
+   216,
    108,
    5.76,
    0,
@@ -6470,7 +9002,7 @@
   ],
   [
    "moveTo",
-   22.7,
+   40,
    35
   ],
   [
@@ -6501,7 +9033,7 @@
   ],
   [
    "moveTo",
-   22.7,
+   40,
    55
   ],
   [
@@ -6532,7 +9064,7 @@
   ],
   [
    "moveTo",
-   107.3,
+   90,
    45
   ],
   [
@@ -6544,14 +9076,17 @@
    "stroke"
   ],
   [
-   "set",
-   "strokeStyle",
-   "#bea7ff"
+   "save"
   ],
   [
    "set",
-   "fillStyle",
-   "#160b26"
+   "strokeStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.5
   ],
   [
    "set",
@@ -6559,31 +9094,94 @@
    2
   ],
   [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
    "beginPath"
   ],
   [
-   "roundRect",
-   20.8,
-   20.8,
-   88.4,
-   48.4,
-   2.5
+   "moveTo",
+   48.9,
+   30.469
   ],
   [
-   "fill"
+   "quadraticCurveTo",
+   48.9,
+   45,
+   48.9,
+   59.531
   ],
   [
    "stroke"
   ],
   [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.5
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   51.3,
+   30.469
+  ],
+  [
+   "quadraticCurveTo",
+   66.8,
+   30.469,
+   82.3,
+   45
+  ],
+  [
+   "quadraticCurveTo",
+   66.8,
+   59.531,
+   51.3,
+   59.531
+  ],
+  [
+   "quadraticCurveTo",
+   59.05,
+   45,
+   51.3,
+   30.469
+  ],
+  [
+   "closePath"
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
   ],
   [
    "set",
    "font",
-   "600 8px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -6597,9 +9195,12 @@
   ],
   [
    "fillText",
-   "xor",
-   65,
-   45
+   "=1",
+   62.925,
+   36.281
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -6611,7 +9212,7 @@
   ],
   [
    "arc",
-   22.7,
+   40,
    35,
    2.4,
    0,
@@ -6630,7 +9231,7 @@
   ],
   [
    "arc",
-   22.7,
+   40,
    55,
    2.4,
    0,
@@ -6649,7 +9250,7 @@
   ],
   [
    "arc",
-   107.3,
+   90,
    45,
    2.4,
    0,
@@ -6706,7 +9307,7 @@
   ],
   [
    "moveTo",
-   31.78,
+   56,
    49
   ],
   [
@@ -6737,7 +9338,7 @@
   ],
   [
    "moveTo",
-   31.78,
+   56,
    77
   ],
   [
@@ -6768,7 +9369,7 @@
   ],
   [
    "moveTo",
-   150.22,
+   126,
    63
   ],
   [
@@ -6780,46 +9381,112 @@
    "stroke"
   ],
   [
-   "set",
-   "strokeStyle",
-   "#bea7ff"
+   "save"
   ],
   [
    "set",
-   "fillStyle",
-   "#160b26"
+   "strokeStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.5
   ],
   [
    "set",
    "lineWidth",
-   2
+   2.8
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
   ],
   [
    "beginPath"
   ],
   [
-   "roundRect",
-   29.12,
-   29.12,
-   123.76,
-   67.76,
-   3.5
+   "moveTo",
+   68.46,
+   42.656
   ],
   [
-   "fill"
+   "quadraticCurveTo",
+   68.46,
+   63,
+   68.46,
+   83.344
   ],
   [
    "stroke"
   ],
   [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.5
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   71.82,
+   42.656
+  ],
+  [
+   "quadraticCurveTo",
+   93.52,
+   42.656,
+   115.22,
+   63
+  ],
+  [
+   "quadraticCurveTo",
+   93.52,
+   83.344,
+   71.82,
+   83.344
+  ],
+  [
+   "quadraticCurveTo",
+   82.67,
+   63,
+   71.82,
+   42.656
+  ],
+  [
+   "closePath"
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
   ],
   [
    "set",
    "font",
-   "600 11px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -6833,9 +9500,12 @@
   ],
   [
    "fillText",
-   "xor",
-   91,
-   63
+   "=1",
+   88.095,
+   50.794
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -6847,7 +9517,7 @@
   ],
   [
    "arc",
-   31.78,
+   56,
    49,
    3.36,
    0,
@@ -6866,7 +9536,7 @@
   ],
   [
    "arc",
-   31.78,
+   56,
    77,
    3.36,
    0,
@@ -6885,7 +9555,7 @@
   ],
   [
    "arc",
-   150.22,
+   126,
    63,
    3.36,
    0,
@@ -6942,7 +9612,7 @@
   ],
   [
    "moveTo",
-   54.48,
+   96,
    84
   ],
   [
@@ -6973,7 +9643,7 @@
   ],
   [
    "moveTo",
-   54.48,
+   96,
    132
   ],
   [
@@ -7004,7 +9674,7 @@
   ],
   [
    "moveTo",
-   257.52,
+   216,
    108
   ],
   [
@@ -7016,46 +9686,112 @@
    "stroke"
   ],
   [
-   "set",
-   "strokeStyle",
-   "#bea7ff"
+   "save"
   ],
   [
    "set",
-   "fillStyle",
-   "#160b26"
+   "strokeStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.5
   ],
   [
    "set",
    "lineWidth",
-   2.88
+   4.8
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
   ],
   [
    "beginPath"
   ],
   [
-   "roundRect",
-   49.92,
-   49.92,
-   212.16,
-   116.16,
-   6
+   "moveTo",
+   117.36,
+   73.125
   ],
   [
-   "fill"
+   "quadraticCurveTo",
+   117.36,
+   108,
+   117.36,
+   142.875
   ],
   [
    "stroke"
   ],
   [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.5
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   123.12,
+   73.125
+  ],
+  [
+   "quadraticCurveTo",
+   160.32,
+   73.125,
+   197.52,
+   108
+  ],
+  [
+   "quadraticCurveTo",
+   160.32,
+   142.875,
+   123.12,
+   142.875
+  ],
+  [
+   "quadraticCurveTo",
+   141.72,
+   108,
+   123.12,
+   73.125
+  ],
+  [
+   "closePath"
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
   ],
   [
    "set",
    "font",
-   "600 18px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -7069,9 +9805,12 @@
   ],
   [
    "fillText",
-   "xor",
-   156,
-   108
+   "=1",
+   151.02,
+   87.075
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -7083,7 +9822,7 @@
   ],
   [
    "arc",
-   54.48,
+   96,
    84,
    5.76,
    0,
@@ -7102,7 +9841,7 @@
   ],
   [
    "arc",
-   54.48,
+   96,
    132,
    5.76,
    0,
@@ -7121,7 +9860,7 @@
   ],
   [
    "arc",
-   257.52,
+   216,
    108,
    5.76,
    0,
@@ -7178,7 +9917,7 @@
   ],
   [
    "moveTo",
-   22.7,
+   40,
    35
   ],
   [
@@ -7209,7 +9948,7 @@
   ],
   [
    "moveTo",
-   22.7,
+   40,
    55
   ],
   [
@@ -7240,7 +9979,7 @@
   ],
   [
    "moveTo",
-   107.3,
+   90,
    45
   ],
   [
@@ -7252,14 +9991,17 @@
    "stroke"
   ],
   [
-   "set",
-   "strokeStyle",
-   "#bea7ff"
+   "save"
   ],
   [
    "set",
-   "fillStyle",
-   "#160b26"
+   "strokeStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.5
   ],
   [
    "set",
@@ -7267,31 +10009,94 @@
    2
   ],
   [
+   "set",
+   "lineCap",
+   "round"
+  ],
+  [
    "beginPath"
   ],
   [
-   "roundRect",
-   20.8,
-   20.8,
-   88.4,
-   48.4,
-   2.5
+   "moveTo",
+   48.9,
+   30.469
   ],
   [
-   "fill"
+   "quadraticCurveTo",
+   48.9,
+   45,
+   48.9,
+   59.531
   ],
   [
    "stroke"
   ],
   [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.5
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   51.3,
+   30.469
+  ],
+  [
+   "quadraticCurveTo",
+   66.8,
+   30.469,
+   82.3,
+   45
+  ],
+  [
+   "quadraticCurveTo",
+   66.8,
+   59.531,
+   51.3,
+   59.531
+  ],
+  [
+   "quadraticCurveTo",
+   59.05,
+   45,
+   51.3,
+   30.469
+  ],
+  [
+   "closePath"
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
   ],
   [
    "set",
    "font",
-   "600 8px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -7305,9 +10110,12 @@
   ],
   [
    "fillText",
-   "xor",
-   65,
-   45
+   "=1",
+   62.925,
+   36.281
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -7319,7 +10127,7 @@
   ],
   [
    "arc",
-   22.7,
+   40,
    35,
    2.4,
    0,
@@ -7338,7 +10146,7 @@
   ],
   [
    "arc",
-   22.7,
+   40,
    55,
    2.4,
    0,
@@ -7357,7 +10165,7 @@
   ],
   [
    "arc",
-   107.3,
+   90,
    45,
    2.4,
    0,
@@ -7414,7 +10222,7 @@
   ],
   [
    "moveTo",
-   31.78,
+   56,
    49
   ],
   [
@@ -7445,7 +10253,7 @@
   ],
   [
    "moveTo",
-   31.78,
+   56,
    77
   ],
   [
@@ -7476,7 +10284,7 @@
   ],
   [
    "moveTo",
-   150.22,
+   126,
    63
   ],
   [
@@ -7488,46 +10296,112 @@
    "stroke"
   ],
   [
-   "set",
-   "strokeStyle",
-   "#bea7ff"
+   "save"
   ],
   [
    "set",
-   "fillStyle",
-   "#160b26"
+   "strokeStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.5
   ],
   [
    "set",
    "lineWidth",
-   2
+   2.8
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
   ],
   [
    "beginPath"
   ],
   [
-   "roundRect",
-   29.12,
-   29.12,
-   123.76,
-   67.76,
-   3.5
+   "moveTo",
+   68.46,
+   42.656
   ],
   [
-   "fill"
+   "quadraticCurveTo",
+   68.46,
+   63,
+   68.46,
+   83.344
   ],
   [
    "stroke"
   ],
   [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.5
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   71.82,
+   42.656
+  ],
+  [
+   "quadraticCurveTo",
+   93.52,
+   42.656,
+   115.22,
+   63
+  ],
+  [
+   "quadraticCurveTo",
+   93.52,
+   83.344,
+   71.82,
+   83.344
+  ],
+  [
+   "quadraticCurveTo",
+   82.67,
+   63,
+   71.82,
+   42.656
+  ],
+  [
+   "closePath"
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
   ],
   [
    "set",
    "font",
-   "600 11px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -7541,9 +10415,12 @@
   ],
   [
    "fillText",
-   "xor",
-   91,
-   63
+   "=1",
+   88.095,
+   50.794
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -7555,7 +10432,7 @@
   ],
   [
    "arc",
-   31.78,
+   56,
    49,
    3.36,
    0,
@@ -7574,7 +10451,7 @@
   ],
   [
    "arc",
-   31.78,
+   56,
    77,
    3.36,
    0,
@@ -7593,7 +10470,7 @@
   ],
   [
    "arc",
-   150.22,
+   126,
    63,
    3.36,
    0,
@@ -7650,7 +10527,7 @@
   ],
   [
    "moveTo",
-   54.48,
+   96,
    84
   ],
   [
@@ -7681,7 +10558,7 @@
   ],
   [
    "moveTo",
-   54.48,
+   96,
    132
   ],
   [
@@ -7712,7 +10589,7 @@
   ],
   [
    "moveTo",
-   257.52,
+   216,
    108
   ],
   [
@@ -7724,46 +10601,112 @@
    "stroke"
   ],
   [
-   "set",
-   "strokeStyle",
-   "#bea7ff"
+   "save"
   ],
   [
    "set",
-   "fillStyle",
-   "#160b26"
+   "strokeStyle",
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.5
   ],
   [
    "set",
    "lineWidth",
-   2.88
+   4.8
+  ],
+  [
+   "set",
+   "lineCap",
+   "round"
   ],
   [
    "beginPath"
   ],
   [
-   "roundRect",
-   49.92,
-   49.92,
-   212.16,
-   116.16,
-   6
+   "moveTo",
+   117.36,
+   73.125
   ],
   [
-   "fill"
+   "quadraticCurveTo",
+   117.36,
+   108,
+   117.36,
+   142.875
   ],
   [
    "stroke"
   ],
   [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
    "set",
    "fillStyle",
-   "#f0e9ff"
+   "#8f7fb0"
+  ],
+  [
+   "set",
+   "globalAlpha",
+   0.5
+  ],
+  [
+   "beginPath"
+  ],
+  [
+   "moveTo",
+   123.12,
+   73.125
+  ],
+  [
+   "quadraticCurveTo",
+   160.32,
+   73.125,
+   197.52,
+   108
+  ],
+  [
+   "quadraticCurveTo",
+   160.32,
+   142.875,
+   123.12,
+   142.875
+  ],
+  [
+   "quadraticCurveTo",
+   141.72,
+   108,
+   123.12,
+   73.125
+  ],
+  [
+   "closePath"
+  ],
+  [
+   "fill"
+  ],
+  [
+   "restore"
+  ],
+  [
+   "save"
+  ],
+  [
+   "set",
+   "fillStyle",
+   "#0c0517"
   ],
   [
    "set",
    "font",
-   "600 18px ui-monospace, \"JetBrains Mono\", monospace"
+   "700 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -7777,9 +10720,12 @@
   ],
   [
    "fillText",
-   "xor",
-   156,
-   108
+   "=1",
+   151.02,
+   87.075
+  ],
+  [
+   "restore"
   ],
   [
    "set",
@@ -7791,7 +10737,7 @@
   ],
   [
    "arc",
-   54.48,
+   96,
    84,
    5.76,
    0,
@@ -7810,7 +10756,7 @@
   ],
   [
    "arc",
-   54.48,
+   96,
    132,
    5.76,
    0,
@@ -7829,7 +10775,7 @@
   ],
   [
    "arc",
-   257.52,
+   216,
    108,
    5.76,
    0,

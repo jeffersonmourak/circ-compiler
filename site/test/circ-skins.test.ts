@@ -380,6 +380,67 @@ describe('circ-skins', () => {
     expect(ops.some((op) => op[0] === 'drawImage' && String(op[1]).startsWith('canvas:'))).toBe(true);
   });
 
+  test('a builtin macro draws through the recipe on a virtual box, tails to the real ports', () => {
+    const theme = themeWith(true);
+    const names = ['and', 'nand', 'or', 'nor', 'xor', 'xnor', 'not'];
+    for (const name of names) {
+      const base = component('subcircuit_builtin', 1);
+      const two = name !== 'not';
+      const c: PlacedComponent = {
+        ...base,
+        kind: { tag: 'subcircuit', subcircuit: name },
+        height: two ? 5 : 3,
+        inPorts: two ? base.inPorts : [{ portName: 'in', coord: { x: X - 1, y: Y + 1 } }],
+        outPort: { x: X + base.width, y: Y + (two ? 2 : 1) },
+      };
+      const { ctx, ops } = recordingContext(10);
+      const sig = 1;
+      skinFor(theme, c)({
+        ctx, theme, cell: 10, component: c, inputSignals: c.inPorts.map(() => sig), outputSignal: sig,
+        inputValues: c.inPorts.map(() => valueOf(sig, 1)), outputValue: valueOf(sig, 1), hovered: false,
+      });
+      // The virtual 5-wide box centred in the 9-wide macro box: x = 2 + 2 = 4.
+      const vx = (c.x + (c.width - 5) / 2) * 10;
+      const innerL = vx + 4, innerR = vx + 50 - 4;
+      // Tails: from each real port's centre to the virtual box's inset edge.
+      const lines = ops.filter((op) => op[0] === 'lineTo');
+      const moves = ops.filter((op) => op[0] === 'moveTo');
+      for (const p of c.inPorts) {
+        const py = p.coord.y * 10 + 5;
+        expect(`${name} in: ${moves.some((m) => m[1] === innerL - 4 && m[2] === py)}`).toBe(`${name} in: true`);
+        expect(`${name} in: ${lines.some((l) => l[1] === p.coord.x * 10 + 5 && l[2] === py)}`).toBe(`${name} in: true`);
+      }
+      const oy = c.outPort.y * 10 + 5;
+      expect(`${name} out: ${moves.some((m) => m[1] === innerR + 4 && m[2] === oy)}`).toBe(`${name} out: true`);
+      expect(`${name} out: ${lines.some((l) => l[1] === c.outPort.x * 10 + 5 && l[2] === oy)}`).toBe(`${name} out: true`);
+      // The symbol: tinted sprite art for the six (a 100×100 canvas), the
+      // triangle for not, whose only image is its halo; a bubble for the negated four.
+      const art = ops.filter((op) => op[0] === 'drawImage' && op[1] === 'canvas:100x100').length;
+      expect(`${name}: ${art}`).toBe(`${name}: ${name === 'not' ? 0 : 1}`);
+      const negated = ['nand', 'nor', 'xnor', 'not'].includes(name);
+      const bubbles = ops.filter((op) => op[0] === 'arc' && op[3] === 2.4 && Number(op[1]) >= innerR - 5.5 && Number(op[1]) <= innerR);
+      expect(`${name}: ${bubbles.length}`).toBe(`${name}: ${negated ? 1 : 0}`);
+      const exclusive = ['xor', 'xnor'].includes(name);
+      expect(`${name}: ${ops.some((op) => op[0] === 'quadraticCurveTo')}`).toBe(`${name}: ${exclusive}`);
+      // The instance name below the real box.
+      const label = ops.find((op) => op[0] === 'fillText' && op[1] === 's')!;
+      expect(label[2]).toBe((c.x + c.width / 2) * 10);
+    }
+  });
+
+  test('a user subcircuit still takes the labelled box', () => {
+    const theme = themeWith(true);
+    const c = component('subcircuit_user', 1);
+    const { ctx, ops } = recordingContext(10);
+    skinFor(theme, c)({
+      ctx, theme, cell: 10, component: c, inputSignals: [0, 0], outputSignal: 0,
+      inputValues: [valueOf(0, 1), valueOf(0, 1)], outputValue: valueOf(0, 1), hovered: false,
+    });
+    expect(ops.some((op) => op[0] === 'roundRect')).toBe(true);
+    expect(ops.some((op) => op[0] === 'drawImage')).toBe(false);
+    expect(ops.some((op) => op[0] === 'fillText' && op[1] === 'adder')).toBe(true);
+  });
+
   test('the NOT gate names itself below its box, like every other part', () => {
     // Before: yOffset = -cell * 15 put the name 0.7 cells above the bottom
     // edge, inside the sprite.
