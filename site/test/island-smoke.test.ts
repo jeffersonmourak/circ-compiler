@@ -243,6 +243,13 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     // The console: a scrollback and a prompt, shut until a session exists,
     // with the same sentence Simulate shows for why.
     expect(doc.querySelector('[data-drawer-panel="console"] .pg-console-log')).not.toBeNull();
+    // An editor's terminal: a bar naming the command it runs, with its actions.
+    expect(doc.querySelector('.pg-console-title')?.textContent).toMatch(/^circ-compile \S+\.circ --sim$/);
+    const consoleButtons = Array.from(
+      doc.querySelectorAll('.pg-console-bar .pg-console-btn'),
+      (b) => (b as unknown as { dataset: Record<string, string> }).dataset.console,
+    );
+    expect(consoleButtons).toEqual(['clear', 'script', 'log']);
     const prompt = doc.querySelector('.pg-console-in') as unknown as { disabled: boolean } | null;
     expect(prompt?.disabled).toBe(true);
     expect(doc.querySelector('.pg-console-note')?.hasAttribute('hidden')).toBe(false);
@@ -325,6 +332,20 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(doc.querySelector('[data-dock-panel="diagnostics"]')?.hasAttribute('hidden')).toBe(false);
     expect(body).not.toBeNull();
   }));
+
+  test('the console\'s Clear on an empty log is harmless, and Copy says what went', async () => {
+    drive((doc) => {
+      const click = (sel: string) => (doc.querySelector(sel) as unknown as { click(): void }).click();
+      click('.pg-console-btn[data-console="clear"]');
+      expect(doc.querySelector('.pg-console-log')?.textContent).toBe('');
+      click('.pg-console-btn[data-console="script"]');
+    });
+    // The clipboard answers in a microtask (or is absent, which is a sentence too).
+    await new Promise((r) => setTimeout(r, 0));
+    drive((doc) => {
+      expect(doc.querySelector('.pg-status')?.textContent).toMatch(/^Clipboard unavailable|^Copied 0 command lines\./);
+    });
+  });
 
   test('the drawer follows the output tab and collapses to its strip', () => drive((doc) => {
     const drawer = doc.querySelector('.pg-drawer') as unknown as { dataset: Record<string, string>; hasAttribute(n: string): boolean };

@@ -283,11 +283,22 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
             role="tabpanel"
             aria-labelledby="pg-drawer-tab-console"
           >
-            {/* The --sim protocol at a prompt. Every line in the log is the
-                executor's reply, the echo of a submitted line (`> …`) or a
-                comment (`# …`) the protocol ignores, so the log pastes into a
-                script. The note shows why there is nothing to drive. */}
+            {/* The --sim protocol at a prompt, dressed as an editor's terminal:
+                a bar with the command the terminal is "running" and its
+                actions, the log, the prompt line. Every line in the log is
+                the executor's reply, the echo of a line (`> …`) — typed, or
+                what another face did — or a comment (`# …`); Copy script
+                gives the lines --sim accepts. The note says why there is
+                nothing to drive. */}
             <div class="pg-console">
+              <div class="pg-console-bar">
+                <span class="pg-console-title">circ-compile main.circ --sim</span>
+                <span class="pg-console-actions">
+                  <button type="button" class="pg-console-btn" data-console="clear" title="Clear the log (Ctrl+L)">Clear</button>
+                  <button type="button" class="pg-console-btn" data-console="script" title="Copy the commands, as a --sim script">Copy script</button>
+                  <button type="button" class="pg-console-btn" data-console="log" title="Copy the whole log">Copy log</button>
+                </span>
+              </div>
               <p class="pg-console-note">Compile a circuit first.</p>
               <pre class="pg-console-log" aria-live="polite" aria-label="Console transcript"></pre>
               <form class="pg-console-form">
@@ -363,7 +374,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
   // `--sim`, and the prompt's own memory. Small, and the session already
   // pulls their one shared dependency, so they ride in the eager bundle.
   import { execute, handshake } from '../scripts/sim-executor.ts';
-  import { HELP_VERB, HistoryRing, MemoryTabFiles, Transcript, commandFor, helpLines, promptEcho } from '../scripts/console.ts';
+  import { HELP_VERB, HistoryRing, MemoryTabFiles, Transcript, commandFor, helpLines, promptEcho, scriptOf } from '../scripts/console.ts';
   import { joinConflicts, requestFor, rootOf, PLAYGROUND_DIR } from '../utils/split-files.ts';
   import { createSplitter } from '../scripts/splitter.ts';
   import { fnv1a } from '../utils/artifact-hash.ts';
@@ -529,6 +540,9 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     const drawerTabs = Array.from(el.querySelectorAll<HTMLButtonElement>('.pg-drawer-tabs [role=tab]'));
     const drawerPanels = Array.from(el.querySelectorAll<HTMLElement>('.pg-drawer-panel'));
     const drawerToggle = el.querySelector<HTMLButtonElement>('.pg-drawer-toggle')!;
+    const consoleEl = el.querySelector<HTMLElement>('.pg-console')!;
+    const consoleTitle = el.querySelector<HTMLElement>('.pg-console-title')!;
+    const consoleButtons = Array.from(el.querySelectorAll<HTMLButtonElement>('.pg-console-btn'));
     const consoleNote = el.querySelector<HTMLElement>('.pg-console-note')!;
     const consoleLog = el.querySelector<HTMLElement>('.pg-console-log')!;
     const consoleForm = el.querySelector<HTMLFormElement>('.pg-console-form')!;
@@ -779,20 +793,34 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       return 'reply';
     }
 
-    /** Append lines to the log. `page` marks lines another face caused, for the stylesheet only. */
-    function consoleAppend(lines: readonly string[], origin: 'prompt' | 'page' = 'prompt') {
+    /** True when the log is scrolled to its end, within a line and a half; a
+     *  reader scrolled up to read must not be dragged down by a new line. */
+    function consoleAtEnd(): boolean {
+      const lineHeight = parseFloat(getComputedStyle(consoleLog).lineHeight);
+      const threshold = Number.isFinite(lineHeight) && lineHeight > 0 ? lineHeight * 1.5 : 24;
+      return consoleLog.scrollHeight - consoleLog.scrollTop - consoleLog.clientHeight <= threshold;
+    }
+
+    /**
+     * Append lines to the log. `page` marks lines another face caused, for
+     * the stylesheet only. The log follows a new line only when it was
+     * already at the end, or when the caller insists (a submit, a handshake).
+     */
+    function consoleAppend(lines: readonly string[], origin: 'prompt' | 'page' = 'prompt', opts: { force?: boolean } = {}) {
       if (lines.length === 0) return;
+      const follow = opts.force || consoleAtEnd();
       consoleState.transcript.append(lines);
       for (const line of lines) {
         const row = document.createElement('span');
         row.className = 'pg-console-line';
         row.dataset.kind = consoleKind(line);
+        if (line.startsWith('ok')) row.dataset.ok = '';
         if (origin === 'page') row.dataset.origin = 'page';
         row.textContent = `${line}\n`;
         consoleLog.appendChild(row);
       }
       while (consoleLog.childElementCount > consoleState.transcript.cap) consoleLog.firstElementChild?.remove();
-      consoleLog.scrollTop = consoleLog.scrollHeight;
+      if (follow) consoleLog.scrollTop = consoleLog.scrollHeight;
     }
 
     function consoleClear() {
@@ -809,14 +837,52 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
 
     /** The lines `--sim` prints first, with the root file as the name the CLI was given. */
     function consoleHandshake(session: SimSession) {
-      consoleAppend(handshake(session, rootOf(state.tabs.files).name));
+      const root = rootOf(state.tabs.files).name;
+      consoleTitle.textContent = `circ-compile ${root} --sim`;
+      consoleAppend(handshake(session, root), 'prompt', { force: true });
+    }
+
+    /**
+     * Hand the clipboard a text and say what went. `navigator.clipboard` is
+     * absent off a secure context and in the test harness, and a browser may
+     * refuse; both are a sentence, never a throw.
+     */
+    function consoleCopy(text: string, what: string) {
+      const capped = consoleState.transcript.length === consoleState.transcript.cap
+        ? `; the log is capped at ${consoleState.transcript.cap.toLocaleString('en-US')} lines`
+        : '';
+      const clip = typeof navigator !== 'undefined' ? navigator.clipboard : undefined;
+      if (!clip || typeof clip.writeText !== 'function') {
+        status.textContent = 'Clipboard unavailable; select the log and copy it.';
+        return;
+      }
+      clip.writeText(text).then(
+        () => { status.textContent = `${what}${capped}.`; },
+        () => { status.textContent = 'Clipboard unavailable; select the log and copy it.'; },
+      );
+    }
+
+    for (const b of consoleButtons) {
+      b.addEventListener('click', () => {
+        const action = b.dataset.console;
+        if (action === 'clear') {
+          consoleClear();
+          consoleIn.focus();
+        } else if (action === 'script') {
+          const lines = scriptOf(consoleState.transcript.lines);
+          consoleCopy(`${lines.join('\n')}\n`, `Copied ${lines.length} command line${lines.length === 1 ? '' : 's'}`);
+        } else if (action === 'log') {
+          const n = consoleState.transcript.length;
+          consoleCopy(`${consoleState.transcript.text}\n`, `Copied the log, ${n} line${n === 1 ? '' : 's'}`);
+        }
+      });
     }
 
     async function consoleSubmit(line: string) {
       const session = sim.session;
       if (!session || consoleState.busy) return;
       consoleState.history.push(line);
-      consoleAppend([promptEcho(line)]);
+      consoleAppend([promptEcho(line)], 'prompt', { force: true });
       if (line.trim() === HELP_VERB) {
         consoleAppend(helpLines());
         return;
@@ -857,7 +923,19 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       } else if (e.key === 'l' && e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
         consoleClear();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        consoleIn.value = '';
+        consoleState.history.reset();
       }
+    });
+    // A terminal takes the caret wherever you click in it, unless you are
+    // selecting text to copy, or pressing one of its buttons.
+    consoleEl.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('button, input')) return;
+      if (!window.getSelection()?.isCollapsed) return;
+      if (!consoleIn.disabled) consoleIn.focus();
     });
 
     // ---- source linking ----
