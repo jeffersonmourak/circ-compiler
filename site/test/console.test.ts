@@ -1,7 +1,8 @@
 // The console's pure parts, over plain values.
 import { describe, expect, test } from 'bun:test';
-import { HistoryRing, LOAD_REFUSAL, MemoryTabFiles, SAVE_REFUSAL, Transcript, helpLines, promptEcho } from '../src/scripts/console.ts';
+import { HistoryRing, LOAD_REFUSAL, MemoryTabFiles, SAVE_REFUSAL, Transcript, commandFor, helpLines, promptEcho } from '../src/scripts/console.ts';
 import { parseLine } from '../src/scripts/sim-protocol.ts';
+import type { SessionEvent } from '../src/scripts/sim-session.ts';
 
 describe('history is a ring of a hundred lines', () => {
   test('up walks back and stays on the oldest; down returns to the empty prompt', () => {
@@ -85,5 +86,54 @@ describe('the echo and the help', () => {
     }
     const verbs = lines.slice(1).map((l) => l.slice(2).trim().split(' ')[0]);
     expect(verbs).toEqual(['pins', 'set', 'get', 'dump', 'eval', 'run', 'reset', 'quit', 'mems', 'peek', 'poke', 'mem', 'clear', 'load', 'save', 'help']);
+  });
+});
+
+describe('commandFor spells the protocol line and its reply', () => {
+  const session = {
+    pins: [
+      { name: 'a', id: 0, width: 4, kind: 'in' as const },
+      { name: 'clk', id: 1, width: 1, kind: 'in' as const },
+      { name: 'q', id: 2, width: 8, kind: 'out' as const },
+    ],
+    mems: [{ name: 'data', id: 3, kind: 'ram' as const, width: 8, addrWidth: 4 }],
+  };
+  const drive = (assigns: { name: string; value: bigint; defined: bigint }[]): SessionEvent => ({
+    kind: 'drive',
+    names: assigns.map((a) => a.name),
+    assigns,
+  });
+
+  test('a drive is one set per pin, with a mask only when the pin is not wholly known', () => {
+    expect(commandFor(drive([{ name: 'a', value: 0xan, defined: 0xfn }]), session)).toEqual(['> set a 0xa', 'ok']);
+    expect(commandFor(drive([{ name: 'clk', value: 1n, defined: 1n }, { name: 'a', value: 3n, defined: 0xfn }]), session)).toEqual([
+      '> set clk 0x1',
+      'ok',
+      '> set a 0x3',
+      'ok',
+    ]);
+    expect(commandFor(drive([{ name: 'a', value: 0x5n, defined: 0x3n }]), session)).toEqual(['> set a 0x1 0x3', 'ok']);
+    expect(commandFor(drive([{ name: 'a', value: 0n, defined: 0n }]), session)).toEqual(['> set a 0x0 0x0', 'ok']);
+    // Canonical: a value bit under an unknown mask bit is not written.
+    expect(commandFor(drive([{ name: 'a', value: 0xfn, defined: 0xcn }]), session)).toEqual(['> set a 0xc 0xc', 'ok']);
+    // A name the session does not know keeps its mask rather than guessing a width.
+    expect(commandFor(drive([{ name: 'zz', value: 1n, defined: 1n }]), session)).toEqual(['> set zz 0x1 0x1', 'ok']);
+    // Every line is the grammar's, so the echo parses once its mark is stripped.
+    for (const line of commandFor(drive([{ name: 'a', value: 0x5n, defined: 0x3n }]), session)) {
+      if (line.startsWith('> ')) expect(parseLine(line.slice(2)).ok).toBe(true);
+    }
+  });
+
+  test('memory events are a poke, a clear or a comment about an image', () => {
+    expect(commandFor({ kind: 'memory', name: 'data', op: 'poke', addr: 2n, value: 0x5an, defined: 0xffn }, session)).toEqual(['> poke data 0x2 0x5a', 'ok']);
+    expect(commandFor({ kind: 'memory', name: 'data', op: 'poke', addr: 15n, value: 0n, defined: 0n }, session)).toEqual(['> poke data 0xf 0x0 0x0', 'ok']);
+    expect(commandFor({ kind: 'memory', name: 'data', op: 'clear' }, session)).toEqual(['> clear data', 'ok']);
+    expect(commandFor({ kind: 'memory', name: 'code', op: 'load', words: 4 }, session)).toEqual(['# code: image from the Memory tab, 4 words']);
+    expect(commandFor({ kind: 'memory', name: 'code', op: 'load', words: 1 }, session)).toEqual(['# code: image from the Memory tab, 1 word']);
+  });
+
+  test('a rebuild is a reset; an end is nothing', () => {
+    expect(commandFor({ kind: 'rebuilt' }, session)).toEqual(['> reset', 'ok']);
+    expect(commandFor({ kind: 'destroyed' }, session)).toEqual([]);
   });
 });

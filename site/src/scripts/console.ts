@@ -7,7 +7,10 @@
 // The echo is prefixed so it cannot be mistaken for a reply, and the help
 // is comment lines, which the protocol ignores.
 
+import { widthMask } from 'circ-renderer/topology';
 import type { FileSource } from './sim-executor.ts';
+import { writeHex } from './sim-protocol.ts';
+import type { SessionEvent, SimSession } from './sim-session.ts';
 
 /**
  * The prompt's ↑/↓ history: the last `cap` submitted lines, newest last.
@@ -138,4 +141,45 @@ export function helpLines(): string[] {
     '# values: decimal, 0x, 0o or 0b, with _ between digits; replies are 0x hex',
     ...rows.map(([cmd, note]) => `# ${cmd.padEnd(width)}  ${note}`),
   ];
+}
+
+/** What `commandFor` needs of a session: the widths, to know when a mask is worth writing. */
+export type WidthSource = Pick<SimSession, 'pins' | 'mems'>;
+
+/** `<value>[ <mask>]`, canonical (`value & defined`), the mask only when the pin is not wholly known. */
+function valueWithMask(value: bigint, defined: bigint, width: number | undefined): string {
+  const canonical = value & defined;
+  const full = width === undefined ? null : widthMask(width);
+  return full !== null && defined === full ? writeHex(canonical) : `${writeHex(canonical)} ${writeHex(defined)}`;
+}
+
+/**
+ * The lines the console prints for something another face did: the protocol
+ * line that would have done the same, echoed as if typed, then the reply the
+ * session gave. A drive is one `set` per pin; a cell written is a `poke`; a
+ * memory emptied is a `clear`; an image the Memory tab applied is a `#`
+ * comment, because the browser refuses `load` and no command is claimed; a
+ * rebuild is `reset` (the caller prints the handshake after it). Nothing
+ * here drives anything: the drive already happened.
+ */
+export function commandFor(event: SessionEvent, session: WidthSource): string[] {
+  switch (event.kind) {
+    case 'drive':
+      return event.assigns.flatMap((a) => {
+        const pin = session.pins.find((p) => p.kind === 'in' && p.name === a.name);
+        return [promptEcho(`set ${a.name} ${valueWithMask(a.value, a.defined, pin?.width)}`), 'ok'];
+      });
+    case 'memory': {
+      if (event.op === 'load') {
+        return [`# ${event.name}: image from the Memory tab, ${event.words} word${event.words === 1 ? '' : 's'}`];
+      }
+      if (event.op === 'clear') return [promptEcho(`clear ${event.name}`), 'ok'];
+      const mem = session.mems.find((m) => m.name === event.name);
+      return [promptEcho(`poke ${event.name} ${writeHex(event.addr)} ${valueWithMask(event.value, event.defined, mem?.width)}`), 'ok'];
+    }
+    case 'rebuilt':
+      return [promptEcho('reset'), 'ok'];
+    case 'destroyed':
+      return [];
+  }
 }
