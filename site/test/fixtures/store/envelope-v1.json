@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "scratch": [
+    {
+      "id": "scratch:1757500000000-abc123",
+      "name": "my adder",
+      "source": "// main.circ\ninput a\ninput b\nxor s(a=a, b=b)\noutput sum(in=s.out)\n",
+      "updatedAt": 1757500100000
+    },
+    {
+      "id": "scratch:1757400000000-def456",
+      "name": "scratch two",
+      "source": "input a\nnot n(in=a)\noutput out(in=n.out)\n",
+      "updatedAt": 1757400100000
+    }
+  ],
+  "activeId": "scratch:1757500000000-abc123",
+  "activeFile": "main.circ",
+  "layout": { "ratios": { "main": 0.42, "drawer": 0.7 } },
+  "settings": {
+    "expandMacros": true,
+    "expandDisplay": false,
+    "format": "json",
+    "valueFormat": "hex",
+    "truthTableCap": 10,
+    "warningsAsErrors": false,
+    "romImages": { "code": "0a0b" }
+  },
+  "tab": "data",
+  "dock": { "open": true, "tab": "settings" },
+  "ws": { "expanded": ["yours", "introduction"] }
+}

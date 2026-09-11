@@ -15,36 +15,33 @@ import type { DecodeResult, HashIntent, ShareKey } from './share-link.ts';
 import type { ExampleLevel } from '../content/examples.ts';
 
 export const STORE_KEY = 'circ.playground.v1';
-export const STORE_VERSION = 1;
+export const STORE_VERSION = 2;
 export const MAX_SCRATCH = 16;
 export const MAX_SOURCE_BYTES = 32 * 1024;
 export const MAX_ENVELOPE_BYTES = 256 * 1024;
 export const WRITE_DEBOUNCE_MS = 500;
 
 /**
- * The three output tabs. Diagnostics is not among them: it belongs to the
- * source, not to the compiled result, so it lives in the editor's own dock
- * beside the settings rather than competing with the preview for the pane a
- * reader is watching.
+ * The canvas region's three views. Data is not among them: it is a panel that
+ * can be open over any view (Phase 5), and diagnostics belong to the source,
+ * in the footer under the editor.
  */
-export type OutputTab = 'preview' | 'truth' | 'simulate' | 'data';
+export type View = 'schematic' | 'live' | 'truth';
+export const VIEWS: readonly View[] = ['schematic', 'live', 'truth'];
 
-/** The editor dock's panels. The memory panel left for the output pane's
- *  drawer, so a stored `memory` falls back like any other unknown tab. */
-export type DockTab = 'diagnostics' | 'settings';
+/** The footer under the editor: open or not, and which panel it was left on.
+ *  Remembered separately, as the dock's were. */
+export interface FooterState {
+  open: boolean;
+  tab: 'diagnostics' | 'settings';
+}
+export type FooterTab = FooterState['tab'];
 
 /** Which rows of the workspace explorer the reader has open. Ids, not
  *  indices: a group or project keeps its expansion across a content change
  *  that renumbers everything around it. */
 export interface WorkspaceState {
   expanded: string[];
-}
-
-/** The dock is collapsible, and which panel it was left on is remembered
- *  separately from whether it was left open. */
-export interface DockState {
-  open: boolean;
-  tab: DockTab;
 }
 
 /** `example:<slug>` | `tour:<n>` | `scratch:<id>`. */
@@ -61,11 +58,17 @@ export interface ScratchProject {
 }
 
 export interface LayoutState {
-  /** Splitter id → first-pane fraction, strictly between 0 and 1. A record so
-   *  a second divider costs no schema change: `main` is the editor's share of
-   *  the panes, `drawer` the output panels' share above the drawer. */
+  /** The source column, in CSS pixels (design file: `480px 1px minmax(0, 1fr)`).
+   *  The reader's intent: clamped on render, never on commit. */
+  sourceWidth: number;
+  /** Splitter id → first-pane fraction, strictly between 0 and 1. `drawer` is
+   *  the output panels' share above the drawer, until Phase 6 moves it to a
+   *  height; `main` left with version 1. */
   ratios: Record<string, number>;
 }
+export const DEFAULT_SOURCE_WIDTH = 480;
+const MIN_SOURCE_WIDTH = 320;
+const MAX_SOURCE_WIDTH = 8192;
 
 /**
  * Stored in camelCase deliberately: an envelope key must never be spreadable
@@ -93,8 +96,8 @@ export interface PlaygroundEnvelope {
   activeFile: string | null;
   layout: LayoutState;
   settings: PlaygroundSettings;
-  tab: OutputTab;
-  dock: DockState;
+  view: View;
+  footer: FooterState;
   ws: WorkspaceState;
 }
 
@@ -118,12 +121,10 @@ export interface TimerLike {
   clearTimeout(id: number): void;
 }
 
-const OUTPUT_TABS: readonly OutputTab[] = ['preview', 'truth', 'simulate', 'data'];
-const DOCK_TABS: readonly DockTab[] = ['diagnostics', 'settings'];
-// Shut. The dock holds diagnostics, and the explorer now carries the per-file
-// error badge, so a reader sees that something is wrong without it — opening it
-// is for reading the messages, which is a deliberate act.
-export const DEFAULT_DOCK: DockState = { open: false, tab: 'diagnostics' };
+const FOOTER_TABS: readonly FooterTab[] = ['diagnostics', 'settings'];
+// Shut. The footer's bar already says how many errors and warnings there are,
+// so opening it is for reading the messages, which is a deliberate act.
+export const DEFAULT_FOOTER: FooterState = { open: false, tab: 'diagnostics' };
 /** The reader's own projects, open. Everything else starts shut, and whichever
  *  group holds the open project is revealed at load without being persisted. */
 export const DEFAULT_WS: WorkspaceState = { expanded: ['yours'] };
@@ -153,10 +154,10 @@ export function defaultEnvelope(): PlaygroundEnvelope {
     scratch: [],
     activeId: null,
     activeFile: null,
-    layout: { ratios: {} },
+    layout: { sourceWidth: DEFAULT_SOURCE_WIDTH, ratios: {} },
     settings: defaultSettings(),
-    tab: 'preview',
-    dock: { ...DEFAULT_DOCK },
+    view: 'schematic',
+    footer: { ...DEFAULT_FOOTER },
     ws: { expanded: [...DEFAULT_WS.expanded] },
   };
 }
@@ -166,13 +167,47 @@ const utf8Bytes = (s: string): number => new TextEncoder().encode(s).length;
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
 
-/** Missing entirely in every envelope written before the dock existed, which
- *  is why each field falls back on its own rather than the object as a whole. */
-function normalizeDock(raw: unknown): DockState {
-  const out: DockState = { ...DEFAULT_DOCK };
+/** Field by field, as the dock's state was: a version-1 envelope from before
+ *  the dock existed migrates with neither field, and each falls back alone. */
+function normalizeFooter(raw: unknown): FooterState {
+  const out: FooterState = { ...DEFAULT_FOOTER };
   if (!isObject(raw)) return out;
   if (typeof raw.open === 'boolean') out.open = raw.open;
-  if (DOCK_TABS.includes(raw.tab as DockTab)) out.tab = raw.tab as DockTab;
+  if (FOOTER_TABS.includes(raw.tab as FooterTab)) out.tab = raw.tab as FooterTab;
+  return out;
+}
+
+/** A whole number of pixels the bench can show; anything else is the default. */
+function normalizeSourceWidth(raw: unknown): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return DEFAULT_SOURCE_WIDTH;
+  const px = Math.round(raw);
+  return px < MIN_SOURCE_WIDTH || px > MAX_SOURCE_WIDTH ? DEFAULT_SOURCE_WIDTH : px;
+}
+
+/**
+ * A version-1 envelope reshaped for version 2, field by field, so a key the
+ * old writer never produced is simply absent and `normalize` defaults it. The
+ * scratch projects ride through untouched: a schema move is not a reset.
+ * The old output tab becomes a view (`preview → schematic`, `simulate` and
+ * `data → live`, `truth → truth`); the dock's state becomes the footer's; the
+ * main splitter's share is dropped for the source column's width.
+ */
+export function migrateV1(raw: Record<string, unknown>): Record<string, unknown> {
+  const tab = raw.tab;
+  const view: View = tab === 'truth' ? 'truth' : tab === 'simulate' || tab === 'data' ? 'live' : 'schematic';
+  const dock = isObject(raw.dock) ? raw.dock : {};
+  const layout = isObject(raw.layout) ? raw.layout : {};
+  const ratios = isObject(layout.ratios) ? { ...layout.ratios } : {};
+  delete ratios.main;
+  const out: Record<string, unknown> = {
+    ...raw,
+    version: 2,
+    view,
+    footer: { open: dock.open, tab: dock.tab },
+    layout: { sourceWidth: DEFAULT_SOURCE_WIDTH, ratios },
+  };
+  delete out.tab;
+  delete out.dock;
   return out;
 }
 
@@ -249,16 +284,18 @@ function normalizeRatios(raw: unknown): Record<string, number> {
  */
 export function normalize(raw: unknown): { envelope: PlaygroundEnvelope; note: StoreNote | null } {
   if (!isObject(raw)) return { envelope: defaultEnvelope(), note: { kind: 'reset', reason: 'corrupt' } };
-  if (raw.version !== STORE_VERSION) {
-    // No migration path before v2: a mismatch resets rather than guesses.
+  const body = raw.version === 1 ? migrateV1(raw) : raw;
+  if (body.version !== STORE_VERSION) {
+    // No migration path from a version this code does not know: a mismatch
+    // resets rather than guesses.
     return { envelope: defaultEnvelope(), note: { kind: 'reset', reason: 'version' } };
   }
 
-  const scratch = normalizeScratch(raw.scratch);
+  const scratch = normalizeScratch(body.scratch);
   const ids = new Set(scratch.map((p) => p.id));
   const activeId =
-    typeof raw.activeId === 'string' && (!raw.activeId.startsWith('scratch:') || ids.has(raw.activeId))
-      ? raw.activeId
+    typeof body.activeId === 'string' && (!body.activeId.startsWith('scratch:') || ids.has(body.activeId))
+      ? body.activeId
       : null;
 
   return {
@@ -266,15 +303,17 @@ export function normalize(raw: unknown): { envelope: PlaygroundEnvelope; note: S
       version: STORE_VERSION,
       scratch,
       activeId,
-      activeFile: typeof raw.activeFile === 'string' ? raw.activeFile : null,
-      layout: { ratios: normalizeRatios(isObject(raw.layout) ? raw.layout.ratios : null) },
-      settings: normalizeSettings(raw.settings),
-      // An envelope written before diagnostics left the output pane carries
-      // `tab: 'diagnostics'`, which is no longer an output tab. It falls back
-      // here like any other unrecognised value rather than resetting anything.
-      tab: OUTPUT_TABS.includes(raw.tab as OutputTab) ? (raw.tab as OutputTab) : 'preview',
-      dock: normalizeDock(raw.dock),
-      ws: normalizeWorkspace(raw.ws),
+      activeFile: typeof body.activeFile === 'string' ? body.activeFile : null,
+      layout: {
+        sourceWidth: normalizeSourceWidth(isObject(body.layout) ? body.layout.sourceWidth : null),
+        ratios: normalizeRatios(isObject(body.layout) ? body.layout.ratios : null),
+      },
+      settings: normalizeSettings(body.settings),
+      // A view this code does not have falls back like any other unrecognised
+      // value rather than resetting anything.
+      view: VIEWS.includes(body.view as View) ? (body.view as View) : 'schematic',
+      footer: normalizeFooter(body.footer),
+      ws: normalizeWorkspace(body.ws),
     },
     note: null,
   };

@@ -3,7 +3,7 @@ import { describe, expect, test } from 'bun:test';
 import { lineCount, summarize, summaryLabels } from '../src/scripts/footer-summary.ts';
 import type { Analysis } from '../src/scripts/circ-diagnostics.ts';
 
-const range = { start: { line: 1, column: 1 }, end: { line: 1, column: 2 } } as Analysis['symbols'][number]['range'];
+const range = { start: { line: 1, column: 1 }, end: { line: 1, column: 2 } } as unknown as Analysis['symbols'][number]['range'];
 const sym = (file_id: number, name: string, kind: Analysis['symbols'][number]['kind']) =>
   ({ file_id, name, kind, width: 1, range });
 const analysis = (symbols: Analysis['symbols'], files = [{ file_id: 0, path: '/playground/main.circ' }]): Analysis =>

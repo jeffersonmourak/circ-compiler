@@ -470,6 +470,8 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     NEW_PROJECT_SOURCE,
     CATALOGUE_GROUPS,
     type CatalogueItem,
+    type View as StoredView,
+    type FooterTab,
   } from '../utils/playground-store.ts';
   import {
     ANALYZE_DEBOUNCE_MS,
@@ -518,7 +520,12 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
   } from '../scripts/circ-diagnostics.ts';
 
   type Tab = 'preview' | 'truth' | 'simulate' | 'data';
-  type DockTab = 'diagnostics' | 'settings';
+  /** The bridge until Phase 2 draws the view switch: the four output tabs
+   *  read and write the envelope's `view`. Two tabs share `live`, so the
+   *  bridge remembers which of them was last shown in memory only. */
+  const viewOfTab = (tab: Tab): StoredView => (tab === 'preview' ? 'schematic' : tab === 'truth' ? 'truth' : 'live');
+  const tabOfView = (view: StoredView): Tab => (view === 'schematic' ? 'preview' : view === 'truth' ? 'truth' : 'simulate');
+  type DockTab = FooterTab;
   type DrawerTab = 'console' | 'memory';
   /** A mapped diagnostic plus the file tab it belongs to; `null` when the
    *  compiler blamed a file with no tab (a `<builtin>/…` source, or a stale
@@ -703,7 +710,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
 
     function showTab(tab: Tab, opts: { persist?: boolean } = {}) {
       state.tab = tab;
-      if (opts.persist !== false) store.update((draft) => { draft.tab = tab; });
+      if (opts.persist !== false) store.update((draft) => { draft.view = viewOfTab(tab); });
       for (const b of tabs) b.setAttribute('aria-selected', String(b.dataset.tab === tab));
       for (const p of panels) p.hidden = p.dataset.panel !== tab;
       // A tab switch re-uses the build stage's current sequence rather than
@@ -740,14 +747,14 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
 
     function showDockTab(tab: DockTab, opts: { persist?: boolean } = {}) {
       selectDockPanel(tab);
-      if (opts.persist !== false) store.update((draft) => { draft.dock.tab = tab; });
+      if (opts.persist !== false) store.update((draft) => { draft.footer.tab = tab; });
     }
 
     function setDockOpen(open: boolean, opts: { persist?: boolean } = {}) {
       dock.dataset.open = String(open);
       dockToggle.setAttribute('aria-expanded', String(open));
       dockToggle.textContent = open ? 'Hide' : 'Show';
-      if (opts.persist !== false) store.update((draft) => { draft.dock.open = open; });
+      if (opts.persist !== false) store.update((draft) => { draft.footer.open = open; });
     }
 
     for (const b of dockTabs) {
@@ -2600,9 +2607,9 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         if (note) status.textContent = note;
       }
 
-      showTab(store.envelope.tab as Tab, { persist: false });
-      showDockTab(store.envelope.dock.tab, { persist: false });
-      setDockOpen(store.envelope.dock.open, { persist: false });
+      showTab(tabOfView(store.envelope.view), { persist: false });
+      showDockTab(store.envelope.footer.tab, { persist: false });
+      setDockOpen(store.envelope.footer.open, { persist: false });
       renderDockBadge();
       applyTruthGate();
       renderWorkspace();
@@ -2616,8 +2623,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
 
     // ---- the pane divider ----
     // The source column's width in pixels (design file: `480px 1px
-    // minmax(0, 1fr)`). Not persisted yet: the envelope's `ratios` accepts
-    // only a fraction, and Phase 1 moves the schema once, to `sourceWidth`.
+    // minmax(0, 1fr)`), the envelope's `layout.sourceWidth`.
     const body = el.querySelector<HTMLElement>('.pg-body')!;
     const separator = el.querySelector<HTMLElement>('.pg-splitter')!;
     const splitter = createSplitter({
@@ -2625,7 +2631,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       separator,
       unit: 'px',
       property: '--pg-source-w',
-      initial: 480,
+      initial: store.envelope.layout.sourceWidth,
       minPx: 320,
       maxReservePx: 480,
       stepPx: 16,
@@ -2633,7 +2639,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       labels: ['source', 'canvas'],
       // Only a drag, a key or a double-click persists; a window resize
       // re-clamps what is rendered and never commits.
-      onCommit: () => { /* Phase 1: draft.layout.sourceWidth */ },
+      onCommit: (px) => store.update((draft) => { draft.layout.sourceWidth = px; }),
     });
 
     // Below the breakpoint the panes stack, so the divider means nothing: it
