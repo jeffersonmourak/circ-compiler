@@ -89,13 +89,14 @@ describe('playground store', () => {
   test('defaults and round-trip', () => {
     const env = defaultEnvelope();
     expect(Object.keys(env).sort()).toEqual(
-      ['activeFile', 'activeId', 'dataOpen', 'footer', 'layout', 'scratch', 'settings', 'version', 'view', 'ws'].sort(),
+      ['activeFile', 'activeId', 'dataOpen', 'dataPanel', 'footer', 'layout', 'scratch', 'settings', 'version', 'view', 'ws'].sort(),
     );
     expect(env.version).toBe(2);
     expect(env.settings.truthTableCap).toBe(12);
     expect(env.settings.format).toBe('json');
     expect(env.view).toBe('schematic');
     expect(env.dataOpen).toBe(false);
+    expect(env.dataPanel).toEqual({});
     expect(env.footer).toEqual({ open: false, tab: 'diagnostics' });
     expect(env.layout).toEqual({ sourceWidth: 480, ratios: {} });
     // The reader's own projects open; every catalogue group starts shut, and
@@ -105,6 +106,27 @@ describe('playground store', () => {
     const round = normalize(JSON.parse(JSON.stringify(env)));
     expect(round.note).toBeNull();
     expect(round.envelope).toEqual(env);
+  });
+
+  test('panel positions round-trip, default under v2, and drop invalid entries', () => {
+    const raw = {
+      ...defaultEnvelope(), dataOpen: true,
+      scratch: [{ id: 'scratch:abc', name: 'mine', source: 'input a\n', updatedAt: 1 }],
+      dataPanel: { 'scratch:abc': { x: 10, y: 20 }, 'example:half-adder': { x: 800, y: -10 } },
+    };
+    expect(normalize(JSON.parse(JSON.stringify(raw))).envelope).toEqual(raw);
+    const missing = { ...raw } as Record<string, unknown>;
+    delete missing.dataPanel;
+    expect(normalize(missing).envelope.dataPanel).toEqual({});
+    expect(normalize(missing).note).toBeNull();
+    const invalid = normalize({ ...raw, dataPanel: {
+      ...raw.dataPanel, nope: { x: 1, y: 2 }, 'scratch:gone': { x: 1, y: 2 },
+      'example:bad': { x: NaN, y: 2 }, 'tour:bad': { x: 0, y: Infinity },
+      'example:': { x: 1, y: 2 }, 'tour:2': { x: '1', y: 2 },
+    } });
+    expect(invalid.envelope.dataPanel).toEqual(raw.dataPanel);
+    expect(invalid.envelope.scratch).toEqual(raw.scratch);
+    expect(invalid.note).toBeNull();
   });
 
   test('unknown keys are dropped', () => {

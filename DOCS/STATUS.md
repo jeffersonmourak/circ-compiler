@@ -225,3 +225,11 @@ Rolling log of shipped slices. Newest at the bottom. The plan is `DOCS/PLANS_PRO
 **Tests:** Added import coverage for source preservation, duplicate stems, UTF-8 byte limits, read failure, cancellation, concurrent change events and envelope persistence. All four gates pass: 589 tests, typecheck with no errors, fresh build, bundle within its unchanged ceiling. `/playground`: 124.2 KB raw / 43.4 KB gzip, versus 120.1 / 42.1 after Phase 3.
 **Next slice:** Phase 5 — the Data panel (`DOCS/PLANS/PHASE_5_data_panel.md`), on the human's word.
 **Notes:** Refreshed all six board-3a captures with the Import action at `/var/folders/91/0hwz8chx0d12hz5x00f53vrm0000gn/T/opencode/bench-3a-{light,dark}-{1440,1024,700}.png`. Reviewed dark/1440, light/1024 and light/700 in this slice. Chrome confirmed the unchanged source width in every mode/width, native ⌘K and Escape, an actual disk-file import and restoration after reload, with no runtime exceptions. The browser probe waits for the debounced envelope write; a fixed 800ms delay proved too short under headless Chrome/Rosetta. Recurring traps now record v2 tier migration, search-only expansion and the import-specific skipped note. Seen outside the switcher at 1024: the Live hint and zoom line overlap; carry that existing canvas-layout issue into Phase 7's sweep.
+
+## 2026-09-11 — Phase 5 — Geometry and saved positions
+
+**What shipped:** `data-panel.ts` provides the default anchor, edge clamp, pointer delta and four-pixel drag threshold. The version-2 envelope adds `dataPanel`, defaulting to an empty map, alongside the existing `dataOpen` field. Saved positions remain intent; viewport bounds apply only when rendering.
+**Files touched:** `site/src/scripts/data-panel.ts`, `site/src/utils/playground-store.ts`, `site/test/{data-panel,playground-store}.test.ts`, `DOCS/STATUS.md`
+**Tests:** Four geometry cases and a store round-trip/default/normalization case. All four gates pass: 594 tests; `/playground` 124.5 KB raw / 43.5 KB gzip.
+**Next slice:** The Data card and its value controls.
+**Notes:** Catalogue positions are validated by nonempty `example:`/`tour:` id shape, as the store does not hold the catalogue. Scratch positions also require a surviving scratch id; non-finite coordinates and unknown shapes are dropped without resetting projects. No schema bump.

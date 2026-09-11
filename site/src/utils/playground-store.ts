@@ -88,6 +88,8 @@ export interface PlaygroundSettings {
   romImages: Record<string, string>;
 }
 
+export interface PanelPos { x: number; y: number }
+
 export interface PlaygroundEnvelope {
   version: number;
   scratch: ScratchProject[];
@@ -99,6 +101,8 @@ export interface PlaygroundEnvelope {
   view: View;
   /** The Data panel, open over whichever view; its rows are the session's. */
   dataOpen: boolean;
+  /** Last committed position per project, in canvas-region CSS pixels. */
+  dataPanel: Record<PickId, PanelPos>;
   footer: FooterState;
   ws: WorkspaceState;
 }
@@ -159,6 +163,7 @@ export function defaultEnvelope(): PlaygroundEnvelope {
     settings: defaultSettings(),
     view: 'schematic',
     dataOpen: false,
+    dataPanel: {},
     footer: { ...DEFAULT_FOOTER },
     ws: { expanded: [...DEFAULT_WS.expanded] },
   };
@@ -231,6 +236,19 @@ function normalizeWorkspace(raw: unknown): WorkspaceState {
     if (seen.size >= MAX_EXPANDED) break;
   }
   return { expanded: [...seen] };
+}
+
+function normalizeDataPanel(raw: unknown, scratchIds: ReadonlySet<string>): Record<PickId, PanelPos> {
+  const out: Record<PickId, PanelPos> = {};
+  if (!isObject(raw)) return out;
+  for (const [id, pos] of Object.entries(raw)) {
+    const kind = idKind(id);
+    if (!kind || !id.slice(id.indexOf(':') + 1) || (kind === 'scratch' && !scratchIds.has(id))) continue;
+    if (!isObject(pos) || typeof pos.x !== 'number' || typeof pos.y !== 'number') continue;
+    if (!Number.isFinite(pos.x) || !Number.isFinite(pos.y)) continue;
+    out[id] = { x: pos.x, y: pos.y };
+  }
+  return out;
 }
 
 function normalizeSettings(raw: unknown): PlaygroundSettings {
@@ -320,6 +338,7 @@ export function normalize(raw: unknown): { envelope: PlaygroundEnvelope; note: S
       // value rather than resetting anything.
       view: VIEWS.includes(body.view as View) ? (body.view as View) : 'schematic',
       dataOpen: body.dataOpen === true,
+      dataPanel: normalizeDataPanel(body.dataPanel, ids),
       footer: normalizeFooter(body.footer),
       ws: normalizeWorkspace(body.ws),
     },
