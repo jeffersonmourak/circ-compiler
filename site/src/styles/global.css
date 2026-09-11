@@ -1027,6 +1027,123 @@ hr {
 .pg-dock-count[hidden] { display: none; }
 .pg-dock-tab[hidden] { display: none; }
 
+/* ---------- the output pane's drawer ----------
+   The session's strip under the Simulate and Data panels: Console and Memory.
+   It borrows the dock's strip, tab and toggle rules so the two read as one
+   family, and takes its height from the drawer divider: the panels above keep
+   `--pg-split-drawer` of the pane, the drawer the rest. */
+.pg-drawer {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-top: 1px solid var(--border);
+  background: var(--pane-bg);
+}
+.pg-drawer[hidden] { display: none; }
+.pg-drawer[data-open="true"] {
+  flex: 0 0 calc((1 - var(--pg-split-drawer, 0.62)) * 100%);
+}
+.pg-drawer-bar {
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+  background: var(--pane-label-bg);
+  flex: 0 0 auto;
+}
+.pg-drawer-tabs {
+  display: flex;
+  gap: 0;
+  overflow-x: auto;
+  flex: 1;
+  min-width: 0;
+  scrollbar-width: thin;
+}
+.pg-drawer-tab {
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 0.4rem 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.pg-drawer-tab:hover { color: var(--fg); }
+.pg-drawer-tab[aria-selected="true"] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.pg-drawer[data-open="false"] .pg-drawer-tab[aria-selected="true"] {
+  border-bottom-color: transparent;
+  color: var(--muted);
+}
+.pg-drawer-tab[hidden] { display: none; }
+.pg-drawer-count {
+  font-size: 0.68rem;
+  line-height: 1;
+  padding: 0.15rem 0.35rem;
+  border-radius: 999px;
+  background: var(--border);
+  color: var(--fg);
+}
+.pg-drawer-count[hidden] { display: none; }
+.pg-drawer-toggle {
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  padding: 0.4rem 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pg-drawer-toggle:hover { color: var(--fg); }
+.pg-drawer-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+.pg-drawer[data-open="false"] .pg-drawer-body { display: none; }
+.pg-drawer-panel { padding: 0.6rem 0.85rem; flex: 1; min-height: 0; }
+.pg-drawer-panel[hidden] { display: none; }
+/* The divider between the panels and the drawer: the main divider turned on
+   its side, so the same handle reads the same way. */
+.pg-drawer-splitter {
+  flex: 0 0 var(--pg-split-w, 8px);
+  background: transparent;
+  border: 0;
+  cursor: row-resize;
+  touch-action: none;
+  position: relative;
+}
+.pg-drawer-splitter::before {
+  content: '';
+  position: absolute;
+  inset: 3px 0;
+  background: var(--border);
+  border-radius: 1px;
+  transition: background 120ms ease;
+}
+.pg-drawer-splitter:hover::before,
+.pg-drawer-splitter:focus-visible::before { background: var(--accent); }
+.pg-drawer-splitter:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.pg-drawer-splitter[hidden] { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .pg-drawer-splitter::before { transition: none; }
+}
+
 /* Source linking: the span in the editor the canvas is pointing at. A
    background, not a border, so it never shifts the text by a pixel. */
 .cm-circ-linked {

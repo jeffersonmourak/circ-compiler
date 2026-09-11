@@ -126,21 +126,6 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
               aria-selected="false"
               aria-controls="pg-dock-panel-settings"
             >Settings</button>
-            {/* Present but hidden until the circuit declares a rom or a ram.
-                A memory's contents are runtime state rather than part of the
-                artifact, so there is nothing to show for a circuit that has
-                none, and a permanently empty tab would be a worse answer than
-                no tab. The island unhides it from the analysis. */}
-            <button
-              type="button"
-              role="tab"
-              class="pg-dock-tab"
-              id="pg-dock-tab-memory"
-              data-dock="memory"
-              aria-selected="false"
-              aria-controls="pg-dock-panel-memory"
-              hidden
-            >Memory<span class="pg-dock-count" hidden></span></button>
           </div>
           <button
             type="button"
@@ -157,14 +142,6 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
             role="tabpanel"
             aria-labelledby="pg-dock-tab-diagnostics"
           ><ul class="pg-diag"></ul></div>
-          <div
-            class="pg-dock-panel"
-            id="pg-dock-panel-memory"
-            data-dock-panel="memory"
-            role="tabpanel"
-            aria-labelledby="pg-dock-tab-memory"
-            hidden
-          ><div class="pg-mem"></div></div>
           <div
             class="pg-dock-panel"
             id="pg-dock-panel-settings"
@@ -248,6 +225,73 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           <button type="button" class="pg-data-reset" title="Every pin unknown, ROM images re-applied">Reset</button>
         </div>
         <div class="pg-data" hidden></div>
+      </div>
+      {/* The drawer: the session's own strip under the two tabs that drive it.
+          Console is the --sim protocol at a prompt; Memory is the panel that
+          used to live in the editor's dock, which is about the RUNNING circuit
+          rather than the source. Hidden with the other output tabs, because a
+          preview or a truth table has no session to drive. */}
+      <div
+        class="pg-drawer-splitter"
+        role="separator"
+        tabindex="0"
+        aria-orientation="horizontal"
+        aria-label="Resize the output and the drawer"
+        aria-controls="pg-pane-output pg-drawer"
+        hidden
+      ></div>
+      <div class="pg-drawer" id="pg-drawer" data-open="true" hidden>
+        <div class="pg-drawer-bar">
+          <div class="pg-drawer-tabs" role="tablist" aria-label="Session panel">
+            <button
+              type="button"
+              role="tab"
+              class="pg-drawer-tab"
+              id="pg-drawer-tab-console"
+              data-drawer="console"
+              aria-selected="true"
+              aria-controls="pg-drawer-panel-console"
+            >Console</button>
+            {/* Present but hidden until the circuit declares a rom or a ram.
+                A memory's contents are runtime state rather than part of the
+                artifact, so there is nothing to show for a circuit that has
+                none, and a permanently empty tab would be a worse answer than
+                no tab. The island unhides it from the analysis. */}
+            <button
+              type="button"
+              role="tab"
+              class="pg-drawer-tab"
+              id="pg-drawer-tab-memory"
+              data-drawer="memory"
+              aria-selected="false"
+              aria-controls="pg-drawer-panel-memory"
+              hidden
+            >Memory<span class="pg-drawer-count" hidden></span></button>
+          </div>
+          <button
+            type="button"
+            class="pg-drawer-toggle"
+            aria-expanded="true"
+            aria-controls="pg-drawer-body"
+          >Hide</button>
+        </div>
+        <div class="pg-drawer-body" id="pg-drawer-body">
+          <div
+            class="pg-drawer-panel"
+            id="pg-drawer-panel-console"
+            data-drawer-panel="console"
+            role="tabpanel"
+            aria-labelledby="pg-drawer-tab-console"
+          ></div>
+          <div
+            class="pg-drawer-panel"
+            id="pg-drawer-panel-memory"
+            data-drawer-panel="memory"
+            role="tabpanel"
+            aria-labelledby="pg-drawer-tab-memory"
+            hidden
+          ><div class="pg-mem"></div></div>
+        </div>
       </div>
     </section>
   </div>
@@ -399,7 +443,8 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
   } from '../scripts/circ-diagnostics.ts';
 
   type Tab = 'preview' | 'truth' | 'simulate' | 'data';
-  type DockTab = 'diagnostics' | 'settings' | 'memory';
+  type DockTab = 'diagnostics' | 'settings';
+  type DrawerTab = 'console' | 'memory';
   /** A mapped diagnostic plus the file tab it belongs to; `null` when the
    *  compiler blamed a file with no tab (a `<builtin>/…` source, or a stale
    *  path from a reply that outlived a rename). */
@@ -450,8 +495,15 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     const dockPanels = Array.from(el.querySelectorAll<HTMLElement>('.pg-dock-panel'));
     const dockToggle = el.querySelector<HTMLButtonElement>('.pg-dock-toggle')!;
     const dockBadge = el.querySelector<HTMLElement>('.pg-dock-badge')!;
-    const memTab = el.querySelector<HTMLButtonElement>('.pg-dock-tab[data-dock="memory"]')!;
-    const memCount = el.querySelector<HTMLElement>('.pg-dock-count')!;
+    // The drawer: the session's strip under the Simulate and Data panels,
+    // with the same scoped [role=tab] query as the two strips above.
+    const drawer = el.querySelector<HTMLElement>('.pg-drawer')!;
+    const drawerSeparator = el.querySelector<HTMLElement>('.pg-drawer-splitter')!;
+    const drawerTabs = Array.from(el.querySelectorAll<HTMLButtonElement>('.pg-drawer-tabs [role=tab]'));
+    const drawerPanels = Array.from(el.querySelectorAll<HTMLElement>('.pg-drawer-panel'));
+    const drawerToggle = el.querySelector<HTMLButtonElement>('.pg-drawer-toggle')!;
+    const memTab = el.querySelector<HTMLButtonElement>('.pg-drawer-tab[data-drawer="memory"]')!;
+    const memCount = el.querySelector<HTMLElement>('.pg-drawer-count')!;
     const memPanel = el.querySelector<HTMLElement>('.pg-mem')!;
     const truthTab = el.querySelector<HTMLButtonElement>('.pg-tabs [data-tab="truth"]')!;
     const truthTip = el.querySelector<HTMLElement>('#pg-tab-tip-truth')!;
@@ -559,6 +611,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       if (opts.persist !== false) store.update((draft) => { draft.tab = tab; });
       for (const b of tabs) b.setAttribute('aria-selected', String(b.dataset.tab === tab));
       for (const p of panels) p.hidden = p.dataset.panel !== tab;
+      setDrawerShown(tab === 'simulate' || tab === 'data');
       // A tab switch re-uses the build stage's current sequence rather than
       // claiming a new one, so a compile already in flight stays current and
       // its artifact still lands.
@@ -594,9 +647,6 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     function showDockTab(tab: DockTab, opts: { persist?: boolean } = {}) {
       selectDockPanel(tab);
       if (opts.persist !== false) store.update((draft) => { draft.dock.tab = tab; });
-      // Reading a memory is deferred until someone is looking at it, so
-      // arriving on the tab is when the contents are actually fetched.
-      if (tab === 'memory') renderMemory();
     }
 
     function setDockOpen(open: boolean, opts: { persist?: boolean } = {}) {
@@ -616,13 +666,66 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           setDockOpen(false);
           return;
         }
-        // Picking a tab by hand outranks any pending restore.
-        memDeferred = false;
         showDockTab(tab);
         setDockOpen(true);
       });
     }
     dockToggle.addEventListener('click', () => setDockOpen(dock.dataset.open !== 'true'));
+
+    // ---- the drawer ----
+    // Which tab is selected and whether it is open are island fields, never
+    // stored: the drawer is only ever a face on the current session.
+    /** The drawer's divider, created with the main one once the panes exist. */
+    let drawerSplitter: ReturnType<typeof createSplitter> | null = null;
+    function currentDrawerTab(): DrawerTab {
+      const selected = drawerTabs.find((b) => b.getAttribute('aria-selected') === 'true');
+      return (selected?.dataset.drawer as DrawerTab) ?? 'console';
+    }
+
+    function selectDrawerTab(tab: DrawerTab) {
+      for (const b of drawerTabs) b.setAttribute('aria-selected', String(b.dataset.drawer === tab));
+      for (const p of drawerPanels) p.hidden = p.dataset.drawerPanel !== tab;
+      // Reading a memory is deferred until someone is looking at it, so
+      // arriving on the tab is when the contents are actually fetched.
+      if (tab === 'memory') renderMemory();
+    }
+
+    /** The divider only means something while the drawer is on screen and open. */
+    function refreshDrawerSeparator() {
+      drawerSeparator.hidden = drawer.hidden || drawer.dataset.open !== 'true';
+      drawerSplitter?.refresh();
+    }
+
+    function setDrawerOpen(open: boolean) {
+      drawer.dataset.open = String(open);
+      drawerToggle.setAttribute('aria-expanded', String(open));
+      drawerToggle.textContent = open ? 'Hide' : 'Show';
+      refreshDrawerSeparator();
+      if (open && memVisible()) renderMemory();
+    }
+
+    /** Shown under Simulate and Data only; the other tabs have no session to drive. */
+    function setDrawerShown(shown: boolean) {
+      const was = !drawer.hidden;
+      drawer.hidden = !shown;
+      refreshDrawerSeparator();
+      if (shown && !was && memVisible()) renderMemory();
+    }
+
+    for (const b of drawerTabs) {
+      b.addEventListener('click', () => {
+        const tab = b.dataset.drawer as DrawerTab;
+        // The dock's gesture: the tab already showing collapses the drawer,
+        // and any tab while collapsed opens it on that tab.
+        if (drawer.dataset.open === 'true' && b.getAttribute('aria-selected') === 'true') {
+          setDrawerOpen(false);
+          return;
+        }
+        selectDrawerTab(tab);
+        setDrawerOpen(true);
+      });
+    }
+    drawerToggle.addEventListener('click', () => setDrawerOpen(drawer.dataset.open !== 'true'));
 
     // ---- source linking ----
     // `decls` refreshes on every analysis; `table` only when a new artifact is
@@ -1413,13 +1516,11 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       else delete downloadBtn.dataset.stale;
     }
 
-    downloadBtn.addEventListener('click', () => {
-      const a = state.artifact;
-      if (!a) return;
-      const name = artifactFileName(activeLabel());
-      // A copy, not a view: the worker transferred this buffer and a later
-      // build may replace it while the download is still being written.
-      const blob = new Blob([a.bytes.slice() as BlobPart], { type: 'application/wasm' });
+    /** Hand the reader a file through a Blob link, revoked after the click. */
+    function downloadBytes(name: string, bytes: Uint8Array, type: string) {
+      // A copy, not a view: a worker-transferred buffer or a runtime's staging
+      // buffer may be replaced while the download is still being written.
+      const blob = new Blob([bytes.slice() as BlobPart], { type });
       const href = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = href;
@@ -1430,6 +1531,13 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       link.click();
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(href), 1000);
+    }
+
+    downloadBtn.addEventListener('click', () => {
+      const a = state.artifact;
+      if (!a) return;
+      const name = artifactFileName(activeLabel());
+      downloadBytes(name, a.bytes, 'application/wasm');
       flash(downloadBtn, 'Saved');
       status.textContent = state.stale
         ? `Saved ${name} (${formatBytes(a.size)}) from the last good build; the source has changed since.`
@@ -1502,33 +1610,20 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         'aria-label',
         `Memory, ${mems.length} declared`,
       );
-      // A dock left on a tab that no longer exists would show a blank panel
-      // with no tab selected, so the selection steps aside — WITHOUT writing
-      // the store, because the circuit may get its memory back on the next
-      // keystroke, and because a reader who reloaded onto this tab should land
-      // back on it once the analysis says it exists.
-      if (mems.length === 0 && currentDockTab() === 'memory') {
-        memDeferred = true;
-        selectDockPanel('diagnostics');
-      } else if (mems.length > 0 && memDeferred) {
-        memDeferred = false;
-        selectDockPanel('memory');
+      // A drawer left on a tab that no longer exists would show a blank panel
+      // with no tab selected, so the selection falls back to the console.
+      // Nothing is stored, so there is nothing to restore when the memory
+      // comes back on the next keystroke.
+      if (mems.length === 0 && currentDrawerTab() === 'memory') {
+        for (const b of drawerTabs) b.setAttribute('aria-selected', String(b.dataset.drawer === 'console'));
+        for (const p of drawerPanels) p.hidden = p.dataset.drawerPanel !== 'console';
       }
     }
-
-    /** Set when the memory tab was the stored choice but nothing was declared
-     *  yet, so the selection can go back to it once something is. */
-    let memDeferred = false;
 
     /** True only when the memory dump is actually on screen. Every visible
      *  word is a call across the wasm boundary, so nothing reads one otherwise. */
     function memVisible(): boolean {
-      return dock.dataset.open === 'true' && currentDockTab() === 'memory' && !memTab.hidden;
-    }
-
-    function currentDockTab(): DockTab {
-      const selected = dockTabs.find((b) => b.getAttribute('aria-selected') === 'true');
-      return (selected?.dataset.dock as DockTab) ?? 'diagnostics';
+      return !drawer.hidden && drawer.dataset.open === 'true' && currentDrawerTab() === 'memory' && !memTab.hidden;
     }
 
     /** Rebuild the whole panel. Cheap: the number of declared memories is
@@ -1681,6 +1776,19 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         refresh.addEventListener('click', () => renderMemory({ force: true }));
         buttons.appendChild(refresh);
       }
+
+      // The image the running circuit holds, as the raw file `--sim`'s `save`
+      // writes: `value & defined` per word, every word of the address space.
+      const save = document.createElement('button');
+      save.type = 'button';
+      save.className = 'pg-mem-btn pg-mem-save';
+      save.textContent = 'Save image';
+      save.title = source.live
+        ? `Download ${mem.name}.bin, every word as the circuit holds it`
+        : 'Open the Simulate or Data tab to save what the circuit holds';
+      save.disabled = !source.live;
+      save.addEventListener('click', () => saveMemoryImage(mem));
+      buttons.appendChild(save);
 
       if (mem.kind === 'rom') {
         // The hex is behind a checkbox: it is the escape hatch for pasting a
@@ -2016,6 +2124,19 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       renderMemory({ force: true });
     }
 
+    /** `save <mem> <path>` for the page: the same bytes, to a download. */
+    function saveMemoryImage(mem: MemorySymbol) {
+      const session = sim.session;
+      const result = session?.storeImage(mem.name);
+      if (!session || !result || !result.ok) {
+        status.textContent = `${mem.name} is not running.`;
+        return;
+      }
+      const name = `${mem.name}.bin`;
+      downloadBytes(name, result.bytes, 'application/octet-stream');
+      status.textContent = `Saved ${name} (${result.words} words).`;
+    }
+
     function clearMemory(mem: MemorySymbol) {
       if (mem.kind === 'rom') {
         // Emptying the image is what clears a rom: an empty image is a legal
@@ -2178,6 +2299,23 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     };
     narrow.addEventListener('change', applyBreakpoint);
     applyBreakpoint();
+
+    // The drawer's divider: the output panels' share of the pane, so the
+    // drawer takes the rest. Declared after the drawer's handlers, which read
+    // it through `refreshDrawerSeparator` only once it exists.
+    drawerSplitter = createSplitter({
+      container: outputPane,
+      separator: drawerSeparator,
+      property: '--pg-split-drawer',
+      orientation: 'horizontal',
+      minPanePx: 96,
+      minRatio: 0.2,
+      maxRatio: 0.85,
+      initial: store.envelope.layout.ratios.drawer ?? 0.62,
+      labels: ['output', 'drawer'],
+      onCommit: (ratio) => store.update((draft) => { draft.layout.ratios.drawer = ratio; }),
+    });
+    refreshDrawerSeparator();
 
     // localStorage is synchronous, so a flush on the way out is enough.
     window.addEventListener('pagehide', () => store.flush());

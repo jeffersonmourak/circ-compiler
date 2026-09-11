@@ -29,10 +29,9 @@ export const WRITE_DEBOUNCE_MS = 500;
  */
 export type OutputTab = 'preview' | 'truth' | 'simulate' | 'data';
 
-/** The editor dock's panels. `memory` only exists while the circuit declares
- *  a rom or a ram; a stored `memory` for a circuit that has none is treated
- *  like any other unreachable tab and falls back at render time. */
-export type DockTab = 'diagnostics' | 'settings' | 'memory';
+/** The editor dock's panels. The memory panel left for the output pane's
+ *  drawer, so a stored `memory` falls back like any other unknown tab. */
+export type DockTab = 'diagnostics' | 'settings';
 
 /** Which rows of the workspace explorer the reader has open. Ids, not
  *  indices: a group or project keeps its expansion across a content change
@@ -63,7 +62,8 @@ export interface ScratchProject {
 
 export interface LayoutState {
   /** Splitter id → first-pane fraction, strictly between 0 and 1. A record so
-   *  a second divider costs no schema change. */
+   *  a second divider costs no schema change: `main` is the editor's share of
+   *  the panes, `drawer` the output panels' share above the drawer. */
   ratios: Record<string, number>;
 }
 
@@ -119,7 +119,7 @@ export interface TimerLike {
 }
 
 const OUTPUT_TABS: readonly OutputTab[] = ['preview', 'truth', 'simulate', 'data'];
-const DOCK_TABS: readonly DockTab[] = ['diagnostics', 'settings', 'memory'];
+const DOCK_TABS: readonly DockTab[] = ['diagnostics', 'settings'];
 // Shut. The dock holds diagnostics, and the explorer now carries the per-file
 // error badge, so a reader sees that something is wrong without it — opening it
 // is for reading the messages, which is a deliberate act.

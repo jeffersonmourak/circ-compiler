@@ -195,6 +195,12 @@ describe('playground store', () => {
       open: false,
       tab: 'settings',
     });
+    // The memory panel moved to the output pane's drawer: an envelope that
+    // remembered it falls back like any other tab the dock does not have.
+    expect(normalize({ ...defaultEnvelope(), dock: { open: true, tab: 'memory' } }).envelope.dock).toEqual({
+      open: true,
+      tab: 'diagnostics',
+    });
     // A tab the dock does not have falls back without touching `open`.
     expect(normalize({ ...defaultEnvelope(), dock: { open: true, tab: 'preview' } }).envelope.dock).toEqual({
       open: true,
