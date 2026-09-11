@@ -109,7 +109,7 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 
 ### [playground-bench.md](playground-bench.md)
 - The bench owns its chrome (the `app` variant renders no site nav or footer; a 48px nav and a 24px status line of the page's own)
-- The handoff is tracked, minus the noise (`DOCS/design/design_handoff_playground_bench/`, fonts and duplicate files dropped)
+- The handoff was tracked without duplicate files, then deleted on closure (preserved at the canonical commit in the playground-bench archive)
 - The three terminal tokens stay site-local, and all three already exist (`--term-ok`, `--term-echo`, `--danger`; `--pg-dot` beside them)
 - The source column is the splitter, in pixels (`--pg-source-w`, `unit: 'px'`, the hairline as the divider)
 - The token guard is a source-text test (`bench-tokens.test.ts`: every colour and face in a `.pg-` rule is a token)

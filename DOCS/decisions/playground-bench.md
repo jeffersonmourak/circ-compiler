@@ -1,6 +1,6 @@
 # playground-bench
 
-The entries below record the decisions of the playground-bench initiative: the site's `/playground` redrawn as the bench of the design handoff under `DOCS/design/design_handoff_playground_bench/` — two regions on one sheet under a 48px nav, over a terminal line and a status line. The sixteen decisions locked at plan time are in `DOCS/PLANS_PROMPT.md`; each phase appends the ones it exercised here as it ships them.
+The entries below record the decisions of the playground-bench initiative: the site's `/playground` redrawn as two regions on one sheet under a 48px nav, over a terminal line and a status line. The plan is summarized in [the archive](../archive/plan-playground-bench.md). Its sixteen locked decisions and the design handoff are preserved at `f9298263f6e7ba794e10808a9f360442989c8d62`; read the full prompt with `git show f9298263f6e7ba794e10808a9f360442989c8d62:DOCS/PLANS_PROMPT.md`.
 
 ### The bench owns its chrome
 
@@ -12,7 +12,7 @@ The entries below record the decisions of the playground-bench initiative: the s
 
 ### The handoff is tracked, minus the noise
 
-**Decision.** `DOCS/design/design_handoff_playground_bench/` is committed as the design reference: `README.md`, `github.md`, `Playground Upgrade.dc.html`, `support.js`, `circ-scenes.js`, and the CircDS bundle under `_ds/<id>/` with its two `woff2` faces and its two font stylesheets. Not committed, and removed from the working tree: `circ-site-theme.js` and `circ-skins.js` (byte-identical to `02e56f4:DOCS/archive/design/canvas-theme/`), `site/src/utils/circ-assets.mjs` (a stale copy of a file the site has since reduced to two sprites), and the 32 JetBrains Mono `.ttf` files (7.6 MB; the family sits in `--font-mono-strict` behind `ui-monospace`, and the site does not ship it). `support.js` is also identical to the archived copy but stays, because the design file needs it beside it to open. The design file wins over its README where the two disagree. At archive time the directory moves to `DOCS/archive/design/playground-bench/`.
+**Decision.** The implementation tracked `DOCS/design/design_handoff_playground_bench/` as its design reference: `README.md`, `github.md`, `Playground Upgrade.dc.html`, `support.js`, `circ-scenes.js`, and the CircDS bundle with two `woff2` faces and their stylesheets. Duplicate theme files, stale asset code and 32 unshipped JetBrains Mono TTFs were removed before tracking. The design file won over its README where they disagreed. On closure, the human requested deletion of the handoff artifacts instead of the planned move into the archive tree. The full reference remains at `f9298263f6e7ba794e10808a9f360442989c8d62:DOCS/design/design_handoff_playground_bench/`.
 
 **Rationale.** A handoff outside the repository cannot be cited by a slice; a handoff with 7.6 MB of fonts that render nothing the site renders is weight every clone pays forever. The mock's strict stack is the site's, so dropping the fonts changes nothing about how the mock reads on the machines that matter.
 

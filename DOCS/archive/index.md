@@ -4,6 +4,7 @@ Each file is a highlight view. The full plan prompt, every phase plan, and every
 
 | Archive | Contents |
 | ------- | -------- |
+| [plan-playground-bench.md](plan-playground-bench.md) | Canvas-first workbench: source tabs and diagnostics footer, Live/Schematic/Truth views, project switcher, floating Data panel, console/memory drawer, saved editor preferences, active-file simulation and source-owned ROM images. Archived on request with final sweep checks carried forward; the plan and deleted design handoff remain in git history. |
 | [plan-v0.md](plan-v0.md) | v0 implementation plan (highlights; full bundle in git history) |
 | [plan-dead-code-removal.md](plan-dead-code-removal.md) | Dead-code removal plan (highlights; the squash merge dropped the bundle from history) |
 | [plan-test-speed.md](plan-test-speed.md) | Test-suite speed-up plan (highlights; the squash merge dropped the bundle from history) |
