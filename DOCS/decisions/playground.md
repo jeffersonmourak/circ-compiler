@@ -316,3 +316,19 @@ The entries below record the decisions of the playground-v2 initiative (the site
 **Rationale.** A memory's contents are runtime state, not source, so the panel belongs beside the console that drives the runtime, not beside the diagnostics that read the text. Moving it is what lets `load` and `save` point at one place.
 
 **Alternatives.** A file surface on the console (a second way to load an image); leaving the panel in the dock and linking to it (a pointer across the page).
+
+### A session lives as long as its artifact
+
+**Decision.** The island keeps one `SimSession` per compiled artifact: built lazily the first time Simulate or Data is opened with one, dropped (runtime destroyed, canvas destroyed, console told `# session ended`) the moment the artifact hook delivers different bytes or none. The Simulate canvas is built over the session on demand and destroyed without destroying the runtime; the Data tab, the Memory panel and the console never hold a runtime of their own.
+
+**Rationale.** The artifact is the circuit; a session over stale bytes would answer for a circuit the reader no longer has. Building on first need keeps the Preview and Truth table tabs free of a runtime they never read.
+
+**Alternatives.** A session per face (three runtimes for one circuit); building the session at every compile (a runtime for readers who never open Simulate).
+
+### Documentation lands with the code
+
+**Decision.** Each phase's last slice writes what it changed: the console's browser section in `DOCS/sim-protocol.md` landed with the console, and every locked decision a phase exercised was appended here at that phase's close — decisions 1, 3, 8 and 9 for Phase 0, 7 for Phase 1, 2, 4, 10 and 11 for Phase 2, 3, 5, 6 and 8 for Phase 3, 9 and this one for Phase 4. The archive is produced per `DOCS/prompts/ARCHIVE.md` only when the human asks.
+
+**Rationale.** A document written after the fact records what someone remembers; one written with the slice records what the slice did, and the reviewer reads both in one diff.
+
+**Alternatives.** One documentation phase at the end (the phase every plan cuts first).

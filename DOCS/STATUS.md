@@ -145,3 +145,47 @@ One entry per shipped slice, newest last. The plan is `DOCS/PLANS_PROMPT.md`; th
 **Tests:** none (review)
 **Next slice:** Phase 4 slice 1.
 **Notes:** none.
+
+## 2026-09-11 — Phase 4 — the walk, the machine half
+
+**What shipped:** every shipped example compiled through the committed `libcirc.wasm`, loaded into the real `CircRuntime` with the example's own `memory` images as preloads and `bootLow` as the page has it, and driven through the executor from a scratch script (not committed: the transcript test already guards the parity, and the plan lands no new behaviour). One row per example, with the console face over the session the canvas and the Data tab share; the browser walk of the three faces together, in both themes, is the human's.
+
+| Example | Console over the session | Result |
+|---|---|---|
+| inverter-chain, fan-out, builtin-xor, slice-and-concat, wide-not, mux-2to1, demux-1to2, full-adder, two-bit-adder | handshake; `dump all` after the low boot (inputs `0x0` defined, outputs settled); `reset` → outputs `0x0 0x0`; `quit` → `ok bye` | ok |
+| half-adder | `eval a=1 b=1 => sum carry` → `ok sum=0x0/0x1 carry=0x1/0x1` | ok |
+| four-bit-adder | `eval a=3 b=5 => s cout` → `ok s=0x8/0xf cout=0x0/0x1`; `eval a=0xf b=1 => s cout` → `s=0x0/0xf cout=0x1/0x1`; `set a 0x10` → `err E_WIDTH a`; `set a 0x5 0x3` then `get a` → `ok 0x1 0x3` | ok |
+| sr-latch | `set s 1`, `set r 0` → `q` 1; `set s 0` holds; `set r 1` → `q` 0; `set r 0` holds; boot-low `q` unknown (both inputs low hold nothing) | ok |
+| ram-write-read | `set a 2`, `set d 0x5a`, `set we 1`, `set clk 0`, `set clk 1` → `get q` `0x5a 0xff`, `peek data 2` the same; `set we 0`, `set d 1`, a full pulse → `q` still `0x5a`; `mem data 0 4` shows the one written cell | ok |
+| rom-lookup | preload from the example's image: `mem code 0 4` → `0x0 0x1 0x4 0x9` defined; `set pc 1`, `get out` → `0x1 0xff`; `poke code 1 0x77` resyncs `out` to `0x77`; `clear code` → `out` `0x0 0x0`; `load code x.bin` → `err E_IO x.bin: FileNotFound` (the map source; the page's says `load images in the Memory tab`); `save code x.bin` → `ok words=16`; `reset` restores the preload | ok |
+
+**Files touched:** `DOCS/STATUS.md`
+**Tests:** `zig build test-all` on `9a4279d`, result pass (no Zig file touched by the initiative); the full site gate on the same tree (`bun test` 524 pass, typecheck 0 errors, build, bundle ok), result pass
+**Next slice:** the measurement.
+**Notes:** no defect. Every row is what `--sim` prints for the same lines, which is the parity the transcript test proves on the four fixtures and this walk extends to the fourteen examples. The human's browser rows (Data tab, canvas click and console showing one value on `four-bit-adder`; `ram-write-read` clocked from the console with the Memory tab and the Data tab following; `rom-lookup` loaded and saved from the Memory tab; `sr-latch` from the Data tab's toggles; a recompile mid-session, a theme flip, a `reset`; both themes) are recorded in the completion entry from the human's report.
+
+## 2026-09-11 — Phase 4 — the measurement
+
+**What shipped:** the `/playground` route measured with `bun run bundle` on the final tree against the Phase 0 baseline.
+
+| Point | Eager graph (raw / gzip) | Lazy chunks |
+|---|---|---|
+| Phase 0 baseline, before the session (`c91f12f`) | 85.1 KB / 31.1 KB | renderer index 41.3 KB raw |
+| Phase 0, session in the island | 90.4 KB / 32.8 KB | renderer index 48.0 KB raw (the human's viewport pin, not this plan) |
+| Phase 1, Data tab | 93.5 KB / 33.6 KB | + `data-view` 1.6 KB / 0.8 KB |
+| Phase 3, drawer | 95.8 KB / 34.2 KB | unchanged |
+| Phase 3, console | 104.9 KB / 37.3 KB | unchanged |
+| Final tree (`9a4279d`) | 104.9 KB / 37.3 KB, ceiling 120 KB gzip | renderer index 46.9 KB / 16.5 KB; `data-view` 1.6 KB / 0.8 KB; `circ-theme` 27.3 KB / 12.8 KB; `canvas-memory` 0.8 KB; `circ-editor` 306.6 KB / 99.6 KB |
+
+**Files touched:** `DOCS/STATUS.md`
+**Tests:** none (measurement)
+**Next slice:** the decisions reread.
+**Notes:** the initiative's whole cost on the eager graph is 19.8 KB raw / 6.2 KB gzip: the session (5.3 KB), the Data tab's island code (3.1 KB), the drawer (2.3 KB) and the console with the grammar and the executor (9.1 KB). The lazy renderer chunk's growth belongs to the viewport pin. The eager graph's imports are what they were plus `sim-session`, `sim-protocol`, `sim-executor` and `console`, none of which reaches the renderer's index; `data-view` is the one module that does, and it stays lazy.
+
+## 2026-09-11 — Phase 4 — the decisions reread
+
+**What shipped:** `DOCS/decisions/playground.md` reread against the plan's twelve locked decisions. Present from earlier phases: 1 (one session), 2 (errors as values), 3 (`reset` and a new artifact), 4 (files are the Memory tab's), 5 (the handshake), 6 (the drawer), 7 (the Data tab is rows), 8 (the Memory panel in the drawer), 10 (the transcript test compiles), 11 (the console's spelling), plus the Phase 0 finding (loads floating, boots low). Added now: 9 (a session lives as long as its artifact) and 12 (documentation lands with the code). Every decision was exercised; none is recorded as unexercised.
+**Files touched:** `DOCS/decisions/playground.md`, `DOCS/STATUS.md`
+**Tests:** `grep -c '^### ' DOCS/decisions/playground.md` → 40, from 27 before the initiative: thirteen entries for twelve decisions and one finding.
+**Next slice:** the completion entry, once the human has walked the page.
+**Notes:** none.
