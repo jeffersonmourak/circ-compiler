@@ -132,6 +132,12 @@ Add an entry here during execution whenever a non-obvious constraint surfaces â€
 - Search must see collapsed groups without persisting their temporary expansion. Filter the fully expanded data first, then apply the search-only expansion set, so collapsing a matching group leaves its heading available to reopen.
 - The store's save-time `skipped` note says a source stays open. A refused import creates nothing; use `describeNote(note, 'import')` for that context.
 
+**The drawer**
+
+- Phase 0 already added `unit: 'px'` to the splitter. Phase 6 extends it with `pane: 'second'` and a usable-span measurement; callbacks remain numeric in the configured unit, not the obsolete phase spec's object shape.
+- The closed terminal line opens on focus. Return focus to its Console button when closing, or the return itself reopens the drawer. Center the splitter's hit band on the bordered row edge so a drag does not acquire a one-pixel offset.
+- Memory headers are rebuilt. Their settings controls need delegated change events, and a jump must force its redraw past the focused-text-field guard. Closed drawers skip memory reads.
+
 **The canvas**
 
 - Restoring an open Data panel can run before the simulator record exists. Use the deferred `hooks.onDataOpen`, as Live uses `hooks.onLive`; artifact delivery fills the panel afterward.

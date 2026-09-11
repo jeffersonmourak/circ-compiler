@@ -1089,7 +1089,7 @@ span.pg-diag-pos { color: var(--muted); cursor: default; }
   font-family: var(--font-mono);
   font-size: 0.65rem;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
+  text-transform: none;
   color: var(--muted);
   border: 1px solid var(--border);
   border-radius: 999px;

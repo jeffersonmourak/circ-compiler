@@ -125,6 +125,9 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - The Data panel keeps a position per project (pointer threshold/cancel, keyboard steps, clamp on render, version-2 position map)
 - The Data card and canvas share the session being built (one pending build per artifact, controls rebound by session identity, deferred restore)
 - The narrow Data panel joins the page flow (static card, no right reserve or grip, automatic stacked tracks; coalesced desktop refit)
+- The drawer is a resizable row with two columns (saved pixel height, console header, 560px memory column, focus and Escape contract)
+- The memory grid marks the address net's value (topology addr source, unknown/implied/addressed/editing states, wide-word scrolling, image provenance)
+- Memory controls reuse the settings and session paths (delegated base radios, existing image/write actions, redraw on jump, panel-named protocol copy)
 
 ## Conventions
 

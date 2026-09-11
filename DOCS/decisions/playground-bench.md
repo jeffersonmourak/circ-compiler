@@ -149,3 +149,31 @@ The grip captures one pointer and waits for a four-pixel move. Release commits t
 **Alternatives.** Keeping the right reserve on a narrow screen (leaves too little view); dragging a static card (has no visible meaning); persisting a new narrow position (overwrites the desktop arrangement).
 
 **Follow-up.** With the panel open at 1024px, the four-bit adder reaches the pinned renderer's default 25% zoom floor and clips in the remaining viewport. The sweep should review that default; the panel's refit preserves the existing zoom range.
+
+### The drawer is a resizable row with two columns
+
+**Decision.** The terminal's closed 40px line grows into a drawer, default 320px. Its height lives in the version-2 envelope as `drawerHeight`; the old ratio is dropped on read. The existing pixel splitter sizes the second pane, measures the frame without nav/status chrome, and clamps on render to a 160px minimum while reserving 200px above. Resizing the viewport does not overwrite saved intent. Its handle is centered on the terminal's bordered edge, so pointer movement and height changes agree pixel for pixel.
+
+The console fills the drawer when no memory is declared. Otherwise a hairline separates it from a 560px memory column; below 800px the two stack. The old drawer tabs and their state are gone. A 34px console header holds the label, command title, Clear, Copy script, Copy log and Close; the log remains strict mono at 12.5px/1.5 and keeps its line-kind colors. Focus or a click on the terminal line opens it. Escape clears a nonempty prompt and resets its history cursor; on an empty prompt it closes the drawer. Closing returns focus to the Console button, not the focus-to-open line.
+
+**Rationale.** Console and memory describe the same session and should be visible together. A height expresses the reader's choice directly, while a share of the canvas pane changed meaning when the drawer became a frame row. Returning focus to the opener button avoids reopening the drawer as soon as it closes.
+
+**Alternatives.** Another pixel-splitter implementation (Phase 0 already supplied the unit); changing callbacks to a new object shape (existing callers already speak the configured unit); a tab strip above the columns (another control with no panel to switch).
+
+### The memory grid marks the address net's value
+
+**Decision.** Each memory keeps its own header, paging/jump toolbar, grid and image controls. The grid has a 40px sticky address column and eight shared word tracks, with +0…+7 headers. Tracks use `minmax(max-content, 1fr)` and row-group subgrids: ordinary words spread across the column, and wide binary values scroll within the table. The table, groups and rows remain elements, rather than `display: contents`. Unknown words, implied zeros, the addressed word and the word under edit have distinct marks.
+
+`addressedWord` follows the topology connection whose destination is that memory and whose port is the renderer's `PortName.Addr`, then reads the source component's value. A slice or wire is read directly; a partly defined address selects no word. The legend names the current address. An image line names a loaded file and word count, or typed hex, or the absence of an image; a RAM says its contents live in the circuit. A changed image drops a stale filename. Memory words are read only while the drawer is open.
+
+**Rationale.** The topology says what actually drives addr; the source declaration alone cannot follow a slice or intermediate wire. The address marker must be independent of whether the selected memory word has been written. Shared tracks preserve the board's geometry without truncating a 64-bit value or widening the drawer.
+
+**Alternatives.** Reading the input pin by name (fails through intermediate components); choosing address zero when undefined (claims a read the circuit did not make); fixed-width cells (clip wide values); reading every memory on every drive while closed (work that paints nothing).
+
+### Memory controls reuse the settings and session paths
+
+**Decision.** Memory base radios, Data radios and the settings select write one `valueFormat`. The settings binding delegates native change events so rebuilt memory controls remain bound, and a base change redraws the grid. Refresh, Clear, ROM Load image and Save call the existing memory functions. Jump forces a redraw so its focused input does not suppress paging through the typing guard. Console file refusals, help and preload comments name the memory panel; the grammar, execution and transcript ordering remain the protocol's.
+
+**Rationale.** Rebuilding a small memory view is inexpensive, but binding only the controls present at boot would leave every later radio inert. Keeping the session's existing write and image paths also keeps canvas values, memory values and the console record in agreement.
+
+**Alternatives.** A private base for memory (different faces would spell the same value differently); attaching another settings controller on every redraw (duplicate listeners); bypassing the session for grid writes (loses console echoes).

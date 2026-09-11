@@ -92,14 +92,14 @@ export class Transcript {
   }
 }
 
-export const LOAD_REFUSAL = 'load images in the Memory tab';
-export const SAVE_REFUSAL = 'save images from the Memory tab';
+export const LOAD_REFUSAL = 'load images in the memory panel';
+export const SAVE_REFUSAL = 'save images from the memory panel';
 
 /**
  * The page's `FileSource`: a browser has no working directory, and the page
  * already has one place that reads and shows an image. Every path is
  * refused with a reason that names it, and the executor keeps the reply
- * protocol-shaped: `err E_IO <path>: load images in the Memory tab`.
+ * protocol-shaped: `err E_IO <path>: load images in the memory panel`.
  */
 export class MemoryTabFiles implements FileSource {
   read(_path: string): { ok: false; error: string } {
@@ -145,15 +145,15 @@ export function helpLines(): string[] {
     ['dump <in|out|all>', 'read every pin of a kind'],
     ['eval <pin>=<value>[/<mask>] ... => <pin> ...', 'drive, then read, in one line'],
     ['run', 'drain the event queue (a `set` already settles)'],
-    ['reset', 'every pin unknown; the Memory tab\'s images reloaded'],
+    ['reset', 'every pin unknown; the memory panel\'s images reloaded'],
     ['quit', '`ok bye`, then the same as reset'],
     ['mems', 'the root memories'],
     ['peek <mem> <addr>', 'read one cell'],
     ['poke <mem> <addr> <value> [<mask>]', 'write one cell and settle'],
     ['mem <mem> [<start> [<count>]]', 'read a range of cells'],
     ['clear <mem>', 'every cell unknown'],
-    ['load <mem> <path>', 'refused here: load images in the Memory tab'],
-    ['save <mem> <path>', 'refused here: save images from the Memory tab'],
+    ['load <mem> <path>', 'refused here: load images in the memory panel'],
+    ['save <mem> <path>', 'refused here: save images from the memory panel'],
     ['help', 'this table'],
   ];
   const width = Math.max(...rows.map(([cmd]) => cmd.length));
@@ -177,7 +177,7 @@ function valueWithMask(value: bigint, defined: bigint, width: number | undefined
  * The lines the console prints for something another face did: the protocol
  * line that would have done the same, echoed as if typed, then the reply the
  * session gave. A drive is one `set` per pin; a cell written is a `poke`; a
- * memory emptied is a `clear`; an image the Memory tab applied is a `#`
+ * memory emptied is a `clear`; an image the memory panel applied is a `#`
  * comment, because the browser refuses `load` and no command is claimed; a
  * rebuild is `reset` (the caller prints the handshake after it). Nothing
  * here drives anything: the drive already happened.
@@ -191,7 +191,7 @@ export function commandFor(event: SessionEvent, session: WidthSource): string[] 
       });
     case 'memory': {
       if (event.op === 'load') {
-        return [`# ${event.name}: image from the Memory tab, ${event.words} word${event.words === 1 ? '' : 's'}`];
+        return [`# ${event.name}: image from the memory panel, ${event.words} word${event.words === 1 ? '' : 's'}`];
       }
       if (event.op === 'clear') return [promptEcho(`clear ${event.name}`), 'ok'];
       const mem = session.mems.find((m) => m.name === event.name);

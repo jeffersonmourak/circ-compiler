@@ -198,11 +198,11 @@ describe('every reply is the loop\'s string', () => {
     expect(await execute(session, refusing, 'load code')).toEqual(['err E_PROTO malformed command']);
   });
 
-  test("the page's file source points at the Memory tab, protocol-shaped", async () => {
+  test("the page's file source points at the memory panel, protocol-shaped", async () => {
     const { session } = await memSession();
     const page = new MemoryTabFiles();
-    expect(await execute(session, page, 'load code x.bin')).toEqual(['err E_IO x.bin: load images in the Memory tab']);
-    expect(await execute(session, page, 'save code x.bin')).toEqual(['err E_IO x.bin: save images from the Memory tab']);
+    expect(await execute(session, page, 'load code x.bin')).toEqual(['err E_IO x.bin: load images in the memory panel']);
+    expect(await execute(session, page, 'save code x.bin')).toEqual(['err E_IO x.bin: save images from the memory panel']);
     // The memory is still resolved first.
     expect(await execute(session, page, 'load nosuch x.bin')).toEqual(['err E_NOMEM nosuch']);
   });
