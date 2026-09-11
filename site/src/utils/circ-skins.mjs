@@ -800,14 +800,95 @@ const drawAnd = (args) => {
 };
 
 /**
+ * The chip a user subcircuit and a memory share: a macro-purple shell on
+ * the surface with a tinted header band. Returns the shell's geometry so the
+ * caller can fill the header and the body.
+ */
+function nsChip(ctx, t, cell, c) {
+  const x0 = c.x * cell, y0 = c.y * cell, w = c.width * cell, h = c.height * cell;
+  const inset = NS_INSET * cell;
+  const bx = x0 + inset, bw = w - inset * 2, r = cell * 0.18;
+  const head = cell;
+  ctx.fillStyle = t.surface;
+  ctx.strokeStyle = t.macro;
+  ctx.lineWidth = Math.max(1.75, cell * 0.1);
+  ctx.beginPath();
+  ctx.roundRect(bx, y0, bw, h, r);
+  ctx.fill();
+  ctx.stroke();
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(bx, y0, bw, h, r);
+  ctx.clip();
+  ctx.fillStyle = t.macro;
+  ctx.globalAlpha = 0.18;
+  ctx.fillRect(bx, y0, bw, head);
+  ctx.restore();
+  ctx.save();
+  ctx.strokeStyle = t.macro;
+  ctx.globalAlpha = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(bx, y0 + head);
+  ctx.lineTo(bx + bw, y0 + head);
+  ctx.stroke();
+  ctx.restore();
+  return { x0, y0, w, h, bx, bw, head, inset };
+}
+
+/**
+ * Tails and dots around a chip, with the same inset and gap rule as the
+ * gates, so a chip sits on the wire exactly like a primitive. `body` fills
+ * the chip between them.
+ */
+function nsChipPart({ ctx, cell, component: c, inputSignals: inSigs, inputValues, outputSignal: outSig, theme }, body) {
+  const t = theme.colors;
+  const x0 = c.x * cell, w = c.width * cell;
+  const inset = NS_INSET * cell;
+  const gap = cell * 0.4;
+  const leftEdge = x0 + inset - gap;
+  const rightEdge = x0 + w - inset + gap;
+  const inDotYs = [];
+  for (let i = 0; i < c.inPorts.length; i++) {
+    const slot = c.inPorts[i];
+    const portY = slot.coord.y * cell + cell / 2;
+    inDotYs.push(portY);
+    nsTail(ctx, cell, leftEdge, slot.coord.x * cell + cell / 2, portY, inSigs[i] ?? 2, t, (inputValues[i]?.width ?? 1) > 1);
+  }
+  const outDotY = c.outPort.y * cell + cell / 2;
+  nsTail(ctx, cell, rightEdge, c.outPort.x * cell + cell / 2, outDotY, outSig, t, (c.bitWidth ?? 1) > 1);
+  body(ctx, t, cell, c, inDotYs, inputValues, outSig);
+  for (let i = 0; i < c.inPorts.length; i++) nsDot(ctx, cell, leftEdge, inDotYs[i], inSigs[i] ?? 2, t);
+  nsDot(ctx, cell, rightEdge, outDotY, outSig, t);
+}
+
+/**
+ * User subcircuit: the chip with the subcircuit name in capitals in the
+ * header and the instance name in the body. The header is what separates
+ * "a box I wrote" from the gate family at a glance.
+ */
+function nsUserSubcircuit(ctx, t, cell, c) {
+  const { y0, h, bx, bw, head } = nsChip(ctx, t, cell, c);
+  const subcircuit = c.kind.tag === 'subcircuit' ? c.kind.subcircuit : '';
+  ctx.fillStyle = t.macro;
+  ctx.font = nsFont(cell, 700);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(subcircuit.toUpperCase(), bx + bw / 2, y0 + head / 2 + cell * 0.02);
+  ctx.fillStyle = t.label;
+  ctx.font = nsFont(cell, 500);
+  ctx.fillText(c.name ?? '', bx + bw / 2, y0 + head + (h - head) / 2);
+}
+
+/**
  * A subcircuit has two faces. A builtin macro (and, nand, or, nor, xor,
  * xnor, not) IS a gate: it takes the gate recipe on a virtual 5-wide box
  * centred in the macro box, so the symbol, slots and bubble match the
  * primitive exactly, and the tails run longer to reach the real ports.
- * Anything else is the labelled box, until Phase 4 gives it a chip.
+ * Anything else is a chip: the subcircuit's name in the header, the
+ * instance's in the body.
  */
 const drawSubcircuit = (args) => {
-  const { ctx, cell, component, inputSignals, inputValues, outputSignal, theme } = args;
+  const { component } = args;
   const subcircuit = component.kind.tag === 'subcircuit' ? component.kind.subcircuit : '';
   const recipe = RECIPES[subcircuit.toLowerCase()];
   if (recipe) {
@@ -815,48 +896,7 @@ const drawSubcircuit = (args) => {
     nsGate({ ...args, component: virt }, { ...recipe, portsFrom: component });
     return;
   }
-
-  const x0 = component.x * cell;
-  const y0 = component.y * cell;
-  const w = component.width * cell;
-  const h = component.height * cell;
-  const gap = cell * 0.45;
-  const leftEdge = x0 + w * 0.08 - gap;
-  const rightEdge = x0 + w * 0.92 + gap;
-
-  const inDotYs = [];
-  for (let i = 0; i < component.inPorts.length; i++) {
-    const slot = component.inPorts[i];
-    const sig = inputSignals[i] ?? 2;
-    const portX = slot.coord.x * cell + cell / 2;
-    const portY = slot.coord.y * cell + cell / 2;
-    inDotYs.push(portY);
-    nsTail(ctx, cell, leftEdge, portX, portY, sig, theme.colors, (inputValues[i]?.width ?? 1) > 1);
-  }
-  const outDotY = component.outPort.y * cell + cell / 2;
-  nsTail(ctx, cell, rightEdge, component.outPort.x * cell + cell / 2, outDotY, outputSignal, theme.colors, (component.bitWidth ?? 1) > 1);
-
-  ctx.strokeStyle = theme.colors.macro;
-  ctx.fillStyle = theme.colors.fillIdle;
-  ctx.lineWidth = Math.max(2, cell * 0.12);
-  const r = cell * 0.25;
-  const bw = w - cell * 0.16, bh = h - cell * 0.16;
-  ctx.beginPath();
-  ctx.roundRect(x0 + cell * 0.08, y0 + cell * 0.08, bw, bh, r);
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = theme.colors.label;
-  ctx.font = `600 ${Math.round(cell * 0.75)}px ui-monospace, "JetBrains Mono", monospace`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(subcircuit, x0 + w / 2, y0 + h / 2);
-
-  for (let i = 0; i < component.inPorts.length; i++) {
-    nsDot(ctx, cell, leftEdge, inDotYs[i], inputSignals[i] ?? 2, theme.colors);
-  }
-  nsDot(ctx, cell, rightEdge, outDotY, outputSignal, theme.colors);
-
-  nsName(ctx, cell, component.name, x0, y0, w, h, theme.colors.labelMuted);
+  nsChipPart(args, nsUserSubcircuit);
 };
 
 /**

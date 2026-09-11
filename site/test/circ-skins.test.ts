@@ -436,7 +436,7 @@ describe('circ-skins', () => {
     }
   });
 
-  test('a user subcircuit still takes the labelled box', () => {
+  test('a user subcircuit is a chip: purple shell, tinted header with its name in capitals, the instance in the body', () => {
     const theme = themeWith(true);
     const c = component('subcircuit_user', 1);
     const { ctx, ops } = recordingContext(10);
@@ -444,9 +444,27 @@ describe('circ-skins', () => {
       ctx, theme, cell: 10, component: c, inputSignals: [0, 0], outputSignal: 0,
       inputValues: [valueOf(0, 1), valueOf(0, 1)], outputValue: valueOf(0, 1), hovered: false,
     });
-    expect(ops.some((op) => op[0] === 'roundRect')).toBe(true);
     expect(ops.some((op) => op[0] === 'drawImage')).toBe(false);
-    expect(ops.some((op) => op[0] === 'fillText' && op[1] === 'adder')).toBe(true);
+    const names = ops.map((op) => op[0]);
+    // Shell: roundRect filled surface, stroked macro; then the header band
+    // clipped to the shell at alpha 0.18, then the rule at 0.5.
+    const shell = names.indexOf('roundRect');
+    expect(ops[shell][1]).toBe((c.x + 0.4) * 10);
+    expect(ops[shell][3]).toBe((c.width - 0.8) * 10);
+    const fills = ops.filter((op) => op[0] === 'set' && op[1] === 'fillStyle').map((op) => op[2]);
+    expect(fills).toContain(colorsDark.surface);
+    expect(fills).toContain(colorsDark.macro);
+    expect(names).toContain('clip');
+    const band = ops.find((op) => op[0] === 'fillRect')!;
+    expect(band[4]).toBe(10); // one cell tall
+    const alphas = ops.filter((op) => op[0] === 'set' && op[1] === 'globalAlpha').map((op) => op[2]);
+    expect(alphas).toEqual([0.18, 0.5]);
+    // The names: subcircuit in capitals in the header, instance in the body.
+    const texts = ops.filter((op) => op[0] === 'fillText').map((op) => op[1]);
+    expect(texts).toEqual(['ADDER', 'u']);
+    const header = ops.find((op) => op[0] === 'fillText' && op[1] === 'ADDER')!;
+    expect(header[3]).toBe(c.y * 10 + 5 + 0.2);
+    expect(balanced(ops)).toBe(true);
   });
 
   test('a slice is a ruler of the incoming word, MSB left, the tapped bits filled', () => {
