@@ -216,16 +216,45 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
       doc.querySelectorAll('.pg-dock-tabs [role=tab]'),
       (b) => (b as unknown as { dataset: Record<string, string> }).dataset.dock,
     );
-    expect(dockTabs).toEqual(['diagnostics', 'settings', 'memory']);
+    expect(dockTabs).toEqual(['diagnostics', 'settings']);
     expect(doc.querySelector('.pg-dock-tab[data-dock="diagnostics"]')?.getAttribute('aria-selected')).toBe('true');
     expect(doc.querySelector('[data-dock-panel="settings"]')?.hasAttribute('hidden')).toBe(true);
 
+    // The drawer under the output panels: the session's console and the
+    // memory panel, which left the dock because it is about the running
+    // circuit rather than the source. Hidden on Preview, which has no session.
+    const drawer = doc.querySelector('.pg-drawer')!;
+    expect(drawer.hasAttribute('hidden')).toBe(true);
+    expect(doc.querySelector('.pg-output .pg-drawer')).not.toBeNull();
+    expect(doc.querySelector('.pg-drawer-splitter')?.getAttribute('aria-orientation')).toBe('horizontal');
+    const drawerTabs = Array.from(
+      doc.querySelectorAll('.pg-drawer-tabs [role=tab]'),
+      (b) => (b as unknown as { dataset: Record<string, string> }).dataset.drawer,
+    );
+    expect(drawerTabs).toEqual(['console', 'memory']);
+    expect(doc.querySelector('.pg-drawer-tab[data-drawer="console"]')?.getAttribute('aria-selected')).toBe('true');
     // The memory tab exists in the markup but is hidden: the default pick
     // declares no rom or ram, and a permanently empty tab is a worse answer
     // than no tab. Its panel ships hidden with it.
-    expect(doc.querySelector('.pg-dock-tab[data-dock="memory"]')?.hasAttribute('hidden')).toBe(true);
-    expect(doc.querySelector('[data-dock-panel="memory"]')?.hasAttribute('hidden')).toBe(true);
+    expect(doc.querySelector('.pg-drawer-tab[data-drawer="memory"]')?.hasAttribute('hidden')).toBe(true);
+    expect(doc.querySelector('[data-drawer-panel="memory"]')?.hasAttribute('hidden')).toBe(true);
     expect(doc.querySelector('.pg-mem')?.textContent).toBe('');
+    expect(doc.querySelector('.pg-dock .pg-mem')).toBeNull();
+    // The console: a scrollback and a prompt, shut until a session exists,
+    // with the same sentence Simulate shows for why.
+    expect(doc.querySelector('[data-drawer-panel="console"] .pg-console-log')).not.toBeNull();
+    // An editor's terminal: a bar naming the command it runs, with its actions.
+    expect(doc.querySelector('.pg-console-title')?.textContent).toMatch(/^circ-compile \S+\.circ --sim$/);
+    const consoleButtons = Array.from(
+      doc.querySelectorAll('.pg-console-bar .pg-console-btn'),
+      (b) => (b as unknown as { dataset: Record<string, string> }).dataset.console,
+    );
+    expect(consoleButtons).toEqual(['clear', 'script', 'log']);
+    const prompt = doc.querySelector('.pg-console-in') as unknown as { disabled: boolean } | null;
+    expect(prompt?.disabled).toBe(true);
+    expect(doc.querySelector('.pg-console-note')?.hasAttribute('hidden')).toBe(false);
+    expect(doc.querySelector('.pg-console-note')?.textContent).toBe('Compile a circuit first.');
+    expect(doc.querySelector('.pg-console-log')?.textContent).toBe('');
     // The rom image boxes left Settings for it, and left nothing behind.
     expect(doc.querySelector('[data-dock-panel="settings"] .pg-rom-group')).toBeNull();
     expect(doc.querySelector('[data-dock-panel="settings"] .pg-rom-box')).toBeNull();
@@ -240,12 +269,15 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(editorPane.querySelectorAll('[data-setting]').length).toBeGreaterThan(0);
     expect(editorPane.querySelector('.pg-dock')).not.toBeNull();
 
-    // The output strip is the three compiled views, diagnostics gone.
+    // The output strip is the four compiled views, diagnostics gone: the
+    // Data tab is the circuit as values, over the same session as Simulate.
     const outTabs = Array.from(
       doc.querySelectorAll('.pg-tabs [role=tab]'),
       (b) => (b as unknown as { dataset: Record<string, string> }).dataset.tab,
     );
-    expect(outTabs).toEqual(['preview', 'truth', 'simulate']);
+    expect(outTabs).toEqual(['preview', 'truth', 'simulate', 'data']);
+    expect(doc.querySelector('.pg-panel[data-panel="data"] .pg-data')).not.toBeNull();
+    expect(doc.querySelector('.pg-panel[data-panel="data"] .pg-data-reset')).not.toBeNull();
     expect(doc.querySelector('.pg-tabs [data-tab="preview"]')?.getAttribute('aria-selected')).toBe('true');
 
     // The tooltip exists and is empty — no analysis lands in this harness, so
@@ -299,6 +331,54 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(dock.dataset.open).toBe('true');
     expect(doc.querySelector('[data-dock-panel="diagnostics"]')?.hasAttribute('hidden')).toBe(false);
     expect(body).not.toBeNull();
+  }));
+
+  test('the console\'s Clear on an empty log is harmless, and Copy says what went', async () => {
+    drive((doc) => {
+      const click = (sel: string) => (doc.querySelector(sel) as unknown as { click(): void }).click();
+      click('.pg-console-btn[data-console="clear"]');
+      expect(doc.querySelector('.pg-console-log')?.textContent).toBe('');
+      click('.pg-console-btn[data-console="script"]');
+    });
+    // The clipboard answers in a microtask (or is absent, which is a sentence too).
+    await new Promise((r) => setTimeout(r, 0));
+    drive((doc) => {
+      expect(doc.querySelector('.pg-status')?.textContent).toMatch(/^Clipboard unavailable|^Copied 0 command lines\./);
+    });
+  });
+
+  test('the drawer follows the output tab and collapses to its strip', () => drive((doc) => {
+    const drawer = doc.querySelector('.pg-drawer') as unknown as { dataset: Record<string, string>; hasAttribute(n: string): boolean };
+    const separator = doc.querySelector('.pg-drawer-splitter')!;
+    const tab = (name: string) => doc.querySelector(`.pg-tabs [data-tab="${name}"]`) as unknown as { click(): void };
+    const toggle = doc.querySelector('.pg-drawer-toggle') as unknown as { click(): void; textContent: string };
+    const consoleTab = doc.querySelector('.pg-drawer-tab[data-drawer="console"]') as unknown as { click(): void };
+
+    expect(drawer.hasAttribute('hidden')).toBe(true);
+    expect(separator.hasAttribute('hidden')).toBe(true);
+    tab('simulate').click();
+    expect(drawer.hasAttribute('hidden')).toBe(false);
+    expect(separator.hasAttribute('hidden')).toBe(false);
+    tab('data').click();
+    expect(drawer.hasAttribute('hidden')).toBe(false);
+    tab('truth').click();
+    expect(drawer.hasAttribute('hidden')).toBe(true);
+    tab('simulate').click();
+
+    // Collapsing keeps the strip and hides the divider with the body.
+    toggle.click();
+    expect(drawer.dataset.open).toBe('false');
+    expect(toggle.textContent).toBe('Show');
+    expect(separator.hasAttribute('hidden')).toBe(true);
+    // The selected tab is the reopen gesture, as on the dock.
+    consoleTab.click();
+    expect(drawer.dataset.open).toBe('true');
+    expect(separator.hasAttribute('hidden')).toBe(false);
+    consoleTab.click();
+    expect(drawer.dataset.open).toBe('false');
+    toggle.click();
+    expect(drawer.dataset.open).toBe('true');
+    tab('preview').click();
   }));
 
   test('a group collapses and reopens, taking its projects with it', () => drive((doc) => {
@@ -455,8 +535,10 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     const errorLine = () => doc.querySelector('.pg-mem-error')?.textContent ?? '';
 
     // The tab is no longer hidden, and the grid is the memory's exact size.
-    expect(doc.querySelector('.pg-dock-tab[data-dock="memory"]')?.hasAttribute('hidden')).toBe(false);
+    expect(doc.querySelector('.pg-drawer-tab[data-drawer="memory"]')?.hasAttribute('hidden')).toBe(false);
     expect(cells()).toHaveLength(16);
+    // Nothing runs in this harness, so the image can be edited but not saved.
+    expect((doc.querySelector('.pg-mem-save') as unknown as { disabled: boolean }).disabled).toBe(true);
     expect(cells().every((c) => (c as unknown as { textContent: string }).textContent === '?')).toBe(true);
 
     // Open a cell.

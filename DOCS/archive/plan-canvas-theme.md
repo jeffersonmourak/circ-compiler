@@ -19,7 +19,7 @@ The renderer grew its three additions and the site split its theme into testable
 - `circ-renderer` `86469f0`: `CircTheme.fanOutMarker` with `FanOutMarkerContext { ctx, theme, cell, x, y, value, signal }`, called per junction in place of the default dot; `test/fan-out-marker.test.ts`.
 - `circ-renderer` `a46bdb1`: `TraceOptions { arcRadius?, cornerRadius? }` on `traceWire`/`wirePath`; with a `cornerRadius` one continuous subpath, `arcTo` corners clamped to half the shorter run, hops spliced in travel order; the positional call unchanged.
 - `circ-renderer` `f882353`: `LayoutOptions.rowGutter` (default `ROW_GUTTER = 1`) threaded into `coords.assign`; `grid` removed from `ThemeColorKey` and `defaultColors`; version `2.3.0-alpha.1`.
-- Site: the handoff committed under `DOCS/design/` (eight files, no `.DS_Store`, no duplicate sprite copy).
+- Site: the handoff committed under `DOCS/design/` (eight files, no `.DS_Store`, no duplicate sprite copy); the port done, the handoff was deleted from the tree, and the ported modules under `site/src/utils/` are its record.
 - Site: `circ-theme.mjs` split into `circ-palette.mjs` (palettes, `PaletteKey`, `pickPalette`), `circ-skins.mjs` (every drawing function; `makeSkins(assets)` binds an `Assets { sprite, offscreen }` seam) and the `circ-theme.mjs` entry; moved bodies byte-identical except `sprite(name)` lookups.
 - Site: `site/test/canvas-record.ts` (a recording 2D context; `measureText` at 0.6 cells per character) and `site/test/circ-skins.test.ts` with op-log goldens under `site/test/fixtures/skins/<kind>.json`, one file per kind keyed by combination (`sprites.sig1.w8.c14`), regenerated with `UPDATE_GOLDENS=1 bun test`; every log must balance `save`/`restore`.
 - Site pinned at the pushed sha; `RENDERER_PIN_VERSION` asserted; baseline theme chunk 28.4 KB raw / 17.2 KB gzip.
@@ -105,6 +105,6 @@ No diagnostic code, runtime export or CLI flag changed; the compiler is untouche
 
 - `DOCS/decisions/canvas-theme.md` — nineteen entries: the three renderer hooks; the theme split and the assets seam; op-log goldens; the handoff tracked; the design file over its README; the palettes; cell-relative strokes and palette-only colours; the wire hook; pins by shape; the value pill and who draws it; the hover ring; no new component kinds; two sprites tinted and measured; the gate anatomy; slice and concat; the shared chip; the write indicator; the junction rule; padding in CSS pixels — and the map of the plan's sixteen locked decisions onto them.
 - `DOCS/decisions/index.md` — the `canvas-theme.md` topic.
-- `DOCS/archive/design/canvas-theme/` — the handoff: `README.md` (what to port), `circ-site-theme.js` (the port target), the two `.dc.html` sheets, the harness files.
+- The design handoff (`README.md`, `circ-site-theme.js`, the two `.dc.html` sheets, the harness files) was deleted from the tree after the port; `git show 02e56f4:DOCS/archive/design/canvas-theme/README.md` recovers it.
 - `circ-renderer/README.md` — the theme colour table, "Drawing a wire yourself" (`TraceOptions`), "Fan-out junctions", the `layoutOptions` row.
 - `site/test/circ-skins.test.ts`, `site/test/circ-theme-hover.test.ts`, `site/test/island-canvas-options.test.ts`, `site/test/renderer-pin.test.ts` — the guards that hold the decisions above.

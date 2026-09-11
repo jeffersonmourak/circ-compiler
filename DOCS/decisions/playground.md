@@ -228,3 +228,195 @@ The entries below record the decisions of the playground-v2 initiative (the site
 
 **Alternatives.** Always encoding the source (long URLs for text the site already ships, and a copy that never tracks a content edit); always using the id (throws away the reader's edit with no warning at all).
 
+
+### One simulation session, and every face drives through it
+
+**Decision.** `site/src/scripts/sim-session.ts` owns the `CircRuntime` built from the compiled artifact. It holds the root pins and memories by name in declaration order (`origin.length === 0`, inputs then outputs — the collection `lib/engine_session.zig` makes for `--sim`), refuses what `--sim` refuses before touching the runtime (`E_NOPIN`, `E_NOTIN`, `E_WIDTH`, `E_NOMEM`, `E_ADDR`, as values with the protocol's argument), settles after every drive, applies the Memory panel's images as preloads at build and at `reset`, and notifies listeners (`drive`, `memory`, `rebuilt`, `destroyed`). The Simulate canvas is `new CircCanvas(session.runtime, …)` over it and reports its clicks back through `notifyExternal`; the Memory panel reads `session.runtime`; the Data tab drives `session.set`. The island keeps one session per artifact, built on first need, dropped on a new or absent artifact, with the reader's pins replayed by name onto the next.
+
+**Rationale.** `renderCircuit` created the runtime inside the canvas, so nothing else could drive the circuit and the memory dock reached the runtime through the picture. A session that outlives the canvas is what a values view and a console need, and what lets a `reset` be the protocol's — a fresh runtime — while the canvas is rebuilt over it.
+
+**Alternatives.** Driving the runtime from each face directly (three owners of one set of pin values); a renderer change to make `CircCanvas` accept a new runtime (a push and a pin bump for a rebuild the island can do).
+
+### The session loads floating, and the page boots low on purpose
+
+**Decision.** The session loads its runtime with `noInitialPinDrive: true`, so after `init()` every pin is unknown as it is under `--sim`. The page's boot — every root input driven low and settled once, which the renderer's `loadFromBytes` did for the canvas before — is `SessionInit.bootLow`, applied by the island at build and never by `reset`. A transcript test leaves it off.
+
+**Rationale.** `--sim`'s RAM transcript depends on the first defined-high clock not being an edge; a runtime that had driven `clk` low first would write. After a console `reset` the page's session is exactly a fresh `--sim` process; before one, a first `set clk 1` on a freshly compiled circuit is an edge, because the page booted low, which is what the canvas always showed.
+
+**Alternatives.** Booting floating everywhere (every pin `?` on a fresh compile, a visible change to a page whose readers click pins from `0`); driving low in `reset` too (the transcripts would not replay).
+
+### The Data tab is rows over the session, spelled the site's way
+
+**Decision.** `site/src/scripts/data-view.ts` is pure: `rowsFor(session, format)` gives one row per root pin with `formatPinValue` in the reader's base; `editRow` parses with `parsePinValue` and drives `session.set`, refusing a parse failure with the renderer's reason before touching the session; `toggleRow` cycles a one-bit input unknown → 1 → 0 → 1; `describeError` turns a protocol code into a sentence. A typed value is wholly known, as in the bus dialog — the renderer's parser takes no `x` bits — and a half-known value is written `10xx` with no prefix. The island renders a table, rebuilding on a shape change and updating in place otherwise so a field being typed into keeps its text; rows follow the session's events and the settings' base.
+
+**Rationale.** The circuit's values are what an adder or an ALU is for, and the site already has one spelling for a value; a second parser here would be a second set of rules. Rendering in place is what lets the rows follow a canvas click while the reader is mid-edit.
+
+**Alternatives.** A per-bit editor (the renderer's dialog does not have one either); a second value grammar for the tab (two spellings on one page).
+
+### Errors are the protocol's, as values
+
+**Decision.** A session method answers `{ ok: true, … }` or `{ ok: false, code, arg }`, with `code` one of the ten codes of `lib/sim/protocol.zig` and `arg` the text `--sim` prints after it (`data`, `data 0x10`, the compiler's image reason). `site/src/scripts/sim-executor.ts` spells such a value `err E_ADDR data 0x10`; `site/src/scripts/data-view.ts` spells it as a sentence. Neither face decides what is wrong; the session does, once, in the loop's order.
+
+**Rationale.** The console must print what the CLI prints, and the Data tab must say the same thing in words. One set of reasons produced in one place keeps the two from drifting, and a value rather than a throw keeps a typo from becoming a stack trace.
+
+**Alternatives.** Throwing typed errors from the session (every face wraps every call); the executor re-checking names and widths itself (two copies of the loop's rules).
+
+### Files are the Memory tab's, and the console points at it
+
+**Decision.** `load <mem> <path>` and `save <mem> <path>` go through an injected `FileSource { read(path); write(path, bytes) }`, with failures spelled as Zig's `@errorName` spells them (`FileNotFound`, `AccessDenied`, `FileTooBig`). The transcript test's source is the repository root, so the goldens' `err E_IO tests/fixtures/mem/does_not_exist.bin: FileNotFound` replays; a unit test's is `MemoryFileSource` over a map; the page's (Phase 3) refuses every read and write with one reason that names the Memory tab. Image bytes are checked by `validateImageBytes` in `lib/memimage.zig`'s order and refused with `writeImageError`'s wording — `17 words exceed capacity 16` — which is not the dock's `describeRomError` sentence.
+
+**Rationale.** A browser has no cwd, and the page already has one place that reads an image file and shows what a memory holds. Keeping the reply protocol-shaped (`err E_IO <path>: <reason>`) means a script written for the CLI fails in the console the way it would fail on a machine without the file, and the reader learns where to go from the reason.
+
+**Alternatives.** A drop box on the console (a second file surface beside the Memory tab); a virtual file system in the page (state the reader cannot see); the dock's sentences in `E_MEMFMT` (a transcript that does not match the CLI).
+
+### The transcript test compiles its circuits in the test
+
+**Decision.** `site/test/sim-transcripts.test.ts` reads the rows of `tests/sim/golden_test.zig`'s table by hand — script, circuit root, `--mem` preloads — compiles each root through the committed `libcirc.wasm` (`instantiateLibcirc`, `callOp('compile')`), loads the bytes into a real `CircRuntime` with `noInitialPinDrive`, builds a `SimSession` with the preload as a Memory-tab image, prints `handshake` then every reply from `execute`, and compares the joined text to `tests/fixtures/expected-sim/<name>.txt` byte for byte. It honours `SKIP_LIBCIRC_TEST=1` and never writes a golden.
+
+**Rationale.** The goldens are the CLI's own proof, kept by `UPDATE_GOLDENS=1 zig build test`; a site test that reads them from the repository cannot drift from them, and one that compiles in the test proves the whole browser path — library, artifact, runtime, session, executor — not a vendored copy of its output.
+
+**Alternatives.** Vendoring the four transcripts into `site/test` (a second copy to keep in step); asserting on a hand-written subset of replies (the handshake and the counted blocks are where the spelling goes wrong).
+
+### The console's value spelling is the protocol's
+
+**Decision.** `site/src/scripts/sim-protocol.ts`'s `parseValue` is `std.fmt.parseInt(u64, text, 0)` over `bigint`, the standard library's rules copied: a leading `+` or `-` (a negative literal overflows an unsigned type, except `-0`), a `0x`/`0o`/`0b` prefix only when more than two characters follow the sign, no underscore at either end of the digits and any number between them, digits checked against the base, at most sixty-four bits. `parseLine` copies `protocol.zig`'s per-verb checks in order, so a bad literal is reported before a later shape error exactly where the CLI reports it. Replies write `0x` lowercase hex with no padding, as `writeHex` does. The Data tab keeps the renderer's `parsePinValue`/`formatPinValue`.
+
+**Rationale.** A console that accepted `1e3` or refused `+10` would answer a CLI script differently from the CLI, and the goldens are the test. The Data tab is a form on the site, so it spells values the way the canvas does; the console is the protocol, so it spells them the way the protocol does.
+
+**Alternatives.** One parser for both (either the canvas accepts `0o17` and underscores, or the console loses them); approximating `parseInt` with a regular expression (the underscore and prefix rules are where an approximation differs).
+
+### `reset` rebuilds the canvas, and a new artifact replays the pins
+
+**Decision.** The protocol's `reset` builds a new runtime from the same bytes, leaves every pin undefined, re-applies the Memory tab's images and emits `rebuilt`; the island builds a fresh `CircCanvas` over the new runtime without replaying the reader's pins, the Data tab re-reads, the console prints `# reset` and the handshake. A new artifact builds a new session, and that one *does* replay the reader's pins by name, as the page always has. `quit` prints `ok bye` and is otherwise `reset`. The page boots each new session low (`SessionInit.bootLow`), never a reset one.
+
+**Rationale.** A reader who typed `reset` asked for the protocol's state, which is every pin unknown; a reader who edited the source asked for the same circuit with the same pins. One gesture, two meanings, and the session tells them apart by which method ran. There is no process for `quit` to end, and the nearest true thing is the state a fresh process would have.
+
+**Alternatives.** Replaying the pins after `reset` too (the transcripts would not replay); ending the session on `quit` (a dead prompt with nothing to bring it back).
+
+### The handshake prints when the session is built
+
+**Decision.** `handshake(session, fileName)` prints `ready proto=1 pins=<N> warnings=<W>`, a `pin` line per root pin and a `diag warning` line per warning from the current analysis, with the root file's name as the CLI's argument, the moment `ensureSession` has a session, before the reader's pins are replayed. `pins` re-prints the pin table on demand. A session with errors never exists, so `error diags=…` is never printed.
+
+**Rationale.** A reader who opens the console expects to see what `--sim` shows first, and the pin table is what they need to type a `set`. Printing it at build rather than at the first prompt keeps the log in the CLI's order.
+
+**Alternatives.** Printing the handshake on the drawer's first open (a log that starts mid-session); the diagnostic's own file name per line (not what the CLI prints).
+
+### The drawer is one element under two tabs, with two tabs of its own
+
+**Decision.** One `.pg-drawer` under the output panels, hidden unless the output tab is Simulate or Data, holds a strip — Console and Memory — over one body; its height is a second `createSplitter`, horizontal, whose ratio persists as `layout.ratios.drawer`; it collapses to its strip with the dock's gesture. Which tab is selected and whether it is open are island fields. The Console keeps one transcript and one history whichever output tab is open, because it drives one session.
+
+**Rationale.** The console and the memory panel are faces on the session, and the session is one; two drawers would be two logs of one conversation. Under Preview and Truth table there is nothing to drive, so the drawer leaves with them.
+
+**Alternatives.** A console per output tab (two histories for one session); a drawer on every tab (a dead prompt under a truth table); persisting the drawer's tab (a reload that lands on a memory tab for a circuit without one).
+
+### The Memory panel reads the session and lives in the drawer
+
+**Decision.** The memory panel moved from the editor's dock to the drawer's Memory tab, shown while the circuit declares a rom or a ram, as its dock tab was; `DockTab` is `'diagnostics' | 'settings'` and a stored `memory` falls back. The panel's grid, hex box, file load and clear are unchanged; it gains a `Save image` button that downloads `<mem>.bin` from `session.storeImage`, enabled while the circuit runs. `memVisible` reads the drawer, so a session event redraws the grid only while it is on screen.
+
+**Rationale.** A memory's contents are runtime state, not source, so the panel belongs beside the console that drives the runtime, not beside the diagnostics that read the text. Moving it is what lets `load` and `save` point at one place.
+
+**Alternatives.** A file surface on the console (a second way to load an image); leaving the panel in the dock and linking to it (a pointer across the page).
+
+### A session lives as long as its artifact
+
+**Decision.** The island keeps one `SimSession` per compiled artifact: built lazily the first time Simulate or Data is opened with one, dropped (runtime destroyed, canvas destroyed, console told `# session ended`) the moment the artifact hook delivers different bytes or none. The Simulate canvas is built over the session on demand and destroyed without destroying the runtime; the Data tab, the Memory panel and the console never hold a runtime of their own.
+
+**Rationale.** The artifact is the circuit; a session over stale bytes would answer for a circuit the reader no longer has. Building on first need keeps the Preview and Truth table tabs free of a runtime they never read.
+
+**Alternatives.** A session per face (three runtimes for one circuit); building the session at every compile (a runtime for readers who never open Simulate).
+
+### Documentation lands with the code
+
+**Decision.** Each phase's last slice writes what it changed: the console's browser section in `DOCS/sim-protocol.md` landed with the console, and every locked decision a phase exercised was appended here at that phase's close — decisions 1, 3, 8 and 9 for Phase 0, 7 for Phase 1, 2, 4, 10 and 11 for Phase 2, 3, 5, 6 and 8 for Phase 3, 9 and this one for Phase 4. The archive is produced per `DOCS/prompts/ARCHIVE.md` only when the human asks.
+
+**Rationale.** A document written after the fact records what someone remembers; one written with the slice records what the slice did, and the reviewer reads both in one diff.
+
+**Alternatives.** One documentation phase at the end (the phase every plan cuts first).
+
+### Session events carry what was driven
+
+**Decision.** A `drive` event carries its `assigns` — each pin's name, value and the mask the runtime received — beside `names`; a `memory` event names its `op`: `poke` with the address, value and mask, `clear`, or `load` with the word count. `notifyExternal(assigns)` takes what the canvas drove. `applyPreloads({ silent })` reports a `load` or a `clear` per image it applied unless silent; the build and `reset` apply silently.
+
+**Rationale.** A face that wants to say what happened must not reconstruct it from another face's state; the session knows, once, at the moment it drove. The build and `reset` are moments the handshake already records, so a comment there would be noise.
+
+**Alternatives.** Faces re-reading pins after each event (a value read after the fact is not the value driven when a mask was partial); a tag on the session's API naming the caller (the console tells its own lines apart by being busy).
+
+### `commandFor` is the one spelling
+
+**Decision.** `console.ts`'s `commandFor(event, session)` turns a session event into the lines the console prints: one `> set <pin> <hex>` per assign with the mask only when the pin is not wholly known, `> poke`, `> clear`, each followed by the `ok` the session gave; an image applied from the Memory tab is a `#` comment naming the memory and the word count; a rebuild is `> reset`, `ok`. Values are canonical (`value & defined`), as the executor's are.
+
+**Rationale.** The log is a transcript, and a transcript has one spelling. The browser refuses `load`, so an image claimed as a `load` line would be a line the CLI could not have printed; a comment is the honest record and a script ignores it.
+
+**Alternatives.** Re-running the executor for a face's action (a second `set clk 1` is not a second edge but is a second settle, and `poke` twice is twice the work); logging in the Data tab's base (a transcript in three bases).
+
+### A page line looks like a typed line
+
+**Decision.** A line another face caused is byte-identical to the line typing it would have produced, and its span carries `data-origin="page"` for the stylesheet only. A console-typed line is not echoed twice: the listener skips events that arrive while the console is running a line. `> reset`, `ok` and the handshake are what every reset prints, whoever caused it.
+
+**Rationale.** The promise is that the log can become a script; a marker inside the text would break it, and a marker outside the text costs nothing.
+
+**Alternatives.** A prefix or a colour word in the text; a separate log for page actions.
+
+### The Memory panel writes through the session
+
+**Decision.** The panel's RAM cell write and clear call `session.poke` and `session.clear`; the session settles, tells the faces and logs the line. A ROM edit stays an image edit through `applyPreloads`, which is why it logs as a comment. `memHost()` stays the panel's read path.
+
+**Rationale.** One owner of the runtime was the driver plan's first anchor, and the panel's two direct calls were a leftover of its move; a write around the session is a write the log cannot see.
+
+**Alternatives.** Emitting events from the panel itself (a second source of truth for what was written).
+
+### `Copy script` is the commands only
+
+**Decision.** `console.ts`'s `scriptOf(lines)` keeps an echo without its `> ` and a `#` comment as it is, and drops every reply; the console's Copy script puts that on the clipboard, Copy log the whole transcript. Both go through `navigator.clipboard.writeText`, guarded; the status span says what went, or that the clipboard is unavailable.
+
+**Rationale.** The CLI refuses an echo as written, so a log pasted whole is not a script; the button is the honest way to get one, and the document now says so.
+
+**Alternatives.** Echoing without a mark (a `set a 1` line the reader could not tell from a reply that reads the same); a download instead of the clipboard (a file for a line the reader wants to paste).
+
+### The toolbar is the console's own top edge
+
+**Decision.** A `.pg-console-bar` above the log carries a title — `circ-compile <root>.circ --sim`, the command the terminal is running — and, at the right, Clear, Copy script and Copy log, styled as the dock's toggle. `Ctrl+L` stays.
+
+**Rationale.** An editor's terminal names its shell and keeps its actions at the top edge of its own panel; a strip that took the log's width would push the text about.
+
+**Alternatives.** The actions on the drawer's strip beside the tabs (they would apply to the Memory tab too); a floating button over the log (over the text it acts on).
+
+### Autoscroll holds while the reader reads
+
+**Decision.** The log follows a new line only when it was already at its end, within a line and a half; a submit and a handshake always scroll to the end. No jump-to-end affordance is built.
+
+**Rationale.** A reader scrolled up is reading; a line the page appended for them must not take that away, and the next thing they type brings them back.
+
+**Alternatives.** Always following (the terminal's default, and the reason terminals grew a scroll lock); never following (a prompt that answers off screen).
+
+### The prompt is one line in the terminal
+
+**Decision.** The input has no border and no background of its own; a `>` glyph in the accent colour precedes it on the same baseline; a click anywhere in the panel that is not a button, an input or a selection focuses it; `Escape` clears the line and resets the history cursor; the panel, not the input, shows the focus ring.
+
+**Rationale.** A terminal has one caret and it is where the text goes; a field with its own box reads as a form.
+
+**Alternatives.** A `$` prompt (the echo in the log is `> `, and one glyph is one story); a multi-line prompt (the protocol is line-oriented).
+
+### Line kinds are the stylesheet's
+
+**Decision.** `consoleKind` classifies a line by its first characters — `err`, `echo`, `note`, `reply` — and `data-ok` marks a reply that begins with `ok`; the stylesheet colours them: `ok` replies in `--term-ok`, errors in `--danger`, echoes in `--term-echo` with the mark in the accent colour, comments in `--muted`, page-originated lines at reduced opacity. The two tokens are defined in both themes beside the site's palette. No line gets an icon or a prefix beyond its text.
+
+**Rationale.** Colour is what a terminal has to tell a reply from an error at a glance, and colour costs the text nothing.
+
+**Alternatives.** ANSI sequences in the text (a log that is no longer the CLI's); a per-line icon (a prefix a copy would carry).
+
+### The document says what a script can take
+
+**Decision.** `DOCS/sim-protocol.md`'s browser section says the log records every face, that the CLI refuses an echo as written, that Copy script gives the lines `--sim` accepts, and that a copied `help` prints one `E_PROTO` and goes on.
+
+**Rationale.** The section had claimed the echoes are ignored, and they are not; a reader who saved a log would have met an error the document said could not happen.
+
+**Alternatives.** None: a false sentence in a reference is a defect.
+
+### A new project is a new terminal
+
+**Decision.** Opening another project clears the console's log and history and skips the `# session ended` line the dropped session would have printed; the next handshake is the first line. Edits within a project keep the log, ending the old session and opening the new one in place.
+
+**Rationale.** A terminal under a different program is a different terminal; a log that carried one circuit's pins into another's would read as one session that never was. Within a project the reader is still working on the same circuit, and the log of their edits is worth keeping.
+
+**Alternatives.** Clearing on every recompile (the history of a debugging session gone with each keystroke); keeping everything (the human's review found it read as one long session).

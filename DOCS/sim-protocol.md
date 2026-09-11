@@ -213,3 +213,63 @@ ok words=16
 load code nope.bin
 err E_IO nope.bin: FileNotFound
 ```
+
+## The protocol in the browser
+
+The playground's Console tab, in the drawer under the Simulate and Data
+tabs, speaks this protocol to the circuit the page compiled. The grammar is
+the CLI's (`site/src/scripts/sim-protocol.ts` copies `parseLine` and
+`parseValue` verb by verb), the replies are the CLI's
+(`site/src/scripts/sim-executor.ts` copies the strings of `lib/sim/loop.zig`),
+and `site/test/sim-transcripts.test.ts` replays every script in
+`tests/fixtures/sim/` through both and matches `tests/fixtures/expected-sim/`
+byte for byte. What follows is the list of differences, all of them about the
+browser having no process, no working directory and no stdin.
+
+- **The handshake prints when the session is built**, which is the first
+  time the Simulate or Data tab is opened with a compiled circuit, and again
+  after every `reset`, whichever face caused it. Its `<file>` is the root
+  file's name. Its `warnings` count and `diag` lines come from the analysis
+  the page ran on the same source.
+- **The log records every face.** A pin clicked on the canvas, a value typed
+  on the Data tab, a cell written or a memory cleared in the Memory tab, and a
+  Reset pressed anywhere are logged as the line that would have done the
+  same — `> set a 0x1`, `> poke data 0x2 0x5a`, `> clear data`, `> reset` —
+  followed by the reply the session gave, in the order they happened. A
+  partly-known value carries its mask (`> set a 0x1 0x3`). A ROM image edited
+  or loaded in the Memory tab is applied as a `--mem` preload, not as a
+  `load`, so it is logged as a comment naming the memory and the word count.
+- **The page boots low.** Before the first `reset` the circuit is in the
+  state the canvas has always shown: every root input driven to 0 and
+  settled once. `reset` (and `quit`) leave every pin undefined, as after
+  `init()`, so from then on the session is a fresh `--sim` process. A script
+  that depends on floating pins begins with `reset`.
+- **`quit` prints `ok bye` and is otherwise `reset`.** There is no process to
+  end; the prompt stays live.
+- **`load` and `save` are the Memory tab's.** The page has no working
+  directory, so both verbs are refused in the protocol's own shape, and the
+  reason says where to go:
+
+  ```
+  load code prog.bin
+  err E_IO prog.bin: load images in the Memory tab
+  save code snapshot.bin
+  err E_IO snapshot.bin: save images from the Memory tab
+  ```
+
+  The Memory tab loads an image from a file or from pasted hex, and its
+  `Save image` button downloads `<mem>.bin` with the bytes `save` would
+  write. Preloads are the Memory tab's images: they are applied when the
+  session is built and again on every `reset`, as `--mem` is.
+- **`help` is a browser-only verb.** It prints the command table as `#`
+  comment lines. The CLI answers `help` itself with `err E_PROTO malformed
+  command`, so a copied script that contains it prints one error and goes on.
+- **No line-length cap.** The CLI's `err E_PROTO command line exceeds limit`
+  is never printed; a browser line has no 8 KiB buffer to overflow.
+- **The log is a transcript; `Copy script` is the script.** Every line in
+  the Console's scrollback is a reply, the echo of a line (`> …`) or a comment
+  (`# …`). The CLI would refuse an echo as written (`> set a 1` is a malformed
+  command), so the console's `Copy script` button copies the lines `--sim`
+  accepts — each echo without its `> `, and the comments — and drops every
+  reply. Saved as a `.script` and fed to `circ-compile <file>.circ --sim`,
+  it replays what the reader did; `Copy log` copies the whole scrollback.
