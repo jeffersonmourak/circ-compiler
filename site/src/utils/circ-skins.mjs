@@ -777,113 +777,69 @@ const drawLed = ({ ctx, cell, component, inputSignals, inputValues, theme }) => 
   if (slot) nsDot(ctx, cell, tailEdge, dotY, sig, t);
 };
 
-const drawNot = ({ ctx, cell, component, inputSignals, inputValues, outputSignal, theme, hovered }) => {
-  const x0 = component.x * cell;
-  const y0 = component.y * cell;
-  const w = component.width * cell;
-  const h = component.height * cell;
-
-  const usingSprite = !!sprite('NOT');
-  const rect = spriteRect(x0, y0, w, h);
-  const gap = cell * 0.45;
-  const leftEdge = (usingSprite ? rect.left : x0 + w * 0.1) - gap;
-  const rightEdge = (usingSprite ? rect.right : x0 + w * 0.95) + gap;
-
-  const inSlot = component.inPorts[0];
-  const inSig = inputSignals[0] ?? 2;
-  const inDotY = inSlot ? inSlot.coord.y * cell + cell / 2 : 0;
-  if (inSlot) {
-    const portX = inSlot.coord.x * cell + cell / 2;
-    nsTail(ctx, cell, leftEdge, portX, inDotY, inSig, theme.colors, (inputValues[0]?.width ?? 1) > 1);
-  }
-  const outDotY = component.outPort.y * cell + cell / 2;
-  nsTail(ctx, cell, rightEdge, component.outPort.x * cell + cell / 2, outDotY, outputSignal, theme.colors, (component.bitWidth ?? 1) > 1);
-
-  if (usingSprite) {
-    drawSprite(ctx, sprite('NOT'), x0, y0, w, h);
-  } else {
-    ctx.strokeStyle = theme.colors.stroke;
-    ctx.fillStyle = theme.colors.background;
-    ctx.lineWidth = Math.max(1, cell * 0.1);
-    const triRight = x0 + w * 0.78;
-    ctx.beginPath();
-    ctx.moveTo(x0 + cell * 0.2, y0 + h * 0.18);
-    ctx.lineTo(x0 + cell * 0.2, y0 + h * 0.82);
-    ctx.lineTo(triRight, y0 + h / 2);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-    const bubbleR = Math.min(cell * 0.3, h * 0.18);
-    ctx.beginPath();
-    ctx.arc(triRight + bubbleR + cell * 0.05, y0 + h / 2, bubbleR, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-  }
-
-  if (inSlot) nsDot(ctx, cell, leftEdge, inDotY, inSig, theme.colors);
-  nsDot(ctx, cell, rightEdge, outDotY, outputSignal, theme.colors);
-
-  nsName(ctx, cell, component.name, x0, y0, w, h, theme.colors.labelMuted);
-
+/** Recipe per gate; the keys are the lowercase subcircuit names `collapse.ts` reports. */
+const RECIPES = {
+  and:  { sprite: 'AND', qualifier: '&' },
+  nand: { sprite: 'AND', negate: true, qualifier: '&' },
+  or:   { sprite: 'OR', qualifier: '\u22651', qx: 0.44, qy: 0.18 },
+  nor:  { sprite: 'OR', negate: true, qualifier: '\u22651', qx: 0.44, qy: 0.18 },
+  xor:  { sprite: 'OR', exclusive: true, qualifier: '=1', qx: 0.44, qy: 0.18 },
+  xnor: { sprite: 'OR', exclusive: true, negate: true, qualifier: '=1', qx: 0.44, qy: 0.18 },
+  not:  { vector: 'triangle', negate: true },
 };
 
-const drawAnd = ({ ctx, cell, component, inputSignals, inputValues, outputSignal, theme, hovered }) => {
-  const x0 = component.x * cell;
-  const y0 = component.y * cell;
-  const w = component.width * cell;
-  const h = component.height * cell;
-
-  const usingSprite = !!sprite('AND');
-  const gap = cell * 0.45;
-  const leftEdge = x0 + w * 0.1 - gap;
-  const rightEdge = x0 + w * 0.92 + gap;
+/**
+ * One body for every gate: tails, then the containers, then dots and the
+ * name. `opts.portsFrom` lets a builtin macro draw on a virtual box while
+ * its tails run to the real ports.
+ */
+function nsGate({ ctx, cell, component: c, inputSignals: inSigs, inputValues, outputSignal: outSig, theme }, opts) {
+  const t = theme.colors;
+  const ports = opts.portsFrom ?? c;
+  const hasSprite = !!(opts.sprite && sprite(opts.sprite));
+  const bounds = hasSprite ? spriteBounds(opts.sprite) : TRIANGLE_BOUNDS;
+  const L = gateGeometry(cell, c, bounds, opts, ports.inPorts.length);
+  const { x0, y0, w, h, cy, innerL, innerR, rect } = L;
+  const gap = cell * 0.4;
+  const leftEdge = innerL - gap;
+  const rightEdge = innerR + gap;
 
   const inDotYs = [];
-  for (let i = 0; i < component.inPorts.length; i++) {
-    const slot = component.inPorts[i];
-    const sig = inputSignals[i] ?? 2;
-    const portX = slot.coord.x * cell + cell / 2;
+  for (let i = 0; i < ports.inPorts.length; i++) {
+    const slot = ports.inPorts[i];
     const portY = slot.coord.y * cell + cell / 2;
     inDotYs.push(portY);
-    nsTail(ctx, cell, leftEdge, portX, portY, sig, theme.colors, (inputValues[i]?.width ?? 1) > 1);
+    nsTail(ctx, cell, leftEdge, slot.coord.x * cell + cell / 2, portY, inSigs[i] ?? 2, t, (inputValues[i]?.width ?? 1) > 1);
   }
-  const outDotY = component.outPort.y * cell + cell / 2;
-  nsTail(ctx, cell, rightEdge, component.outPort.x * cell + cell / 2, outDotY, outputSignal, theme.colors, (component.bitWidth ?? 1) > 1);
+  const outDotY = ports.outPort.y * cell + cell / 2;
+  nsTail(ctx, cell, rightEdge, ports.outPort.x * cell + cell / 2, outDotY, outSig, t, (ports.bitWidth ?? 1) > 1);
 
-  if (usingSprite) {
-    drawSprite(ctx, sprite('AND'), x0, y0, w, h);
-  } else {
-    ctx.strokeStyle = theme.colors.stroke;
-    ctx.fillStyle = theme.colors.background;
-    ctx.lineWidth = Math.max(1, cell * 0.1);
-    const left = x0 + cell * 0.15;
-    const top = y0 + cell * 0.15;
-    const bot = y0 + h - cell * 0.15;
-    const flat = x0 + w * 0.5;
-    const right = x0 + w - cell * 0.15;
-    ctx.beginPath();
-    ctx.moveTo(left, top);
-    ctx.lineTo(flat, top);
-    ctx.bezierCurveTo(right, top, right, bot, flat, bot);
-    ctx.lineTo(left, bot);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-  }
+  if (opts.exclusive) nsExclusive(ctx, cell, L.exclusive, rect, outSig, t);
+  if (hasSprite) nsSpriteRect(ctx, opts.sprite, rect, outSig, t);
+  else if (opts.vector === 'triangle') nsTriangle(ctx, t, cell, rect, outSig);
+  else nsVectorGate(ctx, t, cell, rect, outSig, opts.sprite);
+  if (opts.negate) nsNegate(ctx, cell, L.negate, cy, outSig, t, rect.artR);
 
-  for (let i = 0; i < component.inPorts.length; i++) {
-    nsDot(ctx, cell, leftEdge, inDotYs[i], inputSignals[i] ?? 2, theme.colors);
-  }
-  nsDot(ctx, cell, rightEdge, outDotY, outputSignal, theme.colors);
-
-  if (component.name) {
-    ctx.fillStyle = theme.colors.labelOnComponent;
-    ctx.font = `600 ${Math.round(cell * 0.7)}px ui-monospace, "JetBrains Mono", monospace`;
+  if (opts.qualifier) {
+    ctx.save();
+    ctx.fillStyle = t.labelOnComponent;
+    ctx.font = nsFont(cell, 700);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(component.name, x0 + w / 2, y0 + h / 2);
+    ctx.fillText(opts.qualifier, rect.left + rect.size * (opts.qx ?? 0.31), rect.cy - rect.size * (opts.qy ?? 0.21));
+    ctx.restore();
   }
+  for (let i = 0; i < ports.inPorts.length; i++) nsDot(ctx, cell, leftEdge, inDotYs[i], inSigs[i] ?? 2, t);
+  nsDot(ctx, cell, rightEdge, outDotY, outSig, t);
+  nsName(ctx, cell, c.name, x0, y0, w, h, t.labelMuted);
+}
 
+const drawNot = (args) => {
+  nsGate(args, RECIPES.not);
+};
+
+const drawAnd = (args) => {
+  nsGate(args, RECIPES.and);
 };
 
 const drawSubcircuit = ({ ctx, cell, component, inputSignals, inputValues, outputSignal, theme, hovered }) => {

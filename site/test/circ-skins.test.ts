@@ -328,6 +328,58 @@ describe('circ-skins', () => {
     expect(widths.slice(0, 3)).toEqual([6, 6, 4]);
   });
 
+  test('an AND is the tinted sprite, haloed when HIGH, and a D-shape before the sprites decode', () => {
+    const run = (loaded: boolean, sig: Signal) => {
+      const theme = themeWith(loaded);
+      const c = component('and_gate', 1);
+      const { ctx, ops } = recordingContext(14);
+      const v = valueOf(sig, 1);
+      skinFor(theme, c)({
+        ctx, theme, cell: 14, component: c, inputSignals: [sig, sig], outputSignal: sig,
+        inputValues: [v, v], outputValue: v, hovered: false,
+      });
+      return ops;
+    };
+    const images = (ops: Op[]) => ops.filter((op) => op[0] === 'drawImage').map((op) => op[1]);
+    // HIGH: the halo (padded canvas) under the tinted art, after the three tails.
+    const high = run(true, 1);
+    expect(images(high)).toEqual(['canvas:128x128', 'canvas:100x100']);
+    expect(high.filter((op) => op[0] === 'stroke').length).toBeGreaterThanOrEqual(3);
+    expect(high.findIndex((op) => op[0] === 'drawImage')).toBeGreaterThan(high.findIndex((op) => op[0] === 'stroke'));
+    // Rotated a quarter turn before the art is drawn, and the qualifier on top.
+    expect(high.some((op) => op[0] === 'rotate' && op[1] === 1.571)).toBe(true);
+    expect(high.some((op) => op[0] === 'fillText' && op[1] === '&')).toBe(true);
+    // LOW: the art alone, in the palette's ink.
+    const low = run(true, 0);
+    expect(images(low)).toEqual(['canvas:100x100']);
+    // Before the sprites decode: a vector D-shape, no image.
+    const cold = run(false, 1);
+    expect(images(cold)).toEqual([]);
+    expect(cold.some((op) => op[0] === 'bezierCurveTo')).toBe(true);
+  });
+
+  test('a NOT is the triangle plus the one standard bubble, no PNG', () => {
+    const theme = themeWith(true);
+    const c = component('not_gate', 1);
+    const { ctx, ops } = recordingContext(14);
+    skinFor(theme, c)({
+      ctx, theme, cell: 14, component: c, inputSignals: [0], outputSignal: 1,
+      inputValues: [valueOf(0, 1)], outputValue: valueOf(1, 1), hovered: false,
+    });
+    expect(ops.some((op) => op[0] === 'drawImage' && String(op[1]).startsWith('sprite:'))).toBe(false);
+    const names = ops.map((op) => op[0]);
+    // The triangle: move, two lines, close, fill.
+    const tri = names.indexOf('closePath');
+    expect(names.slice(tri - 3, tri + 2)).toEqual(['moveTo', 'lineTo', 'lineTo', 'closePath', 'fill']);
+    // One bubble at r = 0.24 cell inside the negate slot (the terminal dots
+    // share that radius but sit outside the box's inset).
+    const x0 = c.x * 14, innerR = x0 + c.width * 14 - 0.4 * 14;
+    const bubbles = ops.filter((op) => op[0] === 'arc' && op[3] === 3.36 && Number(op[1]) >= innerR - 0.55 * 14 && Number(op[1]) <= innerR);
+    expect(bubbles).toHaveLength(1);
+    // HIGH: the triangle's halo came from an offscreen canvas.
+    expect(ops.some((op) => op[0] === 'drawImage' && String(op[1]).startsWith('canvas:'))).toBe(true);
+  });
+
   test('the NOT gate names itself below its box, like every other part', () => {
     // Before: yOffset = -cell * 15 put the name 0.7 cells above the bottom
     // edge, inside the sprite.
