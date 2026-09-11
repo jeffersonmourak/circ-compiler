@@ -240,12 +240,15 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(editorPane.querySelectorAll('[data-setting]').length).toBeGreaterThan(0);
     expect(editorPane.querySelector('.pg-dock')).not.toBeNull();
 
-    // The output strip is the three compiled views, diagnostics gone.
+    // The output strip is the four compiled views, diagnostics gone: the
+    // Data tab is the circuit as values, over the same session as Simulate.
     const outTabs = Array.from(
       doc.querySelectorAll('.pg-tabs [role=tab]'),
       (b) => (b as unknown as { dataset: Record<string, string> }).dataset.tab,
     );
-    expect(outTabs).toEqual(['preview', 'truth', 'simulate']);
+    expect(outTabs).toEqual(['preview', 'truth', 'simulate', 'data']);
+    expect(doc.querySelector('.pg-panel[data-panel="data"] .pg-data')).not.toBeNull();
+    expect(doc.querySelector('.pg-panel[data-panel="data"] .pg-data-reset')).not.toBeNull();
     expect(doc.querySelector('.pg-tabs [data-tab="preview"]')?.getAttribute('aria-selected')).toBe('true');
 
     // The tooltip exists and is empty — no analysis lands in this harness, so

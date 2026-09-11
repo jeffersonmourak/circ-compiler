@@ -1055,6 +1055,58 @@ hr {
 .pg-table th { background: var(--pane-label-bg); }
 .pg-table-note { color: var(--muted); font-size: 0.85rem; margin: 0 0 0.5rem; }
 .pg-sim-note { color: var(--muted); font-size: 0.9rem; }
+/* The Data tab: the circuit as values. One table, the truth table's face;
+   inputs are fields or toggles, outputs are text. */
+.pg-data-note { color: var(--muted); font-size: 0.9rem; }
+.pg-data-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.pg-data-reset {
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  padding: 0.15rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--code-bg);
+  color: var(--fg);
+  cursor: pointer;
+}
+.pg-data-reset:hover { color: var(--accent); }
+.pg-data-reset:disabled { opacity: 0.6; cursor: progress; }
+.pg-data table { border-collapse: collapse; font-family: var(--font-mono); font-size: 0.85rem; }
+.pg-data th, .pg-data td { border: 1px solid var(--border); padding: 0.2rem 0.6rem; text-align: left; }
+.pg-data th { background: var(--pane-label-bg); font-weight: 600; }
+.pg-data-width { color: var(--muted); text-align: right; }
+.pg-data tr[data-kind="out"] .pg-data-name { color: var(--muted); }
+.pg-data-in {
+  font: inherit;
+  width: 12ch;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg);
+}
+.pg-data-in[aria-invalid="true"] { border-color: var(--danger); }
+.pg-data-toggle {
+  font: inherit;
+  min-width: 4ch;
+  padding: 0.1rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--code-bg);
+  color: var(--fg);
+  cursor: pointer;
+}
+.pg-data-toggle[data-signal="1"] { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+.pg-data-toggle[data-signal="2"] { color: var(--muted); border-style: dashed; }
 /* The workbench does not shrink a circuit to fit: it keeps every cell at its
    drawn size and lets the panel scroll both ways, since a large circuit
    squeezed into the pane is a picture of a circuit rather than one a reader

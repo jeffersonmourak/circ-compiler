@@ -225,6 +225,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           aria-describedby="pg-tab-tip-truth"
         >Truth table</button>
         <button type="button" role="tab" data-tab="simulate" aria-selected="false">Simulate</button>
+        <button type="button" role="tab" data-tab="data" aria-selected="false">Data</button>
         {/* Empty and invisible until the tab is actually blocked; the island
             fills it with the same sentence the panel shows. `role=tooltip`
             plus the aria-describedby above is what makes the reason reachable
@@ -236,6 +237,17 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       <div class="pg-panel" data-panel="simulate" hidden>
         <div class="pg-sim-note"></div>
         <div class="lc-mount pg-sim-mount" hidden></div>
+      </div>
+      <div class="pg-panel" data-panel="data" hidden>
+        {/* The same circuit as Simulate, as values: one row per root pin,
+            inputs editable in the settings' base, outputs read. Drives the
+            same session the canvas draws. */}
+        <div class="pg-data-note"></div>
+        <div class="pg-data-head" hidden>
+          <span class="pg-data-hint">Type a value and press Enter; ? makes a pin unknown.</span>
+          <button type="button" class="pg-data-reset" title="Every pin unknown, ROM images re-applied">Reset</button>
+        </div>
+        <div class="pg-data" hidden></div>
       </div>
     </section>
   </div>
@@ -386,7 +398,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     type TabbedDiagnostic,
   } from '../scripts/circ-diagnostics.ts';
 
-  type Tab = 'preview' | 'truth' | 'simulate';
+  type Tab = 'preview' | 'truth' | 'simulate' | 'data';
   type DockTab = 'diagnostics' | 'settings' | 'memory';
   /** A mapped diagnostic plus the file tab it belongs to; `null` when the
    *  compiler blamed a file with no tab (a `<builtin>/…` source, or a stale
@@ -413,6 +425,10 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     const previewEl = el.querySelector<HTMLElement>('.pg-preview')!;
     const tableEl = el.querySelector<HTMLElement>('.pg-table')!;
     const simNote = el.querySelector<HTMLElement>('.pg-sim-note')!;
+    const dataNote = el.querySelector<HTMLElement>('.pg-data-note')!;
+    const dataHead = el.querySelector<HTMLElement>('.pg-data-head')!;
+    const dataEl = el.querySelector<HTMLElement>('.pg-data')!;
+    const dataReset = el.querySelector<HTMLButtonElement>('.pg-data-reset')!;
     // Narrowed to the OUTPUT strip: an unscoped [role=tab] would also collect
     // the file tabs, and showTab() would then clobber their aria-selected and
     // blank the output pane.
@@ -548,6 +564,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       // its artifact still lands.
       if (tab === 'preview') void runPreview(buildStage.seq);
       if (tab === 'truth') void runTruth(buildStage.seq);
+      if (tab === 'data') void showData();
     }
     for (const b of tabs) {
       b.addEventListener('click', () => {
@@ -2075,7 +2092,10 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         void runTruth(buildStage.seq);
         // The canvas re-spells its badges in place; nothing is rebuilt and
         // nothing the reader typed or loaded is touched.
-        if (settings().valueFormat !== before) sim.view?.view.setValueFormat(settings().valueFormat);
+        if (settings().valueFormat !== before) {
+          sim.view?.view.setValueFormat(settings().valueFormat);
+          if (state.tab === 'data') renderData();
+        }
         schedule();
       },
     });
@@ -2405,6 +2425,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         banner.hidden = false;
         state.simulateEnabled = false;
         simNote.textContent = 'Simulate is disabled: renderer and compiler disagree on the topology version.';
+        dataNote.textContent = simNote.textContent;
       }
       return true;
     }
@@ -2781,6 +2802,12 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     };
     const loadRenderer = () => (sim.rendererPromise ??= import('circ-renderer'));
     const loadThemes = () => (sim.themesPromise ??= import('../utils/circ-theme.mjs'));
+    // The Data tab's module reaches the renderer's index for its two value
+    // helpers, so it stays behind a dynamic import like the renderer itself.
+    let dataViewPromise: Promise<typeof import('../scripts/data-view.ts')> | null = null;
+    let dataViewLoaded: typeof import('../scripts/data-view.ts') | null = null;
+    const loadDataView = () =>
+      (dataViewPromise ??= import('../scripts/data-view.ts').then((m) => { dataViewLoaded = m; return m; }));
 
     /** Root input names to ids, from the session's own pin table. */
     function rootInputs(session: SimSession): Map<string, number> {
@@ -2835,15 +2862,17 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       for (const [name, v] of sim.pins) session.set(name, v.value, v.defined);
       sim.unsubscribe = session.subscribe((event) => {
         if (event.kind === 'drive' || event.kind === 'memory') {
-          // Another face drove the circuit: the picture and the dump follow.
-          // Only redrawn while the dump is on screen: each visible word costs
-          // a call across the boundary.
+          // Another face drove the circuit: the picture, the rows and the dump
+          // follow. Only redrawn while on screen: each visible word costs a
+          // call across the boundary.
           sim.view?.view.refreshState();
+          if (state.tab === 'data') renderData();
           if (memVisible()) renderMemory();
         } else if (event.kind === 'rebuilt') {
           // The protocol's reset: a new runtime, so a canvas over the old one
-          // is rebuilt over the new.
+          // is rebuilt over the new, and the rows read the new.
           if (sim.view) void buildCanvas();
+          if (state.tab === 'data') renderData();
           renderMemory();
         }
       });
@@ -2914,6 +2943,140 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         simMount.hidden = true;
       }
     }
+    // ---- the Data face ----
+    /** A signature of the rows' shape: a change rebuilds the table, else the
+     *  cells are updated in place so a field being typed into survives. */
+    let dataShape = '';
+
+    /** Open the Data tab on the session, building it on first need. */
+    async function showData() {
+      const session = await ensureSession();
+      if (state.tab !== 'data') return;
+      if (!session) {
+        if (!dataNote.textContent) dataNote.textContent = state.simulateEnabled ? 'Compile a circuit first.' : dataNote.textContent;
+        dataHead.hidden = true;
+        dataEl.hidden = true;
+        return;
+      }
+      await loadDataView();
+      if (sim.session !== session) return;
+      dataNote.textContent = '';
+      dataHead.hidden = false;
+      dataEl.hidden = false;
+      renderData();
+    }
+
+    /** Draw the rows from the session. Synchronous: the module is loaded by `showData` first. */
+    function renderData() {
+      const session = sim.session;
+      const mod = dataViewLoaded;
+      if (!session || !mod) return;
+      const rows = mod.rowsFor(session, settings().valueFormat);
+      const shape = rows.map((r) => `${r.kind}:${r.name}:${r.width}`).join('|');
+      if (shape !== dataShape || dataEl.childElementCount === 0) {
+        dataShape = shape;
+        dataEl.innerHTML = '';
+        const table = document.createElement('table');
+        const head = table.createTHead().insertRow();
+        for (const label of ['pin', 'width', 'value']) {
+          const th = document.createElement('th');
+          th.textContent = label;
+          head.appendChild(th);
+        }
+        const body = table.createTBody();
+        for (const row of rows) {
+          const tr = body.insertRow();
+          tr.dataset.name = row.name;
+          tr.dataset.kind = row.kind;
+          const name = tr.insertCell();
+          name.textContent = row.name;
+          name.className = 'pg-data-name';
+          const width = tr.insertCell();
+          width.textContent = String(row.width);
+          width.className = 'pg-data-width';
+          const cell = tr.insertCell();
+          cell.className = 'pg-data-value';
+          if (row.kind === 'out') {
+            const span = document.createElement('span');
+            span.className = 'pg-data-out';
+            cell.appendChild(span);
+          } else if (row.width === 1) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'pg-data-toggle';
+            btn.title = 'Toggle';
+            btn.addEventListener('click', () => {
+              const r = mod.toggleRow(session, row.name);
+              if (!r.ok) status.textContent = r.message;
+            });
+            cell.appendChild(btn);
+          } else {
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'pg-data-in';
+            input.spellcheck = false;
+            input.autocomplete = 'off';
+            input.setAttribute('aria-label', `${row.name}, ${row.width} bits`);
+            const commit = () => {
+              const r = mod.editRow(session, row.name, input.value, settings().valueFormat);
+              if (!r.ok) {
+                status.textContent = r.message;
+                input.setAttribute('aria-invalid', 'true');
+                return;
+              }
+              input.removeAttribute('aria-invalid');
+            };
+            input.addEventListener('keydown', (e) => {
+              if (e.key === 'Enter') { e.preventDefault(); commit(); }
+              if (e.key === 'Escape') { e.preventDefault(); input.value = currentText(row.name); input.removeAttribute('aria-invalid'); }
+            });
+            input.addEventListener('blur', () => { if (input.value !== currentText(row.name)) commit(); });
+            cell.appendChild(input);
+          }
+        }
+        dataEl.appendChild(table);
+      }
+      const active = document.activeElement;
+      for (const row of rows) {
+        const tr = dataEl.querySelector<HTMLElement>(`tr[data-name="${CSS.escape(row.name)}"]`);
+        if (!tr) continue;
+        const out = tr.querySelector<HTMLElement>('.pg-data-out');
+        if (out) out.textContent = row.text;
+        const btn = tr.querySelector<HTMLButtonElement>('.pg-data-toggle');
+        if (btn) {
+          btn.textContent = row.text;
+          btn.dataset.signal = String(row.signal);
+          btn.setAttribute('aria-pressed', String(row.signal === 1));
+        }
+        const input = tr.querySelector<HTMLInputElement>('.pg-data-in');
+        // A field being typed into keeps the reader's text; every other one
+        // shows the circuit's.
+        if (input && input !== active) {
+          input.value = row.text;
+          input.removeAttribute('aria-invalid');
+        }
+      }
+    }
+
+    /** What the circuit holds for a pin, spelled for the field. */
+    function currentText(name: string): string {
+      const session = sim.session;
+      const mod = dataViewLoaded;
+      if (!session || !mod) return '';
+      return mod.rowsFor(session, settings().valueFormat).find((r) => r.name === name)?.text ?? '';
+    }
+
+    dataReset.addEventListener('click', () => {
+      const session = sim.session;
+      if (!session) return;
+      dataReset.disabled = true;
+      // The protocol's reset: every pin unknown, the ROM images re-applied.
+      // The reader's remembered pins go with it, so a recompile does not
+      // bring them back.
+      sim.pins.clear();
+      void session.reset().finally(() => { dataReset.disabled = false; });
+    });
+
     hooks.onArtifact = (bytes, reason) => {
       sim.bytes = bytes;
       // A new artifact is a new session; the reader's pins are replayed onto it
@@ -2926,11 +3089,16 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         simNote.textContent = state.simulateEnabled
           ? (reason === 'files-changed' ? 'Compile a circuit first.' : 'Fix the errors to simulate.')
           : simNote.textContent;
+        dataNote.textContent = simNote.textContent;
+        dataHead.hidden = true;
+        dataEl.hidden = true;
+        dataEl.innerHTML = '';
         sim.renderedHash = -1;
         renderMemory();
         return;
       }
       simNote.textContent = '';
+      if (state.tab === 'data') void showData();
       if (state.tab === 'simulate' && state.artifact && sim.renderedHash !== state.artifact.hash) {
         sim.renderedHash = state.artifact.hash;
         void buildCanvas();
