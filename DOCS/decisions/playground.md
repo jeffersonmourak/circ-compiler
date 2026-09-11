@@ -252,3 +252,35 @@ The entries below record the decisions of the playground-v2 initiative (the site
 **Rationale.** The circuit's values are what an adder or an ALU is for, and the site already has one spelling for a value; a second parser here would be a second set of rules. Rendering in place is what lets the rows follow a canvas click while the reader is mid-edit.
 
 **Alternatives.** A per-bit editor (the renderer's dialog does not have one either); a second value grammar for the tab (two spellings on one page).
+
+### Errors are the protocol's, as values
+
+**Decision.** A session method answers `{ ok: true, … }` or `{ ok: false, code, arg }`, with `code` one of the ten codes of `lib/sim/protocol.zig` and `arg` the text `--sim` prints after it (`data`, `data 0x10`, the compiler's image reason). `site/src/scripts/sim-executor.ts` spells such a value `err E_ADDR data 0x10`; `site/src/scripts/data-view.ts` spells it as a sentence. Neither face decides what is wrong; the session does, once, in the loop's order.
+
+**Rationale.** The console must print what the CLI prints, and the Data tab must say the same thing in words. One set of reasons produced in one place keeps the two from drifting, and a value rather than a throw keeps a typo from becoming a stack trace.
+
+**Alternatives.** Throwing typed errors from the session (every face wraps every call); the executor re-checking names and widths itself (two copies of the loop's rules).
+
+### Files are the Memory tab's, and the console points at it
+
+**Decision.** `load <mem> <path>` and `save <mem> <path>` go through an injected `FileSource { read(path); write(path, bytes) }`, with failures spelled as Zig's `@errorName` spells them (`FileNotFound`, `AccessDenied`, `FileTooBig`). The transcript test's source is the repository root, so the goldens' `err E_IO tests/fixtures/mem/does_not_exist.bin: FileNotFound` replays; a unit test's is `MemoryFileSource` over a map; the page's (Phase 3) refuses every read and write with one reason that names the Memory tab. Image bytes are checked by `validateImageBytes` in `lib/memimage.zig`'s order and refused with `writeImageError`'s wording — `17 words exceed capacity 16` — which is not the dock's `describeRomError` sentence.
+
+**Rationale.** A browser has no cwd, and the page already has one place that reads an image file and shows what a memory holds. Keeping the reply protocol-shaped (`err E_IO <path>: <reason>`) means a script written for the CLI fails in the console the way it would fail on a machine without the file, and the reader learns where to go from the reason.
+
+**Alternatives.** A drop box on the console (a second file surface beside the Memory tab); a virtual file system in the page (state the reader cannot see); the dock's sentences in `E_MEMFMT` (a transcript that does not match the CLI).
+
+### The transcript test compiles its circuits in the test
+
+**Decision.** `site/test/sim-transcripts.test.ts` reads the rows of `tests/sim/golden_test.zig`'s table by hand — script, circuit root, `--mem` preloads — compiles each root through the committed `libcirc.wasm` (`instantiateLibcirc`, `callOp('compile')`), loads the bytes into a real `CircRuntime` with `noInitialPinDrive`, builds a `SimSession` with the preload as a Memory-tab image, prints `handshake` then every reply from `execute`, and compares the joined text to `tests/fixtures/expected-sim/<name>.txt` byte for byte. It honours `SKIP_LIBCIRC_TEST=1` and never writes a golden.
+
+**Rationale.** The goldens are the CLI's own proof, kept by `UPDATE_GOLDENS=1 zig build test`; a site test that reads them from the repository cannot drift from them, and one that compiles in the test proves the whole browser path — library, artifact, runtime, session, executor — not a vendored copy of its output.
+
+**Alternatives.** Vendoring the four transcripts into `site/test` (a second copy to keep in step); asserting on a hand-written subset of replies (the handshake and the counted blocks are where the spelling goes wrong).
+
+### The console's value spelling is the protocol's
+
+**Decision.** `site/src/scripts/sim-protocol.ts`'s `parseValue` is `std.fmt.parseInt(u64, text, 0)` over `bigint`, the standard library's rules copied: a leading `+` or `-` (a negative literal overflows an unsigned type, except `-0`), a `0x`/`0o`/`0b` prefix only when more than two characters follow the sign, no underscore at either end of the digits and any number between them, digits checked against the base, at most sixty-four bits. `parseLine` copies `protocol.zig`'s per-verb checks in order, so a bad literal is reported before a later shape error exactly where the CLI reports it. Replies write `0x` lowercase hex with no padding, as `writeHex` does. The Data tab keeps the renderer's `parsePinValue`/`formatPinValue`.
+
+**Rationale.** A console that accepted `1e3` or refused `+10` would answer a CLI script differently from the CLI, and the goldens are the test. The Data tab is a form on the site, so it spells values the way the canvas does; the console is the protocol, so it spells them the way the protocol does.
+
+**Alternatives.** One parser for both (either the canvas accepts `0o17` and underscores, or the console loses them); approximating `parseInt` with a regular expression (the underscore and prefix rules are where an approximation differs).

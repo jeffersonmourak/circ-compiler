@@ -16,7 +16,7 @@ A line of protocol text goes into `parseLine` and comes out as a command or one 
 - `site/test/sim-protocol.test.ts`, `site/test/sim-executor.test.ts` (stub session), `site/test/sim-transcripts.test.ts` (real artifacts, the four goldens; `SKIP_LIBCIRC_TEST` honoured).
 
 **Explicitly deferred:**
-- The console element and its drop box (Phase 3): this phase's `FileSource` is a map.
+- The console in the drawer and the page's refusing `FileSource` (Phase 3): this phase's sources are a map and the repository's fixtures.
 - `E_NOSETTLE` (never emitted by the CLI); `E_PROTO command line exceeds limit` (the browser has no 8 KiB line buffer; recorded as a difference in Phase 3's doc section).
 
 ## File & Module Topology
