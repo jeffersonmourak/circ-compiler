@@ -105,3 +105,11 @@ One entry per shipped slice, newest last. The plan is `DOCS/PLANS_PROMPT.md`; th
 **Tests:** none (review)
 **Next slice:** Phase 3 slice 1: the drawer.
 **Notes:** none.
+
+## 2026-09-11 — Phase 3 — the pure parts
+
+**What shipped:** `site/src/scripts/console.ts`: `HistoryRing` (a hundred lines, `up` stays on the oldest, `down` past the newest is the empty prompt, a submit resets the cursor, blank and repeated lines are not kept twice), `Transcript` (the newest lines up to a cap, `text`, `last`, `clear`), `MemoryTabFiles` (refuses every read with `load images in the Memory tab` and every write with `save images from the Memory tab`), `promptEcho` (`> <line>`, which the grammar refuses, so an echo cannot read as a reply), `helpLines` (the command table as `#` comment lines the protocol ignores, plus the browser's `help` and the two refused file verbs).
+**Files touched:** `site/src/scripts/console.ts`, `site/test/console.test.ts`, `site/test/sim-executor.test.ts`, `DOCS/STATUS.md`
+**Tests:** added seven (history bounds, reset and cap; the transcript's cap, `clear` and `last`; both refusals; the echo; help lines one per verb) and one executor case (`load code x.bin` → `err E_IO x.bin: load images in the Memory tab`, `save` likewise, `E_NOMEM` still first); ran `bun test test/console.test.ts test/sim-executor.test.ts` (21 pass), result pass
+**Next slice:** the drawer and the Memory tab's move.
+**Notes:** `HistoryRing.push` skips a line equal to the newest, as a shell does, so ↑ after two identical submits reaches the earlier command in one step.

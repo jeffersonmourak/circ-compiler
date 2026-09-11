@@ -1,6 +1,7 @@
 // Every verb's reply over the stub session, string by string against
 // lib/sim/loop.zig, including the error arms the goldens do not reach.
 import { describe, expect, test } from 'bun:test';
+import { MemoryTabFiles } from '../src/scripts/console.ts';
 import { execute, handshake, MemoryFileSource } from '../src/scripts/sim-executor.ts';
 import { SimSession } from '../src/scripts/sim-session.ts';
 import { AND_GATE, evaluateAnd, evaluateRom, MEMORIES, stubRuntime, type StubRuntime } from './sim-stub.ts';
@@ -195,6 +196,15 @@ describe('every reply is the loop\'s string', () => {
     expect(await execute(session, refusing, 'save nosuch out.bin')).toEqual(['err E_NOMEM nosuch']);
     expect(await execute(session, refusing, 'save code out.bin')).toEqual(['err E_IO out.bin: AccessDenied']);
     expect(await execute(session, refusing, 'load code')).toEqual(['err E_PROTO malformed command']);
+  });
+
+  test("the page's file source points at the Memory tab, protocol-shaped", async () => {
+    const { session } = await memSession();
+    const page = new MemoryTabFiles();
+    expect(await execute(session, page, 'load code x.bin')).toEqual(['err E_IO x.bin: load images in the Memory tab']);
+    expect(await execute(session, page, 'save code x.bin')).toEqual(['err E_IO x.bin: save images from the Memory tab']);
+    // The memory is still resolved first.
+    expect(await execute(session, page, 'load nosuch x.bin')).toEqual(['err E_NOMEM nosuch']);
   });
 
   test('a script replays as one transcript', async () => {
