@@ -10,7 +10,7 @@
 // `bun --bun run build` first; the standing gate order already does.
 import { afterEach, describe, expect, test } from 'bun:test';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { CATALOGUE_GROUPS, STORE_KEY, buildCatalogue, defaultEnvelope } from '../src/utils/playground-store.ts';
+import { STORE_KEY, buildCatalogue, defaultEnvelope } from '../src/utils/playground-store.ts';
 import { examples } from '../src/content/examples.ts';
 import { tour } from '../src/content/tour.ts';
 import { resolve } from 'node:path';
@@ -191,8 +191,8 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
       doc.querySelectorAll('.pg-tree-group .pg-tree-label'),
       (n) => (n as { textContent: string }).textContent,
     );
-    expect(groupRows).toEqual([...CATALOGUE_GROUPS.filter((g) => catalogue.some((c) => c.group === g)), 'Yours']);
-    expect(doc.querySelectorAll('.pg-tree-project').length).toBeLessThan(catalogue.length);
+    expect(groupRows).toEqual(['Tour', 'Examples', 'Mine']);
+    expect(doc.querySelectorAll('.pg-tree-project').length).toBe(catalogue.length);
 
     // The default pick is open, revealed inside its group, and showing files.
     const openProject = doc.querySelector('.pg-tree-project[aria-current="true"]')!;
@@ -338,7 +338,7 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(doc.querySelector('.pg-statusbar')).toBeNull();
     expect(doc.querySelector('.pg-nav .pg-brand')?.getAttribute('href')).not.toBeNull();
     const defaultPick = catalogue[0];
-    expect(doc.querySelector('.pg-crumb-group')?.textContent).toBe(`${defaultPick.group} /`);
+    expect(doc.querySelector('.pg-crumb-group')?.textContent).toBe('Examples /');
     expect(doc.querySelector('.pg-crumb-name')?.textContent).toBe(defaultPick.label);
     // The cluster moved with its state: the harness has no worker, so the
     // word is whatever the pipeline says, never blank.

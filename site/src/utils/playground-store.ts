@@ -127,9 +127,8 @@ const FOOTER_TABS: readonly FooterTab[] = ['diagnostics', 'settings'];
 // Shut. The footer's bar already says how many errors and warnings there are,
 // so opening it is for reading the messages, which is a deliberate act.
 export const DEFAULT_FOOTER: FooterState = { open: false, tab: 'diagnostics' };
-/** The reader's own projects, open. Everything else starts shut, and whichever
- *  group holds the open project is revealed at load without being persisted. */
-export const DEFAULT_WS: WorkspaceState = { expanded: ['yours'] };
+/** All three display groups start open; project files are revealed at load. */
+export const DEFAULT_WS: WorkspaceState = { expanded: ['tour', 'examples', 'yours'] };
 /** Enough for every group plus every project; past this the envelope is being
  *  used as a scratchpad by something other than a reader. */
 const MAX_EXPANDED = 128;
@@ -226,7 +225,9 @@ function normalizeWorkspace(raw: unknown): WorkspaceState {
   const seen = new Set<string>();
   for (const id of raw.expanded) {
     if (typeof id !== 'string' || id === '') continue;
-    seen.add(id);
+    // Version 1 and the early version-2 bench both wrote tier ids. Upgrade
+    // either here so existing version-2 readers keep their open groups too.
+    seen.add(['introduction', 'building-blocks', 'advanced'].includes(id) ? 'examples' : id);
     if (seen.size >= MAX_EXPANDED) break;
   }
   return { expanded: [...seen] };
@@ -815,4 +816,3 @@ export function resolveInitial(input: {
       : null,
   };
 }
-

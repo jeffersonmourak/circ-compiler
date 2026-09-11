@@ -37,6 +37,7 @@ import { readHash, type DecodeResult } from '../src/utils/share-link.ts';
 import { splitFiles, joinFiles } from '../src/utils/split-files.ts';
 import { examples } from '../src/content/examples.ts';
 import { tour } from '../src/content/tour.ts';
+import { displayGroups } from '../src/scripts/ws-tree.ts';
 
 const catalogue = buildCatalogue(examples, tour);
 const sources = [...examples.map((e) => e.source), ...tour.map((t) => t.source)];
@@ -78,6 +79,18 @@ const project = (id: string, updatedAt: number, source = 'input a\n'): ScratchPr
 });
 
 describe('catalogue', () => {
+  test('displayGroups yields Tour, Examples, Mine in tier and age order', () => {
+    const scratch = [project('old', 1), project('new', 2)];
+    const groups = displayGroups([...catalogue].reverse(), scratch);
+    expect(groups.map((g) => [g.id, g.label])).toEqual([['tour', 'Tour'], ['examples', 'Examples'], ['yours', 'Mine']]);
+    expect(groups[0].projects.map((p) => p.id)).toEqual(catalogue.filter((p) => p.group === 'Tour').reverse().map((p) => p.id));
+    expect(groups[1].projects.map((p) => p.id)).toEqual(CATALOGUE_GROUPS.filter((g) => g !== 'Tour').flatMap((g) => catalogue.filter((p) => p.group === g).reverse().map((p) => p.id)));
+    expect(groups[2].projects.map((p) => p.id)).toEqual(['scratch:new', 'scratch:old']);
+    expect(scratch.map((p) => p.id)).toEqual(['scratch:old', 'scratch:new']);
+    for (const p of groups.flatMap((g) => g.projects).filter((p) => !p.editable)) {
+      expect(p.fileCount).toBe(splitFiles(catalogue.find((c) => c.id === p.id)!.source).length);
+    }
+  });
   test('buildCatalogue yields the 21 shipped items with the expected ids', () => {
     expect(catalogue).toHaveLength(21);
     expect(catalogue.filter((c) => c.group === 'Introduction')).toHaveLength(5);

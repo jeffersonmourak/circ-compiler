@@ -405,7 +405,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
   import { formatZoom } from '../scripts/zoom-label.ts';
   import { chipText } from '../scripts/truth-chip.ts';
   import type { TruthRows } from '../scripts/truth-view.ts';
-  import { joinConflicts, requestFor, rootOf, PLAYGROUND_DIR } from '../utils/split-files.ts';
+  import { joinConflicts, requestFor, rootOf, splitFiles, PLAYGROUND_DIR } from '../utils/split-files.ts';
   import { createSplitter } from '../scripts/splitter.ts';
   import { fnv1a } from '../utils/artifact-hash.ts';
   import { artifactFileName } from '../utils/artifact-name.ts';
@@ -461,7 +461,6 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     touchScratch,
     uniqueName,
     NEW_PROJECT_SOURCE,
-    CATALOGUE_GROUPS,
     type CatalogueItem,
     type View as StoredView,
     type FooterTab,
@@ -501,6 +500,8 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     type TreeInput,
     type TreeKey,
     type TreeNode,
+    displayGroups,
+    groupOf,
   } from '../scripts/ws-tree.ts';
   import {
     indexDoc,
@@ -603,6 +604,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     const memPanel = el.querySelector<HTMLElement>('.pg-mem')!;
     const truthTab = el.querySelector<HTMLButtonElement>('.pg-view-tab[data-view="truth"]')!;
     const catalogue = JSON.parse(el.querySelector('#pg-picks')!.textContent || '[]') as CatalogueItem[];
+    const countedCatalogue = catalogue.map((p) => ({ ...p, fileCount: splitFiles(p.source).length }));
     const supported = (el.dataset.supportedVersions || '').split(',').filter(Boolean).map(Number);
 
     // One client per wasm URL, shared by every island on the page.
@@ -1373,30 +1375,11 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     let treeFocus = 0;
     let treeNodes: TreeNode[] = [];
 
-    const groupSlug = (label: string) => label.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-
     /** The tree as data. Rebuilt on every render rather than cached: each of
      *  its inputs — the catalogue, the scratch list, the file set, the
      *  analysis — moves on its own schedule. */
     function treeInput(): TreeInput {
-      // "Yours" is not a catalogue group — it comes from the envelope — so the
-      // array is typed off TreeInput rather than inferred from CATALOGUE_GROUPS.
-      const groups: TreeInput['groups'][number][] = CATALOGUE_GROUPS
-        .filter((g) => catalogue.some((c) => c.group === g))
-        .map((g) => ({
-          id: groupSlug(g),
-          label: g as string,
-          projects: catalogue
-            .filter((c) => c.group === g)
-            .map((c) => ({ id: c.id, label: c.label, editable: false })),
-        }));
-      groups.push({
-        id: 'yours',
-        label: 'Yours',
-        projects: [...store.envelope.scratch]
-          .sort((a, b) => b.updatedAt - a.updatedAt)
-          .map((p) => ({ id: p.id, label: p.name, editable: true })),
-      });
+      const groups = displayGroups(countedCatalogue, store.envelope.scratch);
       return {
         groups,
         activeId: store.envelope.activeId,
@@ -1468,7 +1451,8 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
      *  every load, rename and duplicate. */
     function renderCrumb() {
       const id = store.envelope.activeId;
-      const group = id && idKind(id) !== 'scratch' ? (catalogue.find((c) => c.id === id)?.group ?? 'Yours') : 'Yours';
+      const input = treeInput();
+      const group = input.groups.find((g) => g.id === groupOf(input, id))?.label ?? 'Mine';
       crumbGroup.textContent = `${group} /`;
       crumbName.textContent = activeLabel();
     }
@@ -1478,7 +1462,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       const wantedId = opts.keepFocusOn !== undefined
         ? opts.keepFocusOn
         : (treeNodes[treeFocus]?.id ?? null);
-      treeNodes = visibleNodes(treeInput());
+      treeNodes = visibleNodes(treeInput(), nowMs());
       treeFocus = preferredFocus(treeNodes, wantedId);
 
       const tree = document.createElement('div');

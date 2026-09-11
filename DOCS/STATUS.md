@@ -193,3 +193,11 @@ Rolling log of shipped slices. Newest at the bottom. The plan is `DOCS/PLANS_PRO
 **Tests:** none added (no analysis lands in the harness); 575 pass. Walked on the dev server: a reload onto Truth, hover `a` → one `.cm-circ-linked` span, dots shown; Live then Truth, hover `b` → one span, dots shown.
 **Next slice:** Phase 4, on the human's word.
 **Notes:** Reported by the human: after a refresh on the Truth view the grid showed and the header hover no longer highlighted the code. The grid was the design's (board 3f); what had changed was that a Live visit's `data-canvas` flag hid the static dots on every view after it. The hover went through `link.table`, which `buildCanvas` fills from the layout, so it worked only after a canvas existed; the declaration list from the analysis has the span and is enough.
+
+## 2026-09-11 — Phase 4 — The tree's new data
+
+**What shipped:** The tree and breadcrumb use Tour, Examples and Mine. Catalogue tiers keep their order inside Examples; scratch projects keep newest-first order. Project nodes carry file counts or an age from an injected clock, alongside diagnostic badges. Catalogue file counts are computed once at boot.
+**Files touched:** `site/src/scripts/ws-tree.ts`, `site/src/utils/playground-store.ts`, `site/src/components/Playground.astro`, `site/test/{ws-tree,workspace,playground-store,island-smoke}.test.ts`, `DOCS/STATUS.md`
+**Tests:** Added group-order, file-count and age-band cases; extended migration coverage. Ran `bun --bun run typecheck`, `bun --bun run build`, `bun test`, then the corrected `bun test test/island-smoke.test.ts`: all 578 cases pass across those runs. `bun run bundle`: `/playground` 120.8 KB raw / 42.4 KB gzip, within the unchanged ceiling.
+**Next slice:** Name filtering and the search field.
+**Notes:** Rechecked the clean handoff at `0d4c232`: the human's override leaves dots on Live alone. Tier-id migration belongs in workspace normalization, covering both version 1 and the early version-2 envelopes already written by this branch; restricting it to `migrateV1` would lose those readers' expansion choices. The schema stays at version 2.

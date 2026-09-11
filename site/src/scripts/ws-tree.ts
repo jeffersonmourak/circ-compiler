@@ -16,6 +16,8 @@
 // array of visible rows it is an index ± 1.
 
 import type { TabCounts } from './file-tabs.ts';
+import { CATALOGUE_GROUPS, type CatalogueItem, type ScratchProject } from '../utils/playground-store.ts';
+import { splitFiles } from '../utils/split-files.ts';
 
 /** A workspace group heading, e.g. `Introduction` or `Yours`. */
 export interface GroupNode {
@@ -48,6 +50,8 @@ export interface ProjectNode {
   severity: Severity | null;
   /** The count behind that severity. */
   badge: number;
+  /** File count for shipped projects; age for scratch projects. */
+  meta: string;
 }
 
 export interface FileNode {
@@ -102,6 +106,40 @@ export interface ProjectInput {
   id: string;
   label: string;
   editable: boolean;
+  fileCount: number;
+  updatedAt?: number;
+}
+
+export type DisplayGroupId = 'tour' | 'examples' | 'yours';
+
+/** Catalogue file counts may be supplied once by the island at boot. */
+export function displayGroups(
+  catalogue: readonly (CatalogueItem & { fileCount?: number })[],
+  scratch: readonly ScratchProject[],
+): TreeInput['groups'] {
+  const shipped = (group: CatalogueItem['group']): ProjectInput[] => catalogue
+    .filter((p) => p.group === group)
+    .map((p) => ({ id: p.id, label: p.label, editable: false, fileCount: p.fileCount ?? splitFiles(p.source).length }));
+  return [
+    { id: 'tour', label: 'Tour', projects: shipped('Tour') },
+    { id: 'examples', label: 'Examples', projects: CATALOGUE_GROUPS.filter((g) => g !== 'Tour').flatMap(shipped) },
+    { id: 'yours', label: 'Mine', projects: [...scratch]
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .map((p) => ({ id: p.id, label: p.name, editable: true, fileCount: splitFiles(p.source).length, updatedAt: p.updatedAt })) },
+  ];
+}
+
+/** Age bands use elapsed days; the caller supplies the clock. */
+export function relativeTime(updatedAt: number, now: number): string {
+  const minutes = Math.max(0, Math.floor((now - updatedAt) / 60_000));
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} h ago`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return 'yesterday';
+  if (days <= 30) return `${days} days ago`;
+  return new Date(updatedAt).toISOString().slice(0, 10);
 }
 
 const worst = (c: TabCounts): { severity: Severity | null; badge: number } =>
@@ -121,7 +159,7 @@ export const fileNodeId = (projectId: string, index: number): string => `${proje
  * what makes every keyboard move an index step. The active project's files
  * appear only when both its group and the project itself are expanded.
  */
-export function visibleNodes(input: TreeInput): TreeNode[] {
+export function visibleNodes(input: TreeInput, now = 0): TreeNode[] {
   const out: TreeNode[] = [];
   for (const group of input.groups) {
     const groupOpen = input.expanded.has(group.id);
@@ -158,6 +196,9 @@ export function visibleNodes(input: TreeInput): TreeNode[] {
         editable: project.editable,
         severity: roll.severity,
         badge: roll.badge,
+        meta: project.updatedAt === undefined
+          ? `${active ? input.files.length : project.fileCount} file${(active ? input.files.length : project.fileCount) === 1 ? '' : 's'}`
+          : relativeTime(project.updatedAt, now),
       });
       if (!projectOpen) continue;
 

@@ -100,7 +100,7 @@ describe('playground store', () => {
     expect(env.layout).toEqual({ sourceWidth: 480, ratios: {} });
     // The reader's own projects open; every catalogue group starts shut, and
     // whichever one holds the open project is revealed at load.
-    expect(env.ws).toEqual({ expanded: ['yours'] });
+    expect(env.ws).toEqual({ expanded: ['tour', 'examples', 'yours'] });
     // normalize is a fixed point on its own output.
     const round = normalize(JSON.parse(JSON.stringify(env)));
     expect(round.note).toBeNull();
@@ -131,7 +131,7 @@ describe('playground store', () => {
     expect(envelope.settings.valueFormat).toBe('hex');
     expect(envelope.settings.truthTableCap).toBe(10);
     expect(envelope.settings.romImages).toEqual({ code: '0a0b' });
-    expect(envelope.ws).toEqual({ expanded: ['yours', 'introduction'] });
+    expect(envelope.ws).toEqual({ expanded: ['yours', 'examples'] });
     // The Data tab was a face of the live session, so it lands on the live
     // view, with the panel open over it.
     expect(envelope.view).toBe('live');
@@ -250,8 +250,14 @@ describe('playground store', () => {
     // envelope predates it. An id naming nothing is harmless — it is never read.
     const noWs = { ...defaultEnvelope() } as Record<string, unknown>;
     delete noWs.ws;
-    expect(normalize(noWs).envelope.ws).toEqual({ expanded: ['yours'] });
-    expect(normalize({ ...defaultEnvelope(), ws: 'nope' }).envelope.ws).toEqual({ expanded: ['yours'] });
+    expect(normalize(noWs).envelope.ws).toEqual({ expanded: ['tour', 'examples', 'yours'] });
+    expect(normalize({ ...defaultEnvelope(), ws: 'nope' }).envelope.ws).toEqual({ expanded: ['tour', 'examples', 'yours'] });
+    for (const version of [1, 2]) {
+      const result = normalize({ ...defaultEnvelope(), version, ws: { expanded: ['building-blocks', 'yours', 'advanced', 'introduction'] } });
+      expect(result.envelope.ws.expanded).toEqual(['examples', 'yours']);
+      expect(result.note).toBeNull();
+      expect(normalize(result.envelope).envelope.ws).toEqual(result.envelope.ws);
+    }
     expect(normalize({ ...defaultEnvelope(), ws: { expanded: [] } }).envelope.ws).toEqual({ expanded: [] });
     expect(
       normalize({ ...defaultEnvelope(), ws: { expanded: ['a', 'a', 'b', 7, '', null] } }).envelope.ws,
