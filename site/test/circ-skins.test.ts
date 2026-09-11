@@ -153,6 +153,69 @@ describe('circ-palette', () => {
 
 describe('circ-skins', () => {
   const store = new Map<string, Record<string, Op[]>>();
+  const skinsSource = readFileSync(resolve(import.meta.dir, '..', 'src', 'utils', 'circ-skins.mjs'), 'utf8');
+  const paletteValues = new Set([...Object.values(colorsDark), ...Object.values(colorsLight)]);
+
+  test('no skin sets a literal stroke width', () => {
+    // The gap the handoff named: a 4px wire at every cell size. Every width
+    // is a function of the cell now; a bare number is a regression.
+    expect(skinsSource.match(/lineWidth\s*=\s*\d/g) ?? []).toEqual([]);
+  });
+
+  test('every colour a skin sets comes from the palette', () => {
+    // A hex literal in a skin is a colour the theme flip cannot reach.
+    for (const loaded of [false, true]) {
+      const theme = themeWith(loaded);
+      for (const kind of KINDS) for (const sig of SIGNALS) for (const width of WIDTHS) {
+        const c = component(kind, width);
+        const { ctx, ops } = recordingContext(14);
+        const value = valueOf(sig, width);
+        skinFor(theme, c)({
+          ctx, theme, cell: 14, component: c,
+          inputSignals: c.inPorts.map(() => sig), outputSignal: sig,
+          inputValues: c.inPorts.map(() => value), outputValue: value, hovered: false,
+        });
+        for (const op of ops) {
+          if (op[0] !== 'set' || (op[1] !== 'fillStyle' && op[1] !== 'strokeStyle')) continue;
+          expect(`${kind}: ${String(op[2])}`).toMatch(new RegExp(`^${kind}: (${[...paletteValues].map((v) => v.replace(/[()]/g, '\\$&')).join('|')})$`));
+        }
+      }
+    }
+  });
+
+  test('a bus tail is heavier and in the bus colour', () => {
+    // An and gate fed by two 8-bit buses draws its input tails in wireBus at
+    // 1.5× the wire weight; its 1-bit output tail stays in the signal colour.
+    const theme = themeWith(true);
+    const c = { ...component('and_gate', 1), bitWidth: 1 };
+    const { ctx, ops } = recordingContext(20);
+    const bus = valueOf(1, 8);
+    skinFor(theme, c)({
+      ctx, theme, cell: 20, component: c,
+      inputSignals: [1, 1], outputSignal: 1,
+      inputValues: [bus, bus], outputValue: valueOf(1, 1), hovered: false,
+    });
+    const strokes = ops.filter((op) => op[0] === 'set' && op[1] === 'strokeStyle').map((op) => op[2]);
+    expect(strokes.slice(0, 3)).toEqual([colorsDark.wireBus, colorsDark.wireBus, colorsDark.wireActive]);
+    const widths = ops.filter((op) => op[0] === 'set' && op[1] === 'lineWidth').map((op) => op[2]);
+    expect(widths.slice(0, 3)).toEqual([6, 6, 4]);
+  });
+
+  test('the NOT gate names itself below its box, like every other part', () => {
+    // Before: yOffset = -cell * 15 put the name 0.7 cells above the bottom
+    // edge, inside the sprite.
+    const theme = themeWith(true);
+    const c = component('not_gate', 1);
+    const { ctx, ops } = recordingContext(10);
+    skinFor(theme, c)({
+      ctx, theme, cell: 10, component: c,
+      inputSignals: [0], outputSignal: 1, inputValues: [valueOf(0, 1)], outputValue: valueOf(1, 1), hovered: false,
+    });
+    const name = ops.find((op) => op[0] === 'fillText' && op[1] === 'n')!;
+    expect(name).toBeDefined();
+    // Below the box: y0 + h + 0.16 cell = 20 + 30 + 1.6.
+    expect(name[3]).toBe(51.6);
+  });
 
   for (const kind of KINDS) {
     test(`${kind}: every combination draws as its golden says`, () => {

@@ -8,7 +8,7 @@
   [
    "set",
    "lineWidth",
-   4
+   2
   ],
   [
    "set",
@@ -39,7 +39,7 @@
   [
    "set",
    "lineWidth",
-   4
+   2
   ],
   [
    "set",
@@ -97,7 +97,7 @@
    "arc",
    25.5,
    35,
-   2.8,
+   2.4,
    0,
    6.283
   ],
@@ -116,7 +116,7 @@
    "arc",
    64.5,
    35,
-   2.8,
+   2.4,
    0,
    6.283
   ],
@@ -131,7 +131,7 @@
   [
    "set",
    "font",
-   "500 7px ui-monospace, \"JetBrains Mono\", monospace"
+   "500 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -147,7 +147,7 @@
    "fillText",
    "n",
    45,
-   43
+   51.6
   ]
  ],
  "sprites.sig0.w1.c14": [
@@ -159,7 +159,7 @@
   [
    "set",
    "lineWidth",
-   4
+   2.8
   ],
   [
    "set",
@@ -190,7 +190,7 @@
   [
    "set",
    "lineWidth",
-   4
+   2.8
   ],
   [
    "set",
@@ -248,7 +248,7 @@
    "arc",
    35.7,
    49,
-   3.92,
+   3.36,
    0,
    6.283
   ],
@@ -267,7 +267,7 @@
    "arc",
    90.3,
    49,
-   3.92,
+   3.36,
    0,
    6.283
   ],
@@ -298,7 +298,7 @@
    "fillText",
    "n",
    63,
-   60.2
+   72.24
   ]
  ],
  "sprites.sig0.w1.c24": [
@@ -310,7 +310,7 @@
   [
    "set",
    "lineWidth",
-   4
+   4.8
   ],
   [
    "set",
@@ -341,7 +341,7 @@
   [
    "set",
    "lineWidth",
-   4
+   4.8
   ],
   [
    "set",
@@ -399,7 +399,7 @@
    "arc",
    61.2,
    84,
-   6.72,
+   5.76,
    0,
    6.283
   ],
@@ -418,7 +418,7 @@
    "arc",
    154.8,
    84,
-   6.72,
+   5.76,
    0,
    6.283
   ],
@@ -433,7 +433,7 @@
   [
    "set",
    "font",
-   "500 16px ui-monospace, \"JetBrains Mono\", monospace"
+   "500 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -449,19 +449,19 @@
    "fillText",
    "n",
    108,
-   103.2
+   123.84
   ]
  ],
  "sprites.sig0.w8.c10": [
   [
    "set",
    "strokeStyle",
-   "#4c3a6b"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   3
   ],
   [
    "set",
@@ -487,12 +487,12 @@
   [
    "set",
    "strokeStyle",
-   "#4c3a6b"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   3
   ],
   [
    "set",
@@ -550,7 +550,7 @@
    "arc",
    25.5,
    35,
-   2.8,
+   2.4,
    0,
    6.283
   ],
@@ -569,7 +569,7 @@
    "arc",
    64.5,
    35,
-   2.8,
+   2.4,
    0,
    6.283
   ],
@@ -584,7 +584,7 @@
   [
    "set",
    "font",
-   "500 7px ui-monospace, \"JetBrains Mono\", monospace"
+   "500 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -600,19 +600,19 @@
    "fillText",
    "n",
    45,
-   43
+   51.6
   ]
  ],
  "sprites.sig0.w8.c14": [
   [
    "set",
    "strokeStyle",
-   "#4c3a6b"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   4.2
   ],
   [
    "set",
@@ -638,12 +638,12 @@
   [
    "set",
    "strokeStyle",
-   "#4c3a6b"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   4.2
   ],
   [
    "set",
@@ -701,7 +701,7 @@
    "arc",
    35.7,
    49,
-   3.92,
+   3.36,
    0,
    6.283
   ],
@@ -720,7 +720,7 @@
    "arc",
    90.3,
    49,
-   3.92,
+   3.36,
    0,
    6.283
   ],
@@ -751,19 +751,19 @@
    "fillText",
    "n",
    63,
-   60.2
+   72.24
   ]
  ],
  "sprites.sig0.w8.c24": [
   [
    "set",
    "strokeStyle",
-   "#4c3a6b"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   7.2
   ],
   [
    "set",
@@ -789,12 +789,12 @@
   [
    "set",
    "strokeStyle",
-   "#4c3a6b"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   7.2
   ],
   [
    "set",
@@ -852,7 +852,7 @@
    "arc",
    61.2,
    84,
-   6.72,
+   5.76,
    0,
    6.283
   ],
@@ -871,7 +871,7 @@
    "arc",
    154.8,
    84,
-   6.72,
+   5.76,
    0,
    6.283
   ],
@@ -886,7 +886,7 @@
   [
    "set",
    "font",
-   "500 16px ui-monospace, \"JetBrains Mono\", monospace"
+   "500 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -902,7 +902,7 @@
    "fillText",
    "n",
    108,
-   103.2
+   123.84
   ]
  ],
  "sprites.sig1.w1.c10": [
@@ -914,7 +914,7 @@
   [
    "set",
    "lineWidth",
-   4
+   2
   ],
   [
    "set",
@@ -945,7 +945,7 @@
   [
    "set",
    "lineWidth",
-   4
+   2
   ],
   [
    "set",
@@ -1003,7 +1003,7 @@
    "arc",
    25.5,
    35,
-   2.8,
+   2.4,
    0,
    6.283
   ],
@@ -1022,7 +1022,7 @@
    "arc",
    64.5,
    35,
-   2.8,
+   2.4,
    0,
    6.283
   ],
@@ -1037,7 +1037,7 @@
   [
    "set",
    "font",
-   "500 7px ui-monospace, \"JetBrains Mono\", monospace"
+   "500 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -1053,7 +1053,7 @@
    "fillText",
    "n",
    45,
-   43
+   51.6
   ]
  ],
  "sprites.sig1.w1.c14": [
@@ -1065,7 +1065,7 @@
   [
    "set",
    "lineWidth",
-   4
+   2.8
   ],
   [
    "set",
@@ -1096,7 +1096,7 @@
   [
    "set",
    "lineWidth",
-   4
+   2.8
   ],
   [
    "set",
@@ -1154,7 +1154,7 @@
    "arc",
    35.7,
    49,
-   3.92,
+   3.36,
    0,
    6.283
   ],
@@ -1173,7 +1173,7 @@
    "arc",
    90.3,
    49,
-   3.92,
+   3.36,
    0,
    6.283
   ],
@@ -1204,7 +1204,7 @@
    "fillText",
    "n",
    63,
-   60.2
+   72.24
   ]
  ],
  "sprites.sig1.w1.c24": [
@@ -1216,7 +1216,7 @@
   [
    "set",
    "lineWidth",
-   4
+   4.8
   ],
   [
    "set",
@@ -1247,7 +1247,7 @@
   [
    "set",
    "lineWidth",
-   4
+   4.8
   ],
   [
    "set",
@@ -1305,7 +1305,7 @@
    "arc",
    61.2,
    84,
-   6.72,
+   5.76,
    0,
    6.283
   ],
@@ -1324,7 +1324,7 @@
    "arc",
    154.8,
    84,
-   6.72,
+   5.76,
    0,
    6.283
   ],
@@ -1339,7 +1339,7 @@
   [
    "set",
    "font",
-   "500 16px ui-monospace, \"JetBrains Mono\", monospace"
+   "500 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -1355,19 +1355,19 @@
    "fillText",
    "n",
    108,
-   103.2
+   123.84
   ]
  ],
  "sprites.sig1.w8.c10": [
   [
    "set",
    "strokeStyle",
-   "hsl(134 61% 52%)"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   3
   ],
   [
    "set",
@@ -1393,12 +1393,12 @@
   [
    "set",
    "strokeStyle",
-   "hsl(134 61% 52%)"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   3
   ],
   [
    "set",
@@ -1456,7 +1456,7 @@
    "arc",
    25.5,
    35,
-   2.8,
+   2.4,
    0,
    6.283
   ],
@@ -1475,7 +1475,7 @@
    "arc",
    64.5,
    35,
-   2.8,
+   2.4,
    0,
    6.283
   ],
@@ -1490,7 +1490,7 @@
   [
    "set",
    "font",
-   "500 7px ui-monospace, \"JetBrains Mono\", monospace"
+   "500 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -1506,19 +1506,19 @@
    "fillText",
    "n",
    45,
-   43
+   51.6
   ]
  ],
  "sprites.sig1.w8.c14": [
   [
    "set",
    "strokeStyle",
-   "hsl(134 61% 52%)"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   4.2
   ],
   [
    "set",
@@ -1544,12 +1544,12 @@
   [
    "set",
    "strokeStyle",
-   "hsl(134 61% 52%)"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   4.2
   ],
   [
    "set",
@@ -1607,7 +1607,7 @@
    "arc",
    35.7,
    49,
-   3.92,
+   3.36,
    0,
    6.283
   ],
@@ -1626,7 +1626,7 @@
    "arc",
    90.3,
    49,
-   3.92,
+   3.36,
    0,
    6.283
   ],
@@ -1657,19 +1657,19 @@
    "fillText",
    "n",
    63,
-   60.2
+   72.24
   ]
  ],
  "sprites.sig1.w8.c24": [
   [
    "set",
    "strokeStyle",
-   "hsl(134 61% 52%)"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   7.2
   ],
   [
    "set",
@@ -1695,12 +1695,12 @@
   [
    "set",
    "strokeStyle",
-   "hsl(134 61% 52%)"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   7.2
   ],
   [
    "set",
@@ -1758,7 +1758,7 @@
    "arc",
    61.2,
    84,
-   6.72,
+   5.76,
    0,
    6.283
   ],
@@ -1777,7 +1777,7 @@
    "arc",
    154.8,
    84,
-   6.72,
+   5.76,
    0,
    6.283
   ],
@@ -1792,7 +1792,7 @@
   [
    "set",
    "font",
-   "500 16px ui-monospace, \"JetBrains Mono\", monospace"
+   "500 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -1808,7 +1808,7 @@
    "fillText",
    "n",
    108,
-   103.2
+   123.84
   ]
  ],
  "sprites.sig2.w1.c10": [
@@ -1820,7 +1820,7 @@
   [
    "set",
    "lineWidth",
-   4
+   2
   ],
   [
    "set",
@@ -1851,7 +1851,7 @@
   [
    "set",
    "lineWidth",
-   4
+   2
   ],
   [
    "set",
@@ -1909,7 +1909,7 @@
    "arc",
    25.5,
    35,
-   2.8,
+   2.4,
    0,
    6.283
   ],
@@ -1928,7 +1928,7 @@
    "arc",
    64.5,
    35,
-   2.8,
+   2.4,
    0,
    6.283
   ],
@@ -1943,7 +1943,7 @@
   [
    "set",
    "font",
-   "500 7px ui-monospace, \"JetBrains Mono\", monospace"
+   "500 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -1959,7 +1959,7 @@
    "fillText",
    "n",
    45,
-   43
+   51.6
   ]
  ],
  "sprites.sig2.w1.c14": [
@@ -1971,7 +1971,7 @@
   [
    "set",
    "lineWidth",
-   4
+   2.8
   ],
   [
    "set",
@@ -2002,7 +2002,7 @@
   [
    "set",
    "lineWidth",
-   4
+   2.8
   ],
   [
    "set",
@@ -2060,7 +2060,7 @@
    "arc",
    35.7,
    49,
-   3.92,
+   3.36,
    0,
    6.283
   ],
@@ -2079,7 +2079,7 @@
    "arc",
    90.3,
    49,
-   3.92,
+   3.36,
    0,
    6.283
   ],
@@ -2110,7 +2110,7 @@
    "fillText",
    "n",
    63,
-   60.2
+   72.24
   ]
  ],
  "sprites.sig2.w1.c24": [
@@ -2122,7 +2122,7 @@
   [
    "set",
    "lineWidth",
-   4
+   4.8
   ],
   [
    "set",
@@ -2153,7 +2153,7 @@
   [
    "set",
    "lineWidth",
-   4
+   4.8
   ],
   [
    "set",
@@ -2211,7 +2211,7 @@
    "arc",
    61.2,
    84,
-   6.72,
+   5.76,
    0,
    6.283
   ],
@@ -2230,7 +2230,7 @@
    "arc",
    154.8,
    84,
-   6.72,
+   5.76,
    0,
    6.283
   ],
@@ -2245,7 +2245,7 @@
   [
    "set",
    "font",
-   "500 16px ui-monospace, \"JetBrains Mono\", monospace"
+   "500 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -2261,19 +2261,19 @@
    "fillText",
    "n",
    108,
-   103.2
+   123.84
   ]
  ],
  "sprites.sig2.w8.c10": [
   [
    "set",
    "strokeStyle",
-   "#33244d"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   3
   ],
   [
    "set",
@@ -2299,12 +2299,12 @@
   [
    "set",
    "strokeStyle",
-   "#33244d"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   3
   ],
   [
    "set",
@@ -2362,7 +2362,7 @@
    "arc",
    25.5,
    35,
-   2.8,
+   2.4,
    0,
    6.283
   ],
@@ -2381,7 +2381,7 @@
    "arc",
    64.5,
    35,
-   2.8,
+   2.4,
    0,
    6.283
   ],
@@ -2396,7 +2396,7 @@
   [
    "set",
    "font",
-   "500 7px ui-monospace, \"JetBrains Mono\", monospace"
+   "500 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -2412,19 +2412,19 @@
    "fillText",
    "n",
    45,
-   43
+   51.6
   ]
  ],
  "sprites.sig2.w8.c14": [
   [
    "set",
    "strokeStyle",
-   "#33244d"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   4.2
   ],
   [
    "set",
@@ -2450,12 +2450,12 @@
   [
    "set",
    "strokeStyle",
-   "#33244d"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   4.2
   ],
   [
    "set",
@@ -2513,7 +2513,7 @@
    "arc",
    35.7,
    49,
-   3.92,
+   3.36,
    0,
    6.283
   ],
@@ -2532,7 +2532,7 @@
    "arc",
    90.3,
    49,
-   3.92,
+   3.36,
    0,
    6.283
   ],
@@ -2563,19 +2563,19 @@
    "fillText",
    "n",
    63,
-   60.2
+   72.24
   ]
  ],
  "sprites.sig2.w8.c24": [
   [
    "set",
    "strokeStyle",
-   "#33244d"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   7.2
   ],
   [
    "set",
@@ -2601,12 +2601,12 @@
   [
    "set",
    "strokeStyle",
-   "#33244d"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   7.2
   ],
   [
    "set",
@@ -2664,7 +2664,7 @@
    "arc",
    61.2,
    84,
-   6.72,
+   5.76,
    0,
    6.283
   ],
@@ -2683,7 +2683,7 @@
    "arc",
    154.8,
    84,
-   6.72,
+   5.76,
    0,
    6.283
   ],
@@ -2698,7 +2698,7 @@
   [
    "set",
    "font",
-   "500 16px ui-monospace, \"JetBrains Mono\", monospace"
+   "500 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -2714,7 +2714,7 @@
    "fillText",
    "n",
    108,
-   103.2
+   123.84
   ]
  ],
  "vector.sig0.w1.c10": [
@@ -2726,7 +2726,7 @@
   [
    "set",
    "lineWidth",
-   4
+   2
   ],
   [
    "set",
@@ -2757,7 +2757,7 @@
   [
    "set",
    "lineWidth",
-   4
+   2
   ],
   [
    "set",
@@ -2851,7 +2851,7 @@
    "arc",
    20.5,
    35,
-   2.8,
+   2.4,
    0,
    6.283
   ],
@@ -2870,7 +2870,7 @@
    "arc",
    72,
    35,
-   2.8,
+   2.4,
    0,
    6.283
   ],
@@ -2885,7 +2885,7 @@
   [
    "set",
    "font",
-   "500 7px ui-monospace, \"JetBrains Mono\", monospace"
+   "500 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -2901,7 +2901,7 @@
    "fillText",
    "n",
    45,
-   43
+   51.6
   ]
  ],
  "vector.sig0.w1.c14": [
@@ -2913,7 +2913,7 @@
   [
    "set",
    "lineWidth",
-   4
+   2.8
   ],
   [
    "set",
@@ -2944,7 +2944,7 @@
   [
    "set",
    "lineWidth",
-   4
+   2.8
   ],
   [
    "set",
@@ -3038,7 +3038,7 @@
    "arc",
    28.7,
    49,
-   3.92,
+   3.36,
    0,
    6.283
   ],
@@ -3057,7 +3057,7 @@
    "arc",
    100.8,
    49,
-   3.92,
+   3.36,
    0,
    6.283
   ],
@@ -3088,7 +3088,7 @@
    "fillText",
    "n",
    63,
-   60.2
+   72.24
   ]
  ],
  "vector.sig0.w1.c24": [
@@ -3100,7 +3100,7 @@
   [
    "set",
    "lineWidth",
-   4
+   4.8
   ],
   [
    "set",
@@ -3131,7 +3131,7 @@
   [
    "set",
    "lineWidth",
-   4
+   4.8
   ],
   [
    "set",
@@ -3225,7 +3225,7 @@
    "arc",
    49.2,
    84,
-   6.72,
+   5.76,
    0,
    6.283
   ],
@@ -3244,7 +3244,7 @@
    "arc",
    172.8,
    84,
-   6.72,
+   5.76,
    0,
    6.283
   ],
@@ -3259,7 +3259,7 @@
   [
    "set",
    "font",
-   "500 16px ui-monospace, \"JetBrains Mono\", monospace"
+   "500 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -3275,19 +3275,19 @@
    "fillText",
    "n",
    108,
-   103.2
+   123.84
   ]
  ],
  "vector.sig0.w8.c10": [
   [
    "set",
    "strokeStyle",
-   "#4c3a6b"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   3
   ],
   [
    "set",
@@ -3313,12 +3313,12 @@
   [
    "set",
    "strokeStyle",
-   "#4c3a6b"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   3
   ],
   [
    "set",
@@ -3412,7 +3412,7 @@
    "arc",
    20.5,
    35,
-   2.8,
+   2.4,
    0,
    6.283
   ],
@@ -3431,7 +3431,7 @@
    "arc",
    72,
    35,
-   2.8,
+   2.4,
    0,
    6.283
   ],
@@ -3446,7 +3446,7 @@
   [
    "set",
    "font",
-   "500 7px ui-monospace, \"JetBrains Mono\", monospace"
+   "500 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -3462,19 +3462,19 @@
    "fillText",
    "n",
    45,
-   43
+   51.6
   ]
  ],
  "vector.sig0.w8.c14": [
   [
    "set",
    "strokeStyle",
-   "#4c3a6b"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   4.2
   ],
   [
    "set",
@@ -3500,12 +3500,12 @@
   [
    "set",
    "strokeStyle",
-   "#4c3a6b"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   4.2
   ],
   [
    "set",
@@ -3599,7 +3599,7 @@
    "arc",
    28.7,
    49,
-   3.92,
+   3.36,
    0,
    6.283
   ],
@@ -3618,7 +3618,7 @@
    "arc",
    100.8,
    49,
-   3.92,
+   3.36,
    0,
    6.283
   ],
@@ -3649,19 +3649,19 @@
    "fillText",
    "n",
    63,
-   60.2
+   72.24
   ]
  ],
  "vector.sig0.w8.c24": [
   [
    "set",
    "strokeStyle",
-   "#4c3a6b"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   7.2
   ],
   [
    "set",
@@ -3687,12 +3687,12 @@
   [
    "set",
    "strokeStyle",
-   "#4c3a6b"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   7.2
   ],
   [
    "set",
@@ -3786,7 +3786,7 @@
    "arc",
    49.2,
    84,
-   6.72,
+   5.76,
    0,
    6.283
   ],
@@ -3805,7 +3805,7 @@
    "arc",
    172.8,
    84,
-   6.72,
+   5.76,
    0,
    6.283
   ],
@@ -3820,7 +3820,7 @@
   [
    "set",
    "font",
-   "500 16px ui-monospace, \"JetBrains Mono\", monospace"
+   "500 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -3836,7 +3836,7 @@
    "fillText",
    "n",
    108,
-   103.2
+   123.84
   ]
  ],
  "vector.sig1.w1.c10": [
@@ -3848,7 +3848,7 @@
   [
    "set",
    "lineWidth",
-   4
+   2
   ],
   [
    "set",
@@ -3879,7 +3879,7 @@
   [
    "set",
    "lineWidth",
-   4
+   2
   ],
   [
    "set",
@@ -3973,7 +3973,7 @@
    "arc",
    20.5,
    35,
-   2.8,
+   2.4,
    0,
    6.283
   ],
@@ -3992,7 +3992,7 @@
    "arc",
    72,
    35,
-   2.8,
+   2.4,
    0,
    6.283
   ],
@@ -4007,7 +4007,7 @@
   [
    "set",
    "font",
-   "500 7px ui-monospace, \"JetBrains Mono\", monospace"
+   "500 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -4023,7 +4023,7 @@
    "fillText",
    "n",
    45,
-   43
+   51.6
   ]
  ],
  "vector.sig1.w1.c14": [
@@ -4035,7 +4035,7 @@
   [
    "set",
    "lineWidth",
-   4
+   2.8
   ],
   [
    "set",
@@ -4066,7 +4066,7 @@
   [
    "set",
    "lineWidth",
-   4
+   2.8
   ],
   [
    "set",
@@ -4160,7 +4160,7 @@
    "arc",
    28.7,
    49,
-   3.92,
+   3.36,
    0,
    6.283
   ],
@@ -4179,7 +4179,7 @@
    "arc",
    100.8,
    49,
-   3.92,
+   3.36,
    0,
    6.283
   ],
@@ -4210,7 +4210,7 @@
    "fillText",
    "n",
    63,
-   60.2
+   72.24
   ]
  ],
  "vector.sig1.w1.c24": [
@@ -4222,7 +4222,7 @@
   [
    "set",
    "lineWidth",
-   4
+   4.8
   ],
   [
    "set",
@@ -4253,7 +4253,7 @@
   [
    "set",
    "lineWidth",
-   4
+   4.8
   ],
   [
    "set",
@@ -4347,7 +4347,7 @@
    "arc",
    49.2,
    84,
-   6.72,
+   5.76,
    0,
    6.283
   ],
@@ -4366,7 +4366,7 @@
    "arc",
    172.8,
    84,
-   6.72,
+   5.76,
    0,
    6.283
   ],
@@ -4381,7 +4381,7 @@
   [
    "set",
    "font",
-   "500 16px ui-monospace, \"JetBrains Mono\", monospace"
+   "500 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -4397,19 +4397,19 @@
    "fillText",
    "n",
    108,
-   103.2
+   123.84
   ]
  ],
  "vector.sig1.w8.c10": [
   [
    "set",
    "strokeStyle",
-   "hsl(134 61% 52%)"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   3
   ],
   [
    "set",
@@ -4435,12 +4435,12 @@
   [
    "set",
    "strokeStyle",
-   "hsl(134 61% 52%)"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   3
   ],
   [
    "set",
@@ -4534,7 +4534,7 @@
    "arc",
    20.5,
    35,
-   2.8,
+   2.4,
    0,
    6.283
   ],
@@ -4553,7 +4553,7 @@
    "arc",
    72,
    35,
-   2.8,
+   2.4,
    0,
    6.283
   ],
@@ -4568,7 +4568,7 @@
   [
    "set",
    "font",
-   "500 7px ui-monospace, \"JetBrains Mono\", monospace"
+   "500 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -4584,19 +4584,19 @@
    "fillText",
    "n",
    45,
-   43
+   51.6
   ]
  ],
  "vector.sig1.w8.c14": [
   [
    "set",
    "strokeStyle",
-   "hsl(134 61% 52%)"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   4.2
   ],
   [
    "set",
@@ -4622,12 +4622,12 @@
   [
    "set",
    "strokeStyle",
-   "hsl(134 61% 52%)"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   4.2
   ],
   [
    "set",
@@ -4721,7 +4721,7 @@
    "arc",
    28.7,
    49,
-   3.92,
+   3.36,
    0,
    6.283
   ],
@@ -4740,7 +4740,7 @@
    "arc",
    100.8,
    49,
-   3.92,
+   3.36,
    0,
    6.283
   ],
@@ -4771,19 +4771,19 @@
    "fillText",
    "n",
    63,
-   60.2
+   72.24
   ]
  ],
  "vector.sig1.w8.c24": [
   [
    "set",
    "strokeStyle",
-   "hsl(134 61% 52%)"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   7.2
   ],
   [
    "set",
@@ -4809,12 +4809,12 @@
   [
    "set",
    "strokeStyle",
-   "hsl(134 61% 52%)"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   7.2
   ],
   [
    "set",
@@ -4908,7 +4908,7 @@
    "arc",
    49.2,
    84,
-   6.72,
+   5.76,
    0,
    6.283
   ],
@@ -4927,7 +4927,7 @@
    "arc",
    172.8,
    84,
-   6.72,
+   5.76,
    0,
    6.283
   ],
@@ -4942,7 +4942,7 @@
   [
    "set",
    "font",
-   "500 16px ui-monospace, \"JetBrains Mono\", monospace"
+   "500 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -4958,7 +4958,7 @@
    "fillText",
    "n",
    108,
-   103.2
+   123.84
   ]
  ],
  "vector.sig2.w1.c10": [
@@ -4970,7 +4970,7 @@
   [
    "set",
    "lineWidth",
-   4
+   2
   ],
   [
    "set",
@@ -5001,7 +5001,7 @@
   [
    "set",
    "lineWidth",
-   4
+   2
   ],
   [
    "set",
@@ -5095,7 +5095,7 @@
    "arc",
    20.5,
    35,
-   2.8,
+   2.4,
    0,
    6.283
   ],
@@ -5114,7 +5114,7 @@
    "arc",
    72,
    35,
-   2.8,
+   2.4,
    0,
    6.283
   ],
@@ -5129,7 +5129,7 @@
   [
    "set",
    "font",
-   "500 7px ui-monospace, \"JetBrains Mono\", monospace"
+   "500 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -5145,7 +5145,7 @@
    "fillText",
    "n",
    45,
-   43
+   51.6
   ]
  ],
  "vector.sig2.w1.c14": [
@@ -5157,7 +5157,7 @@
   [
    "set",
    "lineWidth",
-   4
+   2.8
   ],
   [
    "set",
@@ -5188,7 +5188,7 @@
   [
    "set",
    "lineWidth",
-   4
+   2.8
   ],
   [
    "set",
@@ -5282,7 +5282,7 @@
    "arc",
    28.7,
    49,
-   3.92,
+   3.36,
    0,
    6.283
   ],
@@ -5301,7 +5301,7 @@
    "arc",
    100.8,
    49,
-   3.92,
+   3.36,
    0,
    6.283
   ],
@@ -5332,7 +5332,7 @@
    "fillText",
    "n",
    63,
-   60.2
+   72.24
   ]
  ],
  "vector.sig2.w1.c24": [
@@ -5344,7 +5344,7 @@
   [
    "set",
    "lineWidth",
-   4
+   4.8
   ],
   [
    "set",
@@ -5375,7 +5375,7 @@
   [
    "set",
    "lineWidth",
-   4
+   4.8
   ],
   [
    "set",
@@ -5469,7 +5469,7 @@
    "arc",
    49.2,
    84,
-   6.72,
+   5.76,
    0,
    6.283
   ],
@@ -5488,7 +5488,7 @@
    "arc",
    172.8,
    84,
-   6.72,
+   5.76,
    0,
    6.283
   ],
@@ -5503,7 +5503,7 @@
   [
    "set",
    "font",
-   "500 16px ui-monospace, \"JetBrains Mono\", monospace"
+   "500 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -5519,19 +5519,19 @@
    "fillText",
    "n",
    108,
-   103.2
+   123.84
   ]
  ],
  "vector.sig2.w8.c10": [
   [
    "set",
    "strokeStyle",
-   "#33244d"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   3
   ],
   [
    "set",
@@ -5557,12 +5557,12 @@
   [
    "set",
    "strokeStyle",
-   "#33244d"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   3
   ],
   [
    "set",
@@ -5656,7 +5656,7 @@
    "arc",
    20.5,
    35,
-   2.8,
+   2.4,
    0,
    6.283
   ],
@@ -5675,7 +5675,7 @@
    "arc",
    72,
    35,
-   2.8,
+   2.4,
    0,
    6.283
   ],
@@ -5690,7 +5690,7 @@
   [
    "set",
    "font",
-   "500 7px ui-monospace, \"JetBrains Mono\", monospace"
+   "500 9px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -5706,19 +5706,19 @@
    "fillText",
    "n",
    45,
-   43
+   51.6
   ]
  ],
  "vector.sig2.w8.c14": [
   [
    "set",
    "strokeStyle",
-   "#33244d"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   4.2
   ],
   [
    "set",
@@ -5744,12 +5744,12 @@
   [
    "set",
    "strokeStyle",
-   "#33244d"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   4.2
   ],
   [
    "set",
@@ -5843,7 +5843,7 @@
    "arc",
    28.7,
    49,
-   3.92,
+   3.36,
    0,
    6.283
   ],
@@ -5862,7 +5862,7 @@
    "arc",
    100.8,
    49,
-   3.92,
+   3.36,
    0,
    6.283
   ],
@@ -5893,19 +5893,19 @@
    "fillText",
    "n",
    63,
-   60.2
+   72.24
   ]
  ],
  "vector.sig2.w8.c24": [
   [
    "set",
    "strokeStyle",
-   "#33244d"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   7.2
   ],
   [
    "set",
@@ -5931,12 +5931,12 @@
   [
    "set",
    "strokeStyle",
-   "#33244d"
+   "#bea7ff"
   ],
   [
    "set",
    "lineWidth",
-   4
+   7.2
   ],
   [
    "set",
@@ -6030,7 +6030,7 @@
    "arc",
    49.2,
    84,
-   6.72,
+   5.76,
    0,
    6.283
   ],
@@ -6049,7 +6049,7 @@
    "arc",
    172.8,
    84,
-   6.72,
+   5.76,
    0,
    6.283
   ],
@@ -6064,7 +6064,7 @@
   [
    "set",
    "font",
-   "500 16px ui-monospace, \"JetBrains Mono\", monospace"
+   "500 14px ui-monospace, \"JetBrains Mono\", monospace"
   ],
   [
    "set",
@@ -6080,7 +6080,7 @@
    "fillText",
    "n",
    108,
-   103.2
+   123.84
   ]
  ]
 }

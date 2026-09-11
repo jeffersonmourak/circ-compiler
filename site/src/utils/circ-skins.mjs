@@ -41,48 +41,51 @@ export function makeSkins(a) {
 
 /* ───── helpers ────────────────────────────────────────────────────── */
 
+/** Font for a label: `w` weight, sized by the cell, never under 9px. */
+const nsFont = (cell, w = 600) =>
+  `${w} ${Math.max(9, Math.round(cell * 0.6))}px ui-monospace, "JetBrains Mono", monospace`;
+
+/** Stroke weight of a wire, in proportion to the cell: 4px at cell 20. */
+const nsWire = (cell) => Math.max(2, cell * 0.2);
+
+/** The palette colour for what a wire carries: a bus, or one tri-state bit. */
+const wireColour = (t, sig, bus) =>
+  bus ? t.wireBus : sig === 1 ? t.wireActive : sig === 0 ? t.wireIdle : t.wireUndefined;
+
 /**
- * Stroke a horizontal "tail" between the gate's actual visual edge and
- * the wire's endpoint cell-center. Drawn BEFORE the gate symbol so the
- * symbol covers the tail's gate-edge end cleanly.
+ * Stroke a horizontal "tail" between the part's visual edge and the wire's
+ * endpoint cell-centre, in the wire's own colour and weight (a bus is 1.5×).
+ * Drawn BEFORE the symbol so the symbol covers the tail's inner end cleanly.
  */
-function drawTailLine(ctx, gateEdge, portEnd, y, signal, theme) {
-  ctx.strokeStyle =
-    signal === 1
-      ? theme.colors.wireActive
-      : signal === 0
-        ? theme.colors.wireIdle
-        : theme.colors.wireUndefined;
-  ctx.lineWidth = 4;
+function nsTail(ctx, cell, from, to, y, sig, t, bus) {
+  ctx.strokeStyle = wireColour(t, sig, bus);
+  ctx.lineWidth = nsWire(cell) * (bus ? 1.5 : 1);
   ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.moveTo(gateEdge, y);
-  ctx.lineTo(portEnd, y);
+  ctx.moveTo(from, y);
+  ctx.lineTo(to, y);
   ctx.stroke();
 }
 
 /**
- * Stamp the orange terminal dot at the tail's gate-edge end. Drawn
- * AFTER the gate symbol so the dot always sits on top of the gate.
+ * Stamp the terminal dot at the tail's inner end. Drawn AFTER the symbol so
+ * the dot always sits on top of it.
  */
-function drawTailDot(ctx, cell, gateEdge, y, signal, theme) {
-  ctx.fillStyle = signal === 1 ? theme.colors.portOn : theme.colors.portOff;
+function nsDot(ctx, cell, x, y, sig, t) {
+  ctx.fillStyle = sig === 1 ? t.portOn : t.portOff;
   ctx.beginPath();
-  ctx.arc(gateEdge, y, cell * 0.28, 0, Math.PI * 2);
+  ctx.arc(x, y, cell * 0.24, 0, Math.PI * 2);
   ctx.fill();
 }
 
-/**
- * Draw the component's name as a small label hovering just below its
- * bounding box. Used by NOT, AND, and the small input/output pins.
- */
-function drawNameBelow(ctx, cell, name, bx, by, bw, bh, color, yOffset = 0) {
+/** The part's name, just below its box. */
+function nsName(ctx, cell, name, bx, by, bw, bh, color) {
   if (!name) return;
   ctx.fillStyle = color;
-  ctx.font = `500 ${Math.round(cell * 0.65)}px ui-monospace, "JetBrains Mono", monospace`;
+  ctx.font = nsFont(cell, 500);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'top';
-  ctx.fillText(name, bx + bw / 2, by + bh + (cell + yOffset) * 0.05);
+  ctx.fillText(name, bx + bw / 2, by + bh + cell * 0.16);
 }
 
 /**
@@ -196,7 +199,7 @@ const drawInputPin = ({ ctx, cell, component, outputSignal, hovered, theme }) =>
   const tailEdge = cx + r + cell * 0.45;
   const portY = component.outPort.y * cell + cell / 2;
   const portX = component.outPort.x * cell + cell / 2;
-  drawTailLine(ctx, tailEdge, portX, portY, outputSignal, theme);
+  nsTail(ctx, cell, tailEdge, portX, portY, outputSignal, theme.colors, (component.bitWidth ?? 1) > 1);
 
   let fill = isOn ? theme.colors.inputOn : theme.colors.inputOff;
   let stroke = isOn ? theme.colors.inputBorderOn : theme.colors.inputBorderOff;
@@ -213,13 +216,13 @@ const drawInputPin = ({ ctx, cell, component, outputSignal, hovered, theme }) =>
     theme.colors.labelOnComponent
   );
   if (!nameFitsInside(component)) {
-    drawNameBelow(ctx, cell, component.name, x, y, w, h, theme.colors.labelMuted);
+    nsName(ctx, cell, component.name, x, y, w, h, theme.colors.labelMuted);
   }
 
-  drawTailDot(ctx, cell, tailEdge, portY, outputSignal, theme);
+  nsDot(ctx, cell, tailEdge, portY, outputSignal, theme.colors);
 };
 
-const drawOutputPin = ({ ctx, cell, component, inputSignals, theme, hovered }) => {
+const drawOutputPin = ({ ctx, cell, component, inputSignals, inputValues, theme, hovered }) => {
   const x = component.x * cell;
   const y = component.y * cell;
   const w = component.width * cell;
@@ -235,7 +238,7 @@ const drawOutputPin = ({ ctx, cell, component, inputSignals, theme, hovered }) =
   if (slot) {
     const portX = slot.coord.x * cell + cell / 2;
     dotY = slot.coord.y * cell + cell / 2;
-    drawTailLine(ctx, tailEdge, portX, dotY, sig, theme);
+    nsTail(ctx, cell, tailEdge, portX, dotY, sig, theme.colors, (inputValues[0]?.width ?? 1) > 1);
   }
 
   const inside = nameFitsInside(component) ? component.name : isOn ? '1' : '0';
@@ -248,14 +251,14 @@ const drawOutputPin = ({ ctx, cell, component, inputSignals, theme, hovered }) =
     theme.colors.labelOnComponent
   );
   if (!nameFitsInside(component)) {
-    drawNameBelow(ctx, cell, component.name, x, y, w, h, theme.colors.labelMuted);
+    nsName(ctx, cell, component.name, x, y, w, h, theme.colors.labelMuted);
   }
 
-  if (slot) drawTailDot(ctx, cell, tailEdge, dotY, sig, theme);
+  if (slot) nsDot(ctx, cell, tailEdge, dotY, sig, theme.colors);
 
 };
 
-const drawLed = ({ ctx, cell, component, inputSignals, theme, hovered }) => {
+const drawLed = ({ ctx, cell, component, inputSignals, inputValues, theme, hovered }) => {
   const cx = (component.x + component.width / 2) * cell;
   const cy = (component.y + component.height / 2) * cell;
   const r = Math.min(component.width, component.height) * cell * 0.4;
@@ -268,7 +271,7 @@ const drawLed = ({ ctx, cell, component, inputSignals, theme, hovered }) => {
   if (slot) {
     const portX = slot.coord.x * cell + cell / 2;
     dotY = slot.coord.y * cell + cell / 2;
-    drawTailLine(ctx, tailEdge, portX, dotY, sig, theme);
+    nsTail(ctx, cell, tailEdge, portX, dotY, sig, theme.colors, (inputValues[0]?.width ?? 1) > 1);
   }
 
   ctx.fillStyle = isOn ? theme.colors.outputOn : theme.colors.outputOff;
@@ -287,18 +290,18 @@ const drawLed = ({ ctx, cell, component, inputSignals, theme, hovered }) => {
     ctx.globalAlpha = 1;
   }
 
-  drawNameBelow(
+  nsName(
     ctx, cell, component.name,
     component.x * cell, component.y * cell,
     component.width * cell, component.height * cell,
     theme.colors.labelMuted
   );
 
-  if (slot) drawTailDot(ctx, cell, tailEdge, dotY, sig, theme);
+  if (slot) nsDot(ctx, cell, tailEdge, dotY, sig, theme.colors);
 
 };
 
-const drawNot = ({ ctx, cell, component, inputSignals, outputSignal, theme, hovered }) => {
+const drawNot = ({ ctx, cell, component, inputSignals, inputValues, outputSignal, theme, hovered }) => {
   const x0 = component.x * cell;
   const y0 = component.y * cell;
   const w = component.width * cell;
@@ -315,14 +318,10 @@ const drawNot = ({ ctx, cell, component, inputSignals, outputSignal, theme, hove
   const inDotY = inSlot ? inSlot.coord.y * cell + cell / 2 : 0;
   if (inSlot) {
     const portX = inSlot.coord.x * cell + cell / 2;
-    drawTailLine(ctx, leftEdge, portX, inDotY, inSig, theme);
+    nsTail(ctx, cell, leftEdge, portX, inDotY, inSig, theme.colors, (inputValues[0]?.width ?? 1) > 1);
   }
   const outDotY = component.outPort.y * cell + cell / 2;
-  drawTailLine(
-    ctx, rightEdge,
-    component.outPort.x * cell + cell / 2,
-    outDotY, outputSignal, theme
-  );
+  nsTail(ctx, cell, rightEdge, component.outPort.x * cell + cell / 2, outDotY, outputSignal, theme.colors, (component.bitWidth ?? 1) > 1);
 
   if (usingSprite) {
     drawSprite(ctx, sprite('NOT'), x0, y0, w, h);
@@ -345,14 +344,14 @@ const drawNot = ({ ctx, cell, component, inputSignals, outputSignal, theme, hove
     ctx.stroke();
   }
 
-  if (inSlot) drawTailDot(ctx, cell, leftEdge, inDotY, inSig, theme);
-  drawTailDot(ctx, cell, rightEdge, outDotY, outputSignal, theme);
+  if (inSlot) nsDot(ctx, cell, leftEdge, inDotY, inSig, theme.colors);
+  nsDot(ctx, cell, rightEdge, outDotY, outputSignal, theme.colors);
 
-  drawNameBelow(ctx, cell, component.name, x0, y0, w, h, theme.colors.labelMuted, -cell * 15);
+  nsName(ctx, cell, component.name, x0, y0, w, h, theme.colors.labelMuted);
 
 };
 
-const drawAnd = ({ ctx, cell, component, inputSignals, outputSignal, theme, hovered }) => {
+const drawAnd = ({ ctx, cell, component, inputSignals, inputValues, outputSignal, theme, hovered }) => {
   const x0 = component.x * cell;
   const y0 = component.y * cell;
   const w = component.width * cell;
@@ -370,14 +369,10 @@ const drawAnd = ({ ctx, cell, component, inputSignals, outputSignal, theme, hove
     const portX = slot.coord.x * cell + cell / 2;
     const portY = slot.coord.y * cell + cell / 2;
     inDotYs.push(portY);
-    drawTailLine(ctx, leftEdge, portX, portY, sig, theme);
+    nsTail(ctx, cell, leftEdge, portX, portY, sig, theme.colors, (inputValues[i]?.width ?? 1) > 1);
   }
   const outDotY = component.outPort.y * cell + cell / 2;
-  drawTailLine(
-    ctx, rightEdge,
-    component.outPort.x * cell + cell / 2,
-    outDotY, outputSignal, theme
-  );
+  nsTail(ctx, cell, rightEdge, component.outPort.x * cell + cell / 2, outDotY, outputSignal, theme.colors, (component.bitWidth ?? 1) > 1);
 
   if (usingSprite) {
     drawSprite(ctx, sprite('AND'), x0, y0, w, h);
@@ -401,9 +396,9 @@ const drawAnd = ({ ctx, cell, component, inputSignals, outputSignal, theme, hove
   }
 
   for (let i = 0; i < component.inPorts.length; i++) {
-    drawTailDot(ctx, cell, leftEdge, inDotYs[i], inputSignals[i] ?? 2, theme);
+    nsDot(ctx, cell, leftEdge, inDotYs[i], inputSignals[i] ?? 2, theme.colors);
   }
-  drawTailDot(ctx, cell, rightEdge, outDotY, outputSignal, theme);
+  nsDot(ctx, cell, rightEdge, outDotY, outputSignal, theme.colors);
 
   if (component.name) {
     ctx.fillStyle = theme.colors.labelOnComponent;
@@ -415,7 +410,7 @@ const drawAnd = ({ ctx, cell, component, inputSignals, outputSignal, theme, hove
 
 };
 
-const drawSubcircuit = ({ ctx, cell, component, inputSignals, outputSignal, theme, hovered }) => {
+const drawSubcircuit = ({ ctx, cell, component, inputSignals, inputValues, outputSignal, theme, hovered }) => {
   const x0 = component.x * cell;
   const y0 = component.y * cell;
   const w = component.width * cell;
@@ -438,14 +433,10 @@ const drawSubcircuit = ({ ctx, cell, component, inputSignals, outputSignal, them
     const portX = slot.coord.x * cell + cell / 2;
     const portY = slot.coord.y * cell + cell / 2;
     inDotYs.push(portY);
-    drawTailLine(ctx, leftEdge, portX, portY, sig, theme);
+    nsTail(ctx, cell, leftEdge, portX, portY, sig, theme.colors, (inputValues[i]?.width ?? 1) > 1);
   }
   const outDotY = component.outPort.y * cell + cell / 2;
-  drawTailLine(
-    ctx, rightEdge,
-    component.outPort.x * cell + cell / 2,
-    outDotY, outputSignal, theme
-  );
+  nsTail(ctx, cell, rightEdge, component.outPort.x * cell + cell / 2, outDotY, outputSignal, theme.colors, (component.bitWidth ?? 1) > 1);
 
   if (usingSprite) {
     drawSprite(ctx, sprite, x0, y0, w, h);
@@ -467,11 +458,11 @@ const drawSubcircuit = ({ ctx, cell, component, inputSignals, outputSignal, them
   }
 
   for (let i = 0; i < component.inPorts.length; i++) {
-    drawTailDot(ctx, cell, leftEdge, inDotYs[i], inputSignals[i] ?? 2, theme);
+    nsDot(ctx, cell, leftEdge, inDotYs[i], inputSignals[i] ?? 2, theme.colors);
   }
-  drawTailDot(ctx, cell, rightEdge, outDotY, outputSignal, theme);
+  nsDot(ctx, cell, rightEdge, outDotY, outputSignal, theme.colors);
 
-  drawNameBelow(ctx, cell, component.name, x0, y0, w, h, theme.colors.labelMuted);
+  nsName(ctx, cell, component.name, x0, y0, w, h, theme.colors.labelMuted);
 
 };
 
@@ -481,7 +472,7 @@ const drawSubcircuit = ({ ctx, cell, component, inputSignals, outputSignal, them
  * through to the package's default skins and render in a foreign visual
  * language beside the sprite-drawn gates.
  */
-const drawBox = ({ ctx, cell, component, inputSignals, outputSignal, theme }, label, borderColor) => {
+const drawBox = ({ ctx, cell, component, inputSignals, inputValues, outputSignal, theme }, label, borderColor) => {
   const x0 = component.x * cell;
   const y0 = component.y * cell;
   const w = component.width * cell;
@@ -496,10 +487,10 @@ const drawBox = ({ ctx, cell, component, inputSignals, outputSignal, theme }, la
     const sig = inputSignals[i] ?? 2;
     const portY = slot.coord.y * cell + cell / 2;
     inDotYs.push(portY);
-    drawTailLine(ctx, leftEdge, slot.coord.x * cell + cell / 2, portY, sig, theme);
+    nsTail(ctx, cell, leftEdge, slot.coord.x * cell + cell / 2, portY, sig, theme.colors, (inputValues[i]?.width ?? 1) > 1);
   }
   const outDotY = component.outPort.y * cell + cell / 2;
-  drawTailLine(ctx, rightEdge, component.outPort.x * cell + cell / 2, outDotY, outputSignal, theme);
+  nsTail(ctx, cell, rightEdge, component.outPort.x * cell + cell / 2, outDotY, outputSignal, theme.colors, (component.bitWidth ?? 1) > 1);
 
   ctx.strokeStyle = borderColor;
   ctx.fillStyle = theme.colors.fillIdle;
@@ -516,9 +507,9 @@ const drawBox = ({ ctx, cell, component, inputSignals, outputSignal, theme }, la
   ctx.fillText(label, x0 + w / 2, y0 + h / 2);
 
   for (let i = 0; i < component.inPorts.length; i++) {
-    drawTailDot(ctx, cell, leftEdge, inDotYs[i], inputSignals[i] ?? 2, theme);
+    nsDot(ctx, cell, leftEdge, inDotYs[i], inputSignals[i] ?? 2, theme.colors);
   }
-  drawTailDot(ctx, cell, rightEdge, outDotY, outputSignal, theme);
+  nsDot(ctx, cell, rightEdge, outDotY, outputSignal, theme.colors);
 };
 
 /** `[i]` or `[lo:hi]`, the way the compiler's own preview writes a slice. */
@@ -539,7 +530,7 @@ const drawMemory = (args) => {
   const label = memoryLabel(kind, component.name, component.bitWidth, component.memory?.addrWidth ?? 0);
   drawBox(args, label, theme.colors.macro);
   const x0 = component.x * cell, y0 = component.y * cell;
-  drawNameBelow(ctx, cell, component.name, x0, y0, component.width * cell, component.height * cell, theme.colors.labelMuted);
+  nsName(ctx, cell, component.name, x0, y0, component.width * cell, component.height * cell, theme.colors.labelMuted);
 };
 
 /* ───── theme objects ──────────────────────────────────────────────── */
