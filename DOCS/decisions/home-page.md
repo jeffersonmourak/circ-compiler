@@ -73,3 +73,53 @@ The entries below record the decisions exercised while redrawing the site's land
 **Rationale.** Native sizing keeps small circuit details crisp. A single link makes pointer and keyboard navigation unambiguous; the gallery is where pins become interactive.
 
 **Alternatives.** Scale each circuit into its tile; put a button inside the link; make thumbnail pins compete with the tile's navigation.
+
+### Sections stack without changing the simulation
+
+**Decision.** Home-page sections use scoped grids and token-based surfaces, with 40px desktop side padding and 24px below 800px. The hero, language, preview and tiles become single columns on narrow screens. The install row stacks its text and target. Renderer viewport and thumbnail crop rules remain scoped to their component variants.
+
+**Rationale.** The same source and controls must remain reachable when the available width changes. Responsive presentation must not rebuild a simulation or restyle the gallery's shared mount.
+
+**Alternatives.** Hide content on narrow screens; scale the entire page; let app-layout rules reach the landing canvas.
+
+### Navigation stays in ordinary links
+
+**Decision.** The filled playground call precedes the outlined reference call. The download chip and install row link to `/download`. Example-specific playground links use `OpenInPlayground`'s catalogue check. Gallery tiles link to the shipped HTML anchors.
+
+**Rationale.** These actions navigate to existing destinations and need no additional client-side state or handlers.
+
+**Alternatives.** Scripted buttons for navigation; unchecked example fragments; another download mechanism on the home page.
+
+### Rendered checks complement structural tests
+
+**Decision.** Tests enforce source-derived metadata, page structure, token use, memory attributes and bundle limits. Chrome checks cover both themes at 1100, 1440 and 700px, including pin clicks, deferred thumbnails and install-row layout. Browser review was brought forward after Phase 0's tests missed inherited code-block styles and a collapsed narrow canvas.
+
+**Rationale.** A structurally correct DOM does not prove computed geometry or typography. Actual rendering caught defects that source checks could not see.
+
+**Alternatives.** Treat a successful build as visual sign-off; wait until the end to inspect all layout changes.
+
+### Copy and reviewed design changes stay explicit
+
+**Decision.** Labels and ledes follow the handoff, with syntax corrected to the actual language and counts derived from sources. During review the user widened main to 1500px, moved Playground first in the nav, right-aligned navigation, separated gallery tiles by 2rem with individual hover borders, and removed the lineage paragraph. The Markdown twin follows that final removal. The preview retains the user's two-panel presentation.
+
+**Rationale.** The handoff guides the implementation, but subsequent user edits are part of the accepted design. Documentation must record departures rather than claim pixel identity with the original board.
+
+**Alternatives.** Overwrite reviewed changes to recover the original mock; preserve removed prose only in Markdown; silently change example syntax or counts.
+
+## Locked-decision map
+
+| Plan decision | Recorded under |
+| --- | --- |
+| 1, 2 | The handoff is tracked without its unused payload; Copy and reviewed design changes stay explicit |
+| 3 | Gallery tiles use shipped sources and images |
+| 4 | LiveCanvas adds only requested surfaces |
+| 5 | Thumbnails are fixed-cell crops inside links |
+| 6 | Home and live-canvas rules join the token guard |
+| 7 | The values line is pure text before it is DOM |
+| 8 | The hero shows the renderer's real boot state |
+| 9, 10 | Sections stack without changing the simulation |
+| 11 | Navigation stays in ordinary links |
+| 12 | The preview section frames the existing figure |
+| 13 | The landing twin follows the visible sections |
+| 14 | Rendered checks complement structural tests |
+| 15 | Copy and reviewed design changes stay explicit |

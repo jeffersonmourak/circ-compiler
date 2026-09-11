@@ -142,6 +142,8 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - The landing Markdown twin follows visible sections and shares their headings
 - Gallery tiles derive metadata and memory images from shipped examples
 - Thumbnail canvases retain fixed cell sizes, defer mounting and live inside single links
+- Sections and the install row stack under 800px without rebuilding simulations
+- Browser checks complement structural tests; reviewed user layout and copy changes are recorded explicitly
 
 ## Conventions
 

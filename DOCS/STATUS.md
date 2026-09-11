@@ -128,3 +128,11 @@
 | Full page and native-size thumbnail crops | dark | 1440 | ok |
 | Stacked page and install row | light | 700 | ok; install row uses column layout |
 | Stacked page and install row | dark | 700 | ok |
+
+## 2026-09-11 — Phase 3 — Decisions and archive draft
+
+**What shipped:** Completed the home-page decisions and all fifteen locked-decision mappings. Prepared `DOCS/archive/plan-home-page.md` as a review draft, including reviewed departures from the handoff and the final verification results.
+**Files touched:** `DOCS/decisions/home-page.md`, `DOCS/decisions/index.md`, `DOCS/STATUS.md`; archive draft remains untracked pending review.
+**Tests:** All implementation gates are recorded above; `zig build test-all` passed. Documentation diff passes `git diff --check`.
+**Next slice:** None — implementation complete; archive cleanup only on request after draft approval.
+**Notes:** Implementation is committed as `f2154ee`. The original plan bundle and handoff remain present. The archive draft deliberately leaves the canonical SHA pending final archive approval. No push was performed.
