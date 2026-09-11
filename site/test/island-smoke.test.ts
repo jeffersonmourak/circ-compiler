@@ -212,19 +212,21 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(doc.querySelector(`#${labelledBy}`)?.classList.contains('pg-file')).toBe(true);
     expect(doc.querySelector(`#${labelledBy}`)?.getAttribute('aria-selected')).toBe('true');
 
-    // The dock: two panels under the editor, diagnostics open and selected.
-    const dock = doc.querySelector('.pg-dock') as unknown as { dataset: Record<string, string> } | null;
-    expect(dock).not.toBeNull();
-    // Shut on a fresh envelope: the tree carries the error badge now, so the
-    // dock is for reading the messages rather than for noticing them.
-    expect(dock!.dataset.open).toBe('false');
-    const dockTabs = Array.from(
-      doc.querySelectorAll('.pg-dock-tabs [role=tab]'),
-      (b) => (b as unknown as { dataset: Record<string, string> }).dataset.dock,
-    );
-    expect(dockTabs).toEqual(['diagnostics', 'settings']);
-    expect(doc.querySelector('.pg-dock-tab[data-dock="diagnostics"]')?.getAttribute('aria-selected')).toBe('true');
-    expect(doc.querySelector('[data-dock-panel="settings"]')?.hasAttribute('hidden')).toBe(true);
+    // The footer under the editor: a bar with the counts and the stats, a
+    // gear, and a body shut on a fresh envelope — the bar already says how
+    // many, so opening it is for reading the messages. The dock is gone.
+    expect(doc.querySelector('.pg-dock')).toBeNull();
+    const footer = doc.querySelector('.pg-footer') as unknown as { dataset: Record<string, string> } | null;
+    expect(footer).not.toBeNull();
+    expect(footer!.dataset.open).toBe('false');
+    expect(footer!.dataset.tab).toBe('diagnostics');
+    expect(doc.querySelector('.pg-footer-counts-text')?.textContent).toBe('0 errors · 0 warnings');
+    expect(doc.querySelector('.pg-footer-counts')?.getAttribute('data-severity')).toBe('none');
+    // No analysis lands in this harness, so the stats are the lines alone.
+    expect(doc.querySelector('.pg-footer-stats')?.textContent).toMatch(/^\d+ lines?$/);
+    expect(doc.querySelector('.pg-footer-gear')?.getAttribute('aria-label')).toBe('Settings');
+    expect(doc.querySelector('.pg-footer-body')?.hasAttribute('hidden')).toBe(true);
+    expect(doc.querySelector('[data-footer-panel="settings"]')?.hasAttribute('hidden')).toBe(true);
 
     // The drawer is the frame's third row: the session's console and the
     // memory panel, folded to one line until asked for. It left the output
@@ -251,7 +253,7 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(doc.querySelector('.pg-drawer-tab[data-drawer="memory"]')?.hasAttribute('hidden')).toBe(true);
     expect(doc.querySelector('[data-drawer-panel="memory"]')?.hasAttribute('hidden')).toBe(true);
     expect(doc.querySelector('.pg-mem')?.textContent).toBe('');
-    expect(doc.querySelector('.pg-dock .pg-mem')).toBeNull();
+    expect(doc.querySelector('.pg-footer .pg-mem')).toBeNull();
     // The console: a scrollback and a prompt, shut until a session exists,
     // with the same sentence Simulate shows for why.
     expect(doc.querySelector('[data-drawer-panel="console"] .pg-console-log')).not.toBeNull();
@@ -268,8 +270,8 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(doc.querySelector('.pg-console-note')?.textContent).toBe('Compile a circuit first.');
     expect(doc.querySelector('.pg-console-log')?.textContent).toBe('');
     // The rom image boxes left Settings for it, and left nothing behind.
-    expect(doc.querySelector('[data-dock-panel="settings"] .pg-rom-group')).toBeNull();
-    expect(doc.querySelector('[data-dock-panel="settings"] .pg-rom-box')).toBeNull();
+    expect(doc.querySelector('[data-footer-panel="settings"] .pg-rom-group')).toBeNull();
+    expect(doc.querySelector('[data-footer-panel="settings"] .pg-rom-box')).toBeNull();
 
     // Both moved OUT of the output pane. A duplicate left behind would give
     // the settings two sets of live controls bound to one store.
@@ -279,7 +281,8 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(doc.querySelectorAll('.pg-diag')).toHaveLength(1);
     const editorPane = doc.querySelector('.pg-editor')!;
     expect(editorPane.querySelectorAll('[data-setting]').length).toBeGreaterThan(0);
-    expect(editorPane.querySelector('.pg-dock')).not.toBeNull();
+    expect(editorPane.querySelector('.pg-footer')).not.toBeNull();
+    expect(doc.querySelectorAll('.pg-footer [data-setting]').length).toBeGreaterThan(0);
 
     // The output strip is the four compiled views, diagnostics gone: the
     // Data tab is the circuit as values, over the same session as Simulate.
@@ -387,38 +390,88 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(body.style.getPropertyValue('--pg-source-w')).toBe(before);
   }));
 
-  test('the dock collapses and reopens, and remembers which panel', () => drive((doc) => {
+  test('the footer opens on the counts and on the gear, and remembers which', () => drive((doc) => {
     // The playground module is imported once per process, so this reuses the
     // document the test above left behind rather than mounting a second one.
-    const dock = doc.querySelector('.pg-dock') as unknown as { dataset: Record<string, string> };
-    const toggle = doc.querySelector('.pg-dock-toggle') as unknown as { click(): void; textContent: string };
-    const diagTab = doc.querySelector('.pg-dock-tab[data-dock="diagnostics"]') as unknown as { click(): void };
-    const setTab = doc.querySelector('.pg-dock-tab[data-dock="settings"]') as unknown as { click(): void };
-    const body = doc.querySelector('.pg-dock-body')!;
+    const press = (el: unknown, key: string) =>
+      (el as { dispatchEvent(e: unknown): void }).dispatchEvent(
+        new (globalThis as unknown as { KeyboardEvent: new (t: string, o: unknown) => unknown })
+          .KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }),
+      );
+    const footer = doc.querySelector('.pg-footer') as unknown as { dataset: Record<string, string> };
+    const counts = doc.querySelector('.pg-footer-counts') as unknown as { click(): void; getAttribute(n: string): string | null };
+    const gear = doc.querySelector('.pg-footer-gear') as unknown as { click(): void; getAttribute(n: string): string | null };
+    const body = doc.querySelector('.pg-footer-body')!;
+    const panel = (name: string) => doc.querySelector(`[data-footer-panel="${name}"]`)!;
 
-    expect(dock.dataset.open).toBe('false');
-    toggle.click();
-    expect(dock.dataset.open).toBe('true');
-    expect(toggle.textContent).toBe('Hide');
-    toggle.click();
-    expect(dock.dataset.open).toBe('false');
-    expect(toggle.textContent).toBe('Show');
-    toggle.click();
+    expect(footer.dataset.open).toBe('false');
+    // The counts open the list, and close it again.
+    counts.click();
+    expect(footer.dataset.open).toBe('true');
+    expect(footer.dataset.tab).toBe('diagnostics');
+    expect(body.hasAttribute('hidden')).toBe(false);
+    expect(counts.getAttribute('aria-expanded')).toBe('true');
+    expect(panel('diagnostics').hasAttribute('hidden')).toBe(false);
+    expect(panel('settings').hasAttribute('hidden')).toBe(true);
+    counts.click();
+    expect(footer.dataset.open).toBe('false');
+    expect(counts.getAttribute('aria-expanded')).toBe('false');
 
-    // Switching panel keeps the dock open and moves the selection with it.
-    setTab.click();
-    expect(dock.dataset.open).toBe('true');
-    expect(doc.querySelector('[data-dock-panel="settings"]')?.hasAttribute('hidden')).toBe(false);
-    expect(doc.querySelector('[data-dock-panel="diagnostics"]')?.hasAttribute('hidden')).toBe(true);
+    // The gear opens the settings; the counts, while open, switch the panel.
+    gear.click();
+    expect(footer.dataset.open).toBe('true');
+    expect(footer.dataset.tab).toBe('settings');
+    expect(gear.getAttribute('aria-expanded')).toBe('true');
+    expect(panel('settings').hasAttribute('hidden')).toBe(false);
+    expect(panel('settings').querySelectorAll('[data-setting]').length).toBeGreaterThan(0);
+    counts.click();
+    expect(footer.dataset.open).toBe('true');
+    expect(footer.dataset.tab).toBe('diagnostics');
+    expect(gear.getAttribute('aria-expanded')).toBe('false');
+    // The gear on its own panel is the close gesture.
+    gear.click();
+    gear.click();
+    expect(footer.dataset.open).toBe('false');
+    expect(footer.dataset.tab).toBe('settings');
 
-    // Clicking the panel already showing is the collapse gesture.
-    setTab.click();
-    expect(dock.dataset.open).toBe('false');
-    // …and clicking the OTHER panel while collapsed reopens on that one.
-    diagTab.click();
-    expect(dock.dataset.open).toBe('true');
-    expect(doc.querySelector('[data-dock-panel="diagnostics"]')?.hasAttribute('hidden')).toBe(false);
-    expect(body).not.toBeNull();
+    // Escape in the body closes it and hands focus back to the opener.
+    gear.click();
+    press(panel('settings').querySelector('[data-setting]'), 'Escape');
+    expect(footer.dataset.open).toBe('false');
+    expect((doc as unknown as { activeElement: unknown }).activeElement).toBe(gear);
+  }));
+
+  test('diagnostics render as grid rows', () => drive((doc) => {
+    type Island = { state: { mapped: unknown[] }; renderDiagnostics(): void };
+    const island = (doc.querySelector('.pg') as unknown as { __playground: Island }).__playground;
+    const row = (over: Record<string, unknown>) => ({
+      from: 0, to: 5, severity: 'error', code: 'E001', message: 'unknown component', fileName: 'main.circ',
+      line: 2, column: 3, docLine: 1, tab: 0, ...over,
+    });
+    island.state.mapped = [
+      row({}),
+      row({ severity: 'warning', code: 'W002', message: 'unused wire', line: 4, column: 1 }),
+      // The compiler blamed a builtin file: no buffer, no jump.
+      row({ severity: 'warning', code: 'W003', fileName: '<builtin>/xor.circ', from: null, to: null, tab: null, docLine: null }),
+    ];
+    island.renderDiagnostics();
+    expect(doc.querySelector('.pg-footer-counts-text')?.textContent).toBe('1 error · 2 warnings');
+    expect(doc.querySelector('.pg-footer-counts')?.getAttribute('data-severity')).toBe('error');
+    const rows = Array.from(doc.querySelectorAll('.pg-diag .pg-diag-row'));
+    expect(rows).toHaveLength(3);
+    const cells = (r: unknown) => Array.from((r as { children: ArrayLike<{ className: string; textContent: string; tagName: string }> }).children);
+    expect(cells(rows[0]).map((c) => c.className)).toEqual(['pg-diag-glyph', 'pg-diag-pos', 'pg-diag-code', 'pg-diag-msg']);
+    expect(cells(rows[0]).map((c) => c.textContent)).toEqual(['▲', 'main.circ:2:3', 'E001', 'unknown component']);
+    expect(cells(rows[0])[1].tagName).toBe('BUTTON');
+    expect((rows[0] as unknown as { dataset: Record<string, string> }).dataset.severity).toBe('error');
+    // A placeless row shows its position as text, not as a button.
+    expect(cells(rows[2])[1].tagName).toBe('SPAN');
+    expect(cells(rows[2])[1].textContent).toMatch(/^<builtin>\/xor\.circ:/);
+    // Back to nothing, and the bar follows.
+    island.state.mapped = [];
+    island.renderDiagnostics();
+    expect(doc.querySelector('.pg-diag-none')?.textContent).toBe('No diagnostics.');
+    expect(doc.querySelector('.pg-footer-counts')?.getAttribute('data-severity')).toBe('none');
   }));
 
   test('the console\'s Clear on an empty log is harmless, and Copy says what went', async () => {

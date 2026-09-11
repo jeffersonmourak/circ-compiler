@@ -777,110 +777,104 @@ hr {
 }
 .pg-panel { padding: 0.75rem 0.85rem; overflow: auto; flex: 1; }
 .pg-panel[hidden] { display: none; }
-.pg-diag { list-style: none; margin: 0; padding: 0; font-family: var(--font-mono); font-size: 0.85rem; }
-.pg-diag li { margin: 0 0 0.35rem; }
-.pg-diag button {
-  font: inherit;
-  text-align: left;
-  background: transparent;
-  border: none;
-  padding: 0;
-  color: var(--fg);
-  cursor: pointer;
-}
-.pg-diag button:hover { text-decoration: underline; }
-.pg-diag-error button { color: var(--accent); }
-.pg-diag-warning button { color: var(--muted); }
-.pg-diag button:disabled { color: var(--muted); cursor: default; text-decoration: none; }
-.pg-diag-counts { color: var(--muted); margin-bottom: 0.5rem; }
-/* ---------- the editor's dock ----------
-   A collapsible strip under the editing surface holding the two panels that
-   are about the SOURCE rather than the compiled result: diagnostics and
-   settings. It is `flex: 0 0 auto` so the editor above it takes the slack. */
-.pg-dock {
+/* ---------- the diagnostics footer ----------
+   Under the editor (design file 3b: a 30px bar, mono 11px in --muted; the
+   counts in --fg with a caret when either is non-zero). Its body opens on the
+   label surface: the diagnostics as a grid of glyph · position · code ·
+   message, or the settings form behind the gear. */
+.pg-footer {
   flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   min-height: 0;
+  max-height: 45%;
   border-top: 1px solid var(--border);
-  background: var(--pane-bg);
-}
-.pg-dock-bar {
-  display: flex;
-  align-items: stretch;
-  gap: 0.5rem;
-  background: var(--pane-label-bg);
-}
-.pg-dock-tabs {
-  display: flex;
-  gap: 0;
-  overflow-x: auto;
-  flex: 1;
-  min-width: 0;
-  scrollbar-width: thin;
-}
-.pg-dock-tab {
-  font: inherit;
   font-family: var(--font-mono);
-  font-size: 0.75rem;
-  letter-spacing: 0.04em;
+}
+.pg-footer-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 30px;
+  flex: none;
+  padding: 0 12px 0 16px;
+  font-size: 11px;
   color: var(--muted);
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  padding: 0.4rem 0.85rem;
-  cursor: pointer;
   white-space: nowrap;
+}
+.pg-footer-counts {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-}
-.pg-dock-tab:hover { color: var(--fg); }
-.pg-dock-tab[aria-selected="true"] {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
-}
-/* Collapsed, nothing is "selected" in a way the reader can see, so the
-   underline would be a lie about what is on screen. */
-.pg-dock[data-open="false"] .pg-dock-tab[aria-selected="true"] {
-  border-bottom-color: transparent;
-  color: var(--muted);
-}
-.pg-dock-badge {
-  font-size: 0.68rem;
-  line-height: 1;
-  padding: 0.15rem 0.35rem;
-  border-radius: 999px;
-  background: var(--border);
-  color: var(--fg);
-}
-.pg-dock-badge[data-severity="error"] { background: var(--danger); color: var(--bg); }
-.pg-dock-badge[hidden] { display: none; }
-.pg-dock-toggle {
+  gap: 6px;
   font: inherit;
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.04em;
+  color: var(--fg);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.pg-footer-counts[data-severity='none'] { color: var(--muted); }
+.pg-footer-counts[data-severity='none'] .pg-footer-caret { display: none; }
+.pg-footer-caret { color: var(--muted); font-size: 10px; transition: transform 120ms ease; }
+.pg-footer-counts[aria-expanded='true'] .pg-footer-caret { transform: rotate(180deg); }
+.pg-footer-stats { margin-left: auto; overflow: hidden; text-overflow: ellipsis; }
+.pg-footer-gear {
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
   color: var(--muted);
   background: transparent;
-  border: none;
-  padding: 0.4rem 0.85rem;
+  border: 0;
+  padding: 0 2px;
   cursor: pointer;
-  white-space: nowrap;
 }
-.pg-dock-toggle:hover { color: var(--fg); }
-.pg-dock-body {
-  /* A share of the pane rather than a fixed height, so the dock stays usable
-     on a short viewport and never crowds the editor out on a tall one. */
-  height: var(--pg-dock-h, 12rem);
+.pg-footer-counts:hover,
+.pg-footer-gear:hover { color: var(--fg); }
+.pg-footer-gear[aria-expanded='true'] { color: var(--accent); }
+.pg-footer-counts:focus-visible,
+.pg-footer-gear:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pg-footer-body {
   overflow: auto;
+  min-height: 0;
+  background: var(--pane-label-bg);
   border-top: 1px solid var(--border);
 }
-.pg-dock[data-open="false"] .pg-dock-body { display: none; }
-.pg-dock-panel { padding: 0.6rem 0.85rem; }
-.pg-dock-panel[hidden] { display: none; }
-/* Settings, now a dock panel rather than a drawer of its own. */
-.pg-settings { font-size: 0.8rem; }
+.pg-footer-body[hidden] { display: none; }
+.pg-diag {
+  list-style: none;
+  margin: 0;
+  padding: 6px 16px 10px;
+  display: grid;
+  grid-template-columns: 14px 104px 52px minmax(0, 1fr);
+  gap: 6px 10px;
+  align-items: baseline;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.pg-diag[hidden] { display: none; }
+.pg-diag-row { display: contents; }
+.pg-diag-glyph { color: var(--muted); font-size: 9px; }
+.pg-diag-row[data-severity='error'] .pg-diag-glyph { color: var(--danger); }
+.pg-diag-pos {
+  font: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pg-diag-pos:hover { text-decoration: underline; }
+span.pg-diag-pos { color: var(--muted); cursor: default; }
+.pg-diag-code { color: var(--muted); }
+.pg-diag-msg { color: var(--fg); min-width: 0; }
+.pg-diag-none { grid-column: 1 / -1; color: var(--muted); }
+.pg-settings { font-size: 0.8rem; padding: 8px 16px 10px; }
+.pg-settings[hidden] { display: none; }
 .pg-settings-group {
   border: 0;
   border-top: 1px solid var(--border);
@@ -1077,16 +1071,6 @@ hr {
   background: color-mix(in srgb, var(--danger) 12%, var(--bg));
 }
 /* The count beside the tab label, so a collapsed dock still says how many. */
-.pg-dock-count {
-  font-size: 0.68rem;
-  line-height: 1;
-  padding: 0.15rem 0.35rem;
-  border-radius: 999px;
-  background: var(--border);
-  color: var(--fg);
-}
-.pg-dock-count[hidden] { display: none; }
-.pg-dock-tab[hidden] { display: none; }
 
 /* ---------- the output pane's drawer ----------
    The session's strip under the Simulate and Data panels: Console and Memory.
@@ -1320,7 +1304,6 @@ hr {
   outline: none;
   box-shadow: inset 0 -2px 0 var(--accent);
 }
-.pg-diag-ok { color: var(--muted); }
 .pg-preview {
   margin: 0;
   font-family: var(--font-mono-strict);

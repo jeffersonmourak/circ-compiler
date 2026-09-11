@@ -136,85 +136,49 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           rows="18"
         >{initial.source}</textarea>
       </div>
-      <!-- The dock. Both of its panels are about the SOURCE rather than the
-           compiled result, which is why they sit under the editor instead of
-           competing with the preview for the output pane. It ships open so a
-           reader with no stored envelope sees their diagnostics. -->
-      <div class="pg-dock" data-open="false">
-        <div class="pg-dock-bar">
-          <div class="pg-dock-tabs" role="tablist" aria-label="Editor panel">
-            <button
-              type="button"
-              role="tab"
-              class="pg-dock-tab"
-              id="pg-dock-tab-diagnostics"
-              data-dock="diagnostics"
-              aria-selected="true"
-              aria-controls="pg-dock-panel-diagnostics"
-            >Diagnostics<span class="pg-dock-badge" hidden></span></button>
-            <button
-              type="button"
-              role="tab"
-              class="pg-dock-tab"
-              id="pg-dock-tab-settings"
-              data-dock="settings"
-              aria-selected="false"
-              aria-controls="pg-dock-panel-settings"
-            >Settings</button>
-          </div>
-          <button
-            type="button"
-            class="pg-dock-toggle"
-            aria-expanded="true"
-            aria-controls="pg-dock-body"
-          >Hide</button>
+      {/* The diagnostics footer (design file 3b: 30px). The bar says how many
+          errors and warnings the compiler found and what the source is made
+          of; the counts open the list, the gear opens the settings. Both are
+          about the SOURCE, which is why they sit under the editor. */}
+      <div class="pg-footer" data-open="false" data-tab="diagnostics">
+        <div class="pg-footer-bar">
+          <button type="button" class="pg-footer-counts" data-severity="none" aria-expanded="false" aria-controls="pg-footer-body">
+            <span class="pg-footer-counts-text">0 errors · 0 warnings</span><span class="pg-footer-caret" aria-hidden="true">▾</span>
+          </button>
+          <span class="pg-footer-stats"></span>
+          <button type="button" class="pg-footer-gear" aria-label="Settings" aria-expanded="false" aria-controls="pg-footer-body">⚙</button>
         </div>
-        <div class="pg-dock-body" id="pg-dock-body">
-          <div
-            class="pg-dock-panel"
-            id="pg-dock-panel-diagnostics"
-            data-dock-panel="diagnostics"
-            role="tabpanel"
-            aria-labelledby="pg-dock-tab-diagnostics"
-          ><ul class="pg-diag"></ul></div>
-          <div
-            class="pg-dock-panel"
-            id="pg-dock-panel-settings"
-            data-dock-panel="settings"
-            role="tabpanel"
-            aria-labelledby="pg-dock-tab-settings"
-            hidden
-          >
-            <div class="pg-settings">
-              <fieldset class="pg-settings-group">
-                <legend>Preview</legend>
-                <label><input type="checkbox" data-setting="expandMacros" /> Expand macros</label>
-                <label><input type="checkbox" data-setting="expandDisplay" /> Expand display</label>
-              </fieldset>
-              <fieldset class="pg-settings-group">
-                <legend>Truth table</legend>
-                <label for="pg-set-format">Format</label>
-                <select id="pg-set-format" data-setting="format">
-                  <option value="json">table</option>
-                  <option value="markdown">markdown</option>
-                  <option value="csv">csv</option>
-                </select>
-                <label for="pg-set-values">Values</label>
-                <select id="pg-set-values" data-setting="valueFormat">
-                  <option value="binary">binary</option>
-                  <option value="hex">hex</option>
-                  <option value="decimal">decimal</option>
-                </select>
-                <label for="pg-set-cap">Input-bit cap</label>
-                <input id="pg-set-cap" type="number" min="1" max="24" step="1" data-setting="truthTableCap" />
-                <span class="pg-settings-hint">2^cap rows; once the enumeration starts, it runs to the end.</span>
-              </fieldset>
-              <fieldset class="pg-settings-group">
-                <legend>Compile</legend>
-                <label><input type="checkbox" data-setting="warningsAsErrors" /> Treat warnings as errors</label>
-              </fieldset>
-            </div>
-          </div>
+        <div class="pg-footer-body" id="pg-footer-body" hidden>
+          <ul class="pg-diag" data-footer-panel="diagnostics"></ul>
+          <div class="pg-settings" data-footer-panel="settings" hidden>
+          <fieldset class="pg-settings-group">
+            <legend>Preview</legend>
+            <label><input type="checkbox" data-setting="expandMacros" /> Expand macros</label>
+            <label><input type="checkbox" data-setting="expandDisplay" /> Expand display</label>
+          </fieldset>
+          <fieldset class="pg-settings-group">
+            <legend>Truth table</legend>
+            <label for="pg-set-format">Format</label>
+            <select id="pg-set-format" data-setting="format">
+              <option value="json">table</option>
+              <option value="markdown">markdown</option>
+              <option value="csv">csv</option>
+            </select>
+            <label for="pg-set-values">Values</label>
+            <select id="pg-set-values" data-setting="valueFormat">
+              <option value="binary">binary</option>
+              <option value="hex">hex</option>
+              <option value="decimal">decimal</option>
+            </select>
+            <label for="pg-set-cap">Input-bit cap</label>
+            <input id="pg-set-cap" type="number" min="1" max="24" step="1" data-setting="truthTableCap" />
+            <span class="pg-settings-hint">2^cap rows; once the enumeration starts, it runs to the end.</span>
+          </fieldset>
+          <fieldset class="pg-settings-group">
+            <legend>Compile</legend>
+            <label><input type="checkbox" data-setting="warningsAsErrors" /> Treat warnings as errors</label>
+          </fieldset>
+        </div>
         </div>
       </div>
     </section>
@@ -418,6 +382,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
   import { execute, handshake } from '../scripts/sim-executor.ts';
   import { HELP_VERB, HistoryRing, MemoryTabFiles, Transcript, commandFor, helpLines, promptEcho, scriptOf } from '../scripts/console.ts';
   import { summaryOf } from '../scripts/terminal-line.ts';
+  import { summarize, summaryLabels } from '../scripts/footer-summary.ts';
   import { joinConflicts, requestFor, rootOf, PLAYGROUND_DIR } from '../utils/split-files.ts';
   import { createSplitter } from '../scripts/splitter.ts';
   import { fnv1a } from '../utils/artifact-hash.ts';
@@ -531,7 +496,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
    *  bridge remembers which of them was last shown in memory only. */
   const viewOfTab = (tab: Tab): StoredView => (tab === 'preview' ? 'schematic' : tab === 'truth' ? 'truth' : 'live');
   const tabOfView = (view: StoredView): Tab => (view === 'schematic' ? 'preview' : view === 'truth' ? 'truth' : 'simulate');
-  type DockTab = FooterTab;
+
   type DrawerTab = 'console' | 'memory';
   /** A mapped diagnostic plus the file tab it belongs to; `null` when the
    *  compiler blamed a file with no tab (a `<builtin>/…` source, or a stale
@@ -581,14 +546,15 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     const crumbGroup = el.querySelector<HTMLElement>('.pg-crumb-group')!;
     const crumbName = el.querySelector<HTMLElement>('.pg-crumb-name')!;
     const panels = Array.from(el.querySelectorAll<HTMLElement>('.pg-panel'));
-    // The dock: the editor's own strip, distinct from both the output tabs
-    // above and the file tabs. Its [role=tab] query is scoped for the same
-    // reason .pg-tabs's is.
-    const dock = el.querySelector<HTMLElement>('.pg-dock')!;
-    const dockTabs = Array.from(el.querySelectorAll<HTMLButtonElement>('.pg-dock-tabs [role=tab]'));
-    const dockPanels = Array.from(el.querySelectorAll<HTMLElement>('.pg-dock-panel'));
-    const dockToggle = el.querySelector<HTMLButtonElement>('.pg-dock-toggle')!;
-    const dockBadge = el.querySelector<HTMLElement>('.pg-dock-badge')!;
+    // The diagnostics footer under the editor: its bar, the two openers, and
+    // the body the two panels share.
+    const footer = el.querySelector<HTMLElement>('.pg-footer')!;
+    const footerCounts = el.querySelector<HTMLButtonElement>('.pg-footer-counts')!;
+    const footerCountsText = el.querySelector<HTMLElement>('.pg-footer-counts-text')!;
+    const footerStats = el.querySelector<HTMLElement>('.pg-footer-stats')!;
+    const footerGear = el.querySelector<HTMLButtonElement>('.pg-footer-gear')!;
+    const footerBody = el.querySelector<HTMLElement>('.pg-footer-body')!;
+    const footerPanels = Array.from(el.querySelectorAll<HTMLElement>('[data-footer-panel]'));
     // The drawer: the session's strip under the Simulate and Data panels,
     // with the same scoped [role=tab] query as the two strips above.
     const drawer = el.querySelector<HTMLElement>('.pg-drawer')!;
@@ -667,6 +633,9 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       // The terminal line follows the transcript, which only a session feeds;
       // the smoke test feeds it lines the way a reply would arrive.
       consoleAppend: (lines: readonly string[]) => consoleAppend(lines, 'page', { force: true }),
+      // The footer's list follows `state.mapped`, which only an analysis
+      // fills; the smoke test seeds it and calls this.
+      renderDiagnostics: () => renderDiagnostics(),
     };
 
     // ---- tabs ----
@@ -744,42 +713,49 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       });
     }
 
-    // ---- the editor's dock ----
-    /** Move the selection. DOM only — no store write and no re-render, so the
-     *  memory tab's own availability check can use it without recursing back
-     *  through the render that called it. */
-    function selectDockPanel(tab: DockTab) {
-      for (const b of dockTabs) b.setAttribute('aria-selected', String(b.dataset.dock === tab));
-      for (const p of dockPanels) p.hidden = p.dataset.dockPanel !== tab;
+    // ---- the diagnostics footer ----
+    // The bar under the editor says how many errors and warnings there are and
+    // what the source is made of; its body opens on the diagnostics list or on
+    // the settings form. The gestures are the dock's: the counts open the body
+    // on diagnostics, or close it when it is already open there; the gear
+    // does the same for settings; the other button while open switches panel.
+    // Escape in the body closes it and hands focus back to whichever opened it.
+    let footerOpener: HTMLButtonElement | null = null;
+    function reflectFooter() {
+      const open = footer.dataset.open === 'true';
+      const tab = footer.dataset.tab;
+      footerCounts.setAttribute('aria-expanded', String(open && tab === 'diagnostics'));
+      footerGear.setAttribute('aria-expanded', String(open && tab === 'settings'));
     }
-
-    function showDockTab(tab: DockTab, opts: { persist?: boolean } = {}) {
-      selectDockPanel(tab);
+    function showFooterTab(tab: FooterTab, opts: { persist?: boolean } = {}) {
+      footer.dataset.tab = tab;
+      for (const p of footerPanels) p.hidden = p.dataset.footerPanel !== tab;
+      reflectFooter();
       if (opts.persist !== false) store.update((draft) => { draft.footer.tab = tab; });
     }
-
-    function setDockOpen(open: boolean, opts: { persist?: boolean } = {}) {
-      dock.dataset.open = String(open);
-      dockToggle.setAttribute('aria-expanded', String(open));
-      dockToggle.textContent = open ? 'Hide' : 'Show';
+    function setFooterOpen(open: boolean, opts: { persist?: boolean } = {}) {
+      footer.dataset.open = String(open);
+      footerBody.hidden = !open;
+      reflectFooter();
       if (opts.persist !== false) store.update((draft) => { draft.footer.open = open; });
     }
-
-    for (const b of dockTabs) {
-      b.addEventListener('click', () => {
-        const tab = b.dataset.dock as DockTab;
-        // Clicking the panel you are already on, while open, closes the dock —
-        // the gesture every editor with a bottom panel uses. Clicking the other
-        // panel while closed opens it on that panel.
-        if (dock.dataset.open === 'true' && b.getAttribute('aria-selected') === 'true') {
-          setDockOpen(false);
-          return;
-        }
-        showDockTab(tab);
-        setDockOpen(true);
-      });
+    function toggleFooter(tab: FooterTab, opener: HTMLButtonElement) {
+      if (footer.dataset.open === 'true' && footer.dataset.tab === tab) {
+        setFooterOpen(false);
+        return;
+      }
+      footerOpener = opener;
+      showFooterTab(tab);
+      setFooterOpen(true);
     }
-    dockToggle.addEventListener('click', () => setDockOpen(dock.dataset.open !== 'true'));
+    footerCounts.addEventListener('click', () => toggleFooter('diagnostics', footerCounts));
+    footerGear.addEventListener('click', () => toggleFooter('settings', footerGear));
+    footerBody.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      setFooterOpen(false);
+      (footerOpener ?? footerCounts).focus();
+    });
 
     // ---- the drawer ----
     // Which tab is selected and whether it is open are island fields, never
@@ -2656,9 +2632,9 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       }
 
       showTab(tabOfView(store.envelope.view), { persist: false });
-      showDockTab(store.envelope.footer.tab, { persist: false });
-      setDockOpen(store.envelope.footer.open, { persist: false });
-      renderDockBadge();
+      showFooterTab(store.envelope.footer.tab, { persist: false });
+      setFooterOpen(store.envelope.footer.open, { persist: false });
+      renderFooterBar();
       applyTruthGate();
       renderWorkspace();
 
@@ -3218,75 +3194,58 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       });
     }
 
-    /** `<file>:<line>:<col> <code> <message>`, with the compiler's own
-     *  FILE-LOCAL position. A combined-document line number means nothing to a
-     *  reader who is looking at `half_adder.circ`; the jump target keeps using
-     *  the absolute span, so nothing about clicking changes. */
-    function diagnosticLabel(m: TabbedDiagnostic): string {
-      return `${m.fileName}:${m.line}:${m.column} ${m.code} ${m.message}`;
+    /** The bar: the counts on the left, what the source is made of on the
+     *  right, both from the island's own state. The severity on the counts
+     *  button is what colours it and shows its caret. */
+    function renderFooterBar() {
+      const summary = summarize(state.tabs.files, state.analysis, state.mapped);
+      const [left, right] = summaryLabels(summary);
+      footerCountsText.textContent = left;
+      footerStats.textContent = right;
+      footerCounts.dataset.severity = summary.errors > 0 ? 'error' : summary.warnings > 0 ? 'warning' : 'none';
     }
 
-    /** The count on the dock tab. It is the only diagnostics signal a reader
-     *  gets while the dock is collapsed, so it carries the severity in its
-     *  colour as well as the number. */
-    function renderDockBadge() {
-      const errors = state.mapped.filter((m) => m.severity === 'error').length;
-      const warnings = state.mapped.length - errors;
-      dockBadge.hidden = state.mapped.length === 0;
-      dockBadge.dataset.severity = errors > 0 ? 'error' : 'warning';
-      dockBadge.textContent = String(errors > 0 ? errors : warnings);
-      dockBadge.title =
-        `${errors} error${errors === 1 ? '' : 's'}, ${warnings} warning${warnings === 1 ? '' : 's'}`;
-    }
-
+    /** The list as a grid (design file 3b: `14px 104px 52px 1fr`): a glyph,
+     *  the compiler's own FILE-LOCAL position as the jump, the code, the
+     *  message. A combined-document line number means nothing to a reader
+     *  looking at `half_adder.circ`; the jump target keeps the absolute span. */
     function renderDiagnostics() {
       diagList.innerHTML = '';
-      // Both derive from `state.mapped`, so they are refreshed together with
-      // the list rather than by whoever remembers to call them.
-      renderDockBadge();
+      // All three derive from `state.mapped`, so they are refreshed together
+      // with the list rather than by whoever remembers to call them.
+      renderFooterBar();
       applyTruthGate();
+      const cell = (cls: string, text: string): HTMLSpanElement => {
+        const el = document.createElement('span');
+        el.className = cls;
+        el.textContent = text;
+        return el;
+      };
       if (state.mapped.length === 0) {
         const li = document.createElement('li');
-        li.className = 'pg-diag-ok';
+        li.className = 'pg-diag-none';
         li.textContent = 'No diagnostics.';
         diagList.appendChild(li);
         return;
       }
 
-      const errors = state.mapped.filter((m) => m.severity === 'error').length;
-      const warnings = state.mapped.length - errors;
-      const counts = document.createElement('li');
-      counts.className = 'pg-diag-counts';
-      counts.textContent =
-        `${errors} error${errors === 1 ? '' : 's'}, ${warnings} warning${warnings === 1 ? '' : 's'}`;
-      diagList.appendChild(counts);
-
       for (const m of state.mapped) {
         const li = document.createElement('li');
-        li.className = `pg-diag-${m.severity}`;
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.textContent = diagnosticLabel(m);
-        // Hovering or focusing a row lights up whatever it points at, so the
-        // list is a third way into the picture.
-        if (m.tab !== null) {
-          const show = () => {
-            const line = m.line;
-            const file = state.tabs.files[m.tab!];
-            const decl = file
-              ? declarationAt(link.decls, line, m.column, file.body.split('\n')[line - 1] ?? '')
-              : null;
-            if (decl) highlightByName(decl.name);
-          };
-          btn.addEventListener('pointerenter', show);
-          btn.addEventListener('focus', show);
-          btn.addEventListener('pointerleave', () => highlightByName(null));
-          btn.addEventListener('blur', () => highlightByName(null));
-        }
-        // Any row with a span jumps, switching tabs first when the compiler
-        // blamed another file. `showDocument` is synchronous, so the select on
-        // the next statement lands in the file that just became visible.
+        li.className = 'pg-diag-row';
+        li.dataset.severity = m.severity;
+        const glyph = cell('pg-diag-glyph', '▲');
+        glyph.setAttribute('role', 'img');
+        glyph.setAttribute('aria-label', m.severity);
+        const position = `${m.fileName}:${m.line}:${m.column}`;
+        let pos: HTMLElement;
         if (m.from !== null && m.to !== null && m.tab !== null) {
+          // A row with a span jumps, switching files first when the compiler
+          // blamed another one. `showDocument` is synchronous, so the select
+          // on the next statement lands in the file that just became visible.
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'pg-diag-pos';
+          btn.textContent = position;
           const { from, to, tab } = m;
           btn.addEventListener('click', () => {
             if (editor) {
@@ -3302,12 +3261,28 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
               source.focus();
             }
           });
+          // Hovering or focusing a row lights up whatever it points at, so
+          // the list is a third way into the picture.
+          const show = () => {
+            const line = m.line;
+            const file = state.tabs.files[tab];
+            const decl = file
+              ? declarationAt(link.decls, line, m.column, file.body.split('\n')[line - 1] ?? '')
+              : null;
+            if (decl) highlightByName(decl.name);
+          };
+          btn.addEventListener('pointerenter', show);
+          btn.addEventListener('focus', show);
+          btn.addEventListener('pointerleave', () => highlightByName(null));
+          btn.addEventListener('blur', () => highlightByName(null));
+          pos = btn;
         } else {
-          // A file with no editor buffer (`<builtin>/…`): the row stays, so the
-          // count and the message are still visible, but there is nowhere to go.
-          btn.disabled = true;
+          // A file with no editor buffer (`<builtin>/…`): the row stays, so
+          // the count and the message are still visible, but there is nowhere
+          // to go, and a span says so where a disabled button would not.
+          pos = cell('pg-diag-pos', position);
         }
-        li.appendChild(btn);
+        li.append(glyph, pos, cell('pg-diag-code', m.code), cell('pg-diag-msg', m.message));
         diagList.appendChild(li);
       }
     }
