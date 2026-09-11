@@ -137,3 +137,11 @@ One entry per shipped slice, newest last. The plan is `DOCS/PLANS_PROMPT.md`; th
 **Tests:** none (documents)
 **Next slice:** the human's review of Phase 3, then Phase 4 (the sweep).
 **Notes:** `sim-protocol.md` is not among the documents `site/scripts/lib/site-config.ts` syncs into the site's reference pages, so the spec's `bun run sync` step has nothing to regenerate; the section is read from the repository, where the getting-started page already points readers.
+
+## 2026-09-11 — Phase 3 — review
+
+**What shipped:** the human reviewed the drawer, the console and the document and approved ("go"). Phase 3 complete.
+**Files touched:** `DOCS/STATUS.md`
+**Tests:** none (review)
+**Next slice:** Phase 4 slice 1.
+**Notes:** none.
