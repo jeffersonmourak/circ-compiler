@@ -1500,6 +1500,30 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     const landing = readFileSync(resolve(DIST, 'index.html'), 'utf8');
     expect(landing).toContain('class="lc"');
     expect(landing).toContain('data-circ-autorun');
+    const landingWindow = new Window();
+    landingWindow.document.write(landing);
+    const landingDoc = landingWindow.document;
+    const heroCards = landingDoc.querySelectorAll('.lc');
+    expect(heroCards).toHaveLength(1);
+    expect(heroCards[0].getAttribute('data-circ-fit')).toBe('parent');
+    expect(heroCards[0].hasAttribute('data-circ-values')).toBe(true);
+    expect(heroCards[0].hasAttribute('data-circ-autorun')).toBe(true);
+    expect(heroCards[0].querySelectorAll('.lc-source .line')).toHaveLength(7);
+    expect(heroCards[0].querySelector('.lc-pins')?.textContent).toBe('');
+    expect(landingDoc.querySelector('h1')?.textContent).toBe('Logic circuits, written down.');
+    expect(landingDoc.querySelector('.home-tagline')?.textContent?.replace(/\s+/g, ' ').trim()).toBe(
+      'A small language for building and simulating logic circuits, made for people learning how computers work.',
+    );
+    expect(Array.from(landingDoc.querySelectorAll('main > section')).map(el =>
+      el.classList.contains('home-hero') ? 'hero' : el.classList.contains('home-lang') ? 'language' : 'preview',
+    )).toEqual(['hero', 'language', 'preview']);
+    expect(landingDoc.querySelector('.landing-prose')).toBeNull();
+    expect(Array.from(landingDoc.querySelectorAll('.home-vocab-key')).map(el => el.textContent)).toEqual(['primitives', 'macros', 'signals', 'files']);
+    expect(landingDoc.querySelectorAll('.home-step')).toHaveLength(3);
+    expect(landingDoc.querySelectorAll('.home-preview .cp')).toHaveLength(1);
+    expect(Array.from(landingDoc.querySelectorAll('.home-status-row span')).map(el => el.textContent)).toEqual(['source', 'circ-compile --preview']);
+    expect(landingDoc.querySelector('.home-preview-link')?.getAttribute('href')).toEndWith('#pick=example:half-adder');
+    landingWindow.close();
     const optedOut = Array.from(doc.querySelectorAll('.lc:not([data-circ-autorun])'));
     expect(watcher.observed).toHaveLength(cards.length);
     for (const el of optedOut) expect(watcher.observed).not.toContain(el);

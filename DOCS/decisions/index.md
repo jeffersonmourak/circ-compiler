@@ -132,6 +132,15 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - The active editor file is the playground entry point (sibling imports retained, matching canvas/pins/source links, immediate invalidation of previous-file replies)
 - ROM images belong to source declarations (project/file ownership, bounded persistence, imported-instance preloads and matching scratch Truth rows)
 
+### [home-page.md](home-page.md)
+- The home-page handoff is tracked without unused fonts and stale site code
+- `LiveCanvas` adds source, values and parent-fit surfaces only when requested
+- `.home-` and `.lc-` rules join the existing source-text token guard
+- Root pin values are formatted by a renderer-free pure module
+- The hero reports the renderer's real all-low boot state
+- The preview section frames the existing figure without changing the gallery component
+- The landing Markdown twin follows visible sections and shares their headings
+
 ## Conventions
 
 - Decisions use `###` headings inside topic files.

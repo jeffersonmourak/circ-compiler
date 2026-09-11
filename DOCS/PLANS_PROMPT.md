@@ -113,9 +113,11 @@ Add an entry here during execution whenever a non-obvious constraint surfaces â€
 
 **The shared component**
 
+- `pin-line.ts` cannot import `ComponentKind` without putting renderer code in the eager island chunk, and it cannot copy the kind bytes without violating `renderer-pin.test.ts`'s invariant. `rootPins` therefore accepts the input and output kind values from the renderer module `LiveCanvas` has already loaded.
 - `island-smoke.test.ts:1497-1505` reads `dist/index.html` for `class="lc"` and `data-circ-autorun`, and asserts the observer watches exactly the opted-in cards. Adding tiles changes the count on the gallery page's harness only if the gallery changes; on the landing page it is the hero plus three.
 - `content-artifacts.test.ts:21` names `hero-half-adder.wasm` as the landing page's inline artifact and refuses two entries sharing one artifact. The tiles must name the examples' own `wasm`, never a copy.
 - `.lc-mount canvas` carries `max-width: 100%` and `height: auto !important` (`global.css:499-509`), and the 600px block swaps the mount to `display: block` (`:537-547`). A thumbnail that wants its natural size must override both inside its own scope, or a wide circuit squashes and the crop becomes a scale.
+- `app-layout.test.ts` freezes every selector that mentions `.lc-mount`, not just app-layout selectors. A new `LiveCanvas` variant must add its exact scoped selectors to that set while preserving the separate rule that none may contain `data-layout`.
 - The `hidden` attribute loses to any `display` rule of higher specificity; the `.lc-*[hidden]` override idiom at `global.css:516-522` must be kept for any new toggled piece.
 - `renderCircuit` builds a canvas as big as the circuit unless `viewport` is given; with `viewport: 'parent'` a mount with no height renders nothing and throws nothing. The hero's pane height comes from CSS (`min-height: 210px`), never from the canvas.
 - `onAssetsReady` re-themes every active canvas once the sprites decode (`LiveCanvas.astro:146-152`); a values line must not be rebuilt by that path, only repainted.

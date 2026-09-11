@@ -57,13 +57,16 @@ describe('app layout', () => {
     expect(optIn.map((f) => f.split('/').pop())).toEqual(['playground.astro']);
   });
 
-  test('nothing restyles .lc-mount', () => {
-    // The frozen set. `.lc-mount` is LiveCanvas.astro's mount too, so a rule
-    // added for the workbench would silently restyle / and /gallery.
+  test('only LiveCanvas variants restyle .lc-mount', () => {
+    // The frozen set. `.lc-mount` is LiveCanvas.astro's shared mount, so only
+    // an explicit component variant may add to its base and mobile rules.
     const frozen = [
       '.lc-mount',
       '.lc-mount canvas',
       '.lc-launch[hidden], .lc-mount[hidden], .lc-error[hidden]',
+      ".lc[data-circ-fit='parent'] .lc-mount",
+      ".lc[data-circ-fit='parent'] .lc-mount[hidden]",
+      ".lc[data-circ-fit='parent'] .lc-mount canvas",
     ];
     const mentioning = selectorsOf(css).filter((s) => s.includes('.lc-mount'));
     expect([...new Set(mentioning)].sort()).toEqual([...new Set(frozen)].sort());

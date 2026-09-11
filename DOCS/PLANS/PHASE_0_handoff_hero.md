@@ -28,7 +28,7 @@ A reader opens `/` and sees, above the fold at 1100px: a headline (`Logic circui
 
 | Module/Package | File | Responsibility |
 |---------------|------|---------------|
-| site | `site/src/scripts/pin-line.ts` | `rootPins(topology)` and `pinLine(pins, format)`: the values line as a string, renderer-free. |
+| site | `site/src/scripts/pin-line.ts` | `rootPins(topology, read, kinds)` and `pinLine(pins, format)`: the values line as a string, renderer-free. |
 | site | `site/test/pin-line.test.ts` | The spelling cases below over hand-built pin records and a stub topology. |
 | docs | `DOCS/decisions/home-page.md` | The initiative's decisions, appended per phase; registered in `DOCS/decisions/index.md`. |
 | docs | `DOCS/design/design_handoff_home_page/**` | The handoff, tracked per decision 2 (already on disk, untracked; slice 1 trims and stages it). |
@@ -37,7 +37,7 @@ A reader opens `/` and sees, above the fold at 1100px: a headline (`Logic circui
 
 | Module/Package | File | Change |
 |---------------|------|--------|
-| site | `site/src/components/LiveCanvas.astro` | Props `label?: string`, `source?: string`, `values?: boolean`, `link?: { href: string; label: string }`, `fit?: 'parent'`. Markup: the header's left text from `label`; a `.lc-body` wrapper holding an optional `.lc-source` pane (shiki `Code` as `CodePreview.astro:41`) beside `.lc-launch`/`.lc-mount`/`.lc-error`; an optional `.lc-values` footer with `.lc-pins` and the link. Attributes `data-circ-fit="parent"` and `data-circ-values` on `.lc`. Script: `fit` → `viewport: 'parent', navigation: false` in `renderCircuit`'s options (`:129-138`); `values` → `onPinChange` writes `.lc-pins` and the mount writes it once after `applyMemory`; the text comes from `pinLine(rootPins(view.runtime.topology), 'hex')`. |
+| site | `site/src/components/LiveCanvas.astro` | Props `label?: string`, `source?: string`, `values?: boolean`, `link?: { href: string; label: string }`, `fit?: 'parent'`. Markup: the header's left text from `label`; a `.lc-body` wrapper holding an optional `.lc-source` pane (shiki `Code` as `CodePreview.astro:41`) beside `.lc-launch`/`.lc-mount`/`.lc-error`; an optional `.lc-values` footer with `.lc-pins`, a checked named link slot and the raw-link fallback. Attributes `data-circ-fit="parent"` and `data-circ-values` on `.lc`. Script: `fit` → `viewport: 'parent', navigation: false` in `renderCircuit`'s options (`:129-138`); `values` → `onPinChange` writes `.lc-pins` and the mount writes it once after `applyMemory`; the text comes from `pinLineParts(rootPins(view.runtime.topology, read, kinds), 'hex')`. |
 | site | `site/src/pages/index.astro` | The hero section (markup below) replacing lines 30–42; `heroSource` passed to the card's `source`; the top `CodePreview` removed (it returns in Phase 1's section). |
 | site | `site/src/styles/global.css` | `.home-hero*`, `.home-call*`, `.home-chip`, `.lc-body`, `.lc-source`, `.lc-values` rules; `.landing-tagline` and `.landing-hero` (`:1522-1529`) deleted. The shared `.lc-mount` block (`:493-547`) untouched. |
 | site | `site/test/bench-tokens.test.ts` | `benchRules` becomes rules whose selector includes `.pg-` or `.home-` or `.lc-`; the three assertions and the guard count unchanged. |
@@ -82,6 +82,7 @@ export interface PinRecord { name: string; kind: 'in' | 'out'; value: { value: b
 export function rootPins(
   topology: { components: readonly { id: number; kind: number; name: string; width: number; origin: readonly unknown[] }[] },
   read: (id: number) => PinRecord['value'],
+  kinds: { input: number; output: number },
 ): PinRecord[];
 /** `a = 1 · b = 0 → sum = 1 · carry = 0`. A one-bit pin is its digit; a bus
  *  is spelled in `format` (`0x…` for hex, `0b…` for binary, plain decimal);
@@ -141,5 +142,5 @@ Run command: `cd site && bun test test/pin-line.test.ts test/bench-tokens.test.t
 
 ## Open Questions / Spikes
 
-- `TODO(phase0):` the hero's fitted scale at 1100px. The half-adder at `cell 14` is about 16 cells wide; the pane is roughly 380px after the 236px source column, so the renderer may fit below 100%. If the walk finds it small, the slice may raise `cell` on the hero only (the mock caps at 14 and computes the floor; the renderer computes a scale) and STATUS records the value.
-- `TODO(phase0):` whether `OpenInPlayground.astro` should grow a `class` prop so the values-line link reuses its catalogue check, or the hero builds the href with the same `#pick=` shape and a build-time check of its own. Recommended: the prop, one line in the component and no second check.
+- Resolved in Phase 0: keep the board's `cell=14`; the renderer fits it into the parent. The planned visual judgment remains part of Phase 3's single browser pass.
+- Resolved in Phase 0: `OpenInPlayground.astro` accepts an optional replacement class and occupies `LiveCanvas`'s named values-link slot, so the catalogue check remains the one source of truth.

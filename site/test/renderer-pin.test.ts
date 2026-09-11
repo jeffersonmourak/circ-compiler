@@ -147,6 +147,10 @@ describe('renderer pin', () => {
     expect(island).toMatch(/navigation: \{ wheel: 'modifier', drag: true, touch: /);
     expect(island).not.toContain("wheel: 'always'");
     expect(island).toContain('onViewChange: (view) =>');
+    const liveCanvas = readFileSync(resolve(import.meta.dir, '..', 'src', 'components', 'LiveCanvas.astro'), 'utf8');
+    expect(liveCanvas).toContain("container.dataset.circFit === 'parent'");
+    expect(liveCanvas).toMatch(/fitToParent \? \{ viewport: 'parent' as const, navigation: false \} : \{\}/);
+    expect(liveCanvas).toContain('onPinChange: container.dataset.circValues !== undefined ? refreshValues : undefined');
   });
 
   test('the value dialog the site styles is the one the installed renderer builds', () => {

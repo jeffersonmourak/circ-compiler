@@ -1,4 +1,5 @@
-// Every colour and every face in a playground rule is a token.
+// Every colour and every face in a playground, home-page or live-canvas rule
+// is a token.
 //
 // The bench is drawn on CircDS tokens (`--bg`, `--pane-bg`, `--code-bg`,
 // `--pane-label-bg`, `--fg`, `--muted`, `--accent`, `--accent-soft`,
@@ -42,7 +43,9 @@ function rulesOf(source: string): Rule[] {
   return out;
 }
 
-const benchRules = rulesOf(css).filter((r) => r.selector.includes('.pg-'));
+const guardedRules = rulesOf(css).filter((r) =>
+  ['.pg-', '.home-', '.lc-'].some((prefix) => r.selector.includes(prefix)),
+);
 
 /** The properties that carry a colour. `border` and its sides are shorthands
  *  whose colour is the only token-bearing part; the widths and styles pass. */
@@ -99,19 +102,19 @@ function offending(rule: Rule): string[] {
   return out;
 }
 
-describe('bench tokens', () => {
+describe('site feature tokens', () => {
   test('the guard sees the rules', () => {
     // A regex that silently matched nothing would pass every assertion below.
-    expect(benchRules.length).toBeGreaterThan(100);
+    expect(guardedRules.length).toBeGreaterThan(100);
   });
 
-  test('every colour in a .pg- rule is a token', () => {
-    const failures = benchRules.flatMap(offending).filter((f) => !/→ font/.test(f));
+  test('every colour in a .pg-, .home- or .lc- rule is a token', () => {
+    const failures = guardedRules.flatMap(offending).filter((f) => !/→ font/.test(f));
     expect(failures).toEqual([]);
   });
 
-  test('every face in a .pg- rule is a token', () => {
-    const failures = benchRules.flatMap(offending).filter((f) => /→ font/.test(f));
+  test('every face in a .pg-, .home- or .lc- rule is a token', () => {
+    const failures = guardedRules.flatMap(offending).filter((f) => /→ font/.test(f));
     expect(failures).toEqual([]);
   });
 

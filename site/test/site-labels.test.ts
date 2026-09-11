@@ -15,6 +15,19 @@ import { resolve } from 'node:path';
 const SITE = resolve(import.meta.dir, '..');
 const read = (...parts: string[]) => readFileSync(resolve(SITE, ...parts), 'utf8');
 
+test('the landing twin is headed the way the page is', () => {
+  const page = read('src', 'pages', 'index.astro');
+  const twin = read('public', 'index.md');
+  const headings = [...page.matchAll(/<h2 class="home-h2">([^<]+)<\/h2>/g)].map(m => m[1]);
+  expect(headings).toHaveLength(2);
+  const twinHeadings = [...twin.matchAll(/^## (.+)$/gm)].map(m => m[1]);
+  expect(twinHeadings.filter(h => headings.includes(h))).toEqual(headings);
+  for (const old of ['What it is', "What it isn't", 'Where it runs']) {
+    expect(twinHeadings).not.toContain(old);
+    expect(page).not.toContain(`<h2>${old}</h2>`);
+  }
+});
+
 /** `{ href: url('/tour'), label: 'Tour' }` → `['/tour', 'Tour']`. */
 function navLinks(): [string, string][] {
   const source = read('src', 'components', 'Nav.astro');
