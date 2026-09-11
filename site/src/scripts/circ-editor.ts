@@ -240,11 +240,16 @@ function chromeSpec(palette: EditorPalette): Record<string, Record<string, strin
     '.cm-cursor, .cm-dropCursor': { borderLeftColor: palette.caret },
     '.cm-content ::selection': { backgroundColor: palette.selection },
     '.cm-content::selection': { backgroundColor: palette.selection },
+    // The gutter is no band (design file: a 32px gutter at 55% opacity on the
+    // pane's own surface); the palette's background and border are
+    // transparent, and the opacity is the theme's.
     '.cm-gutters': {
       backgroundColor: palette.gutterBackground,
       color: palette.gutterForeground,
       borderRight: `1px solid ${palette.gutterBorder}`,
+      opacity: '0.55',
     },
+    '.cm-lineNumbers .cm-gutterElement': { minWidth: '32px' },
     '.cm-activeLine': { backgroundColor: palette.activeLine },
     '.cm-activeLineGutter': { backgroundColor: palette.activeLine, color: palette.foreground },
     // A theme spec outranks a package `baseTheme`, so no `!important` is

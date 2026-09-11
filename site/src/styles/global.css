@@ -690,13 +690,15 @@ hr {
   flex: 1;
   min-height: 0;
 }
+/* The editor's metrics are the design file's: strict mono 14px at 1.7, 16px
+   of air above and below the document. */
 .pg-cm .cm-scroller {
   font-family: var(--font-mono-strict);
-  font-size: 0.9rem;
-  line-height: 1.5;
+  font-size: 14px;
+  line-height: 1.7;
   overflow: auto;
 }
-.pg-cm .cm-content { padding: 0.75rem 0; }
+.pg-cm .cm-content { padding: 16px 0; }
 .pg-cm .cm-line { padding: 0 0.85rem; }
 .pg-status {
   padding: 0.4rem 0.85rem;
