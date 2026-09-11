@@ -97,3 +97,11 @@ One entry per shipped slice, newest last. The plan is `DOCS/PLANS_PROMPT.md`; th
 **Tests:** added three transcript cases; ran `bun test test/sim-transcripts.test.ts` (4 pass), result pass
 **Next slice:** the phase's documents (decisions 2, 4, 10 and 11; the spec's stale line about a drop box), then the human's review.
 **Notes:** the three goldens passed on the first run — the session's memory verbs already matched the loop, and the executor's canonical masking covered the rest — so the spec's slices 3 and 4 close in one commit with nothing to fix. The `sim_mem_errors` transcript proves the loop's order end to end: `E_NOMEM` before the file is read, `E_IO … FileNotFound`, `E_MEMFMT … 17 words exceed capacity 16` with the compiler's wording, `E_ADDR data 0x10`, `E_WIDTH data`, `E_NOPIN data` twice, `E_PROTO malformed command`.
+
+## 2026-09-11 — Phase 2 — review
+
+**What shipped:** the human reviewed the grammar, the executor and the four transcripts and approved ("go"). Phase 2 complete.
+**Files touched:** `DOCS/STATUS.md`
+**Tests:** none (review)
+**Next slice:** Phase 3 slice 1: the drawer.
+**Notes:** none.
