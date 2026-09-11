@@ -311,6 +311,32 @@ describe('circ-skins', () => {
     expect(half.some((op) => op[0] === 'fillText')).toBe(false);
   });
 
+  test('fan-out: a ring in the wire colour with the centre knocked out to alpha', () => {
+    const theme = themeWith(true);
+    for (const cell of CELLS) for (const sig of SIGNALS) for (const width of WIDTHS) {
+      const value = valueOf(sig, width);
+      const { ctx, ops } = recordingContext(cell);
+      theme.fanOutMarker!({ ctx, theme, cell, x: 3, y: 2, value, signal: sig });
+      expect(balanced(ops)).toBe(true);
+      checkGolden('fanout', `sig${sig}.w${width}.c${cell}`, ops, store);
+      const names = ops.map((op) => op[0]);
+      const fills = ops.filter((op) => op[0] === 'arc').map((op) => op[3]);
+      const r3 = (n: number) => Math.round(n * 1000) / 1000;
+      expect(fills).toEqual([r3(cell * 0.3), r3(cell * 0.13)]);
+      expect(names.indexOf('save')).toBeLessThan(names.indexOf('arc'));
+      // The knock-out comes after the disc and before the restore, and the
+      // op log ends with the composite mode put back.
+      const knock = ops.findIndex((op) => op[0] === 'set' && op[1] === 'globalCompositeOperation');
+      expect(ops[knock][2]).toBe('destination-out');
+      expect(knock).toBeGreaterThan(names.indexOf('fill'));
+      expect(names[names.length - 1]).toBe('restore');
+      const colour = ops.find((op) => op[0] === 'set' && op[1] === 'fillStyle')![2];
+      const expected = sig === 2 ? colorsDark.wireUndefined : width > 1 ? colorsDark.wireBus : sig === 1 ? colorsDark.wireActive : colorsDark.wireIdle;
+      expect(colour).toBe(expected);
+    }
+    flush(store);
+  });
+
   test('highlight: the ring for every kind draws as the golden says', () => {
     const theme = themeWith(true);
     for (const kind of KINDS) for (const cell of CELLS) {

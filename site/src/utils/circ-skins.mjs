@@ -606,6 +606,27 @@ function nsBusTick(ctx, t, cell, wire, value) {
   ctx.restore();
 }
 
+/**
+ * A fan-out junction: a ring in the wire's own colour, so a split reads as
+ * "the signal branches here" and stays distinct from the solid terminal dots
+ * at either end. The canvas is transparent, so the centre is knocked out to
+ * alpha with `destination-out` rather than painted in a guessed background.
+ */
+function drawFanOut({ ctx, cell, x, y, value, theme }) {
+  const cx = x * cell + cell / 2;
+  const cy = y * cell + cell / 2;
+  ctx.save();
+  ctx.fillStyle = theme.colors[wireColorKey(wireStyleOf(value))];
+  ctx.beginPath();
+  ctx.arc(cx, cy, cell * 0.3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.beginPath();
+  ctx.arc(cx, cy, cell * 0.13, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 export const skins = {
   [ComponentKind.InputPin]: drawInputPin,
   [ComponentKind.OutputPin]: drawOutputPin,
@@ -637,6 +658,9 @@ export const sharedRenderers = {
   wire: drawWire,
   // No port markers — each skin draws its own tail.
   portMarker: () => {},
+  // A junction is the one mark the canvas used to stamp itself, a dot in the
+  // wire's colour on a wire of that colour. The ring says something.
+  fanOutMarker: drawFanOut,
   // The ring around a hovered or host-highlighted component, drawn by the
   // canvas after every skin. One hook, every kind — including the four above
   // that used to fall through to defaults that never read `hovered`.
