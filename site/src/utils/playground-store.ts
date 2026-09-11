@@ -174,7 +174,7 @@ export function defaultEnvelope(): PlaygroundEnvelope {
     layout: { sourceWidth: DEFAULT_SOURCE_WIDTH, ratios: {} },
     settings: defaultSettings(),
     editor: normalizeEditorPreferences(undefined),
-    view: 'schematic',
+    view: 'live',
     dataOpen: false,
     dataPanel: {},
     drawerHeight: 320,
@@ -353,7 +353,7 @@ export function normalize(raw: unknown): { envelope: PlaygroundEnvelope; note: S
       editor: normalizeEditorPreferences(body.editor),
       // A view this code does not have falls back like any other unrecognised
       // value rather than resetting anything.
-      view: VIEWS.includes(body.view as View) ? (body.view as View) : 'schematic',
+      view: VIEWS.includes(body.view as View) ? (body.view as View) : 'live',
       dataOpen: body.dataOpen === true,
       dataPanel: normalizeDataPanel(body.dataPanel, ids),
       drawerHeight: typeof body.drawerHeight === 'number' && Number.isFinite(body.drawerHeight) && body.drawerHeight > 0 ? body.drawerHeight : 320,

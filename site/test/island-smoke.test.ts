@@ -165,6 +165,11 @@ async function runIsland(page: string, chunkPrefix: string, seed?: Record<string
 
 describe.skipIf(!hasBuild)('the built islands run', () => {
   test('the playground mounts its editor, tabs and workbench', async () => {
+    const initialWindow = new Window();
+    initialWindow.document.write(readFileSync(resolve(DIST, 'playground', 'index.html'), 'utf8'));
+    expect(initialWindow.document.querySelector('.pg-view-tab[aria-selected="true"]')?.getAttribute('data-view')).toBe('live');
+    expect(initialWindow.document.querySelector('[data-view-panel="live"]')?.hasAttribute('hidden')).toBe(false);
+    initialWindow.close();
     // Restored onto the Live view, as a reader who left the page there comes
     // back to it. This is the boot path that once reached the simulator's
     // record before it was declared ("Cannot access 'sim' before
@@ -175,7 +180,7 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     (doc.querySelector('.pg-data-close') as unknown as HTMLElement).click();
     expect(doc.querySelector('.pg-view-tab[data-view="live"]')?.getAttribute('aria-selected')).toBe('true');
     expect(doc.querySelector('[data-view-panel="live"]')?.hasAttribute('hidden')).toBe(false);
-    // Back to the default view for the rest of the walk.
+    // Select Schematic explicitly for the rest of this walk.
     (doc.querySelector('.pg-view-tab[data-view="schematic"]') as unknown as { click(): void }).click();
 
 

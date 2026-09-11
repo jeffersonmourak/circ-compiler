@@ -94,7 +94,9 @@ describe('playground store', () => {
     expect(env.version).toBe(2);
     expect(env.settings.truthTableCap).toBe(12);
     expect(env.settings.format).toBe('json');
-    expect(env.view).toBe('schematic');
+    expect(env.view).toBe('live');
+    expect(normalize({ ...defaultEnvelope(), view: 'schematic' }).envelope.view).toBe('schematic');
+    expect(normalize({ ...defaultEnvelope(), view: 'truth' }).envelope.view).toBe('truth');
     expect(env.dataOpen).toBe(false);
     expect(env.dataPanel).toEqual({});
     expect(env.drawerHeight).toBe(320);
@@ -193,7 +195,8 @@ describe('playground store', () => {
     }
     const bare = normalize({ version: 1 });
     expect(bare.note).toBeNull();
-    expect(bare.envelope).toEqual(defaultEnvelope());
+    // Legacy envelopes keep the old implicit view; only fresh state defaults to Live.
+    expect(bare.envelope).toEqual({ ...defaultEnvelope(), view: 'schematic' });
   });
 
   test('version mismatch and corruption reset', () => {
@@ -253,8 +256,8 @@ describe('playground store', () => {
 
     // A view this code does not have falls back; the old tab names are views
     // only through the migrator, never at version 2.
-    expect(normalize({ ...defaultEnvelope(), view: 'nope' }).envelope.view).toBe('schematic');
-    expect(normalize({ ...defaultEnvelope(), view: 'data' }).envelope.view).toBe('schematic');
+    expect(normalize({ ...defaultEnvelope(), view: 'nope' }).envelope.view).toBe('live');
+    expect(normalize({ ...defaultEnvelope(), view: 'data' }).envelope.view).toBe('live');
     expect(normalize({ ...defaultEnvelope(), view: 'truth' }).envelope.view).toBe('truth');
     // The panel's flag is a boolean or nothing.
     expect(normalize({ ...defaultEnvelope(), dataOpen: 'yes' }).envelope.dataOpen).toBe(false);

@@ -20,7 +20,7 @@ const groups = displayGroups(catalogue, []);
 ---
 <div
   class="pg"
-  style="--pg-term-h: 0px"
+  style="--pg-term-h: 40px"
   data-libcirc-wasm={wasmHref}
   data-supported-versions={supportedVersions.join(',')}
   data-manifest-full-version={manifest.full_version.toString()}
@@ -178,36 +178,36 @@ const groups = displayGroups(catalogue, []);
       aria-label="Resize the editor and output panes"
       aria-controls="pg-pane-editor pg-pane-output"
     ></div>
-    <section class="pg-output" id="pg-pane-output">
+    <section class="pg-output" id="pg-pane-output" data-view="live">
       {/* The canvas region (design file, board 2a): the view switch top-left,
           the Data button top-right, the hint line bottom-left, the zoom line
           bottom-right, and the view itself in the inset between them. */}
       <div class="pg-view-bar">
         <div class="pg-view-switch" role="tablist" aria-label="View">
-          <button type="button" role="tab" class="pg-view-tab" data-view="schematic" aria-selected="true" aria-controls="pg-view-schematic" tabindex="0">Schematic</button>
-          <button type="button" role="tab" class="pg-view-tab" data-view="live" aria-selected="false" aria-controls="pg-view-live" tabindex="-1">Live</button>
+          <button type="button" role="tab" class="pg-view-tab" data-view="schematic" aria-selected="false" aria-controls="pg-view-schematic" tabindex="-1">Schematic</button>
+          <button type="button" role="tab" class="pg-view-tab" data-view="live" aria-selected="true" aria-controls="pg-view-live" tabindex="0">Live</button>
           <button type="button" role="tab" class="pg-view-tab" data-view="truth" aria-selected="false" aria-controls="pg-view-truth" tabindex="-1">Truth</button>
         </div>
         {/* Each view owns its tools. The Truth chip carries the counts and
             any refusal; its cap control is beside it. */}
-        <div class="pg-view-tools" data-for="schematic">
+        <div class="pg-view-tools" data-for="schematic" hidden>
           <label class="pg-tool-toggle"><input type="checkbox" data-setting="expandMacros" /> Expand macros</label>
           <label class="pg-tool-toggle"><input type="checkbox" data-setting="expandDisplay" /> Expand display</label>
           <button type="button" class="pg-tool-btn" data-copy="preview" title="Copy the schematic as text"><span class="pg-action-label">Copy</span></button>
         </div>
-        <span class="pg-truth-chip" id="pg-truth-chip" data-for="truth"></span>
-        <div class="pg-view-tools pg-truth-tools" data-for="truth">
+        <span class="pg-truth-chip" id="pg-truth-chip" data-for="truth" hidden></span>
+        <div class="pg-view-tools pg-truth-tools" data-for="truth" hidden>
           <label for="pg-set-cap">Input-bit cap</label>
           <input id="pg-set-cap" type="number" min="1" max="24" step="1" data-setting="truthTableCap" aria-describedby="pg-cap-hint" />
           <span class="visually-hidden" id="pg-cap-hint">2^cap rows; once the enumeration starts, it runs to the end.</span>
         </div>
         <button type="button" class="pg-data-btn" aria-expanded="false" aria-controls="pg-data-card">Data <span class="pg-data-count"></span></button>
       </div>
-      <div class="pg-view-panel" id="pg-view-schematic" data-view-panel="schematic" role="tabpanel"><pre class="pg-preview"></pre></div>
+      <div class="pg-view-panel" id="pg-view-schematic" data-view-panel="schematic" role="tabpanel" hidden><pre class="pg-preview"></pre></div>
       {/* The truth table in a card on the dot grid (design file 3f): the row
           matching the session's pins tinted, a click on a row driving them. */}
       <div class="pg-view-panel" id="pg-view-truth" data-view-panel="truth" role="tabpanel" hidden><div class="pg-truth-card"><div class="pg-table"></div></div></div>
-      <div class="pg-view-panel pg-live" id="pg-view-live" data-view-panel="live" role="tabpanel" hidden>
+      <div class="pg-view-panel pg-live" id="pg-view-live" data-view-panel="live" role="tabpanel">
         <div class="pg-sim-note"></div>
         <div class="pg-sim-mount" hidden></div>
       </div>
@@ -233,8 +233,8 @@ const groups = displayGroups(catalogue, []);
       <div class="pg-hint"></div>
       {/* The bottom-right line is the view's: the schematic's size, the truth
           table's copies, the Live view's zoom. */}
-      <div class="pg-size" data-for="schematic">0 × 0 chars</div>
-      <div class="pg-truth-copy" data-for="truth">
+      <div class="pg-size" data-for="schematic" hidden>0 × 0 chars</div>
+      <div class="pg-truth-copy" data-for="truth" hidden>
         <button type="button" class="pg-tool-btn" data-copy="markdown" title="Copy the table as markdown"><span class="pg-action-label">Copy as markdown</span></button>
         <span class="pg-zoom-sep" aria-hidden="true">·</span>
         <button type="button" class="pg-tool-btn" data-copy="csv" title="Copy the table as CSV"><span class="pg-action-label">CSV</span></button>
@@ -253,7 +253,7 @@ const groups = displayGroups(catalogue, []);
       last thing typed and the first reply — and opens the drawer on Console
       or Memory. The drawer itself is the element it was under the output
       pane; only its row changed. */}
-  <div class="pg-term" data-open="false" hidden inert>
+  <div class="pg-term" data-open="false">
     <div class="pg-term-line" tabindex="0" role="group" aria-label="Session console and memory">
       <span class="pg-term-title">circ-compile main.circ --sim</span>
       <span class="pg-term-prompt" aria-hidden="true">&gt;</span>
@@ -593,7 +593,7 @@ const groups = displayGroups(catalogue, []);
        *  document. Refreshed by BOTH producers in the pipeline. */
       mapped: [] as MappedRow[],
       artifact: null as { bytes: Uint8Array; hash: number; size: number; importedImages: ImportedImages } | null,
-      view: 'schematic' as StoredView,
+      view: 'live' as StoredView,
       /** The Data card: open over whichever view; its rows are the session's. */
       dataOpen: false,
       version: null as LibcircVersion | null,
