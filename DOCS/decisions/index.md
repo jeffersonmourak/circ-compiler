@@ -107,6 +107,13 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - What a skin draws is pinned as an op log (`canvas-record.ts`, `circ-skins.test.ts`, one golden file per kind under `test/fixtures/skins/`)
 - The handoff is tracked beside the plan (`DOCS/design/`, moved under `DOCS/archive/design/` at archive time)
 
+### [playground-bench.md](playground-bench.md)
+- The bench owns its chrome (the `app` variant renders no site nav or footer; a 48px nav and a 24px status line of the page's own)
+- The handoff is tracked, minus the noise (`DOCS/design/design_handoff_playground_bench/`, fonts and duplicate files dropped)
+- The three terminal tokens stay site-local, and all three already exist (`--term-ok`, `--term-echo`, `--danger`; `--pg-dot` beside them)
+- The source column is the splitter, in pixels (`--pg-source-w`, `unit: 'px'`, the hairline as the divider)
+- The token guard is a source-text test (`bench-tokens.test.ts`: every colour and face in a `.pg-` rule is a token)
+
 ## Conventions
 
 - Decisions use `###` headings inside topic files.
