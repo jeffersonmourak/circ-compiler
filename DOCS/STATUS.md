@@ -129,3 +129,11 @@ One entry per shipped slice, newest last. The plan is `DOCS/PLANS_PROMPT.md`; th
 **Tests:** added `both islands lay out with a row gutter of two`, `both islands pad the canvas by 1.5 cells`; ran `bun test` (443 pass), typecheck (0 errors), `bun --bun run build`, `bun run bundle` (every route ok; theme chunk 31.7 KB raw / 18.3 KB gzip), result pass
 **Next slice:** gallery review (the human): `hero-half-adder`, `wide-not`, `two-bit-adder`, and a memory highlighted from the playground editor, both modes, `cell` 10, 14, 24.
 **Notes:** no gallery card passes an explicit `padding` (grep over `src/pages` and `src/content`), so the new default reaches every card. Decisions 7, 8 and 9 recorded.
+
+## 2026-09-10 — Phase 2 — gallery review
+
+**What shipped:** the human reviewed the Phase 2 tree and approved it ("nice"); no value changed. Phase 2 complete.
+**Files touched:** `DOCS/STATUS.md`
+**Tests:** none (review)
+**Next slice:** Phase 3 slice 1: sprite assets — tint, halo, bounds.
+**Notes:** none.
