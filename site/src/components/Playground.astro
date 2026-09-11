@@ -353,7 +353,8 @@ const groups = displayGroups(catalogue, []);
   // pulls their one shared dependency, so they ride in the eager bundle.
   import { execute, handshake } from '../scripts/sim-executor.ts';
   import { HELP_VERB, HistoryRing, MemoryTabFiles, Transcript, commandFor, helpLines, promptEcho, scriptOf } from '../scripts/console.ts';
-  import { summaryOf, memoryHeader } from '../scripts/terminal-line.ts';
+  import { summaryOf, memoryHeader, legendFor, imageLine } from '../scripts/terminal-line.ts';
+  import { addressedWord } from '../scripts/memory-panel.ts';
   import { summarize, summaryLabels } from '../scripts/footer-summary.ts';
   import { pinCountLabel } from '../scripts/pin-count.ts';
   import { formatZoom } from '../scripts/zoom-label.ts';
@@ -2243,6 +2244,7 @@ const groups = displayGroups(catalogue, []);
     const romImplied = new Map<string, Set<number>>();
     /** Roms whose hex escape hatch is showing. */
     const hexOpen = new Set<string>();
+    const imageFiles = new Map<string, { text: string; file: string }>();
 
     /** The running circuit's runtime, or null when nothing is simulating or
      *  the artifact predates memories. Contents can be read whenever a
@@ -2479,6 +2481,12 @@ const groups = displayGroups(catalogue, []);
       wrap.appendChild(controls);
       wrap.appendChild(gridTable(mem, source, win));
       wrap.appendChild(gridError);
+      const legend = document.createElement('p');
+      legend.className = 'pg-mem-legend';
+      const host = source.live ? memHost() : null;
+      const memId = host ? memIdOf(mem) : null;
+      legend.textContent = legendFor(mem, host && memId !== null ? addressedWord(host, memId) : null);
+      wrap.appendChild(legend);
       if (source.note) {
         const note = document.createElement('p');
         note.className = 'pg-mem-idle'; note.textContent = source.note; wrap.appendChild(note);
@@ -2486,7 +2494,8 @@ const groups = displayGroups(catalogue, []);
       if (mem.kind === 'rom' && hexOpen.has(mem.name)) wrap.appendChild(hexEditor(mem));
 
       const meta = document.createElement('div');
-      meta.className = 'pg-rom-meta';
+      meta.className = 'pg-rom-meta pg-mem-image';
+      if (mem.kind === 'ram') meta.textContent = imageLine(mem, null);
       wrap.appendChild(meta);
       const err = document.createElement('div');
       err.className = 'pg-rom-error';
@@ -2537,6 +2546,7 @@ const groups = displayGroups(catalogue, []);
           }
           // A loaded file is entirely the reader's choice, so nothing in it is
           // implied.
+          imageFiles.set(mem.name, { text: result.text, file: chosen.name });
           setImage(mem, result.text, new Set());
           status.textContent = `Loaded ${chosen.name} into ${mem.name}.`;
         });
@@ -2607,7 +2617,19 @@ const groups = displayGroups(catalogue, []);
       const implied = romImplied.get(mem.name) ?? new Set<number>();
       const table = document.createElement('table');
       table.className = 'pg-mem-table';
+      const head = document.createElement('thead');
+      const labels = document.createElement('tr');
+      for (const text of ['addr', ...Array.from({ length: MEM_PER_ROW }, (_, i) => `+${i}`)]) {
+        const th = document.createElement('th');
+        th.scope = 'col'; th.textContent = text;
+        th.className = text === 'addr' ? 'pg-mem-addr' : 'pg-mem-offset';
+        labels.appendChild(th);
+      }
+      head.appendChild(labels); table.appendChild(head);
       const body = document.createElement('tbody');
+      const host = source.live ? memHost() : null;
+      const memId = host ? memIdOf(mem) : null;
+      const addressed = host && memId !== null ? addressedWord(host, memId) : null;
       const rows = dumpRows(source.read, win, MEM_PER_ROW, mem.width, settings().valueFormat);
       for (const row of rows) {
         const tr = document.createElement('tr');
@@ -2619,6 +2641,8 @@ const groups = displayGroups(catalogue, []);
         for (const c of row.cells) {
           const td = document.createElement('td');
           td.className = 'pg-mem-cell';
+          td.dataset.addr = String(c.addr);
+          if (c.addr === addressed) td.dataset.addressed = 'true';
           td.textContent = c.text;
           if (!c.known) td.dataset.unknown = 'true';
           // A zero that is only there because a later word was written is not
@@ -2659,6 +2683,7 @@ const groups = displayGroups(catalogue, []);
       implied: ReadonlySet<number>,
       opts: { redraw?: boolean } = {},
     ) {
+      if (imageFiles.get(mem.name)?.text !== text) imageFiles.delete(mem.name);
       romImages.set(mem.name, text);
       romImplied.set(mem.name, new Set(implied));
       applyToView();
@@ -2668,6 +2693,8 @@ const groups = displayGroups(catalogue, []);
 
     /** Swap one cell for an input. Enter writes it; Escape leaves it alone. */
     function editCell(td: HTMLElement, mem: MemorySymbol, addr: number) {
+      if (td.querySelector('input')) return;
+      td.dataset.editing = 'true';
       const format = settings().valueFormat;
       const previous = td.textContent ?? '';
       const input = document.createElement('input');
@@ -2844,9 +2871,7 @@ const groups = displayGroups(catalogue, []);
       const parsed = parseRomImage(text, mem);
       if (parsed.ok) {
         err.textContent = '';
-        meta.textContent = text.trim() === ''
-          ? 'No image; the rom starts undefined.'
-          : `${parsed.words} of ${maxWords(mem.addrWidth)} words`;
+        meta.textContent = imageLine(mem, { file: imageFiles.get(mem.name)?.file ?? null, words: parsed.words });
       } else {
         meta.textContent = '';
         err.textContent = parsed.message;

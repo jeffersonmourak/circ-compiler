@@ -1194,6 +1194,8 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(doc.querySelector('.pg-drawer')?.hasAttribute('data-mem')).toBe(true);
     expect(doc.querySelector('.pg-drawer-mem')?.hasAttribute('hidden')).toBe(false);
     expect(cells()).toHaveLength(16);
+    expect(Array.from(doc.querySelectorAll('.pg-mem-table thead th'), (h) => h.textContent)).toEqual(['addr', '+0', '+1', '+2', '+3', '+4', '+5', '+6', '+7']);
+    expect(Array.from(doc.querySelectorAll('.pg-mem-table tbody .pg-mem-addr'), (h) => h.textContent)).toEqual(['0', '8']);
     // Nothing runs in this harness, so the image can be edited but not saved.
     expect((doc.querySelector('.pg-mem-save') as unknown as { disabled: boolean }).disabled).toBe(true);
     expect(cells().every((c) => (c as unknown as { textContent: string }).textContent === '?')).toBe(true);
@@ -1201,6 +1203,7 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     // Open a cell.
     const cell = cells()[0] as unknown as { dispatchEvent(e: unknown): void };
     fire(cell, 'dblclick');
+    expect(doc.querySelector('.pg-mem-cell[data-editing="true"]')).not.toBeNull();
     const input = () => doc.querySelector('.pg-mem-input') as unknown as
       { value: string; maxLength: number; getAttribute(n: string): string | null } | null;
     expect(input()).not.toBeNull();

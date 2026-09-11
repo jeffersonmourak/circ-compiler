@@ -13,6 +13,17 @@ export function memoryHeader(mem: Pick<MemorySymbol, 'kind' | 'width' | 'addrWid
   return `${mem.kind}[${mem.width},${mem.addrWidth}] · ${total} word${total === 1 ? '' : 's'}`;
 }
 
+export function legendFor(mem: Pick<MemorySymbol, 'addrWidth'>, addressed: number | null): string {
+  const address = addressed === null ? '' : ` · addr = 0x${addressed.toString(16).padStart(Math.ceil(mem.addrWidth / 4), '0')}`;
+  return `double-click a word to edit · ? unknown${address}`;
+}
+
+export function imageLine(mem: Pick<MemorySymbol, 'kind'>, meta: { file: string | null; words: number } | null): string {
+  if (mem.kind === 'ram') return 'contents live in the circuit';
+  if (!meta || meta.words === 0) return 'no image · the rom starts undefined';
+  return `image · ${meta.file ?? 'hex bytes'} · ${meta.words} word${meta.words === 1 ? '' : 's'}`;
+}
+
 export interface TermSummary {
   /** The last line typed, without its `> ` echo prefix; null with no echo. */
   command: string | null;

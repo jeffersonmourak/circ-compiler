@@ -1,9 +1,18 @@
 // The closed terminal line's summary, read off the console's transcript.
 import { describe, expect, test } from 'bun:test';
-import { summaryOf, memoryHeader } from '../src/scripts/terminal-line.ts';
+import { summaryOf, memoryHeader, legendFor, imageLine } from '../src/scripts/terminal-line.ts';
 import { Transcript, promptEcho } from '../src/scripts/console.ts';
 
 describe('terminal line', () => {
+  test('the memory legend and image line describe their source', () => {
+    expect(legendFor({ addrWidth: 4 }, 3)).toContain('addr = 0x3');
+    expect(legendFor({ addrWidth: 8 }, 3)).toContain('addr = 0x03');
+    expect(legendFor({ addrWidth: 4 }, null)).not.toContain('addr =');
+    expect(imageLine({ kind: 'rom' }, null)).toBe('no image · the rom starts undefined');
+    expect(imageLine({ kind: 'rom' }, { file: 'lut.bin', words: 5 })).toBe('image · lut.bin · 5 words');
+    expect(imageLine({ kind: 'rom' }, { file: null, words: 1 })).toBe('image · hex bytes · 1 word');
+    expect(imageLine({ kind: 'ram' }, null)).toBe('contents live in the circuit');
+  });
   test('the memory header names the declared shape and capacity', () => {
     expect(memoryHeader({ kind: 'rom', width: 8, addrWidth: 4 }, 16)).toBe('rom[8,4] · 16 words');
     expect(memoryHeader({ kind: 'ram', width: 64, addrWidth: 8 }, 256)).toBe('ram[64,8] · 256 words');
