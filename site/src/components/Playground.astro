@@ -2792,8 +2792,9 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         const view = await renderCircuit({
           bytes,
           cell: 14,
-          // 1.5 cells: room for the value chip above a top-row pin.
-          padding: Math.ceil(14 * 1.5),
+          // Two cells: the value chip above a top-row pin reaches 1.42 cells
+          // over its box, and it wants air, not a fit to the pixel.
+          padding: Math.ceil(14 * 2),
           interactive: true,
           theme: pickTheme(),
           // Two free rows between stacked boxes, for the same chip.

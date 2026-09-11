@@ -76,7 +76,7 @@ The entries below record the decisions of the canvas-theme initiative: the site'
 
 ### The value pill is one shape, drawn by whoever knows the text
 
-**Decision.** `nsValuePill` is a 0.92-cell chip, solid for HIGH or a bus, outlined for LOW, dashed for undefined, seated with its bottom 0.5 cells above a pin's circle or 0.5 cells above a box's top edge. A single-bit pin draws its own `0`/`1`/`?` pill; every multi-bit component's pill is drawn by the `busValue` hook with the canvas's `text`, solid in `wireBus` with `busLabel` ink; `rom` and `ram` get none. The pill's top is 1.34 cells above a 3-row pin box, so both islands pass `layoutOptions: { rowGutter: 2 }` and pad by `Math.ceil(cell * 1.5)`; `island-canvas-options.test.ts` guards both.
+**Decision.** `nsValuePill` is a 0.92-cell chip, solid for HIGH or a bus, outlined for LOW, dashed for undefined, seated with its bottom 0.5 cells above a pin's circle or 0.5 cells above a box's top edge. A single-bit pin draws its own `0`/`1`/`?` pill; every multi-bit component's pill is drawn by the `busValue` hook with the canvas's `text`, solid in `wireBus` with `busLabel` ink; `rom` and `ram` get none. The pill's top is 1.34 cells above a 3-row pin box, so both islands pass `layoutOptions: { rowGutter: 2 }` and pad by `Math.ceil(cell * 2)` (1.5 cells fit the chip to the pixel and a reader saw it cut); `island-canvas-options.test.ts` guards both.
 
 **Rationale.** The canvas spells a bus in the reader's chosen base (`setValueFormat`), and only the hook is handed that text; a pill drawn from a skin would ignore the setting. The renderer's default badge was the library's blue text, off-palette on both panes. The gutter and padding follow from the pill's geometry, measured, not chosen.
 

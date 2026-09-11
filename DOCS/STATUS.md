@@ -233,3 +233,11 @@ One entry per shipped slice, newest last. The plan is `DOCS/PLANS_PROMPT.md`; th
 **Tests:** renderer: added `a trunk that several wires share is not a run of junctions`, the hook test's rule restated as a degree property; ran `bun test` (201 pass) and `bunx tsc --noEmit`, result pass. Site: ran `bun test` (461 pass), typecheck (0 errors), `bun --bun run build`, `bun run bundle` (every route ok; theme chunk unchanged at 27.3 KB / 12.8 KB), result pass
 **Next slice:** Phase 5 slice 1: the walk.
 **Notes:** `bun install --force` was run right after the `bun add` this time, before any gate, per the trap recorded after Phase 0. The site's `fanOutMarker` hook did not change: the rule for where it is called is the renderer's, which is where it belongs.
+
+## 2026-09-10 — Phase 4 — review nit: the top-row chip
+
+**What shipped:** both islands pad the canvas by two cells (28px at cell 14) instead of 1.5; the guard test follows. The human saw a top-row pin's value chip cut at the canvas edge: at 1.5 cells the chip's top, stroke included, sat 1.42 cells over the box and fit to the pixel, which a device-pixel rounding or a stroke's half width could cut. Two cells leave it half a cell of air.
+**Files touched:** `site/src/components/LiveCanvas.astro`, `site/src/components/Playground.astro`, `site/test/island-canvas-options.test.ts`, `DOCS/STATUS.md`
+**Tests:** `both islands pad the canvas by two cells` (renamed, re-targeted); ran `bun test` (461 pass), typecheck (0 errors), `bun --bun run build` (every gallery card carries `data-circ-padding="28"`), `bun run bundle` (ok), result pass
+**Next slice:** Phase 5 slice 1: the walk.
+**Notes:** the renderer's padding is one number for all four sides; a top-only offset would be a renderer change. Two cells all round reads as balanced on a card, and is what decision 8 in `DOCS/decisions/canvas-theme.md` now says (updated in place, since the value was measured, not chosen).
