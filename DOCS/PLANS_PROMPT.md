@@ -119,6 +119,7 @@ Add an entry here during execution whenever a non-obvious constraint surfaces â€
 **Renderer and pin**
 
 - The site's `renderer-pin.test.ts` reads `node_modules/circ-renderer/package.json` and `bun.lock`; a `bun add` that rewrote one but not the other fails there, not at runtime. Bump `RENDERER_PIN_VERSION` in the same slice as `package.json`.
+- A `bun add` of the pin can leave `node_modules/vite/node_modules/esbuild` without a working platform binary: `astro check` and `astro build` then fail with "The service was stopped" (Phase 0 slice 6). `bun install --force` restores it with no lockfile change; run it before reading anything into the failure.
 - The renderer's `draw()` order is fixed (`canvas.ts:703-766`): skins are drawn before fan-out dots, port markers and bus badges, and the highlight is last. A skin cannot draw "on top of" the pill of another component; only the hooks that run later can.
 - `SkinContext` has no runtime handle. A skin that needs state across draws (the RAM `prev_clk`) keeps it in a module-level `WeakMap` keyed on `ctx.canvas`; `setTheme` swaps the theme without rebuilding the canvas (`canvas.ts:194`), so the map survives a theme flip and is dropped with the element.
 
