@@ -551,6 +551,52 @@ describe('circ-skins', () => {
     }
   });
 
+  test('a memory chip shows its declaration in the header and addr → word in the body', () => {
+    const theme = themeWith(true);
+    const run = (kind: 'rom' | 'ram', addr: BitValue, word: BitValue) => {
+      const c = component(kind, 8);
+      const { ctx, ops } = recordingContext(10);
+      const inputs = c.inPorts.map((_, i) => (i === 0 ? addr : valueOf(0, 1)));
+      skinFor(theme, c)({
+        ctx, theme, cell: 10, component: c, inputSignals: inputs.map((v) => (v.defined ? 1 : 2)), outputSignal: 1,
+        inputValues: inputs, outputValue: word, hovered: false,
+      });
+      return { c, ops };
+    };
+    const texts = (ops: Op[]) => ops.filter((op) => op[0] === 'fillText').map((op) => op[1]);
+    const colourOf = (ops: Op[], text: string) => {
+      const i = ops.findIndex((op) => op[0] === 'fillText' && op[1] === text);
+      return [...ops.slice(0, i)].reverse().find((op) => op[0] === 'set' && op[1] === 'fillStyle')![2];
+    };
+    const addr5 = { value: 0x5n, defined: 0xfn, width: 4 };
+    const word3c = { value: 0x3cn, defined: 0xffn, width: 8 };
+
+    const rom = run('rom', addr5, word3c);
+    expect(texts(rom.ops)).toEqual(['ROM', '8×16', '0x5', ' → ', '0x3C', 'code']);
+    expect(colourOf(rom.ops, 'ROM')).toBe(colorsDark.macro);
+    expect(colourOf(rom.ops, '0x5')).toBe(colorsDark.label);
+    expect(colourOf(rom.ops, '0x3C')).toBe(colorsDark.wireBus);
+    // The ROM's instance name goes below the box, like a pin's.
+    const name = rom.ops.find((op) => op[0] === 'fillText' && op[1] === 'code')!;
+    expect(name[3]).toBe((rom.c.y + rom.c.height) * 10 + 1.6);
+    expect(rom.ops.some((op) => op[0] === 'fillText' && op[1] === 'wr')).toBe(false);
+
+    // Unloaded: the address is known, the word is not.
+    const empty = run('rom', addr5, { value: 0n, defined: 0n, width: 8 });
+    expect(texts(empty.ops)).toEqual(['ROM', '8×16', '0x5', ' → ', '?', 'code']);
+    expect(colourOf(empty.ops, '?')).toBe(colorsDark.labelMuted);
+
+    // RAM: four port labels on their rows, the word one row above the name, the wr dot unlit.
+    const ram = run('ram', addr5, word3c);
+    expect(texts(ram.ops)).toEqual(['RAM', '8×16', 'addr', 'din', 'we', 'clk', '0x5', ' → ', '0x3C', 'data', 'wr']);
+    for (const [i, port] of ['addr', 'din', 'we', 'clk'].entries()) {
+      const label = ram.ops.find((op) => op[0] === 'fillText' && op[1] === port)!;
+      expect(label[3]).toBe(ram.c.inPorts[i].coord.y * 10 + 5);
+    }
+    expect(colourOf(ram.ops, 'wr')).toBe(colorsDark.labelMuted);
+    expect(balanced(ram.ops)).toBe(true);
+  });
+
   test('the NOT gate names itself below its box, like every other part', () => {
     // Before: yOffset = -cell * 15 put the name 0.7 cells above the bottom
     // edge, inside the sprite.

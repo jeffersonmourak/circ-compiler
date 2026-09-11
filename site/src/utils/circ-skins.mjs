@@ -11,7 +11,7 @@
 // that a sprite is looked up through `sprite(name)` instead of a module
 // variable the loader assigned.
 
-import { ComponentKind, memoryLabel, traceWire, wireColorKey, wireStyleOf } from 'circ-renderer';
+import { ComponentKind, traceWire, widthMask, wireColorKey, wireStyleOf } from 'circ-renderer';
 
 /**
  * What the skins need from the page: the decoded sprites (null until they
@@ -840,7 +840,8 @@ function nsChip(ctx, t, cell, c) {
  * gates, so a chip sits on the wire exactly like a primitive. `body` fills
  * the chip between them.
  */
-function nsChipPart({ ctx, cell, component: c, inputSignals: inSigs, inputValues, outputSignal: outSig, theme }, body) {
+function nsChipPart(args, body) {
+  const { ctx, cell, component: c, inputSignals: inSigs, inputValues, outputSignal: outSig, theme } = args;
   const t = theme.colors;
   const x0 = c.x * cell, w = c.width * cell;
   const inset = NS_INSET * cell;
@@ -856,7 +857,7 @@ function nsChipPart({ ctx, cell, component: c, inputSignals: inSigs, inputValues
   }
   const outDotY = c.outPort.y * cell + cell / 2;
   nsTail(ctx, cell, rightEdge, c.outPort.x * cell + cell / 2, outDotY, outSig, t, (c.bitWidth ?? 1) > 1);
-  body(ctx, t, cell, c, inDotYs, inputValues, outSig);
+  body(ctx, t, cell, c, inDotYs, args);
   for (let i = 0; i < c.inPorts.length; i++) nsDot(ctx, cell, leftEdge, inDotYs[i], inSigs[i] ?? 2, t);
   nsDot(ctx, cell, rightEdge, outDotY, outSig, t);
 }
@@ -899,53 +900,6 @@ const drawSubcircuit = (args) => {
   nsChipPart(args, nsUserSubcircuit);
 };
 
-/**
- * A bit-shape or memory box: the same rounded box the collapsed macro draws,
- * with the site's tails and a name below. These four kinds used to fall
- * through to the package's default skins and render in a foreign visual
- * language beside the sprite-drawn gates.
- */
-const drawBox = ({ ctx, cell, component, inputSignals, inputValues, outputSignal, theme }, label, borderColor) => {
-  const x0 = component.x * cell;
-  const y0 = component.y * cell;
-  const w = component.width * cell;
-  const h = component.height * cell;
-  const gap = cell * 0.45;
-  const leftEdge = x0 + w * 0.08 - gap;
-  const rightEdge = x0 + w * 0.92 + gap;
-
-  const inDotYs = [];
-  for (let i = 0; i < component.inPorts.length; i++) {
-    const slot = component.inPorts[i];
-    const sig = inputSignals[i] ?? 2;
-    const portY = slot.coord.y * cell + cell / 2;
-    inDotYs.push(portY);
-    nsTail(ctx, cell, leftEdge, slot.coord.x * cell + cell / 2, portY, sig, theme.colors, (inputValues[i]?.width ?? 1) > 1);
-  }
-  const outDotY = component.outPort.y * cell + cell / 2;
-  nsTail(ctx, cell, rightEdge, component.outPort.x * cell + cell / 2, outDotY, outputSignal, theme.colors, (component.bitWidth ?? 1) > 1);
-
-  ctx.strokeStyle = borderColor;
-  ctx.fillStyle = theme.colors.fillIdle;
-  ctx.lineWidth = Math.max(2, cell * 0.12);
-  const r = cell * 0.25;
-  ctx.beginPath();
-  ctx.roundRect(x0 + cell * 0.08, y0 + cell * 0.08, w - cell * 0.16, h - cell * 0.16, r);
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = theme.colors.label;
-  ctx.font = `600 ${Math.round(cell * 0.75)}px ui-monospace, "JetBrains Mono", monospace`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(label, x0 + w / 2, y0 + h / 2);
-
-  for (let i = 0; i < component.inPorts.length; i++) {
-    nsDot(ctx, cell, leftEdge, inDotYs[i], inputSignals[i] ?? 2, theme.colors);
-  }
-  nsDot(ctx, cell, rightEdge, outDotY, outputSignal, theme.colors);
-};
-
-/** `[i]` or `[lo:hi]`, the way the compiler's own preview writes a slice. */
 /* ───── bit parts: slice and concat ────────────────────────────────
  * A labelled box tells you a slice exists; it does not tell you which bits
  * it takes. These draw the bit field itself: a slice is a ruler of the
@@ -1105,15 +1059,117 @@ const drawConcat = (args) => {
   nsBitPart(args, nsConcatAsset);
 };
 
-/** `rom code[8,4]` — the label text comes from the renderer, so the canvas
- *  and the preview cannot spell a memory two ways. Named below like a macro. */
+/** Hex for a fully defined value, `?` otherwise; the masks are bigint, as the renderer's are. */
+function nsHex(v) {
+  if (!v) return '?';
+  const mask = widthMask(v.width);
+  if ((v.defined & mask) !== mask) return '?';
+  return '0x' + (v.value & mask).toString(16).toUpperCase().padStart(Math.ceil(v.width / 4), '0');
+}
+
+/* ───── memories: ROM and RAM ──────────────────────────────────────
+ * Both take the chip. The header carries the DECLARATION — mode on the
+ * left, W×2^A on the right — because contents are runtime configuration
+ * and the shape is the only thing the source knows. The body shows the one
+ * thing a reader wants from a memory mid-simulation: the addressed word,
+ * addr → word, in the bus colour. Reads are asynchronous, so the word is
+ * the output and the address is the first input; an unloaded cell reads ?
+ * like any undefined value. A RAM labels its four ports inside the left
+ * edge and carries a write indicator bottom right.
+ */
+function nsMemory(ctx, t, cell, c, inDotYs, { inputValues, outputValue }, mode) {
+  const { x0, y0, w, h, bx, bw, head } = nsChip(ctx, t, cell, c);
+  const W = c.bitWidth ?? 1;
+  const A = c.memory?.addrWidth ?? 0;
+  const ram = mode === 'ram';
+
+  // Header: MODE left, W×2^A right.
+  ctx.font = nsFont(cell, 700);
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = t.macro;
+  ctx.textAlign = 'left';
+  ctx.fillText(mode.toUpperCase(), bx + cell * 0.45, y0 + head / 2 + cell * 0.02);
+  ctx.font = nsFont(cell, 500);
+  ctx.textAlign = 'right';
+  ctx.fillText(`${W}\u00d7${2 ** A}`, bx + bw - cell * 0.45, y0 + head / 2 + cell * 0.02);
+
+  // Port labels inside the left edge, on each port row (a RAM has four).
+  if (ram) {
+    ctx.font = nsFont(cell, 500);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = t.labelMuted;
+    for (let i = 0; i < c.inPorts.length; i++) ctx.fillText(c.inPorts[i].portName, bx + cell * 0.4, inDotYs[i]);
+  }
+
+  // Body: the addressed word. addr → word, the word in the bus colour when defined.
+  const addr = inputValues[0];
+  const addrText = nsHex(addr);
+  const wordText = nsHex(outputValue);
+  const bodyY = y0 + head + (h - head) / 2;
+  const nameY = ram ? bodyY + cell * 1.1 : null;
+  const cx = bx + bw / 2 + (ram ? cell * 0.9 : 0);
+  ctx.font = nsFont(cell, 700);
+  const seg = [
+    { text: addrText, colour: addrText === '?' ? t.labelMuted : t.label },
+    { text: ' \u2192 ', colour: t.labelMuted },
+    { text: wordText, colour: wordText === '?' ? t.labelMuted : t.wireBus },
+  ];
+  const total = seg.reduce((sum, sg) => sum + ctx.measureText(sg.text).width, 0);
+  let px = cx - total / 2;
+  ctx.textAlign = 'left';
+  for (const sg of seg) {
+    ctx.fillStyle = sg.colour;
+    ctx.fillText(sg.text, px, nameY ? bodyY - cell * 0.5 : bodyY);
+    px += ctx.measureText(sg.text).width;
+  }
+  // Instance name: a RAM has room under the word; a ROM puts it below the box.
+  if (nameY) {
+    ctx.textAlign = 'center';
+    ctx.fillStyle = t.label;
+    ctx.font = nsFont(cell, 500);
+    ctx.fillText(c.name ?? '', cx, nameY - cell * 0.5);
+  } else {
+    nsName(ctx, cell, c.name, x0, y0, w, h, t.labelMuted);
+  }
+
+  // RAM write indicator: a dot labelled "wr" bottom right, lit orange on the
+  // we·clk edge the engine writes on. Whether it is lit is decided per draw.
+  if (ram) {
+    const wr = ramWriting(ctx, c, inputValues);
+    const ir = cell * 0.2;
+    const ix = bx + bw - cell * 0.55 - ir;
+    const iy = y0 + h - cell * 0.5;
+    if (wr) {
+      nsVecHalo(ctx, 'wr', ix - ir, iy - ir, ir * 2, ir * 2, t.inputOn, cell * 0.6,
+        (g) => { g.beginPath(); g.arc(ir, ir, ir, 0, Math.PI * 2); g.closePath(); });
+    }
+    ctx.fillStyle = wr ? t.inputOn : t.surface;
+    ctx.strokeStyle = wr ? t.inputOn : t.labelMuted;
+    ctx.lineWidth = Math.max(1.5, cell * 0.1);
+    ctx.beginPath();
+    ctx.arc(ix, iy, ir, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = wr ? t.inputOn : t.labelMuted;
+    ctx.font = nsFont(cell, 600);
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('wr', ix - ir - cell * 0.3, iy + cell * 0.02);
+  }
+}
+
+/**
+ * Whether this draw is the one on which a RAM commits a write. Decided in
+ * the next slice; until then a RAM never shows as writing.
+ */
+function ramWriting(ctx, c, inputValues) {
+  void ctx; void c; void inputValues;
+  return false;
+}
+
 const drawMemory = (args) => {
-  const { component, ctx, cell, theme } = args;
-  const kind = component.kind.tag === 'primitive' ? component.kind.kind : ComponentKind.Rom;
-  const label = memoryLabel(kind, component.name, component.bitWidth, component.memory?.addrWidth ?? 0);
-  drawBox(args, label, theme.colors.macro);
-  const x0 = component.x * cell, y0 = component.y * cell;
-  nsName(ctx, cell, component.name, x0, y0, component.width * cell, component.height * cell, theme.colors.labelMuted);
+  const mode = args.component.kind.tag === 'primitive' && args.component.kind.kind === ComponentKind.Ram ? 'ram' : 'rom';
+  nsChipPart(args, (ctx, t, cell, c, inDotYs, a) => nsMemory(ctx, t, cell, c, inDotYs, a, mode));
 };
 
 /* ───── theme objects ──────────────────────────────────────────────── */

@@ -81,9 +81,12 @@ describe('circ-theme hover', () => {
     expect([...palette.matchAll(/inputHover:/g)]).toHaveLength(2);
   });
 
-  test('a memory is labelled by the renderer, so the canvas and the preview agree', () => {
-    // `rom code[8,4]` comes from one function in one place.
-    expect(source).toMatch(/^import \{[^}]*\bmemoryLabel\b[^}]*\} from 'circ-renderer';$/m);
-    expect(skinBody('drawMemory')).toContain('memoryLabel(');
+  test('a memory names its declaration in its header, not the preview label', () => {
+    // The chip's header is MODE and W×2^A; the `rom code[8,4]` string the
+    // preview prints is no longer drawn, so the renderer's memoryLabel is
+    // not imported.
+    expect(source).not.toMatch(/\bmemoryLabel\b/);
+    expect(skinBody('drawMemory')).toContain('nsChipPart(');
   });
+
 });
