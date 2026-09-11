@@ -213,6 +213,29 @@ describe('memories', () => {
   });
 });
 
+describe('boot', () => {
+  test('bootLow drives every root input low once, silently; reset leaves them floating', async () => {
+    const made: StubRuntime[] = [];
+    const events: SessionEvent[] = [];
+    const session = await SimSession.build({
+      bytes,
+      bootLow: true,
+      load: async () => {
+        const rt = stubRuntime(MEMORIES, evaluateRom);
+        made.push(rt);
+        return rt;
+      },
+    });
+    session.subscribe((e) => events.push(e));
+    expect(made[0].calls).toEqual(['set:0', 'run']);
+    expect(made[0].values.get(0)).toEqual({ value: 0n, defined: 0xfn, width: 4 });
+    await session.reset();
+    expect(made[1].calls).toEqual([]);
+    expect(made[1].values.get(0)!.defined).toBe(0n);
+    expect(events).toEqual([{ kind: 'rebuilt' }]);
+  });
+});
+
 describe('widths', () => {
   test('a 64-bit pin takes a full 64-bit value and refuses a 65th bit', async () => {
     const wide = [

@@ -101,6 +101,14 @@ export interface SessionInit {
   images?: RomImageMap;
   /** Analysis warnings, for the console's handshake. */
   warnings?: readonly SessionWarning[];
+  /**
+   * Drive every root input low and settle once after building, the way the
+   * page has always booted a canvas (the renderer's `loadFromBytes` did it
+   * until the session took over loading with `noInitialPinDrive`). Never
+   * applied by `reset`, which is the protocol's: every pin floating, as after
+   * `init()`. A test that replays `--sim` transcripts leaves this off.
+   */
+  bootLow?: boolean;
 }
 
 export type SessionEvent =
@@ -186,7 +194,16 @@ export class SimSession {
     const runtime = await init.load(init.bytes);
     const session = new SimSession(init, runtime);
     session.applyPreloads();
+    if (init.bootLow) session.bootLow();
     return session;
+  }
+
+  /** Every root input to 0, fully defined, then one settle. No event: nothing was watching yet. */
+  private bootLow(): void {
+    for (const pin of this.pins) {
+      if (pin.kind === 'in') this.rt.setValue(pin.id, 0n, widthMask(pin.width));
+    }
+    this.rt.run();
   }
 
   /** The current runtime. Replaced by `reset()`; a face that holds it listens for `rebuilt`. */
