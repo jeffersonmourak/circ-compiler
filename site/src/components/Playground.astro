@@ -1,5 +1,6 @@
 ---
 import { url } from '../utils/url.ts';
+import ThemeToggle from './ThemeToggle.astro';
 import { examples } from '../content/examples.ts';
 import { tour } from '../content/tour.ts';
 import { CATALOGUE_GROUPS, buildCatalogue } from '../utils/playground-store.ts';
@@ -49,7 +50,39 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       }
     })();
   </script>
-  <div class="pg-banner" hidden></div>
+  <header class="pg-nav">
+    <div class="pg-nav-left">
+      <a class="pg-brand" href={url('/')}>circ</a>
+      {/* The breadcrumb names the open project; Phase 4 makes it the switcher. */}
+      <button type="button" class="pg-crumb">
+        <span class="pg-crumb-group">{initial.group} /</span>
+        <span class="pg-crumb-name">{initial.label}</span>
+        <span class="pg-crumb-chevron" aria-hidden="true">▾</span>
+      </button>
+      <span class="pg-status-cluster">
+        <span class="pg-dot" data-state="idle" aria-hidden="true"></span>
+        <span class="pg-status-label">Idle</span>
+        <span class="pg-status-detail">Type to compile.</span>
+      </span>
+    </div>
+    <div class="pg-nav-right">
+      {/* Disabled until a build exists; the island keeps the label and title current. */}
+      <button type="button" class="pg-action pg-download" disabled title="Compile a circuit first">
+        <svg class="pg-action-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <path d="M8 2v7.5M4.75 6.5 8 9.75l3.25-3.25M3 12.5h10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span class="pg-action-label">Download</span>
+        <span class="pg-action-meta"></span>
+      </button>
+      <button type="button" class="pg-action pg-share" title="Copy a link to this circuit">
+        <svg class="pg-action-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <path d="M6.5 9.5 9.5 6.5M7 4.5l1.3-1.3a2.5 2.5 0 0 1 3.5 3.5L10.5 8M5.5 8 4.2 9.3a2.5 2.5 0 0 0 3.5 3.5L9 11.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span class="pg-action-label">Share</span>
+      </button>
+      <ThemeToggle />
+    </div>
+  </header>
   <div class="pg-panes">
     <!-- A sibling of the two panes, never a track inside them: the divider's
          arithmetic, its ResizeObserver and its aria-controls all name exactly
@@ -89,6 +122,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       </div>
     </nav>
     <section class="pg-editor" id="pg-pane-editor">
+      <div class="pg-banner" hidden></div>
       <div class="pg-editor-wrap" id="pg-editor-panel" role="tabpanel">
         <div id="pg-editor" class="pg-cm" hidden></div>
         <textarea
@@ -328,32 +362,22 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       </div>
     </section>
   </div>
-  <div class="pg-statusbar">
-    <span class="pg-dot" data-state="idle" aria-hidden="true"></span>
-    <span class="pg-status-label">Idle</span>
-    <span class="pg-status-detail">Type to compile.</span>
-    <span class="pg-status-spacer"></span>
-    {/* Rendered from the committed manifest so the bar is never blank before
+  <footer class="pg-statusline">
+    {/* Rendered from the committed manifest so the line is never blank before
         the version handshake resolves; the island overwrites it after. */}
     <span class="pg-status-identity">circ {manifest.version} · {manifest.revision} · CIRF v{manifest.full_version}</span>
-    <span class="pg-status-actions">
-      {/* Disabled until a build exists; the island keeps the title current. */}
-      <button type="button" class="pg-action pg-download" disabled title="Compile a circuit first">
-        <svg class="pg-action-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-          <path d="M8 2v7.5M4.75 6.5 8 9.75l3.25-3.25M3 12.5h10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-        <span class="pg-action-label">Download .wasm</span>
-      </button>
-      <button type="button" class="pg-action pg-share" title="Copy a link to this circuit">
-        <svg class="pg-action-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
-          <path d="M6.5 9.5 9.5 6.5M7 4.5l1.3-1.3a2.5 2.5 0 0 1 3.5 3.5L10.5 8M5.5 8 4.2 9.3a2.5 2.5 0 0 0 3.5 3.5L9 11.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-        </svg>
-        <span class="pg-action-label">Share</span>
-      </button>
+    {/* The site footer's signature, verbatim: the app page renders no footer. */}
+    <p class="signature muted">
+      Made with <span class="heart" aria-hidden="true">♥︎</span><span class="visually-hidden">love</span>
+      by <a href="https://github.com/jeffersonmourak" rel="noreferrer noopener">@jeffersonmourak</a>
+    </p>
+    <span class="pg-statusline-right">
+      {/* The announcement channel: file-tab operations and store notes. While
+          it holds a sentence the promise beside it yields the cell. */}
+      <span class="pg-status" role="status" aria-live="polite"></span>
+      <span class="pg-promise">runs in your browser · nothing leaves the page</span>
     </span>
-    {/* The announcement channel: file-tab operations and store notes. */}
-    <span class="pg-status" role="status" aria-live="polite"></span>
-  </div>
+  </footer>
   {/* Page data, not a module: it never enters the eager module graph, so the
       content files stay out of the island's bundle. */}
   <script type="application/json" id="pg-picks" set:html={JSON.stringify(catalogue)} />
@@ -523,7 +547,11 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     const wsError = el.querySelector<HTMLElement>('.pg-ws-error')!;
     const shareBtn = el.querySelector<HTMLButtonElement>('.pg-share')!;
     const downloadBtn = el.querySelector<HTMLButtonElement>('.pg-download')!;
-    const statusActions = el.querySelector<HTMLElement>('.pg-status-actions')!;
+    const navActions = el.querySelector<HTMLElement>('.pg-nav-right')!;
+    const downloadLabel = el.querySelector<HTMLElement>('.pg-download .pg-action-label')!;
+    const downloadMeta = el.querySelector<HTMLElement>('.pg-download .pg-action-meta')!;
+    const crumbGroup = el.querySelector<HTMLElement>('.pg-crumb-group')!;
+    const crumbName = el.querySelector<HTMLElement>('.pg-crumb-name')!;
     const panels = Array.from(el.querySelectorAll<HTMLElement>('.pg-panel'));
     // The dock: the editor's own strip, distinct from both the output tabs
     // above and the file tabs. Its [role=tab] query is scoped for the same
@@ -1291,7 +1319,18 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       return b;
     }
 
+    /** The breadcrumb names the open project the way the tree does: its
+     *  group's label, then its own. Rendered with the tree, which redraws on
+     *  every load, rename and duplicate. */
+    function renderCrumb() {
+      const id = store.envelope.activeId;
+      const group = id && idKind(id) !== 'scratch' ? (catalogue.find((c) => c.id === id)?.group ?? 'Yours') : 'Yours';
+      crumbGroup.textContent = `${group} /`;
+      crumbName.textContent = activeLabel();
+    }
+
     function renderTree(opts: { keepFocusOn?: string | null } = {}) {
+      renderCrumb();
       const wantedId = opts.keepFocusOn !== undefined
         ? opts.keepFocusOn
         : (treeNodes[treeFocus]?.id ?? null);
@@ -1653,7 +1692,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         input.className = 'pg-share-fallback';
         input.readOnly = true;
         input.value = text;
-        statusActions.appendChild(input);
+        navActions.appendChild(input);
         input.focus();
         input.select();
         input.addEventListener('blur', () => input.remove(), { once: true });
@@ -1734,6 +1773,10 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     function refreshActions() {
       const a = state.artifact;
       downloadBtn.disabled = !a;
+      // The button says what it would save: the artifact's name, and its
+      // size beside it in the muted tone. With no build it is the bare verb.
+      downloadLabel.textContent = a ? artifactFileName(activeLabel()) : 'Download';
+      downloadMeta.textContent = a ? formatBytes(a.size) : '';
       downloadBtn.title = !a
         ? 'Compile a circuit first'
         : state.stale
@@ -1754,7 +1797,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       link.download = name;
       link.hidden = true;
       // In the document for the click, so the page's own listeners see it.
-      statusActions.appendChild(link);
+      navActions.appendChild(link);
       link.click();
       link.remove();
       window.setTimeout(() => URL.revokeObjectURL(href), 1000);

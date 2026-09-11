@@ -1716,20 +1716,15 @@ a.install-line:hover {
 }
 [data-layout='app'] .pg {
   margin: 0;
-  /* The workbench is the one child that takes the leftover height; anything
-     above it keeps its own. */
+  /* The workbench is the one child of `main` that takes the leftover height. */
   flex: 1;
   min-height: 0;
-  /* Flex for the same reason `main` is, and this one is worse: the three
-     tracks this used to declare — banner, panes, status bar — only lined up
-     when the banner was VISIBLE, which it almost never is. With it hidden
-     there were two items for three tracks, so the panes took the `auto` row
-     and sized to their content while the status bar took the 1fr. That is why
-     the editor grew and shrank with the line count of whichever file was
-     open. A column with one `flex: 1` child does not care how many of its
-     siblings are currently displayed. */
-  display: flex;
-  flex-direction: column;
+  /* The bench frame: nav · body · status line. Fixed tracks, which once bit
+     this element when a hidden banner made the children and the tracks
+     disagree; the banner now lives inside the source pane, and `island-smoke`
+     counts the rendered children against the tracks so it cannot recur. */
+  display: grid;
+  grid-template-rows: 48px minmax(0, 1fr) 24px;
 }
 /* The last good outputs stay on screen while the source is broken, dimmed
    rather than blanked — cleared only when the file set itself changes. */
@@ -1917,45 +1912,127 @@ a.install-line:hover {
   padding: 0 0.2rem;
 }
 
-.pg-statusbar {
+/* ---------- the bench nav ----------
+   Row 1 of the frame (design file: nav 48px, two clusters). The wordmark, the
+   breadcrumb naming the open project, the status cluster; then Download,
+   Share and the theme toggle. The app page renders no site nav, so the
+   wordmark is the way home. */
+.pg-nav {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.3rem 0.5rem;
-  border-top: 1px solid var(--border);
+  justify-content: space-between;
+  gap: 16px;
+  height: 48px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border);
   font-family: var(--font-mono);
-  font-size: 0.75rem;
-  color: var(--muted);
-  min-height: 1.9rem;
-  flex-wrap: wrap;
+  min-width: 0;
 }
-.pg-status-spacer { flex: 1; }
-.pg-status-actions { display: flex; align-items: center; gap: 0.3rem; }
-/* The two status-bar actions: Download .wasm and Share. One shape, an icon
-   and a label each; a label flashes ("Copied", "Saved") through data-state. */
+.pg-nav-left { display: flex; align-items: center; gap: 22px; min-width: 0; }
+.pg-nav-right { display: flex; align-items: center; gap: 8px; flex: none; }
+.pg-brand {
+  font-family: var(--font-mono);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--fg);
+  text-decoration: none;
+  flex: none;
+}
+.pg-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--fg);
+  background: var(--pane-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px 5px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  max-width: 24rem;
+  transition: border-color 120ms, box-shadow 120ms;
+}
+.pg-crumb-group { color: var(--muted); }
+.pg-crumb-name { overflow: hidden; text-overflow: ellipsis; }
+.pg-crumb-chevron { color: var(--accent); font-size: 10px; }
+.pg-crumb:hover { border-color: var(--accent); }
+.pg-crumb[aria-expanded='true'] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.pg-status-cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+}
+.pg-status-detail { overflow: hidden; text-overflow: ellipsis; }
+/* The two nav actions: Download and Share. One shape, an icon and a label
+   each; a label flashes ("Copied", "Saved") through data-state. Download is
+   the outline button and carries the artifact's size in the muted tone;
+   Share is the filled one. */
 .pg-action {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: 6px;
   border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--pane-label-bg);
+  border-radius: 6px;
+  background: transparent;
   color: var(--fg);
   font-family: inherit;
-  font-size: 0.72rem;
-  line-height: 1.2;
-  padding: 0.15rem 0.5rem;
+  font-size: 11.5px;
+  line-height: 1.3;
+  padding: 5px 10px;
   cursor: pointer;
+  white-space: nowrap;
   transition: border-color 120ms, color 120ms, background 120ms;
 }
 .pg-action-icon { width: 0.85rem; height: 0.85rem; flex: none; }
+.pg-action-meta { color: var(--muted); }
+.pg-action-meta:empty { display: none; }
 .pg-action:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
 .pg-action:disabled { opacity: 0.45; cursor: not-allowed; }
 .pg-action[data-state='done'] { border-color: var(--accent); color: var(--accent); }
 .pg-action[data-state='failed'] { border-color: var(--danger); color: var(--danger); }
+.pg-share { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.pg-share:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent-soft); color: var(--bg); }
+.pg-share[data-state='done'] { color: var(--bg); }
 /* A build the source has moved past is still worth saving, but say so. */
 .pg-download[data-stale] .pg-action-icon { opacity: 0.6; }
 .pg-download[data-stale] .pg-action-label::after { content: ' (stale)'; opacity: 0.7; }
+
+/* ---------- the status line ----------
+   Row 4 of the frame (design file: 24px, `1fr auto 1fr`): the compiler
+   identity, the signature the site footer signs with, and on the right the
+   promise — or, while one is being made, an announcement. */
+.pg-statusline {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 16px;
+  height: 24px;
+  padding: 0 16px;
+  border-top: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1;
+  color: var(--muted);
+  opacity: 0.8;
+  white-space: nowrap;
+  min-width: 0;
+}
+.pg-statusline > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.pg-statusline .signature { margin: 0; font-size: inherit; }
+.pg-statusline-right { display: flex; justify-content: flex-end; gap: 8px; }
+.pg-status:not(:empty) + .pg-promise { display: none; }
 .pg-share-fallback {
   font-family: var(--font-mono);
   font-size: 0.7rem;
@@ -1986,8 +2063,7 @@ a.install-line:hover {
 }
 
 [data-layout='app'] .pg-panes {
-  /* The one child of `.pg` that takes the leftover height. */
-  flex: 1;
+  /* The frame's body row; it must be allowed to shrink to the track. */
   min-height: 0;
   /* Sidebar, then the editor's share of what the two panes have left after the
      divider itself, so the tracks always sum to exactly 100%. */

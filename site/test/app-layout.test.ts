@@ -116,10 +116,15 @@ describe('app layout', () => {
     // which is the real invariant; this is the build-free half of it, and it
     // runs in every slice rather than only after `bun --bun run build`.
     for (const [container, fills] of [['main', '.pg'], ['.pg', '.pg-panes']] as const) {
-      expect(declarations(`[data-layout='app'] ${container} {`)).toContain('min-height: 0');
+      const block = declarations(`[data-layout='app'] ${container} {`);
+      expect(block).toContain('min-height: 0');
       const child = declarations(`[data-layout='app'] ${fills} {`);
-      expect(child).toContain('flex: 1');
       expect(child).toContain('min-height: 0');
+      // A flex column hands the leftover to the child that claims it; a grid
+      // hands each child a track, and `island-smoke` counts the tracks against
+      // the rendered children.
+      if (block.includes('grid-template-rows')) expect(block).toContain('display: grid');
+      else expect(child).toContain('flex: 1');
     }
   });
 
@@ -143,6 +148,13 @@ describe('app layout', () => {
       expect(selector).not.toContain('.site-footer');
       expect(selector).not.toContain('.site-nav');
     }
+  });
+
+  test('the frame is the bench rows', () => {
+    const block = stripComments(css).slice(stripComments(css).indexOf("[data-layout='app'] .pg {"));
+    const pg = block.slice(0, block.indexOf('}'));
+    expect(pg).toContain('grid-template-rows: 48px minmax(0, 1fr) 24px');
+    expect(pg).toContain('min-height: 0');
   });
 
   test('the viewport lock has a 100vh fallback before 100dvh', () => {

@@ -287,9 +287,33 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(tip.textContent).toBe('');
     expect(doc.querySelector('.pg-tabs [data-tab="truth"]')?.getAttribute('aria-disabled')).toBe('false');
 
+    // The bench's chrome: no site nav or footer; a nav with the wordmark, the
+    // breadcrumb naming the open project, the status cluster, the two
+    // actions and the theme toggle; a status line with the identity, the
+    // footer's signature and the promise. The status bar is gone.
+    expect(doc.querySelector('.site-nav')).toBeNull();
+    expect(doc.querySelector('.site-footer')).toBeNull();
+    expect(doc.querySelector('.pg-statusbar')).toBeNull();
+    expect(doc.querySelector('.pg-nav .pg-brand')?.getAttribute('href')).not.toBeNull();
+    const defaultPick = catalogue[0];
+    expect(doc.querySelector('.pg-crumb-group')?.textContent).toBe(`${defaultPick.group} /`);
+    expect(doc.querySelector('.pg-crumb-name')?.textContent).toBe(defaultPick.label);
+    // The cluster moved with its state: the harness has no worker, so the
+    // word is whatever the pipeline says, never blank.
+    expect(doc.querySelector('.pg-nav .pg-dot')?.getAttribute('data-state')).not.toBeNull();
+    expect(doc.querySelector('.pg-nav .pg-status-label')?.textContent).not.toBe('');
+    expect(doc.querySelector('.pg-nav .pg-download')).not.toBeNull();
+    expect(doc.querySelector('.pg-nav .pg-share')).not.toBeNull();
+    expect(doc.querySelector('.pg-nav .theme-toggle')).not.toBeNull();
+    expect(doc.querySelector('.pg-statusline .pg-status-identity')).not.toBeNull();
+    expect(doc.querySelector('.pg-statusline .signature .heart')).not.toBeNull();
+    expect(doc.querySelector('.pg-statusline .pg-promise')?.textContent).toBe('runs in your browser · nothing leaves the page');
+    expect(doc.querySelector('.pg-statusline .pg-status[role="status"]')).not.toBeNull();
+    // The banner lives inside the source pane, not among the frame's rows.
+    expect(doc.querySelector('.pg-editor > .pg-banner')).not.toBeNull();
+
     // The workbench furniture, and the panes grid in order.
     expect(doc.querySelector('.pg-splitter')).not.toBeNull();
-    expect(doc.querySelector('.pg-statusbar')).not.toBeNull();
     expect(doc.querySelector('.pg-settings')).not.toBeNull();
     // happy-dom's Element is structurally its own; `className` is all this needs.
     const panes = Array.from(
@@ -615,6 +639,8 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
       const button = doc.querySelector('.pg-download') as unknown as { disabled: boolean; title: string };
       expect(button.disabled).toBe(true);
       expect(button.title).toBe('Compile a circuit first');
+      expect(doc.querySelector('.pg-download .pg-action-label')?.textContent).toBe('Download');
+      expect(doc.querySelector('.pg-download .pg-action-meta')?.textContent).toBe('');
       // The anchor the click creates is caught here, before happy-dom tries
       // to navigate to a blob: URL.
       doc.addEventListener('click', (e) => {
@@ -634,6 +660,9 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
       const button = doc.querySelector('.pg-download') as unknown as { disabled: boolean; title: string; click(): void; hasAttribute(n: string): boolean };
       expect(button.disabled).toBe(false);
       expect(button.title).toMatch(/^Download [a-z0-9-]+\.wasm \(8 B\)$/);
+      // The button says what it would save, and how big it is.
+      expect(doc.querySelector('.pg-download .pg-action-label')?.textContent).toMatch(/^[a-z0-9-]+\.wasm$/);
+      expect(doc.querySelector('.pg-download .pg-action-meta')?.textContent).toBe('8 B');
       expect(button.hasAttribute('data-stale')).toBe(false);
       button.click();
       expect(saved).toHaveLength(1);
@@ -642,7 +671,7 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
       expect(doc.querySelector('.pg-status')?.textContent).toMatch(/^Saved [a-z0-9-]+\.wasm \(8 B\)\.$/);
       expect(doc.querySelector('.pg-download')?.getAttribute('data-state')).toBe('done');
       // The anchor was a means, not a leftover.
-      expect(doc.querySelector('.pg-status-actions a')).toBeNull();
+      expect(doc.querySelector('.pg-nav a[download]')).toBeNull();
     });
 
     // A build the source has moved past is still offered, and says so. This
