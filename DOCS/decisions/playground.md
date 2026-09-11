@@ -332,3 +332,35 @@ The entries below record the decisions of the playground-v2 initiative (the site
 **Rationale.** A document written after the fact records what someone remembers; one written with the slice records what the slice did, and the reviewer reads both in one diff.
 
 **Alternatives.** One documentation phase at the end (the phase every plan cuts first).
+
+### Session events carry what was driven
+
+**Decision.** A `drive` event carries its `assigns` — each pin's name, value and the mask the runtime received — beside `names`; a `memory` event names its `op`: `poke` with the address, value and mask, `clear`, or `load` with the word count. `notifyExternal(assigns)` takes what the canvas drove. `applyPreloads({ silent })` reports a `load` or a `clear` per image it applied unless silent; the build and `reset` apply silently.
+
+**Rationale.** A face that wants to say what happened must not reconstruct it from another face's state; the session knows, once, at the moment it drove. The build and `reset` are moments the handshake already records, so a comment there would be noise.
+
+**Alternatives.** Faces re-reading pins after each event (a value read after the fact is not the value driven when a mask was partial); a tag on the session's API naming the caller (the console tells its own lines apart by being busy).
+
+### `commandFor` is the one spelling
+
+**Decision.** `console.ts`'s `commandFor(event, session)` turns a session event into the lines the console prints: one `> set <pin> <hex>` per assign with the mask only when the pin is not wholly known, `> poke`, `> clear`, each followed by the `ok` the session gave; an image applied from the Memory tab is a `#` comment naming the memory and the word count; a rebuild is `> reset`, `ok`. Values are canonical (`value & defined`), as the executor's are.
+
+**Rationale.** The log is a transcript, and a transcript has one spelling. The browser refuses `load`, so an image claimed as a `load` line would be a line the CLI could not have printed; a comment is the honest record and a script ignores it.
+
+**Alternatives.** Re-running the executor for a face's action (a second `set clk 1` is not a second edge but is a second settle, and `poke` twice is twice the work); logging in the Data tab's base (a transcript in three bases).
+
+### A page line looks like a typed line
+
+**Decision.** A line another face caused is byte-identical to the line typing it would have produced, and its span carries `data-origin="page"` for the stylesheet only. A console-typed line is not echoed twice: the listener skips events that arrive while the console is running a line. `> reset`, `ok` and the handshake are what every reset prints, whoever caused it.
+
+**Rationale.** The promise is that the log can become a script; a marker inside the text would break it, and a marker outside the text costs nothing.
+
+**Alternatives.** A prefix or a colour word in the text; a separate log for page actions.
+
+### The Memory panel writes through the session
+
+**Decision.** The panel's RAM cell write and clear call `session.poke` and `session.clear`; the session settles, tells the faces and logs the line. A ROM edit stays an image edit through `applyPreloads`, which is why it logs as a comment. `memHost()` stays the panel's read path.
+
+**Rationale.** One owner of the runtime was the driver plan's first anchor, and the panel's two direct calls were a leftover of its move; a write around the session is a write the log cannot see.
+
+**Alternatives.** Emitting events from the panel itself (a second source of truth for what was written).
