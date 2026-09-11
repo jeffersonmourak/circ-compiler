@@ -38,6 +38,11 @@ export function optionsFor(
   op: LibcircOp,
   s: PlaygroundSettings,
   preloads?: Record<string, string>,
+  /** The truth table's wire format. The table on screen is parsed, so it
+   *  always asks for `json`; a copy asks for the compiler's `markdown` or
+   *  `csv`. The stored `format` setting is not read: a table requested in
+   *  markdown threw at `JSON.parse` for as long as the setting existed. */
+  format: 'json' | 'markdown' | 'csv' = 'json',
 ): Record<string, unknown> {
   switch (op) {
     case 'analyze':
@@ -55,7 +60,7 @@ export function optionsFor(
       };
     case 'truth_table':
       return {
-        format: s.format,
+        format,
         value_format: s.valueFormat,
         truth_table_cap: s.truthTableCap,
         warnings_as_errors: s.warningsAsErrors,

@@ -60,6 +60,16 @@ describe('optionsFor', () => {
     expect(optionsFor('preview', settings()).color).toBe('never');
   });
 
+  test('truth_table asks for json unless told the copy format', () => {
+    // The table on screen is parsed; a stored `format` of markdown or csv
+    // once reached the request and threw at `JSON.parse`.
+    for (const format of ['json', 'markdown', 'csv'] as const) {
+      expect(optionsFor('truth_table', settings({ format })).format).toBe('json');
+    }
+    expect(optionsFor('truth_table', settings(), undefined, 'markdown').format).toBe('markdown');
+    expect(optionsFor('truth_table', settings(), { code: 'ff' }, 'csv')).toMatchObject({ format: 'csv', preloads: { code: 'ff' } });
+  });
+
   test('truth_table carries its four keys, and preloads only when non-empty', () => {
     expect(optionsFor('truth_table', settings())).toEqual({
       format: 'json',
@@ -91,7 +101,9 @@ describe('optionsFor', () => {
       warningsAsErrors: true,
     });
     expect(optionsFor('preview', s).expand_macros).toBe(true);
-    expect(optionsFor('truth_table', s).format).toBe('csv');
+    // The stored `format` reaches no operation: the table is parsed, and a
+    // copy names its own format (see the test above).
+    expect(optionsFor('truth_table', s).format).toBe('json');
     expect(optionsFor('truth_table', s).value_format).toBe('hex');
     expect(optionsFor('truth_table', s).truth_table_cap).toBe(20);
     // warnings_as_errors is the one key three operations share.
