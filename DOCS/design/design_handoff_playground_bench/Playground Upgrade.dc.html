@@ -1,0 +1,1072 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<![CDATA[<helmet>
+  <meta name="design_doc_mode" content="canvas" />
+  <link rel="stylesheet" href="_ds/circ-site-08dd9906-cc43-49f3-b12c-936e70b128e1/fonts/fonts.css" />
+  <link rel="stylesheet" href="_ds/circ-site-08dd9906-cc43-49f3-b12c-936e70b128e1/fonts/jetbrains-mono.css" />
+  <link rel="stylesheet" href="_ds/circ-site-08dd9906-cc43-49f3-b12c-936e70b128e1/_ds_bundle.css" />
+  <link rel="stylesheet" href="_ds/circ-site-08dd9906-cc43-49f3-b12c-936e70b128e1/styles.css" />
+  <script src="_ds/circ-site-08dd9906-cc43-49f3-b12c-936e70b128e1/_ds_bundle.js"></script>
+  <style>
+    body { margin: 0; background: var(--bg); }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { color: var(--fg); text-decoration: underline; }
+    @keyframes pg-pulse { 50% { opacity: 0.35; } }
+    @keyframes heartbeat { 0% { transform: scale(1); } 8% { transform: scale(1.18); } 16% { transform: scale(1); } 24% { transform: scale(1.14); } 34% { transform: scale(1); } 100% { transform: scale(1); } }
+    @media (prefers-reduced-motion: reduce) { [data-heart] { animation: none; } }
+  </style>
+</helmet>
+<div ref="{{ rootRef }}" data-theme="{{ theme }}" style="font-family: var(--font-prose); color: var(--fg); background: var(--bg); padding: 40px 40px 80px; display: flex; flex-direction: column; gap: 40px; width: max-content; min-width: 1520px;">
+
+  <header style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; max-width: 1440px;">
+    <div style="display: flex; flex-direction: column; gap: 10px; max-width: 62ch;">
+      <span style="font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent);">circ-compiler / site / playground</span>
+      <h1 style="margin: 0; font-size: 34px; line-height: 1.1; font-weight: 600; letter-spacing: -0.01em;">Playground — map &amp; visual upgrade</h1>
+      <p style="margin: 0; font-size: 15px; line-height: var(--line); color: var(--muted); text-wrap: pretty;">Built from <code style="font-family: var(--font-mono); font-size: 13px;">Playground.astro</code> and the <code style="font-family: var(--font-mono); font-size: 13px;">.pg-*</code> rules in <code style="font-family: var(--font-mono); font-size: 13px;">global.css</code>. Same geometry, same tokens, one header grammar for every pane. The simulator uses the site-theme v2 assets from the other sheet.</p>
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px; flex: none;">
+      <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted);">data-theme</span>
+      <div style="display: flex; gap: 2px; background: var(--pane-label-bg); border: 1px solid var(--border); padding: 2px; border-radius: 6px;">
+        <button onClick="{{ setLight }}" style="{{ lightBtn }}">light</button>
+        <button onClick="{{ setDark }}" style="{{ darkBtn }}">dark</button>
+      </div>
+    </div>
+  </header>
+
+  <section style="display: flex; flex-direction: column; gap: 16px; max-width: 1440px;">
+    <h2 style="margin: 0; font-family: var(--font-mono); font-size: 12px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fg);">01 — What the playground is made of today</h2>
+    <div style="display: grid; grid-template-columns: 420px minmax(0, 1fr); gap: 24px; align-items: start;">
+      <div style="display: grid; grid-template-columns: 90px 1fr 8px 1fr; grid-template-rows: 26px 1fr 8px 60px; gap: 0; height: 300px; border: 1px solid var(--border); border-radius: 6px; background: var(--pane-bg); font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); overflow: hidden;">
+        <div style="grid-row: 1 / 3; border-right: 1px solid var(--border); padding: 8px; display: flex; flex-direction: column; gap: 6px;"><span style="color: var(--fg);">.pg-ws</span><span>Workspace tree</span><span style="font-size: 9.5px;">tour · examples · mine</span></div>
+        <div style="grid-column: 2; grid-row: 1 / 3; border-right: 1px solid var(--border); display: flex; flex-direction: column;">
+          <div style="flex: 1; padding: 8px; display: flex; flex-direction: column; gap: 6px;"><span style="color: var(--fg);">.pg-editor</span><span>CodeMirror 6</span></div>
+          <div style="border-top: 1px solid var(--border); background: var(--pane-label-bg); padding: 6px 8px; display: flex; flex-direction: column; gap: 4px;"><span style="color: var(--fg);">.pg-dock</span><span>Diagnostics · Settings</span></div>
+        </div>
+        <div style="grid-column: 3; grid-row: 1 / 3; background: var(--border);"></div>
+        <div style="grid-column: 4; grid-row: 1 / 3; display: flex; flex-direction: column;">
+          <div style="background: var(--pane-label-bg); border-bottom: 1px solid var(--border); padding: 6px 8px;"><span style="color: var(--fg);">.pg-tabs</span> Preview · Truth · Simulate · Data</div>
+          <div style="flex: 1; padding: 8px;"><span style="color: var(--fg);">.pg-panel</span> · .lc-mount</div>
+          <div style="border-top: 1px solid var(--border); background: var(--pane-label-bg); padding: 6px 8px; display: flex; flex-direction: column; gap: 4px;"><span style="color: var(--fg);">.pg-drawer</span><span>Console · Memory</span></div>
+        </div>
+        <div style="grid-column: 1 / 5; grid-row: 4; border-top: 1px solid var(--border); padding: 8px; display: flex; justify-content: space-between; align-items: center;"><span><span style="color: var(--fg);">.pg-statusbar</span> ● Live · 1.2 KB</span><span>circ 0.x · rev · CIRF v3 · Download · Share</span></div>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 6px; overflow: hidden;">
+        <sc-for list="{{ inventory }}" as="it" hint-placeholder-count="8">
+          <div style="background: var(--pane-bg); padding: 12px 14px; display: flex; flex-direction: column; gap: 4px;">
+            <span style="font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--fg);">{{ it.name }}</span>
+            <span style="font-size: 12.5px; line-height: 1.5; color: var(--muted); text-wrap: pretty;">{{ it.body }}</span>
+            <span style="font-family: var(--font-mono); font-size: 10.5px; color: var(--accent);">{{ it.src }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 16px; width: max-content;">
+    <div style="display: flex; align-items: baseline; gap: 12px;">
+      <h2 style="margin: 0; font-family: var(--font-mono); font-size: 12px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fg);">The bench in use — three states of <a href="#2a">2a</a></h2>
+      <span style="font-family: var(--font-mono); font-size: 11px; color: var(--muted);">same chrome, same tokens · switcher open · a wider program · schematic · truth · the Data panel · the drawer expanded</span>
+    </div>
+    <div style="display: flex; gap: 32px; align-items: flex-start;">
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; align-items: baseline; gap: 10px;">
+          <span id="3a" style="font-family: var(--font-mono); font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px; background: var(--accent); color: var(--bg);">3a</span>
+          <span style="font-family: var(--font-mono); font-size: 12px; color: var(--fg);">Workspace switcher</span>
+          <span style="font-family: var(--font-mono); font-size: 11px; color: var(--muted);">the tree, one click away instead of always on</span>
+        </div>
+        <div data-screen-label="3a · workspace switcher" style="width: 1440px; height: 860px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 8px; display: grid; grid-template-rows: 48px minmax(0, 1fr) 40px 24px; overflow: hidden; position: relative;">
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid var(--border); position: relative; z-index: 3;">
+            <div style="display: flex; align-items: center; gap: 22px;">
+              <span style="font-family: var(--font-mono); font-size: 17px; font-weight: 700;">circ</span>
+              <span style="display: inline-flex; align-items: center; gap: 8px; padding: 5px 10px 5px 12px; border-radius: 6px; border: 1px solid var(--accent); background: var(--pane-bg); font-family: var(--font-mono); font-size: 12px; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);">
+                <span style="color: var(--muted);">Examples /</span><span style="color: var(--fg);">nand</span><span style="color: var(--accent); font-size: 10px;">▴</span>
+              </span>
+              <span style="display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11.5px; color: var(--muted);">
+                <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent);"></span><span style="color: var(--fg);">Live</span><span>14 ms · 0 warnings</span>
+              </span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11.5px;">
+              <span style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 6px; border: 1px solid var(--border);">nand.wasm <span style="color: var(--muted);">1.2 KB</span></span>
+              <span style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 6px; background: var(--accent); color: var(--bg);">Share</span>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: 480px 1px minmax(0, 1fr); min-height: 0;">
+            <div style="display: flex; flex-direction: column; min-height: 0; background: var(--pane-bg);">
+              <div style="height: 36px; display: flex; align-items: stretch; border-bottom: 1px solid var(--border); font-family: var(--font-mono); font-size: 11.5px;">
+                <span style="display: inline-flex; align-items: center; padding: 0 16px; color: var(--fg); border-bottom: 2px solid var(--accent);">nand.circ</span>
+                <span style="display: inline-flex; align-items: center; padding: 0 16px; color: var(--muted);">+ file</span>
+              </div>
+              <div style="flex: 1; min-height: 0; overflow: auto; padding: 16px 0; font-family: var(--font-mono-strict); font-size: 14px; line-height: 1.7;">
+                <sc-for list="{{ bench }}" as="ln" hint-placeholder-count="6">
+                  <div style="display: flex; padding: 0 16px;">
+                    <span style="flex: 0 0 32px; text-align: right; padding-right: 16px; color: var(--muted); opacity: 0.55;">{{ ln.n }}</span>
+                    <span style="white-space: pre;"><sc-for list="{{ ln.toks }}" as="tk" hint-placeholder-count="2"><span style="{{ tk.style }}">{{ tk.text }}</span></sc-for></span>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="height: 30px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; border-top: 1px solid var(--border); font-family: var(--font-mono); font-size: 11px; color: var(--muted);"><span>0 errors · 0 warnings</span><span>5 lines · 3 components · 4 nets</span></div>
+            </div>
+            <div style="background: var(--border);"></div>
+            <div style="position: relative; min-height: 0; overflow: hidden;">
+              <div style="{{ dotGrid }}"></div>
+              <div style="position: absolute; top: 14px; left: 16px; display: inline-flex; padding: 2px; border-radius: 6px; border: 1px solid var(--border); background: var(--pane-bg); font-family: var(--font-mono); font-size: 11.5px;">
+                <span style="padding: 4px 12px; color: var(--muted);">Schematic</span><span style="padding: 4px 12px; border-radius: 4px; background: var(--accent); color: var(--bg);">Live</span><span style="padding: 4px 12px; color: var(--muted);">Truth</span>
+              </div>
+              <div style="position: absolute; top: 14px; right: 16px;"><span style="{{ dataBtn }}"><svg viewBox="0 0 16 16" style="width: 12px; height: 12px;" aria-hidden="true"><path d="M2.5 4h11M2.5 8h11M2.5 12h7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>Data <span style="color: var(--muted);">2 → 1</span></span></div>
+              <div style="position: absolute; inset: 60px 16px 40px; display: flex; align-items: center; justify-content: center;"><canvas data-scene="nand" data-cell="20" style="max-width: 100%;"></canvas></div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px; padding: 0 16px; border-top: 1px solid var(--border); background: var(--code-bg); font-family: var(--font-mono-strict); font-size: 12.5px;">
+            <span style="font-family: var(--font-mono); font-size: 11px; color: var(--muted);">circ-compile nand.circ --sim</span><span style="color: var(--accent); font-weight: 600;">&gt;</span><span>set a 1</span><span style="color: var(--muted);">·</span><span style="{{ termOkStyle }}">ok</span>
+            <span style="flex: 1;"></span><span style="font-family: var(--font-mono); font-size: 11px; color: var(--muted);">Console ▴</span><span style="font-family: var(--font-mono); font-size: 11px; color: var(--muted); opacity: 0.5;">Memory</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 16px; font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); opacity: 0.8;"><span>circ 0.9.2 · a77750a · CIRF v3</span><span style="font-family: var(--font-prose); font-size: 11px; color: var(--muted); white-space: nowrap;">Made with <span aria-hidden="true" style="display: inline-block; color: #e63946; transform-origin: center; animation: heartbeat 1.5s ease-out infinite; margin: 0 0.1em; font-size: 1em;">♥︎</span><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;">love</span> by <a href="https://github.com/jeffersonmourak" rel="noreferrer noopener" style="color: var(--muted);">@jeffersonmourak</a></span><span style="text-align: right;">runs in your browser · nothing leaves the page</span></div>
+
+          <div style="{{ scrim }}"></div>
+          <div style="position: absolute; top: 56px; left: 82px; width: 340px; z-index: 4; background: var(--pane-bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 12px 32px rgba(0,0,0,0.28); display: flex; flex-direction: column; overflow: hidden;">
+            <div style="display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); font-family: var(--font-mono); font-size: 12px;">
+              <span style="color: var(--muted);">⌕</span><span style="color: var(--muted); flex: 1;">Find a circuit…</span><span style="font-size: 10px; padding: 1px 5px; border: 1px solid var(--border); border-radius: 3px; color: var(--muted);">⌘K</span>
+            </div>
+            <div style="max-height: 460px; overflow: auto; padding: 2px 0 6px;">
+              <sc-for list="{{ wsRows }}" as="r" hint-placeholder-count="14">
+                <div style="{{ r.style }}"><span>{{ r.label }}</span><span style="{{ r.metaStyle }}">{{ r.meta }}</span></div>
+              </sc-for>
+            </div>
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-top: 1px solid var(--border); font-family: var(--font-mono); font-size: 11.5px;">
+              <span style="color: var(--accent);">+ New circuit</span><span style="color: var(--muted);">Import .circ</span>
+            </div>
+          </div>
+        </div>
+        <p style="margin: 0; max-width: 1440px; font-size: 13px; line-height: 1.55; color: var(--muted); text-wrap: pretty;">The breadcrumb opens the whole tree as a popover: groups as small-caps headings, projects as rows with their file count or diagnostic badge, the open project expanded one level to its files. Search on top, New and Import at the foot. The bench behind dims but never moves — the canvas keeps its width when the list closes.</p>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; align-items: baseline; gap: 10px;">
+          <span id="3b" style="font-family: var(--font-mono); font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px; background: var(--accent); color: var(--bg);">3b</span>
+          <span style="font-family: var(--font-mono); font-size: 12px; color: var(--fg);">A wider program</span>
+          <span style="font-family: var(--font-mono); font-size: 11px; color: var(--muted);">two-bit ripple adder · bus inputs, two outputs, 16 parts</span>
+        </div>
+        <div data-screen-label="3b · adder" style="width: 1440px; height: 860px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 8px; display: grid; grid-template-rows: 48px minmax(0, 1fr) 40px 24px; overflow: hidden;">
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid var(--border);">
+            <div style="display: flex; align-items: center; gap: 22px;">
+              <span style="font-family: var(--font-mono); font-size: 17px; font-weight: 700;">circ</span>
+              <span style="display: inline-flex; align-items: center; gap: 8px; padding: 5px 10px 5px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--pane-bg); font-family: var(--font-mono); font-size: 12px;"><span style="color: var(--muted);">Examples /</span><span>adder2</span><span style="color: var(--muted); font-size: 10px;">▾</span></span>
+              <span style="display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11.5px; color: var(--muted);"><span style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent);"></span><span style="color: var(--fg);">Live</span><span>31 ms · 1 warning</span></span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11.5px;">
+              <span style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 6px; border: 1px solid var(--border);">adder2.wasm <span style="color: var(--muted);">3.8 KB</span></span>
+              <span style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 6px; background: var(--accent); color: var(--bg);">Share</span>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: 440px 1px minmax(0, 1fr); min-height: 0;">
+            <div style="display: flex; flex-direction: column; min-height: 0; background: var(--pane-bg);">
+              <div style="height: 36px; display: flex; align-items: stretch; border-bottom: 1px solid var(--border); font-family: var(--font-mono); font-size: 11.5px;">
+                <span style="display: inline-flex; align-items: center; padding: 0 16px; color: var(--fg); border-bottom: 2px solid var(--accent);">adder2.circ</span>
+                <span style="display: inline-flex; align-items: center; padding: 0 16px; color: var(--muted);">+ file</span>
+              </div>
+              <div style="flex: 1; min-height: 0; overflow: auto; padding: 16px 0; font-family: var(--font-mono-strict); font-size: 13.5px; line-height: 1.7;">
+                <sc-for list="{{ adderSrc }}" as="ln" hint-placeholder-count="16">
+                  <div style="display: flex; padding: 0 16px;">
+                    <span style="flex: 0 0 32px; text-align: right; padding-right: 16px; color: var(--muted); opacity: 0.55;">{{ ln.n }}</span>
+                    <span style="white-space: pre;"><sc-for list="{{ ln.toks }}" as="tk" hint-placeholder-count="2"><span style="{{ tk.style }}">{{ tk.text }}</span></sc-for></span>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="display: flex; flex-direction: column; border-top: 1px solid var(--border); font-family: var(--font-mono); font-size: 11px;">
+                <div style="height: 30px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; color: var(--muted);"><span><span style="color: var(--fg);">0 errors · 1 warning</span> ▾</span><span>16 lines · 16 components · 22 nets</span></div>
+                <div style="display: grid; grid-template-columns: 14px 104px 52px 1fr; gap: 10px; padding: 6px 16px 10px; align-items: baseline; border-top: 1px solid var(--border); background: var(--pane-label-bg);"><span style="color: var(--muted);">▲</span><span style="color: var(--accent);">adder2.circ:8:5</span><span style="color: var(--muted);">W0104</span><span style="color: var(--fg);">`c1` fans out to 2 sinks through a wire crossing 3 others — consider reordering</span></div>
+              </div>
+            </div>
+            <div style="background: var(--border);"></div>
+            <div style="position: relative; min-height: 0; overflow: hidden;">
+              <div style="{{ dotGrid }}"></div>
+              <div style="position: absolute; top: 14px; left: 16px; display: inline-flex; padding: 2px; border-radius: 6px; border: 1px solid var(--border); background: var(--pane-bg); font-family: var(--font-mono); font-size: 11.5px;">
+                <span style="padding: 4px 12px; color: var(--muted);">Schematic</span><span style="padding: 4px 12px; border-radius: 4px; background: var(--accent); color: var(--bg);">Live</span><span style="padding: 4px 12px; color: var(--muted); opacity: 0.5;" title="4 input bits — truth table is 16 rows">Truth</span>
+              </div>
+              <div style="position: absolute; top: 14px; right: 16px;"><span style="{{ dataBtn }}"><svg viewBox="0 0 16 16" style="width: 12px; height: 12px;" aria-hidden="true"><path d="M2.5 4h11M2.5 8h11M2.5 12h7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>Data <span style="color: var(--muted);">2 → 2</span></span></div>
+              <div style="position: absolute; inset: 60px 16px 40px; display: flex; align-items: center; justify-content: center;"><canvas data-scene="adder" data-cell="14" style="max-width: 100%;"></canvas></div>
+              <div style="position: absolute; left: 16px; bottom: 12px; font-family: var(--font-mono); font-size: 11px; color: var(--muted);">click a pin to toggle · open Data to type a bus value · click a bit in the slice ruler</div>
+              <div style="position: absolute; right: 16px; bottom: 12px; font-family: var(--font-mono); font-size: 11px; color: var(--muted);">cell 14 · fit</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px; padding: 0 16px; border-top: 1px solid var(--border); background: var(--code-bg); font-family: var(--font-mono-strict); font-size: 12.5px;">
+            <span style="font-family: var(--font-mono); font-size: 11px; color: var(--muted);">circ-compile adder2.circ --sim</span><span style="color: var(--accent); font-weight: 600;">&gt;</span><span>eval a=0x3 b=0x1 =&gt; sum cout</span><span style="color: var(--muted);">·</span><span style="{{ termOkStyle }}">ok 0x0 0x1</span>
+            <span style="flex: 1;"></span><span style="font-family: var(--font-mono); font-size: 11px; color: var(--muted);">Console ▴</span><span style="font-family: var(--font-mono); font-size: 11px; color: var(--muted); opacity: 0.5;">Memory</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 16px; font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); opacity: 0.8;"><span>circ 0.9.2 · a77750a · CIRF v3</span><span style="font-family: var(--font-prose); font-size: 11px; color: var(--muted); white-space: nowrap;">Made with <span aria-hidden="true" style="display: inline-block; color: #e63946; transform-origin: center; animation: heartbeat 1.5s ease-out infinite; margin: 0 0.1em; font-size: 1em;">♥︎</span><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;">love</span> by <a href="https://github.com/jeffersonmourak" rel="noreferrer noopener" style="color: var(--muted);">@jeffersonmourak</a></span><span style="text-align: right;">runs in your browser · nothing leaves the page</span></div>
+        </div>
+        <p style="margin: 0; max-width: 1440px; font-size: 13px; line-height: 1.55; color: var(--muted); text-wrap: pretty;">The Data button carries the pin count; the panel opens over the canvas when you want to type a value. Sixteen parts fit at cell 14 with the source narrowed to 440px; the Truth view greys out with a tooltip once the input-bit cap is reached, as the site does today. The diagnostics footer expands in place under the source.</p>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; align-items: baseline; gap: 10px;">
+          <span id="3e" style="font-family: var(--font-mono); font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px; background: var(--accent); color: var(--bg);">3e</span>
+          <span style="font-family: var(--font-mono); font-size: 12px; color: var(--fg);">Schematic view</span>
+          <span style="font-family: var(--font-mono); font-size: 11px; color: var(--muted);">circ-compile --preview · the compiler's own drawing, on the same surface</span>
+        </div>
+        <div data-screen-label="3e · schematic" style="width: 1440px; height: 860px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 8px; display: grid; grid-template-rows: 48px minmax(0, 1fr) 40px 24px; overflow: hidden;">
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid var(--border);">
+            <div style="display: flex; align-items: center; gap: 22px;">
+              <span style="font-family: var(--font-mono); font-size: 17px; font-weight: 700;">circ</span>
+              <span style="display: inline-flex; align-items: center; gap: 8px; padding: 5px 10px 5px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--pane-bg); font-family: var(--font-mono); font-size: 12px;"><span style="color: var(--muted);">Examples /</span><span>nand</span><span style="color: var(--muted); font-size: 10px;">▾</span></span>
+              <span style="display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11.5px; color: var(--muted);"><span style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent);"></span><span style="color: var(--fg);">Live</span><span>14 ms · 0 warnings</span></span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11.5px;">
+              <span style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 6px; border: 1px solid var(--border);">nand.wasm <span style="color: var(--muted);">1.2 KB</span></span>
+              <span style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 6px; background: var(--accent); color: var(--bg);">Share</span>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: 480px 1px minmax(0, 1fr); min-height: 0;">
+            <div style="display: flex; flex-direction: column; min-height: 0; background: var(--pane-bg);">
+              <div style="height: 36px; display: flex; align-items: stretch; border-bottom: 1px solid var(--border); font-family: var(--font-mono); font-size: 11.5px;">
+                <span style="display: inline-flex; align-items: center; padding: 0 16px; color: var(--fg); border-bottom: 2px solid var(--accent);">nand.circ</span>
+                <span style="display: inline-flex; align-items: center; padding: 0 16px; color: var(--muted);">+ file</span>
+              </div>
+              <div style="flex: 1; min-height: 0; overflow: auto; padding: 16px 0; font-family: var(--font-mono-strict); font-size: 14px; line-height: 1.7;">
+                <sc-for list="{{ bench }}" as="ln" hint-placeholder-count="6">
+                  <div style="display: flex; padding: 0 16px;">
+                    <span style="flex: 0 0 32px; text-align: right; padding-right: 16px; color: var(--muted); opacity: 0.55;">{{ ln.n }}</span>
+                    <span style="white-space: pre;"><sc-for list="{{ ln.toks }}" as="tk" hint-placeholder-count="2"><span style="{{ tk.style }}">{{ tk.text }}</span></sc-for></span>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="height: 30px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; border-top: 1px solid var(--border); font-family: var(--font-mono); font-size: 11px; color: var(--muted);"><span>0 errors · 0 warnings</span><span>5 lines · 3 components · 4 nets</span></div>
+            </div>
+            <div style="background: var(--border);"></div>
+            <div style="position: relative; min-height: 0; overflow: hidden; background: var(--code-bg);">
+              <div style="position: absolute; top: 14px; left: 16px; display: inline-flex; padding: 2px; border-radius: 6px; border: 1px solid var(--border); background: var(--pane-bg); font-family: var(--font-mono); font-size: 11.5px;">
+                <span style="padding: 4px 12px; border-radius: 4px; background: var(--accent); color: var(--bg);">Schematic</span><span style="padding: 4px 12px; color: var(--muted);">Live</span><span style="padding: 4px 12px; color: var(--muted);">Truth</span>
+              </div>
+              <div style="position: absolute; top: 14px; right: 16px; display: inline-flex; gap: 8px;">
+                <span style="display: inline-flex; padding: 1px; border: 1px solid var(--border); border-radius: 6px; background: var(--pane-bg); font-family: var(--font-mono); font-size: 11px;"><span style="padding: 4px 10px; border-radius: 4px; background: var(--pane-label-bg); color: var(--fg);">unicode</span><span style="padding: 4px 10px; color: var(--muted);">ascii</span></span>
+                <span style="{{ dataBtn }}"><svg viewBox="0 0 16 16" style="width: 12px; height: 12px;" aria-hidden="true"><path d="M3 3.5h10v9H3zM3 8h10M8 3.5v9" fill="none" stroke="currentColor" stroke-width="1.4"></path></svg>Copy</span>
+              </div>
+              <div style="position: absolute; inset: 60px 16px 40px; display: flex; align-items: center; justify-content: center;">
+                <pre style="margin: 0; font-family: var(--font-mono-strict); font-size: 20px; line-height: 1.35; color: var(--fg); white-space: pre; text-align: left;"><sc-for list="{{ schematic }}" as="l" hint-placeholder-count="7"><span style="display: block;">{{ l.t }}</span></sc-for></pre>
+              </div>
+              <div style="position: absolute; left: 16px; bottom: 12px; font-family: var(--font-mono); font-size: 11px; color: var(--muted);">this is what <span style="color: var(--fg);">circ-compile nand.circ --preview</span> prints · same glyph set, same width</div>
+              <div style="position: absolute; right: 16px; bottom: 12px; font-family: var(--font-mono); font-size: 11px; color: var(--muted);">7 × 45 chars</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px; padding: 0 16px; border-top: 1px solid var(--border); background: var(--code-bg); font-family: var(--font-mono-strict); font-size: 12.5px;">
+            <span style="font-family: var(--font-mono); font-size: 11px; color: var(--muted);">circ-compile nand.circ --sim</span><span style="color: var(--accent); font-weight: 600;">&gt;</span><span style="color: var(--muted); opacity: 0.7;">help</span>
+            <span style="flex: 1;"></span><span style="font-family: var(--font-mono); font-size: 11px; color: var(--muted);">Console ▴</span><span style="font-family: var(--font-mono); font-size: 11px; color: var(--muted); opacity: 0.5;">Memory</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 16px; font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); opacity: 0.8;"><span>circ 0.9.2 · a77750a · CIRF v3</span><span style="font-family: var(--font-prose); font-size: 11px; color: var(--muted); white-space: nowrap;">Made with <span aria-hidden="true" style="display: inline-block; color: #e63946; transform-origin: center; animation: heartbeat 1.5s ease-out infinite; margin: 0 0.1em; font-size: 1em;">♥︎</span><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;">love</span> by <a href="https://github.com/jeffersonmourak" rel="noreferrer noopener" style="color: var(--muted);">@jeffersonmourak</a></span><span style="text-align: right;">runs in your browser · nothing leaves the page</span></div>
+        </div>
+        <p style="margin: 0; max-width: 1440px; font-size: 13px; line-height: 1.55; color: var(--muted); text-wrap: pretty;">Schematic is the compiler's own <code style="font-family: var(--font-mono);">--preview</code> text, unchanged — the site's signature figure, given the whole pane. It sits on <code style="font-family: var(--font-mono);">--code-bg</code> rather than the dot grid so it reads as output, not a drawing surface, and uses <code style="font-family: var(--font-mono);">--font-mono-strict</code> so the box glyphs hold the grid. Unicode / ASCII is the same switch the Settings dock has today; Copy takes the text as printed. No pin state here — it's a picture of the program, not of a run.</p>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; align-items: baseline; gap: 10px;">
+          <span id="3f" style="font-family: var(--font-mono); font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px; background: var(--accent); color: var(--bg);">3f</span>
+          <span style="font-family: var(--font-mono); font-size: 12px; color: var(--fg);">Truth view</span>
+          <span style="font-family: var(--font-mono); font-size: 11px; color: var(--muted);">every input combination · the live row picked out · the cap explained in place</span>
+        </div>
+        <div data-screen-label="3f · truth" style="width: 1440px; height: 860px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 8px; display: grid; grid-template-rows: 48px minmax(0, 1fr) 40px 24px; overflow: hidden;">
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid var(--border);">
+            <div style="display: flex; align-items: center; gap: 22px;">
+              <span style="font-family: var(--font-mono); font-size: 17px; font-weight: 700;">circ</span>
+              <span style="display: inline-flex; align-items: center; gap: 8px; padding: 5px 10px 5px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--pane-bg); font-family: var(--font-mono); font-size: 12px;"><span style="color: var(--muted);">Examples /</span><span>nand</span><span style="color: var(--muted); font-size: 10px;">▾</span></span>
+              <span style="display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11.5px; color: var(--muted);"><span style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent);"></span><span style="color: var(--fg);">Live</span><span>14 ms · 0 warnings</span></span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11.5px;">
+              <span style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 6px; border: 1px solid var(--border);">nand.wasm <span style="color: var(--muted);">1.2 KB</span></span>
+              <span style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 6px; background: var(--accent); color: var(--bg);">Share</span>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: 480px 1px minmax(0, 1fr); min-height: 0;">
+            <div style="display: flex; flex-direction: column; min-height: 0; background: var(--pane-bg);">
+              <div style="height: 36px; display: flex; align-items: stretch; border-bottom: 1px solid var(--border); font-family: var(--font-mono); font-size: 11.5px;">
+                <span style="display: inline-flex; align-items: center; padding: 0 16px; color: var(--fg); border-bottom: 2px solid var(--accent);">nand.circ</span>
+                <span style="display: inline-flex; align-items: center; padding: 0 16px; color: var(--muted);">+ file</span>
+              </div>
+              <div style="flex: 1; min-height: 0; overflow: auto; padding: 16px 0; font-family: var(--font-mono-strict); font-size: 14px; line-height: 1.7;">
+                <sc-for list="{{ bench }}" as="ln" hint-placeholder-count="6">
+                  <div style="display: flex; padding: 0 16px;">
+                    <span style="flex: 0 0 32px; text-align: right; padding-right: 16px; color: var(--muted); opacity: 0.55;">{{ ln.n }}</span>
+                    <span style="white-space: pre;"><sc-for list="{{ ln.toks }}" as="tk" hint-placeholder-count="2"><span style="{{ tk.style }}">{{ tk.text }}</span></sc-for></span>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="height: 30px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; border-top: 1px solid var(--border); font-family: var(--font-mono); font-size: 11px; color: var(--muted);"><span>0 errors · 0 warnings</span><span>5 lines · 3 components · 4 nets</span></div>
+            </div>
+            <div style="background: var(--border);"></div>
+            <div style="position: relative; min-height: 0; overflow: hidden;">
+              <div style="{{ dotGrid }}"></div>
+              <div style="position: absolute; top: 14px; left: 16px; display: inline-flex; padding: 2px; border-radius: 6px; border: 1px solid var(--border); background: var(--pane-bg); font-family: var(--font-mono); font-size: 11.5px;">
+                <span style="padding: 4px 12px; color: var(--muted);">Schematic</span><span style="padding: 4px 12px; color: var(--muted);">Live</span><span style="padding: 4px 12px; border-radius: 4px; background: var(--accent); color: var(--bg);">Truth</span>
+              </div>
+              <div style="position: absolute; top: 14px; right: 16px; display: inline-flex; gap: 8px;">
+                <span style="display: inline-flex; align-items: center; gap: 8px; padding: 5px 11px; border-radius: 6px; border: 1px solid var(--border); background: var(--pane-bg); font-family: var(--font-mono); font-size: 11.5px; color: var(--muted);"><span style="color: var(--fg);">2</span> input bits · <span style="color: var(--fg);">4</span> rows · cap <span style="color: var(--fg);">12</span></span>
+                <span style="{{ dataBtn }}"><svg viewBox="0 0 16 16" style="width: 12px; height: 12px;" aria-hidden="true"><path d="M2.5 4h11M2.5 8h11M2.5 12h7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>Data <span style="color: var(--muted);">2 → 1</span></span>
+              </div>
+              <div style="position: absolute; inset: 60px 16px 40px; display: flex; align-items: center; justify-content: center;">
+                <div style="display: flex; flex-direction: column; gap: 10px; align-items: center;">
+                  <div style="display: grid; grid-template-columns: repeat(3, 84px); background: var(--pane-bg); border: 1px solid var(--border); border-radius: 8px; overflow: hidden;">
+                    <sc-for list="{{ truthHead }}" as="c" hint-placeholder-count="3"><span style="{{ c.style }}">{{ c.text }}</span></sc-for>
+                    <sc-for list="{{ truthRows }}" as="r" hint-placeholder-count="4"><div style="{{ r.style }}"><sc-for list="{{ r.cells }}" as="c" hint-placeholder-count="3"><span style="{{ c.style }}">{{ c.text }}</span></sc-for></div></sc-for>
+                  </div>
+                  <span style="font-family: var(--font-mono); font-size: 11px; color: var(--muted);">highlighted row = the pins as they are in Live right now</span>
+                </div>
+              </div>
+              <div style="position: absolute; left: 16px; bottom: 12px; font-family: var(--font-mono); font-size: 11px; color: var(--muted);">click a row to drive the inputs to it · outputs are read from the same wasm</div>
+              <div style="position: absolute; right: 16px; bottom: 12px; font-family: var(--font-mono); font-size: 11px; color: var(--muted);">Copy as markdown · CSV</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px; padding: 0 16px; border-top: 1px solid var(--border); background: var(--code-bg); font-family: var(--font-mono-strict); font-size: 12.5px;">
+            <span style="font-family: var(--font-mono); font-size: 11px; color: var(--muted);">circ-compile nand.circ --sim</span><span style="color: var(--accent); font-weight: 600;">&gt;</span><span>eval a=1 b=0 =&gt; out</span><span style="color: var(--muted);">·</span><span style="{{ termOkStyle }}">ok 0x1</span>
+            <span style="flex: 1;"></span><span style="font-family: var(--font-mono); font-size: 11px; color: var(--muted);">Console ▴</span><span style="font-family: var(--font-mono); font-size: 11px; color: var(--muted); opacity: 0.5;">Memory</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 16px; font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); opacity: 0.8;"><span>circ 0.9.2 · a77750a · CIRF v3</span><span style="font-family: var(--font-prose); font-size: 11px; color: var(--muted); white-space: nowrap;">Made with <span aria-hidden="true" style="display: inline-block; color: #e63946; transform-origin: center; animation: heartbeat 1.5s ease-out infinite; margin: 0 0.1em; font-size: 1em;">♥︎</span><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;">love</span> by <a href="https://github.com/jeffersonmourak" rel="noreferrer noopener" style="color: var(--muted);">@jeffersonmourak</a></span><span style="text-align: right;">runs in your browser · nothing leaves the page</span></div>
+        </div>
+        <p style="margin: 0; max-width: 1440px; font-size: 13px; line-height: 1.55; color: var(--muted); text-wrap: pretty;">The table stays the table — mono digits, a rule between inputs and outputs, HIGH in ink and LOW muted so the pattern reads before the numbers do. Two things are new: the row matching the Live pins is tinted, and clicking any row drives the inputs to it, so Truth and Live are two views of one state. The input-bit cap that hides the tab today is a chip in the toolbar instead (<code style="font-family: var(--font-mono);">2 input bits · 4 rows · cap 12</code>); over the cap the table still opens, filtered to the rows the Data panel's pins match, and the chip says why.</p>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; align-items: baseline; gap: 10px;">
+          <span id="3d" style="font-family: var(--font-mono); font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px; background: var(--accent); color: var(--bg);">3d</span>
+          <span style="font-family: var(--font-mono); font-size: 12px; color: var(--fg);">Many pins</span>
+          <span style="font-family: var(--font-mono); font-size: 11px; color: var(--muted);">the Hack ALU · 8 inputs, 3 outputs, 15 parts · the Data panel, open</span>
+        </div>
+        <div data-screen-label="3d · alu" style="width: 1440px; height: 860px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 8px; display: grid; grid-template-rows: 48px minmax(0, 1fr) 40px 24px; overflow: hidden;">
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid var(--border);">
+            <div style="display: flex; align-items: center; gap: 22px;">
+              <span style="font-family: var(--font-mono); font-size: 17px; font-weight: 700;">circ</span>
+              <span style="display: inline-flex; align-items: center; gap: 8px; padding: 5px 10px 5px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--pane-bg); font-family: var(--font-mono); font-size: 12px;"><span style="color: var(--muted);">Examples /</span><span>alu</span><span style="color: var(--muted); font-size: 10px;">▾</span></span>
+              <span style="display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11.5px; color: var(--muted);"><span style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent);"></span><span style="color: var(--fg);">Live</span><span>48 ms · 0 warnings</span></span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11.5px;">
+              <span style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 6px; border: 1px solid var(--border);">alu.wasm <span style="color: var(--muted);">9.4 KB</span></span>
+              <span style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 6px; background: var(--accent); color: var(--bg);">Share</span>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: 400px 1px minmax(0, 1fr); min-height: 0;">
+            <div style="display: flex; flex-direction: column; min-height: 0; background: var(--pane-bg);">
+              <div style="height: 36px; display: flex; align-items: stretch; border-bottom: 1px solid var(--border); font-family: var(--font-mono); font-size: 11.5px;">
+                <span style="display: inline-flex; align-items: center; padding: 0 16px; color: var(--fg); border-bottom: 2px solid var(--accent);">alu.circ</span>
+                <span style="display: inline-flex; align-items: center; padding: 0 16px; color: var(--muted);">chips/</span>
+                <span style="display: inline-flex; align-items: center; padding: 0 16px; color: var(--muted);">+ file</span>
+              </div>
+              <div style="flex: 1; min-height: 0; overflow: auto; padding: 14px 0; font-family: var(--font-mono-strict); font-size: 12.5px; line-height: 1.65;">
+                <sc-for list="{{ aluSrc }}" as="ln" hint-placeholder-count="21">
+                  <div style="display: flex; padding: 0 14px;">
+                    <span style="flex: 0 0 30px; text-align: right; padding-right: 14px; color: var(--muted); opacity: 0.55;">{{ ln.n }}</span>
+                    <span style="white-space: pre;"><sc-for list="{{ ln.toks }}" as="tk" hint-placeholder-count="2"><span style="{{ tk.style }}">{{ tk.text }}</span></sc-for></span>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="height: 30px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; border-top: 1px solid var(--border); font-family: var(--font-mono); font-size: 11px; color: var(--muted);"><span>0 errors · 0 warnings</span><span>21 lines · 15 components · 6 chips</span></div>
+            </div>
+            <div style="background: var(--border);"></div>
+            <div style="position: relative; min-height: 0; overflow: hidden; display: flex; flex-direction: column;">
+              <div style="{{ dotGrid }}"></div>
+              <div style="position: relative; display: flex; align-items: center; justify-content: space-between; padding: 12px 16px 0;">
+                <div style="display: inline-flex; padding: 2px; border-radius: 6px; border: 1px solid var(--border); background: var(--pane-bg); font-family: var(--font-mono); font-size: 11.5px;">
+                  <span style="padding: 4px 12px; color: var(--muted);">Schematic</span><span style="padding: 4px 12px; border-radius: 4px; background: var(--accent); color: var(--bg);">Live</span><span style="padding: 4px 12px; color: var(--muted); opacity: 0.5;" title="38 input bits — truth table is disabled">Truth</span>
+                </div>
+                <span style="font-family: var(--font-mono); font-size: 11px; color: var(--muted); margin-right: 132px;">cell 6 · fit</span>
+              </div>
+              <div style="position: absolute; top: 14px; right: 16px; z-index: 2;"><span style="{{ dataBtnOn }}"><svg viewBox="0 0 16 16" style="width: 12px; height: 12px;" aria-hidden="true"><path d="M2.5 4h11M2.5 8h11M2.5 12h7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>Data <span style="opacity: 0.7;">8 → 3</span></span></div>
+              <div style="position: absolute; top: 52px; right: 16px; z-index: 2; width: 312px; background: var(--pane-bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 12px 32px rgba(0,0,0,0.28); display: flex; flex-direction: column; overflow: hidden; font-family: var(--font-mono);">
+                <div style="display: flex; align-items: center; gap: 8px; padding: 8px 10px 8px 12px; border-bottom: 1px solid var(--border); font-size: 11px; cursor: grab;">
+                  <span style="color: var(--muted); letter-spacing: 0.2em; font-size: 9px;">⋮⋮</span>
+                  <span style="color: var(--fg); font-weight: 600;">Data</span>
+                  <span style="color: var(--muted); white-space: nowrap;">8 in · 3 out</span>
+                  <span style="flex: 1;"></span>
+                  <span style="display: inline-flex; padding: 1px; border: 1px solid var(--border); border-radius: 4px; font-size: 10px;"><span style="padding: 1px 6px; border-radius: 3px; background: var(--accent); color: var(--bg);">hex</span><span style="padding: 1px 6px; color: var(--muted);">bin</span><span style="padding: 1px 6px; color: var(--muted);">dec</span></span>
+                  <span style="color: var(--muted); padding-left: 4px;">✕</span>
+                </div>
+                <div style="padding: 6px 0 4px;">
+                  <div style="display: grid; grid-template-columns: 1fr 36px 92px; padding: 2px 12px 4px; font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);"><span>input</span><span style="text-align: right;">bits</span><span style="text-align: right;">value</span></div>
+                  <sc-for list="{{ dataIn }}" as="r" hint-placeholder-count="8">
+                    <div style="display: grid; grid-template-columns: 1fr 36px 92px; align-items: center; padding: 3px 12px; font-size: 12px;"><span style="color: var(--fg);">{{ r.name }}</span><span style="text-align: right; color: var(--muted); font-size: 11px;">{{ r.bits }}</span><span style="display: flex; justify-content: flex-end;"><span style="{{ r.ctl }}">{{ r.value }}</span></span></div>
+                  </sc-for>
+                </div>
+                <div style="padding: 4px 0 6px; border-top: 1px solid var(--border);">
+                  <div style="display: grid; grid-template-columns: 1fr 36px 92px; padding: 4px 12px 4px; font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);"><span>output</span><span style="text-align: right;">bits</span><span style="text-align: right;">value</span></div>
+                  <sc-for list="{{ dataOut }}" as="r" hint-placeholder-count="3">
+                    <div style="display: grid; grid-template-columns: 1fr 36px 92px; align-items: center; padding: 3px 12px; font-size: 12px;"><span style="color: var(--fg);">{{ r.name }}</span><span style="text-align: right; color: var(--muted); font-size: 11px;">{{ r.bits }}</span><span style="display: flex; justify-content: flex-end;"><span style="{{ r.ctl }}">{{ r.value }}</span></span></div>
+                  </sc-for>
+                </div>
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-top: 1px solid var(--border); font-size: 11px; color: var(--muted);"><span>edits settle the circuit and echo in the console</span><span style="color: var(--accent);">Reset</span></div>
+              </div>
+              <div style="position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 10px 344px 28px 16px;"><canvas data-scene="alu" data-cell="6" style="max-width: 100%; max-height: 100%;"></canvas></div>
+              <div style="position: absolute; left: 16px; bottom: 12px; font-family: var(--font-mono); font-size: 11px; color: var(--muted);">drag the panel anywhere · it remembers where you left it per circuit</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 12px; padding: 0 16px; border-top: 1px solid var(--border); background: var(--code-bg); font-family: var(--font-mono-strict); font-size: 12.5px;">
+            <span style="font-family: var(--font-mono); font-size: 11px; color: var(--muted);">circ-compile alu.circ --sim</span><span style="color: var(--accent); font-weight: 600;">&gt;</span><span>set f 1</span><span style="color: var(--muted);">·</span><span style="{{ termOkStyle }}">ok</span><span style="color: var(--muted);">·</span><span style="color: var(--muted);">out = 0x000a</span>
+            <span style="flex: 1;"></span><span style="font-family: var(--font-mono); font-size: 11px; color: var(--muted);">Console ▴</span><span style="font-family: var(--font-mono); font-size: 11px; color: var(--muted); opacity: 0.5;">Memory</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 16px; font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); opacity: 0.8;"><span>circ 0.9.2 · a77750a · CIRF v3</span><span style="font-family: var(--font-prose); font-size: 11px; color: var(--muted); white-space: nowrap;">Made with <span aria-hidden="true" style="display: inline-block; color: #e63946; transform-origin: center; animation: heartbeat 1.5s ease-out infinite; margin: 0 0.1em; font-size: 1em;">♥︎</span><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;">love</span> by <a href="https://github.com/jeffersonmourak" rel="noreferrer noopener" style="color: var(--muted);">@jeffersonmourak</a></span><span style="text-align: right;">runs in your browser · nothing leaves the page</span></div>
+        </div>
+        <p style="margin: 0; max-width: 1440px; font-size: 13px; line-height: 1.55; color: var(--muted); text-wrap: pretty;">Data stops being a view and becomes a floating panel over the canvas — the site's existing pin table, made draggable. One button on the toolbar opens it; the count on the button (<code style="font-family: var(--font-mono);">8 → 3</code>) says how many pins without opening anything. Inside, the same table the Data tab has today: name, width, value — buses as hex fields, bits as toggles, outputs read-only. Eight inputs or eighty, the control is the same size. The circuit stays visible beside it, so a toggle and its effect are in one glance.</p>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; align-items: baseline; gap: 10px;">
+          <span id="3c" style="font-family: var(--font-mono); font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px; background: var(--accent); color: var(--bg);">3c</span>
+          <span style="font-family: var(--font-mono); font-size: 12px; color: var(--fg);">Console &amp; Memory</span>
+          <span style="font-family: var(--font-mono); font-size: 11px; color: var(--muted);">the one-line terminal, grown · a rom's cells beside it</span>
+        </div>
+        <div data-screen-label="3c · console and memory" style="width: 1440px; height: 860px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 8px; display: grid; grid-template-rows: 48px minmax(0, 1fr) 320px 24px; overflow: hidden;">
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid var(--border);">
+            <div style="display: flex; align-items: center; gap: 22px;">
+              <span style="font-family: var(--font-mono); font-size: 17px; font-weight: 700;">circ</span>
+              <span style="display: inline-flex; align-items: center; gap: 8px; padding: 5px 10px 5px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--pane-bg); font-family: var(--font-mono); font-size: 12px;"><span style="color: var(--muted);">Examples /</span><span>rom</span><span style="color: var(--muted); font-size: 10px;">▾</span></span>
+              <span style="display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11.5px; color: var(--muted);"><span style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent);"></span><span style="color: var(--fg);">Live</span><span>12 ms · 0 warnings</span></span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11.5px;">
+              <span style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 6px; border: 1px solid var(--border);">rom.wasm <span style="color: var(--muted);">1.6 KB</span></span>
+              <span style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 6px; background: var(--accent); color: var(--bg);">Share</span>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: 480px 1px minmax(0, 1fr); min-height: 0;">
+            <div style="display: flex; flex-direction: column; min-height: 0; background: var(--pane-bg);">
+              <div style="height: 36px; display: flex; align-items: stretch; border-bottom: 1px solid var(--border); font-family: var(--font-mono); font-size: 11.5px;">
+                <span style="display: inline-flex; align-items: center; padding: 0 16px; color: var(--fg); border-bottom: 2px solid var(--accent);">rom.circ</span>
+                <span style="display: inline-flex; align-items: center; padding: 0 16px; color: var(--muted);">lut.hex</span>
+                <span style="display: inline-flex; align-items: center; padding: 0 16px; color: var(--muted);">+ file</span>
+              </div>
+              <div style="flex: 1; min-height: 0; overflow: auto; padding: 16px 0; font-family: var(--font-mono-strict); font-size: 14px; line-height: 1.7;">
+                <sc-for list="{{ romSrc }}" as="ln" hint-placeholder-count="5">
+                  <div style="display: flex; padding: 0 16px;">
+                    <span style="flex: 0 0 32px; text-align: right; padding-right: 16px; color: var(--muted); opacity: 0.55;">{{ ln.n }}</span>
+                    <span style="white-space: pre;"><sc-for list="{{ ln.toks }}" as="tk" hint-placeholder-count="2"><span style="{{ tk.style }}">{{ tk.text }}</span></sc-for></span>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="height: 30px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; border-top: 1px solid var(--border); font-family: var(--font-mono); font-size: 11px; color: var(--muted);"><span>0 errors · 0 warnings</span><span>4 lines · 1 component · 1 memory</span></div>
+            </div>
+            <div style="background: var(--border);"></div>
+            <div style="position: relative; min-height: 0; overflow: hidden;">
+              <div style="{{ dotGrid }}"></div>
+              <div style="position: absolute; top: 14px; left: 16px; display: inline-flex; padding: 2px; border-radius: 6px; border: 1px solid var(--border); background: var(--pane-bg); font-family: var(--font-mono); font-size: 11.5px;">
+                <span style="padding: 4px 12px; color: var(--muted);">Schematic</span><span style="padding: 4px 12px; border-radius: 4px; background: var(--accent); color: var(--bg);">Live</span><span style="padding: 4px 12px; color: var(--muted);">Truth</span>
+              </div>
+              <div style="position: absolute; top: 14px; right: 16px;"><span style="{{ dataBtn }}"><svg viewBox="0 0 16 16" style="width: 12px; height: 12px;" aria-hidden="true"><path d="M2.5 4h11M2.5 8h11M2.5 12h7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>Data <span style="color: var(--muted);">1 → 1</span></span></div>
+              <div style="position: absolute; inset: 60px 16px 24px; display: flex; align-items: center; justify-content: center;"><canvas data-scene="rom" data-cell="18" style="max-width: 100%;"></canvas></div>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: minmax(0, 1fr) 1px 560px; border-top: 1px solid var(--border); background: var(--code-bg); min-height: 0;">
+            <div style="display: flex; flex-direction: column; min-height: 0;">
+              <div style="height: 34px; display: flex; align-items: center; gap: 12px; padding: 0 16px; border-bottom: 1px solid var(--border); font-family: var(--font-mono); font-size: 11px; color: var(--muted);">
+                <span style="color: var(--fg); border-bottom: 2px solid var(--accent); padding: 8px 0;">Console</span><span>circ-compile rom.circ --sim</span>
+                <span style="flex: 1;"></span><span>Clear</span><span>Copy script</span><span>Copy log</span><span style="color: var(--fg);">▾</span>
+              </div>
+              <div style="flex: 1; min-height: 0; overflow: auto; padding: 8px 16px 4px; font-family: var(--font-mono-strict); font-size: 12.5px; line-height: 1.5; display: flex; flex-direction: column;">
+                <sc-for list="{{ conLog }}" as="l" hint-placeholder-count="18"><span style="{{ l.style }}">{{ l.text }}</span></sc-for>
+              </div>
+              <div style="display: flex; gap: 8px; align-items: center; padding: 6px 16px 10px; font-family: var(--font-mono-strict); font-size: 12.5px;"><span style="color: var(--accent); font-weight: 600;">&gt;</span><span>peek lut 0x4</span><span style="width: 7px; height: 14px; background: var(--accent); opacity: 0.8;"></span></div>
+            </div>
+            <div style="background: var(--border);"></div>
+            <div style="display: flex; flex-direction: column; min-height: 0; background: var(--pane-bg);">
+              <div style="height: 34px; display: flex; align-items: center; gap: 10px; padding: 0 14px; border-bottom: 1px solid var(--border); font-family: var(--font-mono); font-size: 11px;">
+                <span style="color: var(--fg); border-bottom: 2px solid var(--accent); padding: 8px 0;">Memory</span>
+                <span style="color: var(--fg);">lut</span><span style="color: var(--muted);">rom[8,4] · 16 words</span>
+                <span style="font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; padding: 1px 6px; border: 1px solid var(--accent); border-radius: 3px; color: var(--accent);">live</span>
+                <span style="flex: 1;"></span>
+                <span style="display: inline-flex; padding: 1px; border: 1px solid var(--border); border-radius: 4px;"><span style="padding: 2px 7px; border-radius: 3px; background: var(--accent); color: var(--bg);">hex</span><span style="padding: 2px 7px; color: var(--muted);">bin</span><span style="padding: 2px 7px; color: var(--muted);">dec</span></span>
+              </div>
+              <div style="flex: 1; min-height: 0; padding: 10px 14px 0; display: flex; flex-direction: column; gap: 8px;">
+                <div style="display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11px; color: var(--muted);">
+                  <span style="padding: 2px 7px; border: 1px solid var(--border); border-radius: 4px; opacity: 0.45;">◂</span><span style="color: var(--fg);">0x0 – 0xf</span><span style="padding: 2px 7px; border: 1px solid var(--border); border-radius: 4px; opacity: 0.45;">▸</span>
+                  <span style="display: inline-flex; align-items: center; gap: 6px; margin-left: 6px;"><span>jump</span><span style="width: 56px; padding: 2px 6px; border: 1px solid var(--border); border-radius: 4px; background: var(--code-bg); color: var(--muted);">0x</span></span>
+                  <span style="flex: 1;"></span><span>Refresh</span><span>Clear</span><span style="color: var(--accent);">Load image…</span><span>Save</span>
+                </div>
+                <div style="display: grid; grid-template-columns: 40px repeat(8, minmax(0, 1fr)); font-family: var(--font-mono); font-size: 11px; align-items: center;">
+                  <span style="padding: 2px 8px; color: var(--muted); font-size: 10px;">addr</span>
+                  <span style="padding: 2px 8px; text-align: center; color: var(--muted); font-size: 10px;">+0</span><span style="padding: 2px 8px; text-align: center; color: var(--muted); font-size: 10px;">+1</span><span style="padding: 2px 8px; text-align: center; color: var(--muted); font-size: 10px;">+2</span><span style="padding: 2px 8px; text-align: center; color: var(--muted); font-size: 10px;">+3</span><span style="padding: 2px 8px; text-align: center; color: var(--muted); font-size: 10px;">+4</span><span style="padding: 2px 8px; text-align: center; color: var(--muted); font-size: 10px;">+5</span><span style="padding: 2px 8px; text-align: center; color: var(--muted); font-size: 10px;">+6</span><span style="padding: 2px 8px; text-align: center; color: var(--muted); font-size: 10px;">+7</span>
+                  <sc-for list="{{ memRows }}" as="row" hint-placeholder-count="2">
+                    <span style="padding: 3px 8px; text-align: right; color: var(--muted); background: var(--pane-label-bg); border-right: 1px solid var(--border);">{{ row.addr }}</span>
+                    <sc-for list="{{ row.cells }}" as="c" hint-placeholder-count="8"><span style="{{ c.style }}">{{ c.text }}</span></sc-for>
+                  </sc-for>
+                </div>
+                <div style="display: flex; align-items: baseline; justify-content: space-between; font-family: var(--font-mono); font-size: 11px; color: var(--muted);">
+                  <span><span style="color: var(--accent);">0x3</span> is the word addr points at · <span style="color: var(--fg);">?</span> = no bit known · <span style="color: var(--fg);">1010101x</span> = one bit unknown</span>
+                  <span>lut[0x4] set.</span>
+                </div>
+                <div style="margin-top: auto; padding: 8px 0 10px; border-top: 1px solid var(--border); font-family: var(--font-mono); font-size: 11px; color: var(--muted); display: flex; justify-content: space-between;">
+                  <span>image · lut.hex · 5 words</span><span>a poke here is logged in the console as the line that would do it</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 0 16px; font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); opacity: 0.8;"><span>circ 0.9.2 · a77750a · CIRF v3</span><span style="font-family: var(--font-prose); font-size: 11px; color: var(--muted); white-space: nowrap;">Made with <span aria-hidden="true" style="display: inline-block; color: #e63946; transform-origin: center; animation: heartbeat 1.5s ease-out infinite; margin: 0 0.1em; font-size: 1em;">♥︎</span><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;">love</span> by <a href="https://github.com/jeffersonmourak" rel="noreferrer noopener" style="color: var(--muted);">@jeffersonmourak</a></span><span style="text-align: right;">runs in your browser · nothing leaves the page</span></div>
+        </div>
+        <p style="margin: 0; max-width: 1440px; font-size: 13px; line-height: 1.55; color: var(--muted); text-wrap: pretty;">Focus the one-line terminal and it grows to a 320px drawer; declare a memory and the drawer splits, console left, cells right. The console is the protocol verbatim — <code style="font-family: var(--font-mono);">help</code> prints as comment lines a script would ignore, replies are <code style="font-family: var(--font-mono);">ok 0x…</code>. The grid keeps the site's rules: addresses in hex whatever the value format, <code style="font-family: var(--font-mono);">?</code> for a word with no known bit, binary with <code style="font-family: var(--font-mono);">x</code> for a half-known one; the addressed word is picked out in accent and a cell under edit gets the accent underline.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <section id="2a" style="display: flex; flex-direction: column; gap: 16px;">
+    <div style="display: flex; align-items: baseline; gap: 12px;">
+      <span style="font-family: var(--font-mono); font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px; background: var(--accent); color: var(--bg);">2a</span>
+      <h2 style="margin: 0; font-family: var(--font-mono); font-size: 12px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fg);">Bench — canvas-first, chromeless</h2>
+      <span style="font-family: var(--font-mono); font-size: 11px; color: var(--muted);">1440 × 860 · sidebar becomes a switcher · Data floats over the canvas · console collapses to one line</span>
+    </div>
+
+    <div data-screen-label="Playground · 2a bench" style="width: 1440px; height: 860px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 8px; display: grid; grid-template-rows: 48px minmax(0, 1fr) 40px 24px; overflow: hidden;">
+
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid var(--border);">
+        <div style="display: flex; align-items: center; gap: 22px;">
+          <span style="font-family: var(--font-mono); font-size: 17px; font-weight: 700;">circ</span>
+          <span style="display: inline-flex; align-items: center; gap: 8px; padding: 5px 10px 5px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--pane-bg); font-family: var(--font-mono); font-size: 12px;">
+            <span style="color: var(--muted);">Examples /</span><span style="color: var(--fg);">nand</span><span style="color: var(--muted); font-size: 10px;">▾</span>
+          </span>
+          <span style="display: inline-flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 11.5px; color: var(--muted);">
+            <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent);"></span><span style="color: var(--fg);">Live</span><span>14 ms · 0 warnings</span>
+          </span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 6px; border: 1px solid var(--border); font-family: var(--font-mono); font-size: 11.5px; color: var(--fg);">
+            <svg viewBox="0 0 16 16" style="width: 12px; height: 12px;" aria-hidden="true"><path d="M8 2v7.5M4.75 6.5 8 9.75l3.25-3.25M3 12.5h10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            nand.wasm <span style="color: var(--muted);">1.2 KB</span>
+          </span>
+          <span style="display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 6px; background: var(--accent); color: var(--bg); font-family: var(--font-mono); font-size: 11.5px;">
+            <svg viewBox="0 0 16 16" style="width: 12px; height: 12px;" aria-hidden="true"><path d="M6.5 9.5 9.5 6.5M7 4.5l1.3-1.3a2.5 2.5 0 0 1 3.5 3.5L10.5 8M5.5 8 4.2 9.3a2.5 2.5 0 0 0 3.5 3.5L9 11.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+            Share
+          </span>
+          <span style="width: 28px; height: 16px; border-radius: 999px; border: 1px solid var(--border); background: var(--pane-label-bg); position: relative; display: inline-block; margin-left: 6px;"><span style="{{ toggleKnob }}"></span></span>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 480px 1px minmax(0, 1fr); min-height: 0;">
+        <div style="display: flex; flex-direction: column; min-height: 0; background: var(--pane-bg);">
+          <div style="height: 36px; display: flex; align-items: stretch; border-bottom: 1px solid var(--border); font-family: var(--font-mono); font-size: 11.5px;">
+            <span style="display: inline-flex; align-items: center; gap: 8px; padding: 0 16px; color: var(--fg); border-bottom: 2px solid var(--accent);">nand.circ</span>
+            <span style="display: inline-flex; align-items: center; padding: 0 16px; color: var(--muted);">+ file</span>
+          </div>
+          <div style="flex: 1; min-height: 0; overflow: auto; padding: 16px 0; font-family: var(--font-mono-strict); font-size: 14px; line-height: 1.7;">
+            <sc-for list="{{ bench }}" as="ln" hint-placeholder-count="6">
+              <div style="display: flex; padding: 0 16px;">
+                <span style="flex: 0 0 32px; text-align: right; padding-right: 16px; color: var(--muted); opacity: 0.55; user-select: none;">{{ ln.n }}</span>
+                <span style="white-space: pre;"><sc-for list="{{ ln.toks }}" as="tk" hint-placeholder-count="2"><span style="{{ tk.style }}">{{ tk.text }}</span></sc-for></span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="height: 30px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; border-top: 1px solid var(--border); font-family: var(--font-mono); font-size: 11px; color: var(--muted);">
+            <span>0 errors · 0 warnings</span>
+            <span>5 lines · 3 components · 4 nets</span>
+          </div>
+        </div>
+
+        <div style="background: var(--border);"></div>
+
+        <div style="position: relative; min-height: 0; overflow: hidden; background: var(--bg);">
+          <div style="{{ dotGrid }}"></div>
+          <div style="position: absolute; top: 14px; left: 16px; display: inline-flex; padding: 2px; border-radius: 6px; border: 1px solid var(--border); background: var(--pane-bg); font-family: var(--font-mono); font-size: 11.5px;">
+            <span style="padding: 4px 12px; border-radius: 4px; color: var(--muted);">Schematic</span>
+            <span style="padding: 4px 12px; border-radius: 4px; background: var(--accent); color: var(--bg);">Live</span>
+            <span style="padding: 4px 12px; border-radius: 4px; color: var(--muted);">Truth</span>
+          </div>
+          <div style="position: absolute; top: 14px; right: 16px;"><span style="{{ dataBtn }}"><svg viewBox="0 0 16 16" style="width: 12px; height: 12px;" aria-hidden="true"><path d="M2.5 4h11M2.5 8h11M2.5 12h7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"></path></svg>Data <span style="color: var(--muted);">2 → 1</span></span></div>
+          <div style="position: absolute; inset: 60px 16px 40px; display: flex; align-items: center; justify-content: center;">
+            <canvas data-scene="nand" data-cell="20" style="max-width: 100%;"></canvas>
+          </div>
+          <div style="position: absolute; left: 16px; bottom: 12px; font-family: var(--font-mono); font-size: 11px; color: var(--muted);">click a pin to toggle · hover a part to find it in the source</div>
+          <div style="position: absolute; right: 16px; bottom: 12px; font-family: var(--font-mono); font-size: 11px; color: var(--muted);">cell 20 · fit</div>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 12px; padding: 0 16px; border-top: 1px solid var(--border); background: var(--code-bg); font-family: var(--font-mono-strict); font-size: 12.5px;">
+        <span style="font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; color: var(--muted);">circ-compile nand.circ --sim</span>
+        <span style="color: var(--accent); font-weight: 600;">&gt;</span>
+        <span style="color: var(--fg);">set a 1</span>
+        <span style="color: var(--muted);">·</span>
+        <span style="{{ termOkStyle }}">ok</span>
+        <span style="flex: 1;"></span>
+        <span style="font-family: var(--font-mono); font-size: 11px; color: var(--muted);">Console ▴</span>
+        <span style="font-family: var(--font-mono); font-size: 11px; color: var(--muted); opacity: 0.5;">Memory</span>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 0 16px; font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); opacity: 0.8;">
+        <span>circ 0.9.2 · a77750a · CIRF v3</span>
+        <span>runs in your browser · nothing leaves the page</span>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; max-width: 1440px;">
+      <div style="background: var(--pane-bg); padding: 14px 16px; display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 14px; font-weight: 600;">No boxes, one surface</span><span style="font-size: 13px; line-height: 1.55; color: var(--muted); text-wrap: pretty;">The four bordered panes become two regions on one sheet with a single hairline between them. Source on --pane-bg, circuit on --bg with a dot grid: the two materials do the separating.</span></div>
+      <div style="background: var(--pane-bg); padding: 14px 16px; display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 14px; font-weight: 600;">Sidebar → switcher</span><span style="font-size: 13px; line-height: 1.55; color: var(--muted); text-wrap: pretty;">The 13rem tree is used once per session, then sits there. It becomes a breadcrumb popover in the top bar; the width goes to the circuit. Files are tabs over the source, as they were before the tree.</span></div>
+      <div style="background: var(--pane-bg); padding: 14px 16px; display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 14px; font-weight: 600;">Data becomes a floating panel</span><span style="font-size: 13px; line-height: 1.55; color: var(--muted); text-wrap: pretty;">The pin table leaves the tab strip and floats over the canvas, opened from one Data button that carries the pin count. Single-bit inputs still toggle by clicking the pin itself; the panel is for typing bus values and reading many outputs at once. Views are one segmented control: Schematic · Live · Truth.</span></div>
+      <div style="background: var(--pane-bg); padding: 14px 16px; display: flex; flex-direction: column; gap: 6px;"><span style="font-size: 14px; font-weight: 600;">Dock and drawer → two lines</span><span style="font-size: 13px; line-height: 1.55; color: var(--muted); text-wrap: pretty;">Diagnostics are a footer line under the source, expanding on click. The console is a one-line terminal across the bottom that grows on focus; Memory is a badge in it. Nothing is open until you ask.</span></div>
+    </div>
+  </section>
+
+  <section id="1a" style="display: flex; flex-direction: column; gap: 16px;">
+    <div style="display: flex; align-items: baseline; gap: 12px;">
+      <span style="font-family: var(--font-mono); font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px; background: var(--pane-label-bg); border: 1px solid var(--border); color: var(--fg);">1a</span>
+      <h2 style="margin: 0; font-family: var(--font-mono); font-size: 12px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fg);">Same geometry, one header grammar</h2>
+      <span style="font-family: var(--font-mono); font-size: 11px; color: var(--muted);">1440 × 860 · Simulate tab · dock and drawer open</span>
+    </div>
+
+    <div data-screen-label="Playground · 1a headers" style="width: 1440px; height: 860px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 8px; display: grid; grid-template-rows: 56px minmax(0, 1fr); overflow: hidden;">
+
+      <nav style="display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid var(--border);">
+        <div style="display: flex; align-items: baseline; gap: 28px;">
+          <span style="font-family: var(--font-mono); font-size: 18px; font-weight: 700; color: var(--fg);">circ</span>
+          <div style="display: flex; gap: 20px; font-size: 14px;">
+            <span style="color: var(--accent); border-bottom: 1px solid var(--accent); padding-bottom: 2px;">Playground</span>
+            <span style="color: var(--muted);">Reference</span>
+            <span style="color: var(--muted);">Gallery</span>
+            <span style="color: var(--muted);">Download</span>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <span style="font-family: var(--font-mono); font-size: 11px; color: var(--muted);">circ 0.9.2 · a77750a · CIRF v3</span>
+          <span style="width: 28px; height: 16px; border-radius: 999px; border: 1px solid var(--border); background: var(--pane-label-bg); position: relative; display: inline-block;"><span style="{{ toggleKnob }}"></span></span>
+        </div>
+      </nav>
+
+      <div style="display: grid; grid-template-rows: minmax(0, 1fr) 34px; min-height: 0; padding: 10px 16px 8px; gap: 8px;">
+        <div style="display: grid; grid-template-columns: 208px minmax(0, 1fr) 8px minmax(0, 1fr); min-height: 0;">
+
+          <aside style="display: flex; flex-direction: column; min-height: 0; background: var(--pane-bg); border: 1px solid var(--border); border-right: 0; border-radius: 6px 0 0 6px; overflow: hidden;">
+            <div style="height: 32px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px 0 12px; background: var(--pane-label-bg); border-bottom: 1px solid var(--border); font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted);">
+              <span>Workspace</span>
+              <span style="font-size: 14px; color: var(--muted); line-height: 1;">+</span>
+            </div>
+            <div style="flex: 1; overflow: auto; padding: 6px 0; font-family: var(--font-mono); font-size: 12px;">
+              <sc-for list="{{ tree }}" as="row" hint-placeholder-count="12">
+                <div style="{{ row.style }}">
+                  <span style="flex: 0 0 10px; font-size: 9px; color: var(--muted);">{{ row.twisty }}</span>
+                  <span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ row.label }}</span>
+                  <sc-if value="{{ row.badge }}" hint-placeholder-val="{{ false }}"><span style="{{ row.badgeStyle }}">{{ row.badge }}</span></sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </aside>
+
+          <section style="display: flex; flex-direction: column; min-height: 0; background: var(--pane-bg); border: 1px solid var(--border); overflow: hidden;">
+            <div style="height: 32px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; background: var(--pane-label-bg); border-bottom: 1px solid var(--border); font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.06em; color: var(--muted);">
+              <span style="display: inline-flex; gap: 6px; white-space: nowrap;"><span style="color: var(--muted);">nand /</span><span style="color: var(--fg);">nand.circ</span></span>
+              <span style="text-transform: uppercase;">circ</span>
+            </div>
+            <div style="flex: 1; min-height: 0; overflow: auto; padding: 12px 0; font-family: var(--font-mono-strict); font-size: 13px; line-height: 1.6;">
+              <sc-for list="{{ code }}" as="ln" hint-placeholder-count="10">
+                <div style="{{ ln.style }}">
+                  <span style="flex: 0 0 36px; text-align: right; padding-right: 14px; color: var(--muted); opacity: 0.6; user-select: none;">{{ ln.n }}</span>
+                  <span style="{{ ln.textStyle }}">{{ ln.text }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="flex: 0 0 auto; display: flex; flex-direction: column; border-top: 1px solid var(--border);">
+              <div style="height: 32px; display: flex; align-items: stretch; justify-content: space-between; background: var(--pane-label-bg);">
+                <div style="display: flex;">
+                  <span style="display: inline-flex; align-items: center; gap: 6px; padding: 0 14px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; color: var(--accent); border-bottom: 2px solid var(--accent);">Diagnostics <span style="font-size: 10px; line-height: 1; padding: 2px 6px; border-radius: 999px; background: var(--border); color: var(--fg);">1</span></span>
+                  <span style="display: inline-flex; align-items: center; padding: 0 14px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; color: var(--muted); border-bottom: 2px solid transparent;">Settings</span>
+                </div>
+                <span style="display: inline-flex; align-items: center; padding: 0 12px; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.04em; color: var(--muted);">Hide</span>
+              </div>
+              <div style="height: 132px; border-top: 1px solid var(--border); padding: 10px 12px; font-family: var(--font-mono); font-size: 12px; display: flex; flex-direction: column; gap: 6px; overflow: auto;">
+                <div style="display: grid; grid-template-columns: 14px 112px 56px 1fr; gap: 10px; align-items: baseline; color: var(--fg);">
+                  <span style="color: var(--muted);">▲</span>
+                  <span style="color: var(--accent);">nand.circ:4:5</span>
+                  <span style="color: var(--muted);">W0102</span>
+                  <span>instance `n` could be written inline: not(in=g.out).out</span>
+                </div>
+                <div style="color: var(--muted); font-size: 11px; margin-top: 4px;">0 errors · 1 warning · compiled in 14 ms</div>
+              </div>
+            </div>
+          </section>
+
+          <div style="position: relative;"><div style="position: absolute; inset: 0 3px; background: var(--border); border-radius: 1px;"></div></div>
+
+          <section style="display: flex; flex-direction: column; min-height: 0; background: var(--pane-bg); border: 1px solid var(--border); border-radius: 0 6px 6px 0; overflow: hidden;">
+            <div style="height: 32px; display: flex; align-items: stretch; justify-content: space-between; background: var(--pane-label-bg); border-bottom: 1px solid var(--border);">
+              <div style="display: flex;">
+                <sc-for list="{{ outTabs }}" as="t" hint-placeholder-count="4">
+                  <span style="{{ t.style }}">{{ t.label }}</span>
+                </sc-for>
+              </div>
+              <div style="display: flex; align-items: center; gap: 6px; padding-right: 8px;">
+                <span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border: 1px solid var(--border); border-radius: 4px; background: var(--pane-bg); font-family: var(--font-mono); font-size: 10.5px; color: var(--fg);">
+                  <svg viewBox="0 0 16 16" style="width: 11px; height: 11px;" aria-hidden="true"><path d="M8 2v7.5M4.75 6.5 8 9.75l3.25-3.25M3 12.5h10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                  .wasm <span style="color: var(--muted);">1.2 KB</span>
+                </span>
+                <span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border: 1px solid var(--border); border-radius: 4px; background: var(--pane-bg); font-family: var(--font-mono); font-size: 10.5px; color: var(--fg);">
+                  <svg viewBox="0 0 16 16" style="width: 11px; height: 11px;" aria-hidden="true"><path d="M6.5 9.5 9.5 6.5M7 4.5l1.3-1.3a2.5 2.5 0 0 1 3.5 3.5L10.5 8M5.5 8 4.2 9.3a2.5 2.5 0 0 0 3.5 3.5L9 11.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                  Share
+                </span>
+              </div>
+            </div>
+
+            <div style="flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden;">
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 12px 0; font-family: var(--font-mono); font-size: 11px; color: var(--muted);">
+                <span>click an input pin to toggle · hover shows the source</span>
+                <span style="display: inline-flex; gap: 12px;"><span>a = <span style="color: var(--fg);">1</span></span><span>b = <span style="color: var(--fg);">0</span></span></span>
+              </div>
+              <div style="flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 8px 12px;">
+                <canvas data-scene="nand" data-cell="14" style="max-width: 100%;"></canvas>
+              </div>
+            </div>
+
+            <div style="position: relative; height: 8px; flex: none;"><div style="position: absolute; inset: 3px 0; background: var(--border); border-radius: 1px;"></div></div>
+
+            <div style="flex: 0 0 300px; display: flex; flex-direction: column; min-height: 0; border-top: 1px solid var(--border);">
+              <div style="height: 32px; display: flex; align-items: stretch; justify-content: space-between; background: var(--pane-label-bg);">
+                <div style="display: flex;">
+                  <span style="display: inline-flex; align-items: center; padding: 0 14px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; color: var(--accent); border-bottom: 2px solid var(--accent);">Console</span>
+                  <span style="display: inline-flex; align-items: center; gap: 6px; padding: 0 14px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; color: var(--muted); border-bottom: 2px solid transparent;">Memory <span style="font-size: 10px; line-height: 1; padding: 2px 6px; border-radius: 999px; background: var(--border); color: var(--fg);">1</span></span>
+                </div>
+                <span style="display: inline-flex; align-items: center; padding: 0 12px; font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.04em; color: var(--muted);">Hide</span>
+              </div>
+              <div style="flex: 1; min-height: 0; border-top: 1px solid var(--border); padding: 8px 10px 10px; display: flex; flex-direction: column;">
+                <div style="flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--code-bg); border-radius: 4px; padding: 6px 10px 8px; font-family: var(--font-mono-strict); font-size: 12.5px; line-height: 1.55;">
+                  <div style="display: flex; align-items: center; justify-content: space-between; padding-bottom: 5px; margin-bottom: 5px; border-bottom: 1px solid var(--border); font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; color: var(--muted);">
+                    <span>circ-compile nand.circ --sim</span>
+                    <span style="display: inline-flex; gap: 2px;"><span style="padding: 2px 8px; border-radius: 3px;">Clear</span><span style="padding: 2px 8px; border-radius: 3px;">Copy script</span><span style="padding: 2px 8px; border-radius: 3px;">Copy log</span></span>
+                  </div>
+                  <div style="flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column;">
+                    <sc-for list="{{ log }}" as="l" hint-placeholder-count="7">
+                      <span style="{{ l.style }}">{{ l.text }}</span>
+                    </sc-for>
+                  </div>
+                  <div style="display: flex; gap: 8px; align-items: baseline; margin-top: 2px;"><span style="color: var(--accent); font-weight: 600;">&gt;</span><span style="color: var(--muted); opacity: 0.7;">help</span><span style="width: 7px; height: 14px; background: var(--accent); display: inline-block; align-self: center; opacity: 0.8;"></span></div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <footer style="display: flex; align-items: center; gap: 12px; padding: 0 10px; border-top: 1px solid var(--border); font-family: var(--font-mono); font-size: 11.5px; color: var(--muted);">
+          <span style="display: inline-flex; align-items: center; gap: 8px; padding: 3px 10px 3px 8px; border-radius: 999px; border: 1px solid var(--border); background: var(--pane-label-bg);">
+            <span style="width: 8px; height: 8px; border-radius: 50%; background: var(--accent);"></span>
+            <span style="color: var(--fg);">Live</span>
+            <span>1.2 KB · 1 warning</span>
+          </span>
+          <span style="color: var(--accent);">Copied a link to this circuit.</span>
+          <span style="flex: 1;"></span>
+          <span>Type to compile · analyze 120 ms · build 400 ms</span>
+        </footer>
+      </div>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 16px; max-width: 1440px;">
+    <h2 style="margin: 0; font-family: var(--font-mono); font-size: 12px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fg);">What <a href="#1a">1a</a> changes, and why</h2>
+    <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 6px; overflow: hidden;">
+      <sc-for list="{{ changes }}" as="c" hint-placeholder-count="9">
+        <div style="background: var(--pane-bg); padding: 14px 16px; display: flex; flex-direction: column; gap: 6px;">
+          <span style="font-size: 14px; font-weight: 600; color: var(--fg);">{{ c.title }}</span>
+          <span style="font-size: 13px; line-height: 1.55; color: var(--muted); text-wrap: pretty;">{{ c.body }}</span>
+        </div>
+      </sc-for>
+    </div>
+    <p style="margin: 0; max-width: 78ch; font-size: 13px; line-height: 1.6; color: var(--muted); text-wrap: pretty;">Not shown, deliberately: the Preview, Truth table, Data and Memory panels and the Settings dock. Each is a screen of its own; say which and I'll draw it in this grammar. Editor source is placeholder copy.</p>
+  </section>
+</div>]]>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;\&quot;light\&quot; | \&quot;dark\&quot;&quot;}}">
+class Component extends DCLogic {
+  state = { theme: null, lib: null };
+  rootRef = React.createRef();
+  get theme() { return this.state.theme ?? this.props.theme ?? "dark"; }
+
+  componentDidMount() { this.loadLib(); }
+  async loadLib() {
+    if (this._loading) return;
+    this._loading = true;
+    const [skins, scenes] = await Promise.all([import("./circ-skins.js?v=22"), import("./circ-scenes.js?v=22")]);
+    await skins.spritesReady.catch(() => {});
+    this.setState({ lib: { skins, scenes } }, () => this.paint());
+  }
+  componentDidUpdate() { this.paint(); }
+  paint() {
+    const lib = this.state.lib, root = this.rootRef.current;
+    if (!lib || !root) return;
+    for (const canvas of root.querySelectorAll("canvas[data-scene]")) {
+      const cell = Number(canvas.getAttribute("data-cell") || 13);
+      const which = canvas.getAttribute("data-scene");
+      const scene = which === "adder" ? lib.scenes.adderScene({ a: 0b11, b: 0b01 })
+        : which === "alu" ? lib.scenes.aluScene({ x: 0x0007, y: 0x0003, f: 1 })
+        : which === "rom" ? lib.scenes.romScene({ addr: 0x3, word: 0x5a })
+        : lib.scenes.nandScene({ a: 1, b: 0 });
+      lib.skins.renderScene(canvas, { ...scene, cell, theme: this.theme, style: "site-next", transparent: true });
+    }
+  }
+
+  btn(active) {
+    return { font: "500 12px var(--font-mono)", padding: "4px 12px", border: "none", borderRadius: "4px", cursor: "pointer",
+      background: active ? "var(--accent)" : "transparent", color: active ? "var(--bg)" : "var(--muted)" };
+  }
+
+  renderVals() {
+    const dark = this.theme === "dark";
+    const mono = "var(--font-mono)";
+    // --term-ok / --term-echo / --danger live in the site's global.css, not the DS bundle: fall back to those values.
+    const termOk = dark ? "var(--term-ok, #8fd3a8)" : "var(--term-ok, #3f7d5c)";
+    const termEcho = dark ? "var(--term-echo, #ece4f8)" : "var(--term-echo, #2d2140)";
+    const danger = "var(--danger, #e5484d)";
+    const rowBase = "display:flex;align-items:center;gap:6px;width:100%;padding:4px 10px 4px calc(10px + var(--depth) * 14px);color:var(--muted);border-left:2px solid transparent;";
+    const toStyle = (s) => Object.fromEntries(s.split(";").filter(Boolean).map((d) => { const i = d.indexOf(":"); const k = d.slice(0, i).trim().replace(/-([a-z])/g, (_, c) => c.toUpperCase()); return [k, d.slice(i + 1).trim()]; }));
+    const treeRow = (label, depth, opts = {}) => ({
+      label, twisty: opts.twisty ?? "", badge: opts.badge ?? null,
+      style: { ...toStyle(rowBase), "--depth": String(depth),
+        ...(opts.group ? { color: "var(--fg)", letterSpacing: "0.06em", textTransform: "uppercase", fontSize: "10.5px", marginTop: depth === 0 && opts.first ? "0" : "8px" } : {}),
+        ...(opts.current ? { color: "var(--accent)" } : {}),
+        ...(opts.file && opts.current ? { background: "var(--pane-label-bg)", borderLeftColor: "var(--accent)" } : {}) },
+      badgeStyle: { fontSize: "10px", lineHeight: 1, padding: "2px 6px", borderRadius: "999px", background: opts.badgeSeverity === "error" ? danger : "var(--border)", color: opts.badgeSeverity === "error" ? "var(--bg)" : "var(--fg)" },
+    });
+    const tree = [
+      treeRow("Tour", 0, { group: true, first: true, twisty: "▾" }),
+      treeRow("1 · A wire", 1, { twisty: "▸" }),
+      treeRow("2 · Gates", 1, { twisty: "▸" }),
+      treeRow("3 · Buses", 1, { twisty: "▸" }),
+      treeRow("Examples", 0, { group: true, twisty: "▾" }),
+      treeRow("nand", 1, { twisty: "▾", current: true }),
+      treeRow("nand.circ", 2, { file: true, current: true, badge: "1" }),
+      treeRow("half-adder", 1, { twisty: "▸" }),
+      treeRow("full-adder", 1, { twisty: "▸" }),
+      treeRow("4-bit counter", 1, { twisty: "▸" }),
+      treeRow("rom-basic", 1, { twisty: "▸" }),
+      treeRow("Mine", 0, { group: true, twisty: "▾" }),
+      treeRow("quiet-otter", 1, { twisty: "▸" }),
+    ];
+
+    const kw = "var(--accent)", id = "var(--fg)", mu = "var(--muted)";
+    const codeLine = (n, text, color, hl) => ({ n, text, style: { display: "flex", padding: "0 12px", background: hl ? "color-mix(in srgb, var(--accent) 14%, transparent)" : "transparent" }, textStyle: { color, whiteSpace: "pre" } });
+    // Real circ grammar, from site/src/content/tour.ts: declarations, then ports bound by name.
+    const code = [
+      codeLine(1, "// nand.circ", mu),
+      codeLine(2, "input a, b", id),
+      codeLine(3, "and g(a=a, b=b)", id),
+      codeLine(4, "not n(in=g.out)", id, true),
+      codeLine(5, "output out(in=n.out)", id),
+      codeLine(6, "", id),
+    ];
+    // Proposal 2a: the same program, tokenised for the chromeless bench.
+    const tok = (t, c) => ({ t, c });
+    const bench = [
+      { n: 1, toks: [tok("// nand.circ", mu)] },
+      { n: 2, toks: [tok("input", kw), tok(" a, b", id)] },
+      { n: 3, toks: [tok("and", kw), tok(" g", id), tok("(a=a, b=b)", mu)] },
+      { n: 4, toks: [tok("not", kw), tok(" n", id), tok("(in=g.out)", mu)] },
+      { n: 5, toks: [tok("output", kw), tok(" out", id), tok("(in=n.out)", mu)] },
+      { n: 6, toks: [tok("", id)] },
+    ].map((l) => ({ ...l, toks: l.toks.map((x) => ({ text: x.t, style: { color: x.c, whiteSpace: "pre" } })) }));
+    // Pin-rail chips. Inputs: solid accent when HIGH, accent outline when LOW,
+    // a bus shows its hex and is a field. Outputs: pane-bg, read-only.
+    const chipBase = { display: "inline-flex", alignItems: "center", gap: "8px", padding: "4px 10px 4px 12px", borderRadius: "999px", fontFamily: mono, fontSize: "12px", border: "1px solid transparent" };
+    const chip = (label, value, kind) => ({ label, value, style: { ...chipBase,
+      ...(kind === "on" ? { background: "var(--accent)", color: "var(--bg)", borderColor: "var(--accent)" }
+        : kind === "off" ? { borderColor: "var(--accent)", color: "var(--fg)" }
+        : kind === "bus" ? { background: "var(--accent)", color: "var(--bg)", borderColor: "var(--accent)", paddingRight: "6px" }
+        : { background: "var(--pane-bg)", borderColor: "var(--border)", color: "var(--fg)" }) },
+      labelStyle: { color: kind === "out" ? "var(--muted)" : "inherit" },
+      valueStyle: kind === "bus" ? { fontWeight: 700, padding: "0 6px", borderRadius: "999px", background: "color-mix(in srgb, var(--bg) 22%, transparent)" } : { fontWeight: 700 },
+    });
+    const pins = [chip("a", "1", "on"), chip("b", "0", "off")];
+    // 3d — the rail at eight inputs. Past ~4 chips the floating row would run
+    // into the view switch, so the rail becomes its own strip under the
+    // toolbar: buses stay as hex fields, single-bit inputs collapse into one
+    // bit-group (label above, toggle below), outputs sit on the far right.
+    const bit = (label, v) => ({ label, value: String(v),
+      cellStyle: { display: "flex", flexDirection: "column", alignItems: "center", gap: "3px", minWidth: "26px" },
+      labelStyle: { fontFamily: mono, fontSize: "10px", color: "var(--muted)" },
+      knobStyle: { width: "22px", height: "22px", borderRadius: "999px", display: "inline-flex", alignItems: "center", justifyContent: "center", fontFamily: mono, fontSize: "11px", fontWeight: 700,
+        ...(v ? { background: "var(--accent)", color: "var(--bg)", border: "1px solid var(--accent)" } : { border: "1px solid var(--accent)", color: "var(--fg)" }) } });
+    const aluBits = [bit("zx", 0), bit("nx", 0), bit("zy", 0), bit("ny", 0), bit("f", 1), bit("no", 0)];
+
+    // The Data button (toolbar, top-right of the canvas) and the panel rows it opens.
+    const dataBtnBase = { display: "inline-flex", alignItems: "center", gap: "7px", padding: "5px 11px", borderRadius: "6px", border: "1px solid var(--border)", background: "var(--pane-bg)", fontFamily: mono, fontSize: "11.5px", color: "var(--fg)" };
+    const dataBtn = dataBtnBase;
+    const dataBtnOn = { ...dataBtnBase, background: "var(--accent)", borderColor: "var(--accent)", color: "var(--bg)" };
+    const ctlField = { fontFamily: mono, fontSize: "12px", padding: "2px 8px", minWidth: "64px", textAlign: "right", borderRadius: "4px", border: "1px solid var(--border)", background: "var(--code-bg)", color: "var(--fg)" };
+    const ctlBit = (on) => ({ width: "22px", height: "22px", borderRadius: "999px", display: "inline-flex", alignItems: "center", justifyContent: "center", fontFamily: mono, fontSize: "11px", fontWeight: 700,
+      ...(on ? { background: "var(--accent)", color: "var(--bg)", border: "1px solid var(--accent)" } : { border: "1px solid var(--accent)", color: "var(--fg)" }) });
+    const ctlRead = { fontFamily: mono, fontSize: "12px", padding: "2px 8px", minWidth: "64px", textAlign: "right", color: "var(--fg)", fontWeight: 700 };
+    const dRow = (name, bits, value, kind) => ({ name, bits: String(bits), value, ctl: kind === "field" ? ctlField : kind === "read" ? ctlRead : ctlBit(kind === "on") });
+    const dataIn = [dRow("x", 16, "0x0007", "field"), dRow("y", 16, "0x0003", "field"), dRow("zx", 1, "0", "off"), dRow("nx", 1, "0", "off"), dRow("zy", 1, "0", "off"), dRow("ny", 1, "0", "off"), dRow("f", 1, "1", "on"), dRow("no", 1, "0", "off")];
+    const dataOut = [dRow("out", 16, "0x000a", "read"), dRow("zr", 1, "0", "read"), dRow("ng", 1, "0", "read")];
+
+    // 3e — Schematic view: the compiler's own --preview text, in the strict mono
+    // stack (Necto's box glyphs don't hold the grid). Lines are plain strings.
+    const schematic = [
+      "  a ─────────┐",
+      "             │  ┌──────┐     ┌──────┐",
+      "             └──┤      │     │      │",
+      "                │  &   ├─────┤  1   ├──── out",
+      "  b ────────────┤      │     │      │",
+      "                └──────┘     └──────┘",
+      "                  g            n",
+    ].map((t) => ({ t }));
+
+    // 3f — Truth view: exhaustive table for the nand program (2 input bits → 4 rows),
+    // with the row that matches the live pins picked out.
+    const ttCell = (text, o = {}) => ({ text, style: { padding: "7px 14px", textAlign: "center", fontFamily: mono, fontSize: "12.5px",
+      color: o.head ? "var(--muted)" : o.on ? "var(--fg)" : "var(--muted)", fontWeight: o.on && !o.head ? 700 : 500,
+      borderBottom: o.head ? "1px solid var(--border)" : "1px solid color-mix(in srgb, var(--border) 60%, transparent)",
+      borderLeft: o.sep ? "1px solid var(--border)" : "none", fontSize: o.head ? "10.5px" : "12.5px", letterSpacing: o.head ? "0.08em" : 0, textTransform: o.head ? "uppercase" : "none",
+      background: o.live ? "color-mix(in srgb, var(--accent) 14%, transparent)" : "transparent" } });
+    const truthRows = [
+      { live: false, cells: [ttCell("0"), ttCell("0"), ttCell("1", { on: true, sep: true })] },
+      { live: false, cells: [ttCell("0"), ttCell("1", { on: true }), ttCell("1", { on: true, sep: true })] },
+      { live: true,  cells: [ttCell("1", { on: true, live: true }), ttCell("0", { live: true }), ttCell("1", { on: true, sep: true, live: true })] },
+      { live: false, cells: [ttCell("1", { on: true }), ttCell("1", { on: true }), ttCell("0", { sep: true })] },
+    ].map((r) => ({ ...r, style: { display: "contents" } }));
+    const truthHead = [ttCell("a", { head: true }), ttCell("b", { head: true }), ttCell("out", { head: true, sep: true })];
+    const rails = {
+      aluIn: [chip("x", "0x0007", "bus"), chip("y", "0x0003", "bus")],
+      aluOut: [chip("out", "0x000a", "out"), chip("zr", "0", "out"), chip("ng", "0", "out")],
+      adderIn: [chip("a", "0x3", "bus"), chip("b", "0x1", "bus")],
+      adderOut: [chip("sum", "0x0", "out"), chip("cout", "1", "out")],
+      romIn: [chip("addr", "0x3", "bus")],
+      romOut: [chip("q", "0x5a", "out")],
+    };
+
+    // Programs for the turn-3 boards. Real circ for the adder; the rom line follows PR #79's label form.
+    const src = (lines) => lines.map((l, i) => ({ n: i + 1, toks: l.map(([t, c]) => ({ text: t, style: { color: c, whiteSpace: "pre" } })) }));
+    const adderSrc = src([
+      [["// adder2.circ — two-bit ripple adder", mu]],
+      [["input", kw], [" a[2], b[2]", id]],
+      [["slice", kw], [" a0", id], ["(in=a, lo=0, hi=1)", mu]],
+      [["slice", kw], [" a1", id], ["(in=a, lo=1, hi=2)", mu]],
+      [["slice", kw], [" b0", id], ["(in=b, lo=0, hi=1)", mu]],
+      [["slice", kw], [" b1", id], ["(in=b, lo=1, hi=2)", mu]],
+      [["xor", kw], [" s0", id], ["(a=a0.out, b=b0.out)", mu]],
+      [["and", kw], [" c1", id], ["(a=a0.out, b=b0.out)", mu]],
+      [["xor", kw], [" p1", id], ["(a=a1.out, b=b1.out)", mu]],
+      [["and", kw], [" g1", id], ["(a=a1.out, b=b1.out)", mu]],
+      [["xor", kw], [" s1", id], ["(a=p1.out, b=c1.out)", mu]],
+      [["and", kw], [" h1", id], ["(a=p1.out, b=c1.out)", mu]],
+      [["or", kw], [" c2", id], ["(a=g1.out, b=h1.out)", mu]],
+      [["concat", kw], [" sum", id], ["(a=s1.out, b=s0.out)", mu]],
+      [["output", kw], [" sum", id], ["(in=sum.out)", mu]],
+      [["output", kw], [" cout", id], ["(in=c2.out)", mu]],
+    ]);
+    const aluSrc = src([
+      [["// alu.circ — the Hack ALU from its own chips", mu]],
+      [["use", kw], [" \"chips/*.circ\"", mu]],
+      [["input", kw], [" x[16], y[16], zx, nx, zy, ny, f, no", id]],
+      [["", id]],
+      [["mux16", kw], [" zxm", id], ["(a=x, b=0, sel=zx)", mu]],
+      [["not16", kw], [" nxn", id], ["(in=zxm.out)", mu]],
+      [["mux16", kw], [" nxm", id], ["(a=zxm.out, b=nxn.out, sel=nx)", mu]],
+      [["mux16", kw], [" zym", id], ["(a=y, b=0, sel=zy)", mu]],
+      [["not16", kw], [" nyn", id], ["(in=zym.out)", mu]],
+      [["mux16", kw], [" nym", id], ["(a=zym.out, b=nyn.out, sel=ny)", mu]],
+      [["", id]],
+      [["add16", kw], [" sum", id], ["(a=nxm.out, b=nym.out)", mu]],
+      [["and16", kw], [" both", id], ["(a=nxm.out, b=nym.out)", mu]],
+      [["mux16", kw], [" fm", id], ["(a=both.out, b=sum.out, sel=f)", mu]],
+      [["not16", kw], [" non", id], ["(in=fm.out)", mu]],
+      [["mux16", kw], [" nom", id], ["(a=fm.out, b=non.out, sel=no)", mu]],
+      [["", id]],
+      [["or16way", kw], [" any", id], ["(in=nom.out)", mu]],
+      [["not", kw], [" zr", id], ["(in=any.out)", mu]],
+      [["slice", kw], [" ng", id], ["(in=nom.out, lo=15, hi=16)", mu]],
+      [["output", kw], [" out", id], ["(in=nom.out)", mu], [", zr", id], ["(in=zr.out)", mu], [", ng", id], ["(in=ng.out)", mu]],
+    ]);
+    const romSrc = src([
+      [["// rom.circ — a 16-word lookup table", mu]],
+      [["input", kw], [" addr[4]", id]],
+      [["rom", kw], [" lut[8,4]", id], ["(addr=addr)", mu]],
+      [["output", kw], [" q", id], ["(in=lut.out)", mu]],
+      [["", id]],
+    ]);
+
+    // Workspace switcher (3a): groups as headings, projects as rows, files one level in.
+    const wsRow = (label, depth, o = {}) => ({ label, meta: o.meta ?? "", style: {
+      display: "flex", alignItems: "center", gap: "8px", padding: depth === 0 ? "10px 12px 4px" : "6px 12px", paddingLeft: `${12 + depth * 14}px`,
+      fontFamily: mono, fontSize: depth === 0 ? "10.5px" : "12px", letterSpacing: depth === 0 ? "0.08em" : "0", textTransform: depth === 0 ? "uppercase" : "none",
+      color: depth === 0 ? "var(--muted)" : o.current ? "var(--accent)" : "var(--fg)", background: o.current && depth === 2 ? "var(--pane-label-bg)" : "transparent",
+      borderLeft: `2px solid ${o.current && depth === 2 ? "var(--accent)" : "transparent"}`, opacity: o.soon ? 0.5 : 1 },
+      metaStyle: { marginLeft: "auto", fontSize: "10.5px", color: o.metaKind === "warn" ? "var(--bg)" : "var(--muted)", background: o.metaKind === "warn" ? "var(--accent)" : "transparent", padding: o.metaKind === "warn" ? "1px 6px" : "0", borderRadius: "999px" } });
+    const wsRows = [
+      wsRow("Tour", 0), wsRow("1 · A wire", 1), wsRow("2 · Gates", 1), wsRow("3 · Buses", 1), wsRow("4 · Memory", 1, { soon: true, meta: "soon" }),
+      wsRow("Examples", 0), wsRow("nand", 1, { current: true, meta: "1 file" }), wsRow("nand.circ", 2, { current: true }),
+      wsRow("adder2", 1, { meta: "1 warning", metaKind: "warn" }), wsRow("rom", 1, { meta: "2 files" }), wsRow("counter4", 1, { meta: "3 files" }),
+      wsRow("Mine", 0), wsRow("quiet-otter", 1, { meta: "yesterday" }), wsRow("bold-heron", 1, { meta: "3 days ago" }),
+    ];
+
+    // Console transcript for 3c: protocol replies exactly as --sim prints them.
+    const con = (text, kind) => ({ text, style: { whiteSpace: "pre", color: kind === "ok" ? termOk : kind === "echo" ? termEcho : kind === "note" ? "var(--muted)" : "var(--fg)" } });
+    const conLog = [
+      con("# circ-compile 0.9.2 · rom.circ · 1 in, 1 out · 1 mem", "note"),
+      con("> help", "echo"),
+      con("# values: decimal, 0x, 0o or 0b, with _ between digits; replies are 0x hex", "note"),
+      con("# set <pin> <value> [<mask>]   drive an input and settle", "note"),
+      con("# get <pin>                    read a pin: ok <value> <defined>", "note"),
+      con("# peek <mem> <addr>            read one cell", "note"),
+      con("# poke <mem> <addr> <value>    write one cell and settle", "note"),
+      con("# mem <mem> [<start> [<count>]] read a range of cells", "note"),
+      con("> mems", "echo"), con("lut rom 8 4", "reply"),
+      con("> set addr 0x3", "echo"), con("ok", "ok"),
+      con("> get q", "echo"), con("ok 0x5a 0xff", "ok"),
+      con("> poke lut 0x4 0xff", "echo"), con("ok", "ok"),
+      con("> mem lut 0x0 0x8", "echo"),
+      con("mem 8", "reply"), con("0x00 0x01 0x02 0x5a 0xff ? ? ?", "reply"),
+    ];
+    // Memory grid for 3c: 16 words, 8 per row; unknown dimmed; one cell mid-edit.
+    const memCell = (text, o = {}) => ({ text, style: { padding: "3px 8px", fontFamily: mono, fontSize: "12px", textAlign: "center", minWidth: "28px",
+      color: o.unknown ? "var(--muted)" : o.hot ? "var(--accent)" : "var(--fg)", opacity: o.unknown ? 0.55 : 1,
+      borderBottom: o.edit ? "2px solid var(--accent)" : o.unknown ? "1px dotted var(--muted)" : "1px solid transparent", background: o.edit ? "var(--pane-label-bg)" : "transparent" } });
+    const memRows = [
+      { addr: "0", cells: [memCell("00"), memCell("01"), memCell("02"), memCell("5a", { hot: true }), memCell("ff", { edit: true }), memCell("?", { unknown: true }), memCell("?", { unknown: true }), memCell("?", { unknown: true })] },
+      { addr: "8", cells: [memCell("10"), memCell("20"), memCell("40"), memCell("80"), memCell("?", { unknown: true }), memCell("?", { unknown: true }), memCell("1010101x"), memCell("?", { unknown: true })] },
+    ];
+
+    const tab = (label, sel, extra = {}) => ({ label, style: { display: "inline-flex", alignItems: "center", padding: "0 14px", fontFamily: mono, fontSize: "11px", letterSpacing: "0.04em",
+      color: sel ? "var(--accent)" : "var(--muted)", borderBottom: `2px solid ${sel ? "var(--accent)" : "transparent"}`, ...extra } });
+    const outTabs = [tab("Preview", false), tab("Truth table", false), tab("Simulate", true), tab("Data", false)];
+
+    const line = (text, kind) => ({ text, style: { whiteSpace: "pre-wrap", color: kind === "ok" ? termOk : kind === "echo" ? termEcho : kind === "note" ? "var(--muted)" : kind === "err" ? danger : "var(--fg)" } });
+    const log = [
+      line("# circ-compile 0.9.2 · nand.circ · 2 in, 1 out", "note"),
+      line("> set a 1", "echo"), line("ok", "ok"),
+      line("> get out", "echo"), line("out = 1", "reply"),
+      line("> set b 1", "echo"), line("ok", "ok"),
+      line("> get out", "echo"), line("out = 0", "reply"),
+    ];
+
+    const inventory = [
+      { name: "Workspace sidebar", body: "Collapsible tree: Tour / Examples / Mine, the open project expanded to its files. Diagnostic counts as badges on rows; a + button floats absolutely over the header.", src: ".pg-ws · ws-tree.ts · playground-store.ts" },
+      { name: "Editor pane", body: "CodeMirror 6 with lint gutter and source-link highlight (.cm-circ-linked). Its theme comes from circ-editor-theme.ts, not global.css.", src: ".pg-editor · circ-editor.ts" },
+      { name: "Editor dock", body: "Diagnostics (file:line, code, message; badge counts) and Settings (three fieldsets: Preview, Truth table, Compile). Opens at a share of the pane.", src: ".pg-dock · settings-drawer.ts" },
+      { name: "Output tabs", body: "Preview (ASCII --preview), Truth table (gated by input-bit cap, tooltip says why), Simulate (circ-renderer canvas), Data (pins as an editable table).", src: ".pg-tabs · pipeline.ts" },
+      { name: "Session drawer", body: "Under Simulate and Data only. Console is the --sim protocol at a prompt; Memory appears once a rom/ram is declared, paged hex grid with per-cell edit.", src: ".pg-drawer · console.ts · memory-panel.ts" },
+      { name: "Status bar", body: "Dot + label + detail from statusFor(); compiler identity; Download .wasm and Share as buttons; an aria-live announcement span.", src: ".pg-statusbar · pipeline.ts" },
+      { name: "Splitters", body: "Main (vertical) and drawer (horizontal); 8px hit area, 2px rule, accent on hover. Ratios persist in the store envelope.", src: ".pg-splitter · splitter.ts" },
+      { name: "Three tab strips, three styles", body: ".pg-tabs, .pg-dock-tab and .pg-drawer-tab each declare their own size, padding and toggle. They read as three components, not one.", src: "global.css 654 · 766 · 1067" },
+    ];
+
+    const changes = [
+      { title: "One pane header, everywhere", body: "A 32px strip on --pane-label-bg with mono 11px tracking: a label or a tab row on the left, actions on the right. Workspace, editor, dock, output and drawer all use it, so the three tab styles collapse into one." },
+      { title: "Actions sit on what they act on", body: "Download .wasm and Share leave the status bar for the output header — the artifact they refer to is right below them. The .wasm button carries the size, so the status bar can stop repeating it." },
+      { title: "Status bar says one thing", body: "A single pill: dot, state word, detail. Announcements stay in accent beside it; timing detail moves right and muted. Compiler identity moves to the site nav, where the reader looks for a version." },
+      { title: "Editor header names the file", body: "project / file.circ as a breadcrumb, replacing the tab strip the sidebar already made redundant. The active file in the tree and the header agree." },
+      { title: "Diagnostics as a grid", body: "Severity glyph · file:line (accent, clickable) · code (muted) · message, in fixed columns so twenty rows scan. The summary line closes with the compile time the pipeline already knows." },
+      { title: "Simulate carries the new assets", body: "The canvas uses site-theme v2: value pills, three-container gates, cell-relative wires. A one-line hint and the live input values sit above it in the same mono voice as everything else." },
+      { title: "Console keeps its terminal", body: "Same code-bg surface and line kinds; the action buttons lose their borders and become ghost text so the command title reads first. The prompt shows a caret so it looks alive." },
+      { title: "Workspace groups as headings", body: "Tour / Examples / Mine become small-caps group rows with a twisty; the open project's files indent one more level; the + moves into the header strip instead of floating." },
+      { title: "Nothing moves geometrically", body: "Sidebar 13rem, 8px splitters, dock and drawer at their stored ratios, app layout locked to the viewport. Every change is a header, a token or a relocation — no new tracks." },
+    ];
+
+    return {
+      rootRef: this.rootRef, theme: this.theme,
+      lightBtn: this.btn(!dark), darkBtn: this.btn(dark),
+      setLight: () => this.setState({ theme: "light" }), setDark: () => this.setState({ theme: "dark" }),
+      toggleKnob: { position: "absolute", top: "2px", left: dark ? "13px" : "2px", width: "10px", height: "10px", borderRadius: "50%", background: "var(--accent)" },
+      tree, code, outTabs, log, inventory, changes, bench, pins,
+      rails, adderSrc, romSrc, aluSrc, aluBits, wsRows, conLog, memRows,
+      dataBtn, dataBtnOn, dataIn, dataOut, schematic, truthRows, truthHead,
+      termOkStyle: { color: termOk },
+      scrim: { position: "absolute", inset: "48px 0 0 0", zIndex: 2, background: dark ? "rgba(12,5,23,0.45)" : "rgba(68,56,86,0.18)" },
+      dotGrid: { position: "absolute", inset: 0, backgroundImage: `radial-gradient(${dark ? "rgba(192,171,218,0.18)" : "rgba(68,56,86,0.14)"} 1px, transparent 1px)`, backgroundSize: "18px 18px" },
+    };
+  }
+}
+</script>
+</body>
+</html>

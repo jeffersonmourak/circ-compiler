@@ -31,6 +31,7 @@ output out(in=inv.out)
 | [logisim-import.md](logisim-import.md)       | Mapping Logisim `ROM`/`RAM` components onto `rom`/`ram`                 |
 | [benchmark.md](benchmark.md)                 | `zig build bench`: engine regression gate, counters, golden workflow    |
 | [decisions/](decisions/index.md)             | Architectural decisions for the `.circ` compiler                        |
+| [PLANS_PROMPT.md](PLANS_PROMPT.md)           | The active plan: the playground bench (phase specs under `PLANS/`)      |
 | [archive/](archive/index.md)                 | Archived implementation plans                                           |
 | [prompts/ARCHIVE.md](prompts/ARCHIVE.md)     | How to archive a finished plan into `DOCS/archive/`                     |
 | [prompts/](prompts/PHASE_MACRO_PLANNER.md)   | The planner prompts that write a plan prompt and its per-phase specs    |
