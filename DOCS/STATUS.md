@@ -201,3 +201,11 @@ Rolling log of shipped slices. Newest at the bottom. The plan is `DOCS/PLANS_PRO
 **Tests:** Added group-order, file-count and age-band cases; extended migration coverage. Ran `bun --bun run typecheck`, `bun --bun run build`, `bun test`, then the corrected `bun test test/island-smoke.test.ts`: all 578 cases pass across those runs. `bun run bundle`: `/playground` 120.8 KB raw / 42.4 KB gzip, within the unchanged ceiling.
 **Next slice:** Name filtering and the search field.
 **Notes:** Rechecked the clean handoff at `0d4c232`: the human's override leaves dots on Live alone. Tier-id migration belongs in workspace normalization, covering both version 1 and the early version-2 envelopes already written by this branch; restricting it to `migrateV1` would lose those readers' expansion choices. The schema stays at version 2.
+
+## 2026-09-11 — Phase 4 — Name filtering
+
+**What shipped:** `filterNodes` matches project and open-file names, trims the query and ignores case, keeps ancestors, and returns the original array for an empty query. The bridge has a search field; ArrowDown enters the tree and Enter loads a sole project match. No matches shows `No circuits found.`
+**Files touched:** `site/src/scripts/ws-tree.ts`, `site/src/components/Playground.astro`, `site/src/styles/global.css`, `site/test/{ws-tree,island-smoke}.test.ts`, `DOCS/STATUS.md`
+**Tests:** Five filter cases and a built-island search through a collapsed group. Typecheck, build, all 583 existing tests and the new smoke case pass (584 total). `bun run bundle`: `/playground` 121.6 KB raw / 42.6 KB gzip.
+**Next slice:** The popover, breadcrumb and keyboard/focus handling.
+**Notes:** Search temporarily expands the tree's input, so collapsed groups remain searchable. It never writes those expansions to the envelope; clearing the query restores the reader's tree. A project match retains its visible files; a file-only match retains only matching files and their ancestors.

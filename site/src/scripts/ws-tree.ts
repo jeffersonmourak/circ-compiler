@@ -142,6 +142,35 @@ export function relativeTime(updatedAt: number, now: number): string {
   return new Date(updatedAt).toISOString().slice(0, 10);
 }
 
+/** Match names and retain their ancestors. A project match keeps its files;
+ *  a file-only match keeps just the matching files. The empty path is free. */
+export function filterNodes(nodes: readonly TreeNode[], query: string): readonly TreeNode[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return nodes;
+  const keep = new Set<TreeNode>();
+  let group: GroupNode | undefined;
+  let project: ProjectNode | undefined;
+  let projectMatches = false;
+  for (const node of nodes) {
+    if (node.kind === 'group') {
+      group = node;
+      project = undefined;
+      projectMatches = false;
+      continue;
+    }
+    if (node.kind === 'project') {
+      project = node;
+      projectMatches = node.label.toLowerCase().includes(needle);
+    }
+    if (projectMatches || (node.kind === 'file' && node.label.toLowerCase().includes(needle))) {
+      if (group) keep.add(group);
+      if (project) keep.add(project);
+      keep.add(node);
+    }
+  }
+  return nodes.filter((node) => keep.has(node));
+}
+
 const worst = (c: TabCounts): { severity: Severity | null; badge: number } =>
   c.errors > 0
     ? { severity: 'error', badge: c.errors }

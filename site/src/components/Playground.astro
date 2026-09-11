@@ -89,6 +89,11 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
          the body grid: the divider's arithmetic, its ResizeObserver and its
          aria-controls all name exactly the two regions. -->
     <nav class="pg-ws" id="pg-ws" aria-label="Workspace" hidden>
+      <label class="pg-switch-search">
+        <span aria-hidden="true">⌕</span>
+        <input type="search" class="pg-switch-query" aria-label="Find a circuit" placeholder="Find a circuit…" autocomplete="off" spellcheck="false" />
+        <kbd aria-hidden="true">⌘K</kbd>
+      </label>
       <div class="pg-ws-body" id="pg-ws-body">
         {/* The pre-hydration fallback: every project, flat, as ordinary links
             into the picker. The island replaces this whole subtree with a real
@@ -502,6 +507,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     type TreeNode,
     displayGroups,
     groupOf,
+    filterNodes,
   } from '../scripts/ws-tree.ts';
   import {
     indexDoc,
@@ -558,6 +564,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     const zoomPct = el.querySelector<HTMLButtonElement>('.pg-zoom-pct')!;
     const zoomFit = el.querySelector<HTMLButtonElement>('.pg-zoom-fit')!;
     const wsRoot = el.querySelector<HTMLElement>('.pg-ws')!;
+    const switchQuery = el.querySelector<HTMLInputElement>('.pg-switch-query')!;
     const crumb = el.querySelector<HTMLButtonElement>('.pg-crumb')!;
     const wsBody = el.querySelector<HTMLElement>('.pg-ws-body')!;
     const wsNew = el.querySelector<HTMLButtonElement>('.pg-ws-new')!;
@@ -1373,7 +1380,8 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     const remembered = new Map<string, { errors: number; warnings: number }>();
     /** Index into the flattened tree that holds the single tab stop. */
     let treeFocus = 0;
-    let treeNodes: TreeNode[] = [];
+    let treeNodes: readonly TreeNode[] = [];
+    let query = '';
 
     /** The tree as data. Rebuilt on every render rather than cached: each of
      *  its inputs — the catalogue, the scratch list, the file set, the
@@ -1462,7 +1470,13 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       const wantedId = opts.keepFocusOn !== undefined
         ? opts.keepFocusOn
         : (treeNodes[treeFocus]?.id ?? null);
-      treeNodes = visibleNodes(treeInput(), nowMs());
+      const input = treeInput();
+      // Search also reaches collapsed groups, without saving an expansion the
+      // reader never chose. Clearing it restores the original tree.
+      if (query.trim()) input.expanded = new Set([
+        ...expanded, ...input.groups.map((g) => g.id), ...(input.activeId ? [input.activeId] : []),
+      ]);
+      treeNodes = filterNodes(visibleNodes(input, nowMs()), query);
       treeFocus = preferredFocus(treeNodes, wantedId);
 
       const tree = document.createElement('div');
@@ -1624,6 +1638,12 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       wsBody.querySelector('.pg-tree')?.remove();
       wsBody.querySelector('.pg-ws-fallback')?.remove();
       wsBody.insertBefore(tree, wsError);
+      if (treeNodes.length === 0) {
+        const empty = document.createElement('p');
+        empty.className = 'pg-ws-empty';
+        empty.textContent = 'No circuits found.';
+        tree.appendChild(empty);
+      }
 
       // One line naming the first file that cannot be written back, so the
       // reader learns why a row is marked rather than only that it is.
@@ -1841,6 +1861,17 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     }
 
     wsNew.addEventListener('click', newProject);
+    switchQuery.addEventListener('input', () => {
+      query = switchQuery.value;
+      renderTree();
+    });
+    switchQuery.addEventListener('keydown', (e) => {
+      if (e.isComposing || (e.key !== 'ArrowDown' && e.key !== 'Enter')) return;
+      e.preventDefault();
+      const matches = treeNodes.filter((n) => n.kind === 'project');
+      if (e.key === 'Enter' && matches.length === 1) loadProject(matches[0].id);
+      else focusNode(0);
+    });
 
     // ---- the workspace card ----
     // The tree opens under the breadcrumb and closes on Escape, on a click

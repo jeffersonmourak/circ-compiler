@@ -7,6 +7,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   fileNodeId,
+  filterNodes,
   groupOf,
   moveFor,
   reveal,
@@ -197,6 +198,33 @@ describe('visibleNodes', () => {
     );
     expect(shape(nodes)).toEqual(['group:Yours']);
     expect(nodes[0].kind === 'group' && nodes[0].count).toBe(0);
+  });
+});
+
+describe('filterNodes', () => {
+  const nodes = visibleNodes(input());
+  test('an empty query returns the same array', () => {
+    expect(filterNodes(nodes, '')).toBe(nodes);
+    expect(filterNodes(nodes, '  ')).toBe(nodes);
+  });
+  test('keeps a group when a project matches, preserving its flags', () => {
+    const found = filterNodes(nodes, 'B');
+    expect(found.map((n) => n.id)).toEqual(['introduction', 'example:b']);
+    expect(found[0]).toBe(nodes[0]);
+    expect(filterNodes(nodes, 'Introduction')).toEqual([]);
+  });
+  test('a file match keeps its project and group, and only matching files', () => {
+    expect(filterNodes(nodes, 'half').map((n) => n.id)).toEqual(['yours', 'scratch:1', 'scratch:1/0']);
+  });
+  test('a project match keeps its open files and trims without case sensitivity', () => {
+    expect(filterNodes(nodes, '  mINE ').map((n) => n.id)).toEqual(['yours', 'scratch:1', 'scratch:1/0', 'scratch:1/1']);
+    expect(filterNodes(nodes, 'missing')).toEqual([]);
+  });
+  test('moveFor walks only the filtered rows and their ancestors', () => {
+    const found = filterNodes(nodes, 'half');
+    expect(moveFor(found, 0, 'ArrowDown')).toEqual({ kind: 'focus', index: 1 });
+    expect(moveFor(found, 2, 'ArrowDown')).toBeNull();
+    expect(moveFor(found, 2, 'ArrowLeft')).toEqual({ kind: 'focus', index: 1 });
   });
 });
 

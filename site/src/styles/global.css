@@ -853,6 +853,10 @@ hr {
    clear through its padding. The region's static dots yield while a canvas
    is showing. The note sits over the canvas, never in its flow, so a hover
    sentence cannot resize the mount. */
+[data-layout='app'] .pg-switch-search { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--muted); font: 12px var(--font-mono); }
+[data-layout='app'] .pg-switch-query { flex: 1; min-width: 0; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--fg); font: inherit; }
+[data-layout='app'] .pg-switch-query::placeholder { color: var(--muted); }
+[data-layout='app'] .pg-switch-search kbd { padding: 1px 5px; border: 1px solid var(--border); border-radius: 3px; font: 10px var(--font-mono); }
 .pg-live { inset: 0; overflow: hidden; display: flex; flex-direction: column; }
 /* The grid is the Live view's alone: the canvas draws its own once it exists,
    and the Schematic and Truth views sit on plain surfaces (the human's call
@@ -2391,4 +2395,3 @@ a.install-line:hover {
   border-bottom: 1px solid transparent;
 }
 .oip:hover { border-bottom-color: var(--accent); }
-

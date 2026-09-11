@@ -635,6 +635,28 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(term.dataset.open).toBe('false');
   }));
 
+  test('search finds a project in a collapsed group and restores the tree', () => drive((doc) => {
+    const group = () => doc.querySelector('.pg-tree-group[data-node="examples"]') as unknown as HTMLElement;
+    group().click();
+    expect(group().getAttribute('aria-expanded')).toBe('false');
+    const field = doc.querySelector('.pg-switch-query') as unknown as HTMLInputElement;
+    const search = (value: string) => {
+      field.value = value;
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    search('  4-BIT RIPPLE ');
+    expect(doc.querySelectorAll('.pg-tree-project')).toHaveLength(1);
+    expect(doc.querySelector('.pg-tree-project')?.getAttribute('data-pick')).toBe('example:four-bit-adder');
+    field.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    expect(doc.activeElement?.getAttribute('data-node')).toBe('examples');
+    search('does not exist');
+    expect(doc.querySelectorAll('.pg-tree-row')).toHaveLength(0);
+    expect(doc.querySelector('.pg-ws-empty')?.textContent).toBe('No circuits found.');
+    search('');
+    expect(group().getAttribute('aria-expanded')).toBe('false');
+    group().click();
+  }));
+
   test('a group collapses and reopens, taking its projects with it', () => drive((doc) => {
     const rows = () => Array.from(doc.querySelectorAll('.pg-tree-row'));
     const openGroup = doc.querySelector('.pg-tree-group[aria-expanded="true"]') as unknown as
