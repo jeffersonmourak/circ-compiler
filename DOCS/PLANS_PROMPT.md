@@ -141,6 +141,7 @@ Add an entry here during execution whenever a non-obvious constraint surfaces â€
 - The closed terminal line opens on focus. Return focus to its Console button when closing, or the return itself reopens the drawer. Center the splitter's hit band on the bordered row edge so a drag does not acquire a one-pixel offset.
 - Memory headers are rebuilt. Their settings controls need delegated change events, and a jump must force its redraw past the focused-text-field guard. Closed drawers skip memory reads.
 - After the Phase 6 review, Schematic hides the whole console/memory row. Its track is zero and the status line is pinned to row 4; Live and Truth restore the drawer state. Include this human override when checking the Schematic board.
+- The collapsed line depends on readiness as well as transcript changes. The handshake can paint before the session is marked live, so `refreshConsoleGate` repaints the line too; dropping a session refreshes that gate.
 
 **The canvas**
 

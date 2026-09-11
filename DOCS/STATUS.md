@@ -329,3 +329,11 @@ Rolling log of shipped slices. Newest at the bottom. The plan is `DOCS/PLANS_PRO
 **Tests:** Added preference bounds, persistence, CodeMirror reconfiguration with selection/undo preservation, and the consolidated UI walk. All four gates pass: 608 tests, typecheck, fresh build and bundle. `/playground` is 132.6 KB raw / 46.1 KB gzip; the lazy editor is 307.2 KB raw / 99.9 KB gzip. No Chrome setup or browser capture, per the human's request for these polishing changes.
 **Next slice:** Phase 7, on the human's word.
 **Notes:** Defaults match the previous editor: Wrap lines on, 14px, two-space indentation. Font size is limited to 10–24px and tab size to 1–8. Editor controls use their own binding and envelope field so changing them does not trigger compilation. The latest user preference about avoiding Chrome for minor updates is recorded in the plan's recurring notes.
+
+## 2026-09-11 — Phase 6 — The collapsed console follows readiness
+
+**What shipped:** Updating the console's readiness also repaints the collapsed terminal line. A newly built session now replaces `Compile a circuit first.` immediately, without a pin edit or drawer interaction. Dropping a session refreshes the same readiness path, keeping the prompt and line synchronized.
+**Files touched:** `site/src/components/Playground.astro`, `site/test/island-smoke.test.ts`, `DOCS/PLANS_PROMPT.md`, `DOCS/STATUS.md`
+**Tests:** The new real-artifact regression first reproduced the stale message while the session was alive and the prompt enabled. It now passes, including the transition back to no session. All four gates pass: 609 tests, typecheck, fresh build and bundle; `/playground` 132.6 KB raw / 46.1 KB gzip. No Chrome run.
+**Next slice:** Phase 7, on the human's word.
+**Notes:** `consoleHandshake` appends the initial transcript before `refreshConsoleGate` marks the console live. The append painted the old readiness, and the gate never repainted it; only the next interaction did. Refreshing the line from the gate fixes that ordering dependency.

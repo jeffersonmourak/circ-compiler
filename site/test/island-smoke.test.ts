@@ -442,6 +442,34 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(region.dataset.dataOpen).toBe('false');
   }));
 
+  test('the collapsed console reflects a ready session before the first interaction', async () => driveAsync(async (doc) => {
+    const island = (doc.querySelector('.pg') as unknown as { __playground: {
+      hooks: { onArtifact(bytes: Uint8Array | null, reason: string): void };
+      getSession(): Promise<SimSession | null>;
+    } }).__playground;
+    const prompt = doc.querySelector('.pg-console-in') as unknown as HTMLInputElement;
+    const reply = () => doc.querySelector('.pg-term-reply')!.textContent;
+    (doc.querySelector('.pg-view-tab[data-view="live"]') as unknown as HTMLElement).click();
+    try {
+      expect(reply()).toBe('Compile a circuit first.');
+      island.hooks.onArtifact(new Uint8Array(readFileSync(resolve(SITE, 'public/wasm/half-adder.wasm'))), 'built');
+      const session = await island.getSession();
+      expect(session?.isAlive).toBe(true);
+      expect(prompt.disabled).toBe(false);
+      expect(doc.querySelector('.pg-console-note')?.hasAttribute('hidden')).toBe(true);
+      expect(doc.querySelector('.pg-drawer')?.getAttribute('data-open')).toBe('false');
+      // No pin edit, console command or drawer opening has repainted the line.
+      expect(reply()).toBe('pin carry out 1');
+      island.hooks.onArtifact(null, 'files-changed');
+      expect(prompt.disabled).toBe(true);
+      expect(doc.querySelector('.pg-console-note')?.hasAttribute('hidden')).toBe(false);
+      expect(reply()).toBe('Compile a circuit first.');
+    } finally {
+      island.hooks.onArtifact(null, 'files-changed');
+      (doc.querySelector('.pg-view-tab[data-view="schematic"]') as unknown as HTMLElement).click();
+    }
+  }));
+
   test('settings retain Compile and Editor while each view owns its controls', () => drive((doc) => {
     expect(Array.from(doc.querySelectorAll('.pg-settings legend'), (e) => e.textContent)).toEqual(['Compile', 'Editor']);
     expect(Array.from(doc.querySelectorAll('.pg-settings [data-setting]'), (e) => e.getAttribute('data-setting'))).toEqual(['warningsAsErrors']);

@@ -994,6 +994,9 @@ const groups = displayGroups(catalogue, []);
       const live = sim.session !== null && sim.session.isAlive;
       consoleIn.disabled = !live || consoleState.busy;
       consoleNote.hidden = live;
+      // The handshake can paint before readiness changes. Refresh the folded
+      // line here too, so it never waits for the first user interaction.
+      renderTermLine();
     }
 
     /** The lines `--sim` prints first, with the root file as the name the CLI was given. */
@@ -3997,6 +4000,7 @@ const groups = displayGroups(catalogue, []);
       sim.session?.destroy();
       sim.session = null;
       sim.sessionBytes = null;
+      refreshConsoleGate();
       syncZoom();
     }
 
