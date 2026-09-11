@@ -220,12 +220,18 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(doc.querySelector('.pg-dock-tab[data-dock="diagnostics"]')?.getAttribute('aria-selected')).toBe('true');
     expect(doc.querySelector('[data-dock-panel="settings"]')?.hasAttribute('hidden')).toBe(true);
 
-    // The drawer under the output panels: the session's console and the
-    // memory panel, which left the dock because it is about the running
-    // circuit rather than the source. Hidden on Preview, which has no session.
+    // The drawer is the frame's third row: the session's console and the
+    // memory panel, folded to one line until asked for. It left the output
+    // pane, so the canvas region never shares its height with it.
     const drawer = doc.querySelector('.pg-drawer')!;
-    expect(drawer.hasAttribute('hidden')).toBe(true);
-    expect(doc.querySelector('.pg-output .pg-drawer')).not.toBeNull();
+    expect(doc.querySelector('.pg-output .pg-drawer')).toBeNull();
+    expect(doc.querySelector('.pg-term .pg-drawer')).not.toBeNull();
+    expect((doc.querySelector('.pg-term') as unknown as { dataset: Record<string, string> }).dataset.open).toBe('false');
+    expect(drawer.hasAttribute('hidden')).toBe(false);
+    expect(doc.querySelector('.pg-term-line .pg-term-title')?.textContent).toMatch(/^circ-compile \S+\.circ --sim$/);
+    expect(doc.querySelector('.pg-term-line .pg-term-cmd')?.textContent).toBe('');
+    expect(doc.querySelector('.pg-term-line .pg-term-reply')?.textContent).toBe('Compile a circuit first.');
+    expect(doc.querySelector('.pg-term-mem')?.getAttribute('aria-disabled')).toBe('true');
     expect(doc.querySelector('.pg-drawer-splitter')?.getAttribute('aria-orientation')).toBe('horizontal');
     const drawerTabs = Array.from(
       doc.querySelectorAll('.pg-drawer-tabs [role=tab]'),
@@ -398,38 +404,51 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     });
   });
 
-  test('the drawer follows the output tab and collapses to its strip', () => drive((doc) => {
-    const drawer = doc.querySelector('.pg-drawer') as unknown as { dataset: Record<string, string>; hasAttribute(n: string): boolean };
+  test('the terminal line opens the drawer and follows the transcript', () => drive((doc) => {
+    type Island = { consoleAppend(lines: readonly string[]): void };
+    const island = (doc.querySelector('.pg') as unknown as { __playground: Island }).__playground;
+    const term = doc.querySelector('.pg-term') as unknown as { dataset: Record<string, string> };
+    const frame = doc.querySelector('.pg') as unknown as { style: { getPropertyValue(n: string): string } };
+    const drawer = doc.querySelector('.pg-drawer') as unknown as { dataset: Record<string, string> };
     const separator = doc.querySelector('.pg-drawer-splitter')!;
-    const tab = (name: string) => doc.querySelector(`.pg-tabs [data-tab="${name}"]`) as unknown as { click(): void };
-    const toggle = doc.querySelector('.pg-drawer-toggle') as unknown as { click(): void; textContent: string };
+    const open = (name: string) => doc.querySelector(`.pg-term-open[data-term="${name}"]`) as unknown as { click(): void };
+    const toggle = doc.querySelector('.pg-drawer-toggle') as unknown as { click(): void };
     const consoleTab = doc.querySelector('.pg-drawer-tab[data-drawer="console"]') as unknown as { click(): void };
 
-    expect(drawer.hasAttribute('hidden')).toBe(true);
-    expect(separator.hasAttribute('hidden')).toBe(true);
+    // Whatever the output tab, the row is there and shut.
+    const tab = (name: string) => doc.querySelector(`.pg-tabs [data-tab="${name}"]`) as unknown as { click(): void };
     tab('simulate').click();
-    expect(drawer.hasAttribute('hidden')).toBe(false);
-    expect(separator.hasAttribute('hidden')).toBe(false);
-    tab('data').click();
-    expect(drawer.hasAttribute('hidden')).toBe(false);
-    tab('truth').click();
-    expect(drawer.hasAttribute('hidden')).toBe(true);
-    tab('simulate').click();
+    expect(term.dataset.open).toBe('false');
+    tab('preview').click();
+    expect(term.dataset.open).toBe('false');
 
-    // Collapsing keeps the strip and hides the divider with the body.
-    toggle.click();
-    expect(drawer.dataset.open).toBe('false');
-    expect(toggle.textContent).toBe('Show');
+    // The line reads the transcript: the last echo and the first reply.
+    island.consoleAppend(['> set a 1', 'ok']);
+    expect(doc.querySelector('.pg-term-cmd')?.textContent).toBe('set a 1');
+    expect(doc.querySelector('.pg-term-reply')?.textContent).toBe('ok');
+    island.consoleAppend(['> get out']);
+    expect(doc.querySelector('.pg-term-cmd')?.textContent).toBe('get out');
+    expect(doc.querySelector('.pg-term-reply')?.textContent).toBe('');
+
+    // Console opens the drawer on the console; the row grows on the frame.
+    open('console').click();
+    expect(term.dataset.open).toBe('true');
+    expect(drawer.dataset.open).toBe('true');
+    expect(frame.style.getPropertyValue('--pg-term-h')).toBe('320px');
+    // The old divider has no neighbour in this row; Phase 6 gives it the height.
     expect(separator.hasAttribute('hidden')).toBe(true);
+    // The drawer bar's toggle closes it, and the frame's row goes back.
+    toggle.click();
+    expect(term.dataset.open).toBe('false');
+    expect(frame.style.getPropertyValue('--pg-term-h')).toBe('');
     // The selected tab is the reopen gesture, as on the dock.
     consoleTab.click();
-    expect(drawer.dataset.open).toBe('true');
-    expect(separator.hasAttribute('hidden')).toBe(false);
+    expect(term.dataset.open).toBe('true');
     consoleTab.click();
-    expect(drawer.dataset.open).toBe('false');
-    toggle.click();
-    expect(drawer.dataset.open).toBe('true');
-    tab('preview').click();
+    expect(term.dataset.open).toBe('false');
+    // Memory is inert until the circuit declares one.
+    open('memory').click();
+    expect(term.dataset.open).toBe('false');
   }));
 
   test('a group collapses and reopens, taking its projects with it', () => drive((doc) => {

@@ -153,7 +153,7 @@ describe('app layout', () => {
   test('the frame is the bench rows', () => {
     const block = stripComments(css).slice(stripComments(css).indexOf("[data-layout='app'] .pg {"));
     const pg = block.slice(0, block.indexOf('}'));
-    expect(pg).toContain('grid-template-rows: 48px minmax(0, 1fr) 24px');
+    expect(pg).toContain('grid-template-rows: 48px minmax(0, 1fr) var(--pg-term-h, 40px) 24px');
     expect(pg).toContain('min-height: 0');
     const bodyAt = block.indexOf("[data-layout='app'] .pg-body {");
     const body = block.slice(bodyAt, block.indexOf('}', bodyAt));

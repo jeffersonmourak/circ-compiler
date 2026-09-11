@@ -1066,9 +1066,8 @@ hr {
   background: var(--pane-bg);
 }
 .pg-drawer[hidden] { display: none; }
-.pg-drawer[data-open="true"] {
-  flex: 0 0 calc((1 - var(--pg-split-drawer, 0.62)) * 100%);
-}
+/* In the terminal row the drawer fills whatever the row is given. */
+.pg-drawer[data-open="true"] { flex: 1 1 auto; }
 .pg-drawer-bar {
   display: flex;
   align-items: stretch;
@@ -1744,7 +1743,7 @@ a.install-line:hover {
      disagree; the banner now lives inside the source pane, and `island-smoke`
      counts the rendered children against the tracks so it cannot recur. */
   display: grid;
-  grid-template-rows: 48px minmax(0, 1fr) 24px;
+  grid-template-rows: 48px minmax(0, 1fr) var(--pg-term-h, 40px) 24px;
 }
 /* The last good outputs stay on screen while the source is broken, dimmed
    rather than blanked — cleared only when the file set itself changes. */
@@ -2025,6 +2024,57 @@ a.install-line:hover {
 /* A build the source has moved past is still worth saving, but say so. */
 .pg-download[data-stale] .pg-action-icon { opacity: 0.6; }
 .pg-download[data-stale] .pg-action-label::after { content: ' (stale)'; opacity: 0.7; }
+
+/* ---------- the terminal line ----------
+   Row 3 of the frame (design file: 40px on the code surface). Closed, one
+   line: the command title, `>` and the last command, its reply, and the two
+   openers. Open, the drawer fills the row, which the island grows to 320px by
+   writing `--pg-term-h` on the frame together with `data-open`. */
+.pg-term {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--code-bg);
+  border-top: 1px solid var(--border);
+}
+.pg-term-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 40px;
+  padding: 0 16px;
+  font-family: var(--font-mono-strict);
+  font-size: 12.5px;
+  color: var(--fg);
+  white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+}
+.pg-term[data-open='true'] .pg-term-line { display: none; }
+.pg-term[data-open='false'] .pg-drawer { display: none; }
+.pg-term-title { font-family: var(--font-mono); font-size: 11px; color: var(--muted); flex: none; }
+.pg-term-prompt { color: var(--accent); font-weight: 600; flex: none; }
+.pg-term-cmd { overflow: hidden; text-overflow: ellipsis; }
+.pg-term-cmd:empty + .pg-term-sep { display: none; }
+.pg-term-sep::before { content: '·'; color: var(--muted); }
+.pg-term-reply { color: var(--term-ok); overflow: hidden; text-overflow: ellipsis; }
+.pg-term-reply[data-kind='note'] { color: var(--muted); }
+.pg-term-reply[data-kind='err'] { color: var(--danger); }
+.pg-term-spacer { flex: 1; }
+.pg-term-open {
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  padding: 4px 6px;
+  cursor: pointer;
+  flex: none;
+}
+.pg-term-open:hover { color: var(--fg); }
+.pg-term-open[aria-disabled='true'] { opacity: 0.5; cursor: default; }
+.pg-term-open[aria-disabled='true']:hover { color: var(--muted); }
 
 /* ---------- the status line ----------
    Row 4 of the frame (design file: 24px, `1fr auto 1fr`): the compiler
