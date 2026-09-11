@@ -430,6 +430,37 @@ describe('circ-skins', () => {
     }
   });
 
+  test('busValue: the chip for every multi-bit kind draws as the golden says, and a memory gets none', () => {
+    const theme = themeWith(true);
+    for (const kind of KINDS) for (const cell of CELLS) {
+      const c = component(kind, 8);
+      const { ctx, ops } = recordingContext(cell);
+      theme.busValue!({ ctx, theme, cell, component: c, value: valueOf(1, 8), text: '0b10100101' });
+      expect(balanced(ops)).toBe(true);
+      checkGolden('busvalue', `${kind}.c${cell}`, ops, store);
+      if (kind === 'rom' || kind === 'ram') {
+        expect(ops).toEqual([]);
+        continue;
+      }
+      // The pill carries the canvas's text verbatim, solid, in the bus colours.
+      const text = ops.find((op) => op[0] === 'fillText')!;
+      expect(text[1]).toBe('0b10100101');
+      const fills = ops.filter((op) => op[0] === 'set' && op[1] === 'fillStyle').map((op) => op[2]);
+      expect(fills).toEqual([colorsDark.wireBus, colorsDark.busLabel]);
+      expect(ops.some((op) => op[0] === 'setLineDash')).toBe(false);
+      // Seated above the box: a pin's above its circle, a box's above its edge.
+      const pill = ops.find((op) => op[0] === 'roundRect')!;
+      const r3 = (n: number) => Math.round(n * 1000) / 1000;
+      const bottom = r3(Number(pill[2]) + Number(pill[4]));
+      const w = c.width * cell, h = c.height * cell;
+      const expected = kind === 'input_pin' || kind === 'output_pin'
+        ? r3(c.y * cell + h / 2 - (Math.min(w, h) / 2 - 0.08 * cell) - 0.5 * cell)
+        : r3(c.y * cell - 0.5 * cell);
+      expect(bottom).toBe(expected);
+    }
+    flush(store);
+  });
+
   test('highlight: the ring for every kind draws as the golden says', () => {
     const theme = themeWith(true);
     for (const kind of KINDS) for (const cell of CELLS) {

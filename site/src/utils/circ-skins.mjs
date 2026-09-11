@@ -713,6 +713,27 @@ function drawFanOut({ ctx, cell, x, y, value, theme }) {
   ctx.restore();
 }
 
+/**
+ * The value chip for every multi-bit component: the pill, solid, in the bus
+ * colour, carrying the text the canvas spelled in the reader's chosen base.
+ * A pin's chip sits above its circle where the single-bit skin puts one;
+ * any other box's sits above its top edge. A memory gets none: its word is
+ * in its body.
+ */
+function drawBusValue({ ctx, cell, component, text, theme }) {
+  const t = theme.colors;
+  const kind = component.kind.tag === 'primitive' ? component.kind.kind : null;
+  if (kind === ComponentKind.Rom || kind === ComponentKind.Ram) return;
+  const w = component.width * cell;
+  const h = component.height * cell;
+  const cx = component.x * cell + w / 2;
+  const isPin = kind === ComponentKind.InputPin || kind === ComponentKind.OutputPin;
+  const bottom = isPin
+    ? component.y * cell + h / 2 - pinRadius(cell, w, h) - cell * 0.5
+    : component.y * cell - cell * 0.5;
+  nsValuePill(ctx, t, cell, cx, bottom, text, 'solid', t.wireBus, t.busLabel);
+}
+
 export const skins = {
   [ComponentKind.InputPin]: drawInputPin,
   [ComponentKind.OutputPin]: drawOutputPin,
@@ -747,6 +768,9 @@ export const sharedRenderers = {
   // A junction is the one mark the canvas used to stamp itself, a dot in the
   // wire's colour on a wire of that colour. The ring says something.
   fanOutMarker: drawFanOut,
+  // The bus badge, as a chip in the palette rather than the library's blue
+  // text; the text is the canvas's, so the reader's base setting is honoured.
+  busValue: drawBusValue,
   // The ring around a hovered or host-highlighted component, drawn by the
   // canvas after every skin. One hook, every kind — including the four above
   // that used to fall through to defaults that never read `hovered`.
