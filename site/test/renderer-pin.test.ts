@@ -212,7 +212,9 @@ describe('renderer pin', () => {
     const gallery = readFileSync(resolve(import.meta.dir, '..', 'src', 'components', 'LiveCanvas.astro'), 'utf8');
     const playground = readFileSync(resolve(import.meta.dir, '..', 'src', 'components', 'Playground.astro'), 'utf8');
     for (const [name, source] of [['LiveCanvas', gallery], ['Playground', playground]] as const) {
-      expect(`${name}: ${/setTheme\(pickTheme\(\)/.test(source)}`).toBe(`${name}: true`);
+      // The playground wraps the picked theme with its dot grid; the gallery
+      // takes it as is. Either way the flip is a setTheme, never a rebuild.
+      expect(`${name}: ${/setTheme\((?:benchTheme\()?pickTheme\(\)/.test(source)}`).toBe(`${name}: true`);
       expect(`${name}: ${/rebuildAll|rebuildSim/.test(source)}`).toBe(`${name}: false`);
     }
     // The only renderCircuit call on each page is the first mount. Both pages

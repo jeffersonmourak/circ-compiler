@@ -29,7 +29,9 @@ describe('island canvas options', () => {
     // zoom line's `cell 14` and the canvas cannot disagree.
     expect(playground).toMatch(/cell: 14,/);
     expect(playground).toMatch(/cell:\s*sim\.cell,/);
-    expect(playground).toMatch(/padding:\s*Math\.ceil\(sim\.cell \* 2\)/);
+    // …and pads by the furniture's bands, or two cells if ever wider.
+    expect(playground).toMatch(/const BENCH_INSET = 60;/);
+    expect(playground).toMatch(/padding:\s*Math\.max\(BENCH_INSET, Math\.ceil\(sim\.cell \* 2\)\)/);
     expect(playground).not.toMatch(/padding:\s*16\b/);
   });
 });

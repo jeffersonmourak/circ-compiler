@@ -374,7 +374,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
 <script>
   import { getSharedClient, type LibcircVersion, type WorkerReply } from '../scripts/libcirc-client.ts';
   // TYPE only: erased at build, so the renderer stays behind its dynamic import.
-  import type { BitValue, CircRuntime, CircView } from 'circ-renderer';
+  import type { BitValue, CircRuntime, CircTheme, CircView } from 'circ-renderer';
   import type { PaletteKey } from '../utils/circ-theme.mjs';
   // A VALUE, but from the topology-only entry point: the decoder and its enum,
   // nothing of the canvas, so the eager bundle stays what it was.
@@ -3394,13 +3394,59 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     };
     const GESTURE_WINDOW_MS = 500;
 
+    /** The furniture's bands: the switch at the top, the two lines at the
+     *  bottom. The canvas covers the whole region under them, so the fit
+     *  keeps this much clear on every side. */
+    const BENCH_INSET = 60;
+
+    /**
+     * The theme the bench draws with: the site's, plus the dot grid under the
+     * circuit (design file: --fg at 14% light, 18% dark; 18px), drawn in world
+     * space through the renderer's background hook so it moves and zooms
+     * with the contents. The colour is the region's own token, read when the
+     * theme is picked, so a flip re-reads it. Zoomed out, the spacing doubles
+     * until the dots are 12px apart on screen; a dot stays one pixel wide.
+     */
+    function benchTheme(theme: CircTheme<PaletteKey>): CircTheme<PaletteKey> {
+      const dot = getComputedStyle(outputPane).getPropertyValue('--pg-dot').trim() || 'rgba(0, 0, 0, 0.14)';
+      return {
+        ...theme,
+        background: ({ ctx, view, viewport }) => {
+          const scale = view.scale;
+          const left = -view.x / scale;
+          const top = -view.y / scale;
+          const width = viewport.width / scale;
+          const height = viewport.height / scale;
+          // The whole element, not the grid: zoomed out, the grid is smaller
+          // than the element, and the page must show through around it.
+          ctx.clearRect(left, top, width, height);
+          let step = 18;
+          while (step * scale < 12) step *= 2;
+          const r = 1 / scale;
+          const x0 = Math.floor(left / step) * step;
+          const y0 = Math.floor(top / step) * step;
+          ctx.fillStyle = dot;
+          ctx.beginPath();
+          for (let x = x0; x <= left + width; x += step) {
+            for (let y = y0; y <= top + height; y += step) {
+              ctx.moveTo(x + r, y);
+              ctx.arc(x, y, r, 0, Math.PI * 2);
+            }
+          }
+          ctx.fill();
+        },
+      };
+    }
+
     // ---- the zoom line ----
-    /** The percentage follows the canvas; the two buttons need one. */
+    /** The percentage follows the canvas; the two buttons need one, and the
+     *  region's static dots yield to the canvas's own while one is showing. */
     function syncZoom() {
       const view = sim.view?.view ?? null;
       zoomPct.textContent = formatZoom(view ? view.getView().scale : 1);
       zoomPct.setAttribute('aria-disabled', String(view === null));
       zoomFit.setAttribute('aria-disabled', String(view === null));
+      outputPane.dataset.canvas = String(view !== null);
     }
     zoomPct.addEventListener('click', () => {
       if (!sim.view) return;
@@ -3549,11 +3595,11 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       try {
         const canvas = new Canvas<PaletteKey>(session.runtime as CircRuntime, {
           cell: sim.cell,
-          // Two cells: the value chip above a top-row pin reaches 1.42 cells
-          // over its box, and it wants air, not a fit to the pixel.
-          padding: Math.ceil(sim.cell * 2),
+          // The furniture's bands, or two cells if ever wider: the value chip
+          // above a top-row pin reaches 1.42 cells over its box and wants air.
+          padding: Math.max(BENCH_INSET, Math.ceil(sim.cell * 2)),
           interactive: true,
-          theme: pickTheme(),
+          theme: benchTheme(pickTheme()),
           // Two free rows between stacked boxes, for the same chip.
           layoutOptions: { rowGutter: 2 },
           // The canvas is the inset's size and the renderer fits the circuit
@@ -3798,7 +3844,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       // In place: the pins the reader set, the values they typed and the
       // images they loaded are all runtime state of THIS canvas, and a
       // rebuild used to throw every one of them away and replay what it could.
-      if (sim.view) void loadThemes().then(({ pickTheme }) => sim.view?.view.setTheme(pickTheme()));
+      if (sim.view) void loadThemes().then(({ pickTheme }) => sim.view?.view.setTheme(benchTheme(pickTheme())));
     }).observe(document.documentElement, {
       attributes: true,
       attributeFilter: ['data-theme'],
