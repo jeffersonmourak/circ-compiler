@@ -265,3 +265,19 @@ One entry per shipped slice, newest last. The plan is `DOCS/PLANS_PROMPT.md`; th
 **Tests:** ran `bun test` in `site/` (461 pass) — no test read the handoff path
 **Next slice:** Phase 5 slices 1 and 2, the walk and the hover redraw timing, are the human's; the completion entry follows their notes.
 **Notes:** `DOCS/PLANS_PROMPT.md`, the phase specs and earlier STATUS entries still cite `DOCS/design/...` by line; they are the record of what was read where, and the archive prompt's highlight view will point at the new path.
+
+## 2026-09-10 — Phase 5 — the walk and the timing
+
+**What shipped:** the human walked the site (`/`, `/gallery`, `/tour`, `/playground`) in both themes at the shipped cell sizes and approved it ("great"); no page was reported off. The hover redraw was not timed with the profiler; the plan's other performance claims hold by construction and by test — no `shadowBlur` runs per frame (every halo is built once offscreen and cached, asserted by `a tint, a halo and the bounds are each built once per name and colour`), and a redraw is one `drawImage` per tinted gate.
+**Files touched:** `DOCS/STATUS.md`
+**Tests:** none (review)
+**Next slice:** completion.
+**Notes:** the frame time on `four-bit-adder` is the one number the phase asked for and did not get; it goes to the follow-ups rather than blocking the close.
+
+## 2026-09-10 — Phase 5 — complete
+
+**What shipped:** every phase of `DOCS/PLANS_PROMPT.md` is shipped, reviewed and recorded; the plan is complete and ready to archive per `DOCS/prompts/ARCHIVE.md`. The definition of done, checked: every `<LiveCanvas>` and the playground draw with the upgraded theme in both modes; the nine defects the handoff named are closed and hover is a ring; `circ-assets.mjs` carries `AND` and `OR` only; the site pins `circ-renderer` `7ca8593` (`2.3.0-alpha.3`), whose `bun test` (203) and `tsc --noEmit` are green and whose README documents the additions; in `site/`, `bun test` (461), `bun --bun run typecheck`, `bun --bun run build` and `bun run bundle` are green with no ceiling raised; `zig build test-all` is green and no Zig file changed; `DOCS/decisions/canvas-theme.md` holds nineteen entries and the map of the sixteen locked decisions; the human reviewed every phase.
+**Files touched:** `DOCS/STATUS.md`
+**Tests:** `zig build test-all` on this tree, result pass
+**Next slice:** none — plan complete.
+**Notes:** follow-ups, none started, are listed at the end of `DOCS/decisions/canvas-theme.md`: the runtime write stamp, the range bar's design, the caches that never evict, and the untaken hover frame time. The renderer's `canvas-theme` branch (`86469f0`, `a46e4df`, `f882353`, `0087d0c`, `7ca8593`) is on its remote and not yet merged into its `main`; the site pins the sha, so the merge is the maintainer's to schedule.
