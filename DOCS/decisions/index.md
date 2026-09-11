@@ -122,6 +122,9 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - A truth row drives the pins through the session (one `set` per column; the tint follows the session; every cell spelled by `formatPinValue`)
 - The switcher is the tree, re-homed (Tour / Examples / Mine, name search, temporary search expansion, keyboard and focus contract, no reflow)
 - A file import creates a scratch project (one `.circ`, duplicate-name numbering, the store's 32 KiB cap and eviction, one read at a time)
+- The Data panel keeps a position per project (pointer threshold/cancel, keyboard steps, clamp on render, version-2 position map)
+- The Data card and canvas share the session being built (one pending build per artifact, controls rebound by session identity, deferred restore)
+- The narrow Data panel joins the page flow (static card, no right reserve or grip, automatic stacked tracks; coalesced desktop refit)
 
 ## Conventions
 

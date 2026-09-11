@@ -121,3 +121,31 @@ The entries below record the decisions of the playground-bench initiative: the s
 **Rationale.** An import is another way to create a project, so it uses the same limits and persistence path. `describeNote` accepts an import context for a skipped source: its save-time sentence says the source stays open, which would be false for an import that created nothing. The import sentence names the refusal and the cap.
 
 **Alternatives.** A separate import store (two limits and two persistence paths); reusing the save refusal verbatim (promises an open project that does not exist); a multi-file picker (outside this handoff).
+
+### The Data panel keeps a position per project
+
+**Decision.** Data opens a non-modal 312px card over any view, anchored 52px down and 16px from the region's right edge. Its header carries the grip, pin counts, native hex/bin/dec radios and Close; its input/output sections use `1fr 36px 92px` rows. Scalar inputs are 22px knobs, buses are fields, outputs are read-only, and Reset sits beside the footer hint. The radios and the settings select use one binding. An edited field owns the first Escape to restore its value; the next closes the card and returns focus to Data.
+
+The grip captures one pointer and waits for a four-pixel move. Release commits the clamped position; Escape, pointer cancellation, lost capture and a project switch abandon it. Arrow keys commit 8px steps, or 32px with Shift. `dataPanel[activeId]` stores the last committed position in the version-2 envelope. Opening and resizing clamp the rendering without overwriting that intent; changing projects closes the panel. Normalization accepts nonempty catalogue id shapes and surviving scratch ids with finite coordinates, dropping bad entries without resetting projects.
+
+**Rationale.** A card's position is the reader's arrangement of that project's bench. A smaller window may borrow space but must not erase that arrangement. Pointer cancellation and resize therefore render from saved intent; only a deliberate move writes it.
+
+**Alternatives.** One position for every project (different circuits need different space); a second storage key (splits the envelope's quota and migration handling); persisting each resize (forgets the larger window); pointer-only movement (the same steps are inexpensive to expose on the grip).
+
+### The Data card and canvas share the session being built
+
+**Decision.** `ensureSession` shares its pending promise for an artifact's bytes, so simultaneous Live and Data requests produce one session. Data controls rebuild on session identity as well as pin shape; their handlers therefore drive the current session after recompilation. Restoring `dataOpen` uses the deferred `onDataOpen` hook, and artifact delivery fills the card after the simulator record exists. Rows and edits still come from the dynamically loaded `data-view.ts`, and every edit and reset reaches the console through the session's events.
+
+**Rationale.** The two faces can become visible together. Without a shared pending build they could create separate runtimes; without session identity in the rows' rebuild key, a same-shaped circuit could leave its controls bound to the destroyed session. A real-artifact island test covers both paths, along with edits, refusals, base changes and reset.
+
+**Alternatives.** One runtime per face (values and the console could disagree); rebuilding rows on every drive (loses a field being edited); reading the simulator from the boot-time restore (the same initialization-order failure Live already fixed).
+
+### The narrow Data panel joins the page flow
+
+**Decision.** Above 800px the open panel reserves 344px at the view's right, and an idle canvas refits after measurement, at most once per frame. Below that width the card is a static block above the selected view, the grip is hidden and disabled, and the right reserve is removed. The app frame's narrow tracks grow with the stacked source and canvas, so the terminal follows them and the page scrolls. Stored panel positions survive this layout unchanged.
+
+**Rationale.** The design stops at desktop widths. Putting a floating card into the narrow page's flow keeps its fields and the view reachable without inventing another docking mechanism. The previous fixed viewport row let the terminal overlap the stacked canvas; automatic narrow tracks remove that conflict.
+
+**Alternatives.** Keeping the right reserve on a narrow screen (leaves too little view); dragging a static card (has no visible meaning); persisting a new narrow position (overwrites the desktop arrangement).
+
+**Follow-up.** With the panel open at 1024px, the four-bit adder reaches the pinned renderer's default 25% zoom floor and clips in the remaining viewport. The sweep should review that default; the panel's refit preserves the existing zoom range.
