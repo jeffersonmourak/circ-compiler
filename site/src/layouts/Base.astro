@@ -1,92 +1,98 @@
 ---
-import Nav from '../components/Nav.astro';
-import Footer from '../components/Footer.astro';
-import PostHog from '../components/PostHog.astro';
-import '../styles/global.css';
+import Nav from "../components/Nav.astro";
+import Footer from "../components/Footer.astro";
+import PostHog from "../components/PostHog.astro";
+import "../styles/global.css";
 
 type Props = {
-  title?: string;
-  description?: string;
-  /**
-   * Override the auto-detected `.md` twin URL. Pass `null` to suppress the
-   * `<link rel="alternate">` advertisement entirely.
-   */
-  mdTwin?: string | null;
-  /**
-   * `'app'` turns the page into a viewport-locked workbench: the body becomes
-   * a `100dvh` grid, `main` stops being a centred article column, and the
-   * page brings its own chrome — the site nav and footer are not rendered,
-   * so the workbench owns every row of the viewport. Every other page keeps
-   * `'default'`, and its markup is byte-identical to before this prop
-   * existed — `data-layout` is only stamped for `'app'`.
-   */
-  layout?: 'default' | 'app';
+    title?: string;
+    description?: string;
+    /**
+     * Override the auto-detected `.md` twin URL. Pass `null` to suppress the
+     * `<link rel="alternate">` advertisement entirely.
+     */
+    mdTwin?: string | null;
+    /**
+     * `'app'` turns the page into a viewport-locked workbench: the body becomes
+     * a `100dvh` grid, `main` stops being a centred article column, and the
+     * page brings its own chrome — the site nav and footer are not rendered,
+     * so the workbench owns every row of the viewport. Every other page keeps
+     * `'default'`, and its markup is byte-identical to before this prop
+     * existed — `data-layout` is only stamped for `'app'`.
+     */
+    layout?: "default" | "app";
+    mainId?: string;
 };
 
 const {
-  title = 'circ — a small language for digital circuits',
-  description = 'A small language for building and simulating logic circuits, made for people learning how computers work.',
-  mdTwin,
-  layout = 'default',
+    title = "circ — a small language for digital circuits",
+    description = "A small language for building and simulating logic circuits, made for people learning how computers work.",
+    mdTwin,
+    layout = "default",
+    mainId,
 } = Astro.props;
 
-const stripTrailingSlash = (s: string): string => s.replace(/\/$/, '');
+const stripTrailingSlash = (s: string): string => s.replace(/\/$/, "");
 
 // Normalize to always end in `/` so `${base}foo` builds a clean path.
 // configure-pages@v5 emits BASE_PATH without a trailing slash.
-const base = import.meta.env.BASE_URL.replace(/\/?$/, '/');
+const base = import.meta.env.BASE_URL.replace(/\/?$/, "/");
 
 // Map the current page path to its `.md` twin. The landing page hits
 // `index.md`; everywhere else we just append `.md`.
 function defaultTwin(pathname: string, basePath: string): string {
-  const normBase = stripTrailingSlash(basePath);
-  const trimmed = stripTrailingSlash(pathname);
-  if (trimmed === normBase || trimmed === '') {
-    return `${normBase}/index.md`;
-  }
-  return `${trimmed}.md`;
+    const normBase = stripTrailingSlash(basePath);
+    const trimmed = stripTrailingSlash(pathname);
+    if (trimmed === normBase || trimmed === "") {
+        return `${normBase}/index.md`;
+    }
+    return `${trimmed}.md`;
 }
 
-const twin: string | null = mdTwin === undefined
-  ? defaultTwin(Astro.url.pathname, base)
-  : mdTwin;
+const twin: string | null =
+    mdTwin === undefined ? defaultTwin(Astro.url.pathname, base) : mdTwin;
 const isLanding = twin === `${stripTrailingSlash(base)}/index.md`;
 ---
+
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{title}</title>
-    <meta name="description" content={description} />
-    <link rel="icon" type="image/svg+xml" href={`${base}favicon.svg`} />
-    <meta name="color-scheme" content="light dark" />
-    <link rel="me" href="https://mastodon.social/@jeffersonmourak" />
-    {twin && <link rel="alternate" type="text/markdown" href={twin} />}
-    {isLanding && (
-      <>
-        <link rel="llms-txt" href={`${base}llms.txt`} />
-        <link rel="llms-full-txt" href={`${base}llms-full.txt`} />
-      </>
-    )}
-    <PostHog />
-    <script is:inline>
-      // Pre-paint theme initialization to avoid a light/dark flash. Reads
-      // localStorage first, then falls back to the OS preference.
-      try {
-        const stored = localStorage.getItem('theme');
-        const preferred = stored || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-        document.documentElement.dataset.theme = preferred;
-      } catch (_) {
-        document.documentElement.dataset.theme = 'light';
-      }
-    </script>
-  </head>
-  <body data-layout={layout === 'app' ? 'app' : undefined}>
-    {layout !== 'app' && <Nav />}
-    <main>
-      <slot />
-    </main>
-    {layout !== 'app' && <Footer />}
-  </body>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>{title}</title>
+        <meta name="description" content={description} />
+        <link rel="icon" type="image/svg+xml" href={`${base}favicon.svg`} />
+        <meta name="color-scheme" content="light dark" />
+        <link rel="me" href="https://mastodon.social/@jeffersonmourak" />
+        {twin && <link rel="alternate" type="text/markdown" href={twin} />}
+        {isLanding && (
+            <>
+                <link rel="llms-txt" href={`${base}llms.txt`} />
+                <link rel="llms-full-txt" href={`${base}llms-full.txt`} />
+            </>
+        )}
+        <PostHog />
+        <script is:inline>
+            // Pre-paint theme initialization to avoid a light/dark flash. Reads
+            // localStorage first, then falls back to the OS preference.
+            try {
+                const stored = localStorage.getItem("theme");
+                const preferred =
+                    stored ||
+                    (window.matchMedia("(prefers-color-scheme: dark)").matches
+                        ? "dark"
+                        : "light");
+                document.documentElement.dataset.theme = preferred;
+            } catch (_) {
+                document.documentElement.dataset.theme = "light";
+            }
+        </script>
+    </head>
+    <body data-layout={layout === "app" ? "app" : undefined}>
+        {layout !== "app" && <Nav />}
+        <main id={mainId}>
+            <slot />
+        </main>
+        {layout !== "app" && <Footer />}
+    </body>
 </html>

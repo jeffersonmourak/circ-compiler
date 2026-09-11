@@ -44,11 +44,11 @@ describe('app layout', () => {
   const css = read('src', 'styles', 'global.css');
 
   test('Base declares the layout prop and defaults it to the default layout', () => {
-    expect(base).toMatch(/layout\?:\s*'default'\s*\|\s*'app'/);
-    expect(base).toMatch(/layout\s*=\s*'default',/);
+    expect(base).toMatch(/layout\?:\s*['"]default['"]\s*\|\s*['"]app['"]/);
+    expect(base).toMatch(/layout\s*=\s*['"]default['"],/);
     // `data-layout` is stamped only for 'app', so every other page's <body> is
     // byte-identical to what it was before the prop existed.
-    expect(base).toMatch(/data-layout=\{layout === 'app' \? 'app' : undefined\}/);
+    expect(base).toMatch(/data-layout=\{layout === ['"]app['"] \? ['"]app['"] : undefined\}/);
   });
 
   test('only the playground opts in', () => {
@@ -150,8 +150,8 @@ describe('app layout', () => {
     // The app page brings its own chrome (the bench nav and status line), so
     // the site nav and footer would be a second wordmark and a second row of
     // links above and below it. Every other page keeps both.
-    expect(base).toMatch(/\{layout !== 'app' && <Nav \/>\}/);
-    expect(base).toMatch(/\{layout !== 'app' && <Footer \/>\}/);
+    expect(base).toMatch(/\{layout !== ['"]app['"] && <Nav \/>\}/);
+    expect(base).toMatch(/\{layout !== ['"]app['"] && <Footer \/>\}/);
     const block = stripComments(css).slice(stripComments(css).indexOf("[data-layout='app'] {"));
     const rows = block.slice(0, block.indexOf('}'));
     // One viewport row, fallback first, for the same reason as the height.

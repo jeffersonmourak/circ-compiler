@@ -1,163 +1,189 @@
 ---
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import Base from '../layouts/Base.astro';
-import CommandSnippet from '../components/CommandSnippet.astro';
-import { url, GITHUB_PUBLIC, GITHUB_REPO } from '../utils/url.ts';
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import Base from "../layouts/Base.astro";
+import CommandSnippet from "../components/CommandSnippet.astro";
+import { url, GITHUB_PUBLIC, GITHUB_REPO } from "../utils/url.ts";
 
 // Single source of truth: the VERSION file at the repo root. The CLI release
 // workflow tags each version `v<VERSION>` and publishes the per-platform
 // binaries to that GitHub Release, so the filenames and URLs below always
 // resolve to a real, downloadable asset.
 const here = path.dirname(fileURLToPath(import.meta.url));
-const version = fs.readFileSync(path.resolve(here, '../../../VERSION'), 'utf8').trim();
+const version = fs
+    .readFileSync(path.resolve(here, "../../../VERSION"), "utf8")
+    .trim();
 const tag = `v${version}`;
 
 const platforms = [
-  {
-    os: 'Linux',
-    arch: 'x86_64',
-    label: 'linux-x86_64',
-    ext: '',
-    minOs: 'Kernel 3.2+',
-  },
-  {
-    os: 'macOS',
-    arch: 'aarch64 (Apple Silicon)',
-    label: 'macos-aarch64',
-    ext: '',
-    minOs: '11 (Big Sur)',
-  },
-  {
-    os: 'Windows',
-    arch: 'x86_64',
-    label: 'windows-x86_64',
-    ext: '.exe',
-    minOs: '10',
-  },
+    {
+        os: "Linux",
+        arch: "x86_64",
+        label: "linux-x86_64",
+        ext: "",
+        minOs: "Kernel 3.2+",
+    },
+    {
+        os: "macOS",
+        arch: "aarch64 (Apple Silicon)",
+        label: "macos-aarch64",
+        ext: "",
+        minOs: "11 (Big Sur)",
+    },
+    {
+        os: "Windows",
+        arch: "x86_64",
+        label: "windows-x86_64",
+        ext: ".exe",
+        minOs: "10",
+    },
 ];
 
 const downloads = platforms.map((p) => {
-  const file = `circ-compile-${tag}-${p.label}${p.ext}`;
-  return {
-    os: p.os,
-    arch: p.arch,
-    file,
-    href: `${GITHUB_REPO}/releases/download/${tag}/${file}`,
-    minOs: p.minOs,
-  };
+    const file = `circ-compile-${tag}-${p.label}${p.ext}`;
+    return {
+        os: p.os,
+        arch: p.arch,
+        file,
+        href: `${GITHUB_REPO}/releases/download/${tag}/${file}`,
+        minOs: p.minOs,
+    };
 });
 ---
+
 <Base
-  title="Download — circ"
-  description="Pre-built circ-compile binaries for Linux, macOS, and Windows. The compiler is in alpha; expect errors."
+    title="Download — circ"
+    description="Pre-built circ-compile binaries for Linux, macOS, and Windows. The compiler is in alpha; expect errors."
+    mainId="download"
 >
-  <h1>Download</h1>
+    <h1>Download</h1>
 
-  <p class="download-version">Latest build: <code>{version}</code></p>
-
-  <aside class="alpha-warning" role="note">
-    <p class="alpha-tag"><strong>Alpha software.</strong></p>
-    <p>
-      <code>circ-compile</code> is under active development. Expect rough edges,
-      cryptic error messages, and breaking changes between builds. Don't use it
-      for anything you care about preserving. Reports of what doesn't work are
-      welcome, but for now please assume nothing here is stable.
+    <p class="download-version">
+        Latest build: <code>{version}</code>
     </p>
-  </aside>
 
-  <section class="install-quick">
-    <h2>Quick install</h2>
-    <p>
-      One command fetches the latest build for your platform and puts
-      <code>circ-compile</code> on your PATH.
-    </p>
-    <p><strong>macOS and Linux</strong></p>
-    <CommandSnippet code="curl -fsSL https://circ-lang.org/install.sh | sh" />
-    <br>
-    <p><strong>Windows (PowerShell)</strong></p>
-    <CommandSnippet code="irm https://circ-lang.org/install.ps1 | iex" />
-    <br>
-    <p>
-      Installs to <code>~/.local/bin</code> (macOS and Linux) or
-      <code>%LOCALAPPDATA%\circ\bin</code> (Windows). Set
-      <code>CIRC_INSTALL_DIR</code> to change the location, or
-      <code>CIRC_VERSION</code> to pin a version.
-    </p>
-  </section>
+    <aside class="alpha-warning" role="note">
+        <p class="alpha-tag">
+            <strong>Alpha software.</strong>
+        </p>
+        <p>
+            <code>circ-compile</code> is under active development. Expect rough
+            edges, cryptic error messages, and breaking changes between builds.
+            Don't use it for anything you care about preserving. Reports of what
+            doesn't work are welcome, but for now please assume nothing here is
+            stable.
+        </p>
+    </aside>
 
-  <p class="download-intro">
-    Or grab a pre-built binary for your platform by hand. Prefer to build from source?
-    See the <a href={url('/reference/getting-started')}>getting-started guide</a>.
-  </p>
-
-  <table class="download-table">
-    <thead>
-      <tr>
-        <th>OS</th>
-        <th>Architecture</th>
-        <th>File name</th>
-        <th>Min OS version</th>
-        <th>Download</th>
-      </tr>
-    </thead>
-    <tbody>
-      {downloads.map((d) => (
-        <tr>
-          <td>{d.os}</td>
-          <td>{d.arch}</td>
-          <td><code>{d.file}</code></td>
-          <td>{d.minOs}</td>
-          <td>
-            <a
-              href={d.href}
-              download
-              data-cli-download
-              data-os={d.os}
-              data-arch={d.arch}
-              data-file={d.file}
-              data-version={version}
-            >↓ Download</a>
-          </td>
-        </tr>
-      ))}
-    </tbody>
-  </table>
-
-  {GITHUB_PUBLIC && (
-    <section class="download-source">
-      <h2>Build from source</h2>
-      <p>
-        For Intel Macs, ARM Linux, ARM Windows, or any platform not listed above,
-        build directly with <a href="https://ziglang.org/" rel="noreferrer noopener">Zig 0.15.x</a>:
-      </p>
-      <CommandSnippet code={`git clone ${GITHUB_REPO}
-cd ${GITHUB_REPO.split('/').pop()}
-zig build circ-compile -Doptimize=ReleaseFast
-./zig-out/bin/circ-compile --help`} />
-      <p>
-        The full walkthrough, including writing your first <code>.circ</code> file
-        and driving the compiled WASM from Node, lives in
-        <a href={url('/reference/getting-started')}>Getting Started</a>.
-      </p>
+    <section class="install-quick">
+        <h2>Quick install</h2>
+        <p>
+            One command fetches the latest build for your platform and puts
+            <code>circ-compile</code> on your PATH.
+        </p>
+        <p>
+            <strong>macOS and Linux</strong>
+        </p>
+        <CommandSnippet code="curl -fsSL https://circ-lang.org/install.sh | sh" />
+        <br />
+        <p>
+            <strong>Windows (PowerShell)</strong>
+        </p>
+        <CommandSnippet code="irm https://circ-lang.org/install.ps1 | iex" />
+        <br />
+        <p>
+            Installs to <code>~/.local/bin</code> (macOS and Linux) or
+            <code>%LOCALAPPDATA%\circ\bin</code> (Windows). Set
+            <code>CIRC_INSTALL_DIR</code> to change the location, or
+            <code>CIRC_VERSION</code> to pin a version.
+        </p>
     </section>
-  )}
 
-  <script is:inline>
-    document.addEventListener('click', (event) => {
-      const link = event.target instanceof Element
-        ? event.target.closest('a[data-cli-download]')
-        : null;
-      if (!link) return;
-      if (typeof window.posthog === 'undefined') return;
-      window.posthog.capture('cli_download', {
-        os: link.dataset.os,
-        arch: link.dataset.arch,
-        file: link.dataset.file,
-        version: link.dataset.version,
-        href: link.getAttribute('href'),
-      });
-    });
-  </script>
+    <p class="download-intro">
+        Or grab a pre-built binary for your platform by hand. Prefer to build
+        from source? See the{" "}
+        <a href={url("/reference/getting-started")}>getting-started guide</a>.
+    </p>
+
+    <table class="download-table">
+        <thead>
+            <tr>
+                <th>OS</th>
+                <th>Architecture</th>
+                <th>File name</th>
+                <th>Min OS version</th>
+                <th>Download</th>
+            </tr>
+        </thead>
+        <tbody>
+            {downloads.map((d) => (
+                <tr>
+                    <td>{d.os}</td>
+                    <td>{d.arch}</td>
+                    <td>
+                        <code>{d.file}</code>
+                    </td>
+                    <td>{d.minOs}</td>
+                    <td>
+                        <a
+                            href={d.href}
+                            download
+                            data-cli-download
+                            data-os={d.os}
+                            data-arch={d.arch}
+                            data-file={d.file}
+                            data-version={version}
+                        >
+                            ↓ Download
+                        </a>
+                    </td>
+                </tr>
+            ))}
+        </tbody>
+    </table>
+
+    {GITHUB_PUBLIC && (
+        <section class="download-source">
+            <h2>Build from source</h2>
+            <p>
+                For Intel Macs, ARM Linux, ARM Windows, or any platform not
+                listed above, build directly with{" "}
+                <a href="https://ziglang.org/" rel="noreferrer noopener">
+                    Zig 0.15.x
+                </a>
+                :
+            </p>
+            <CommandSnippet
+                code={`git clone ${GITHUB_REPO}
+cd ${GITHUB_REPO.split("/").pop()}
+zig build circ-compile -Doptimize=ReleaseFast
+./zig-out/bin/circ-compile --help`}
+            />
+            <p>
+                The full walkthrough, including writing your first{" "}
+                <code>.circ</code> file and driving the compiled WASM from Node,
+                lives in
+                <a href={url("/reference/getting-started")}>Getting Started</a>.
+            </p>
+        </section>
+    )}
+
+    <script is:inline>
+        document.addEventListener("click", (event) => {
+            const link =
+                event.target instanceof Element
+                    ? event.target.closest("a[data-cli-download]")
+                    : null;
+            if (!link) return;
+            if (typeof window.posthog === "undefined") return;
+            window.posthog.capture("cli_download", {
+                os: link.dataset.os,
+                arch: link.dataset.arch,
+                file: link.dataset.file,
+                version: link.dataset.version,
+                href: link.getAttribute("href"),
+            });
+        });
+    </script>
 </Base>

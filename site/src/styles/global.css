@@ -99,6 +99,10 @@ main {
   margin: 0 auto;
 }
 
+main#download {
+    max-width: 1100px;
+}
+
 a {
   color: var(--accent);
   text-decoration: underline;
