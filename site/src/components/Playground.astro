@@ -217,7 +217,7 @@ const groups = displayGroups(catalogue, []);
       {/* Every face drives the same session; the panel is a non-modal dialog. */}
       <div class="pg-data-card" id="pg-data-card" role="dialog" aria-label="Data" tabindex="-1" hidden>
         <div class="pg-data-head">
-          <button type="button" class="pg-data-grip" aria-label="Move the panel" disabled>⋮⋮</button>
+          <button type="button" class="pg-data-grip" aria-label="Move the panel" title="Drag, or use the arrow keys. Shift moves farther.">⋮⋮</button>
           <strong>Data</strong><span class="pg-data-summary"></span>
           <div class="pg-data-base" role="radiogroup" aria-label="Value base">
             {([['hex', 'hex'], ['binary', 'bin'], ['decimal', 'dec']] as const).map(([value, label]) => (
@@ -413,6 +413,8 @@ const groups = displayGroups(catalogue, []);
   import type { TruthRows } from '../scripts/truth-view.ts';
   import { joinConflicts, requestFor, rootOf, splitFiles, PLAYGROUND_DIR } from '../utils/split-files.ts';
   import { createSplitter } from '../scripts/splitter.ts';
+  import { clampPanel, defaultPos, positionFromDrag, crossedThreshold } from '../scripts/data-panel.ts';
+  import type { PanelPos } from '../utils/playground-store.ts';
   import { fnv1a } from '../utils/artifact-hash.ts';
   import { artifactFileName } from '../utils/artifact-name.ts';
   import { capRefusal, mountSettingsDrawer, optionsFor, truthTableRefusal } from '../scripts/settings-drawer.ts';
@@ -551,6 +553,7 @@ const groups = displayGroups(catalogue, []);
     const dataFooter = el.querySelector<HTMLElement>('.pg-data-footer')!;
     const dataSummary = el.querySelector<HTMLElement>('.pg-data-summary')!;
     const dataClose = el.querySelector<HTMLButtonElement>('.pg-data-close')!;
+    const dataGrip = el.querySelector<HTMLButtonElement>('.pg-data-grip')!;
     const dataEl = el.querySelector<HTMLElement>('.pg-data')!;
     const dataReset = el.querySelector<HTMLButtonElement>('.pg-data-reset')!;
     // Narrowed to the view switch: an unscoped [role=tab] would also collect
@@ -700,6 +703,8 @@ const groups = displayGroups(catalogue, []);
       // The Data walk uses a real artifact without mounting a canvas.
       getSession: () => ensureSession(),
       showData: () => showData(),
+      placeDataPanel: () => placeDataPanel(),
+      dataPanelState: () => ({ open: store.envelope.dataOpen, positions: store.envelope.dataPanel }),
       truth,
     };
 
@@ -823,12 +828,16 @@ const groups = displayGroups(catalogue, []);
 
     /** The Data card: open over whichever view, its rows the session's. */
     function setDataOpen(open: boolean, opts: { persist?: boolean; focus?: boolean } = {}) {
+      if (!open) cancelDataDrag();
       state.dataOpen = open;
       if (opts.persist !== false) store.update((draft) => { draft.dataOpen = open; });
       dataCard.hidden = !open;
       dataBtn.setAttribute('aria-expanded', String(open));
       outputPane.dataset.dataOpen = String(open);
-      if (open) hooks.onDataOpen?.();
+      if (open) {
+        placeDataPanel();
+        hooks.onDataOpen?.();
+      }
       if (opts.focus !== false) (open ? dataCard : dataBtn).focus();
     }
     dataBtn.addEventListener('click', () => setDataOpen(!state.dataOpen));
@@ -837,6 +846,7 @@ const groups = displayGroups(catalogue, []);
       if (e.key !== 'Escape' || e.defaultPrevented) return;
       e.preventDefault();
       e.stopPropagation();
+      if (dataDrag) { cancelDataDrag(); return; }
       setDataOpen(false);
     });
 
@@ -1274,6 +1284,88 @@ const groups = displayGroups(catalogue, []);
     const store = createStore();
     store.onNote((note) => { status.textContent = describeNote(note); });
 
+    // One rendered position over per-project intent. Resizing only borrows
+    // space; a pointer release or an arrow key is what commits a position.
+    const dataNarrow = matchMedia('(max-width: 800px)');
+    let dataPosition: PanelPos = { x: 0, y: 0 };
+    let dataDrag: { pointerId: number; projectId: string; from: PanelPos; start: PanelPos; moved: boolean } | null = null;
+
+    function placeDataPanel(pos?: PanelPos) {
+      if (!state.dataOpen) return;
+      dataGrip.disabled = dataNarrow.matches;
+      if (dataNarrow.matches) {
+        dataCard.style.removeProperty('left');
+        dataCard.style.removeProperty('top');
+        dataCard.style.removeProperty('right');
+        return;
+      }
+      const region = outputPane.getBoundingClientRect();
+      const card = dataCard.getBoundingClientRect();
+      const id = store.envelope.activeId;
+      const intent = pos ?? (dataDrag?.moved ? dataPosition : (id ? store.envelope.dataPanel[id] : undefined) ?? defaultPos(region));
+      dataPosition = clampPanel(intent, card, region);
+      dataCard.style.left = `${dataPosition.x}px`;
+      dataCard.style.top = `${dataPosition.y}px`;
+      dataCard.style.right = 'auto';
+    }
+    function cancelDataDrag() {
+      if (!dataDrag) return;
+      const id = dataDrag.pointerId;
+      dataDrag = null;
+      delete dataCard.dataset.dragging;
+      try { dataGrip.releasePointerCapture(id); } catch { /* The pointer may already be gone. */ }
+      placeDataPanel();
+    }
+    dataGrip.addEventListener('pointerdown', (e) => {
+      const id = store.envelope.activeId;
+      if (!id || !state.dataOpen || dataNarrow.matches || dataDrag || e.button !== 0 || e.isPrimary === false) return;
+      placeDataPanel();
+      dataDrag = { pointerId: e.pointerId, projectId: id, from: { x: e.clientX, y: e.clientY }, start: { ...dataPosition }, moved: false };
+      e.preventDefault();
+      e.stopPropagation();
+      dataGrip.focus();
+      try { dataGrip.setPointerCapture(e.pointerId); } catch { /* Synthetic pointers have no capture. */ }
+    });
+    dataGrip.addEventListener('pointermove', (e) => {
+      const drag = dataDrag;
+      if (!drag || e.pointerId !== drag.pointerId) return;
+      if (dataNarrow.matches) { cancelDataDrag(); return; }
+      const point = { x: e.clientX, y: e.clientY };
+      if (!drag.moved && !crossedThreshold(drag.from, point)) return;
+      drag.moved = true;
+      dataCard.dataset.dragging = 'true';
+      placeDataPanel(positionFromDrag(drag.start, drag.from, point));
+    });
+    dataGrip.addEventListener('pointerup', (e) => {
+      const drag = dataDrag;
+      if (!drag || e.pointerId !== drag.pointerId) return;
+      if (drag.moved && drag.projectId === store.envelope.activeId) {
+        const pos = { ...dataPosition };
+        store.update((draft) => { draft.dataPanel[drag.projectId] = pos; });
+      }
+      cancelDataDrag();
+    });
+    for (const event of ['pointercancel', 'lostpointercapture']) dataGrip.addEventListener(event, (e) => {
+      if ((e as PointerEvent).pointerId === dataDrag?.pointerId) cancelDataDrag();
+    });
+    dataGrip.addEventListener('keydown', (e) => {
+      if (dataDrag || dataNarrow.matches || e.altKey || e.ctrlKey || e.metaKey) return;
+      const delta = e.key === 'ArrowLeft' ? [-1, 0] : e.key === 'ArrowRight' ? [1, 0]
+        : e.key === 'ArrowUp' ? [0, -1] : e.key === 'ArrowDown' ? [0, 1] : null;
+      const id = store.envelope.activeId;
+      if (!delta || !id) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const step = e.shiftKey ? 32 : 8;
+      placeDataPanel({ x: dataPosition.x + delta[0] * step, y: dataPosition.y + delta[1] * step });
+      const pos = { ...dataPosition };
+      store.update((draft) => { draft.dataPanel[id] = pos; });
+    });
+    const dataResize = new ResizeObserver(() => placeDataPanel());
+    dataResize.observe(outputPane);
+    dataResize.observe(dataCard);
+    dataNarrow.addEventListener('change', () => { cancelDataDrag(); placeDataPanel(); });
+
     // ---- the workspace ----
     /** Load a project by id. A switch replaces the whole document registry, so
      *  the previous project's text is never one Ctrl-Z away. */
@@ -1286,7 +1378,10 @@ const groups = displayGroups(catalogue, []);
       state.tabs = selectTab(state.tabs, index >= 0 ? index : rootIndex(state.tabs));
       source.value = toSource(state.tabs);
       editor?.setDocuments(state.tabs.files.map((f) => f.body), state.tabs.active);
-      if (store.envelope.activeId !== id) consoleNewSession();
+      if (store.envelope.activeId !== id) {
+        setDataOpen(false, { focus: false });
+        consoleNewSession();
+      }
       store.update((draft) => {
         draft.activeId = id;
         draft.activeFile = activeFile(state.tabs).name;

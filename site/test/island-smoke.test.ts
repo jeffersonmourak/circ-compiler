@@ -166,7 +166,7 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     // back to it. This is the boot path that once reached the simulator's
     // record before it was declared ("Cannot access 'sim' before
     // initialization"), and it aborted the rest of the boot with it.
-    const { doc, errors } = await runIsland('playground', 'Playground.astro', { ...defaultEnvelope(), view: 'live', dataOpen: true });
+    const { doc, errors } = await runIsland('playground', 'Playground.astro', { ...defaultEnvelope(), activeId: buildCatalogue(examples, tour)[0].id, view: 'live', dataOpen: true });
     expect(errors).toEqual([]);
     expect(doc.querySelector('.pg-data-card')?.hasAttribute('hidden')).toBe(false);
     (doc.querySelector('.pg-data-close') as unknown as HTMLElement).click();
@@ -513,6 +513,76 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
       island.hooks.onArtifact(null, 'files-changed');
       select.value = originalBase;
       select.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  }));
+
+  test('the Data grip commits only deliberate moves and restores each project position', async () => driveAsync(async (doc) => {
+    const island = (doc.querySelector('.pg') as unknown as { __playground: {
+      placeDataPanel(): void; dataPanelState(): { open: boolean; positions: Record<string, { x: number; y: number }> };
+    } }).__playground;
+    const card = doc.querySelector('.pg-data-card') as unknown as HTMLElement;
+    const region = doc.querySelector('.pg-output') as unknown as HTMLElement;
+    const grip = doc.querySelector('.pg-data-grip') as unknown as HTMLButtonElement;
+    const originalCardRect = card.getBoundingClientRect;
+    const originalRegionRect = region.getBoundingClientRect;
+    let size = { width: 900, height: 600 };
+    region.getBoundingClientRect = () => ({ ...size, x: 0, y: 0 }) as DOMRect;
+    card.getBoundingClientRect = () => ({ width: 312, height: 260, x: 0, y: 0 }) as DOMRect;
+    const Pointer = lastWindow!.PointerEvent;
+    const pointer = (type: string, x: number, y: number, pointerId = 1) => grip.dispatchEvent(new Pointer(type, { clientX: x, clientY: y, pointerId, button: 0, isPrimary: true, bubbles: true }) as unknown as Event);
+    const click = (selector: string) => (doc.querySelector(selector) as unknown as HTMLElement).click();
+    const position = () => ({ x: Number.parseFloat(card.style.left), y: Number.parseFloat(card.style.top) });
+    const id = doc.querySelector('.pg-switch-project[aria-current="true"]')!.getAttribute('data-pick')!;
+    const saved = () => island.dataPanelState().positions[id];
+    const drag = (x: number, y: number) => { pointer('pointerdown', 0, 0); pointer('pointermove', x, y); };
+    try {
+      click('.pg-data-btn');
+      expect(position()).toEqual({ x: 572, y: 52 });
+      drag(3, 3);
+      pointer('pointerup', 3, 3);
+      expect(saved()).toBeUndefined();
+      expect(position()).toEqual({ x: 572, y: 52 });
+      pointer('pointerdown', 0, 0);
+      pointer('pointermove', -100, 80, 2);
+      expect(position()).toEqual({ x: 572, y: 52 });
+      pointer('pointermove', -100, 80);
+      pointer('pointerup', -100, 80);
+      expect(saved()).toEqual({ x: 472, y: 132 });
+      drag(-50, 50);
+      grip.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      expect(card.hidden).toBe(false);
+      expect(position()).toEqual(saved());
+      for (const event of ['pointercancel', 'lostpointercapture']) {
+        drag(-50, 50); pointer(event, -50, 50);
+        expect(position()).toEqual(saved());
+      }
+      drag(5000, 5000); pointer('pointerup', 5000, 5000);
+      expect(saved()).toEqual({ x: 588, y: 340 });
+      size = { width: 400, height: 300 }; island.placeDataPanel();
+      expect(position()).toEqual({ x: 88, y: 40 });
+      expect(saved()).toEqual({ x: 588, y: 340 });
+      size = { width: 900, height: 600 }; island.placeDataPanel();
+      expect(position()).toEqual(saved());
+      grip.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+      grip.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', shiftKey: true, bubbles: true }));
+      expect(saved()).toEqual({ x: 580, y: 308 });
+      drag(-100, -100);
+      click('.pg-crumb'); click('.pg-switch-project[data-pick="example:half-adder"]');
+      expect(card.hidden).toBe(true);
+      expect(island.dataPanelState().open).toBe(false);
+      expect(saved()).toEqual({ x: 580, y: 308 });
+      click('.pg-data-btn');
+      expect(position()).toEqual({ x: 572, y: 52 });
+      click('.pg-crumb'); click(`.pg-switch-project[data-pick="${id}"]`);
+      expect(card.hidden).toBe(true);
+      click('.pg-data-btn');
+      expect(position()).toEqual(saved());
+      await new Promise((r) => setTimeout(r, 550));
+      expect(JSON.parse(lastWindow!.localStorage.getItem(STORE_KEY)!).dataPanel[id]).toEqual(saved());
+    } finally {
+      if (!card.hidden) click('.pg-data-close');
+      card.getBoundingClientRect = originalCardRect;
+      region.getBoundingClientRect = originalRegionRect;
     }
   }));
 

@@ -1509,6 +1509,7 @@ span.pg-diag-pos { color: var(--muted); cursor: default; }
 [data-layout='app'] .pg-data-close,
 [data-layout='app'] .pg-data-grip { flex: none; border: 0; padding: 0; background: transparent; color: var(--muted); font: inherit; cursor: pointer; }
 [data-layout='app'] .pg-data-grip { cursor: grab; touch-action: none; }
+[data-layout='app'] .pg-data-card[data-dragging='true'] .pg-data-grip { cursor: grabbing; }
 [data-layout='app'] .pg-data { min-height: 0; overflow: auto; }
 [data-layout='app'] .pg-data-section { padding: 6px 0; }
 [data-layout='app'] .pg-data-section + .pg-data-section { border-top: 1px solid var(--border); }
@@ -2377,6 +2378,7 @@ a.install-line:hover {
   [data-layout='app'] {
     height: auto;
     overflow: visible;
+    grid-template-rows: auto;
   }
   [data-layout='app'] main { overflow: visible; }
   [data-layout='app'] .pg-editor,
@@ -2385,7 +2387,14 @@ a.install-line:hover {
   }
   /* Stacked: the regions become bands, and the card spans the width. */
   [data-layout='app'] .pg-body { grid-template-columns: 1fr; }
-  [data-layout='app'] .pg { grid-template-rows: auto minmax(0, 1fr) var(--pg-term-h, 40px) auto; }
+  [data-layout='app'] .pg { flex: none; min-height: 100dvh; grid-template-rows: auto auto var(--pg-term-h, 40px) auto; }
+  [data-layout='app'] .pg-editor { height: 60vh; }
+  [data-layout='app'] .pg-output,
+  [data-layout='app'] .pg-output[data-data-open='true'] { padding: 60px 16px 40px; }
+  [data-layout='app'] .pg-output .pg-view-panel { position: relative; inset: auto; order: 2; flex: 1 0 50vh; min-height: 50vh; }
+  [data-layout='app'] .pg-output[data-data-open='true'] .pg-view-panel { right: auto; }
+  [data-layout='app'] .pg-data-card { position: static; width: auto; max-width: none; max-height: none; order: 1; flex: none; margin-bottom: 16px; }
+  [data-layout='app'] .pg-data-grip { display: none; }
   [data-layout='app'] .pg-nav { height: auto; min-height: 48px; flex-wrap: wrap; padding: 8px 12px; }
   [data-layout='app'] .pg-nav-left { gap: 12px; max-width: 100%; flex-wrap: wrap; }
   [data-layout='app'] .pg-switch { left: 0; right: 0; width: auto; max-width: 100%; }
