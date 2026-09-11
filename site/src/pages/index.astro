@@ -33,14 +33,14 @@ const vocabulary = [
   { key: 'files', chips: ['import adder "adder.circ"'], note: 'one circuit each' },
 ];
 const pipeline = [
-  { title: 'Write a .circ file', body: 'Plain text. Any editor — or the playground, which checks the wiring as you type.' },
-  { title: 'circ-compile it', body: 'Out comes one self-contained .wasm. Add --preview to print the schematic in your terminal first.' },
-  { title: 'Run it anywhere WebAssembly runs', body: "Set input pins from JavaScript, read outputs back. Browser, Node, or the playground's live canvas." },
+  { title: 'Write a .circ file', body: 'Use any text editor, or write in the playground to check your wiring as you type.' },
+  { title: 'Compile it', body: 'Run circ-compile to produce a self-contained WebAssembly module. Use --preview to print a schematic in your terminal.' },
+  { title: 'Run the circuit', body: 'Set input pins and read outputs from JavaScript. Run the module in a browser, in Node, or in the playground.' },
 ];
 const tiles = [
-  { slug: 'two-bit-adder', cell: 5, lede: 'Two 2-bit operands, sliced into lanes, added with a ripple carry, joined back into a bus.' },
-  { slug: 'four-bit-adder', cell: 6, lede: 'The same adder twice as wide: four lanes, each carrying into the next, 256 rows of truth.' },
-  { slug: 'rom-lookup', cell: 6, lede: 'A lookup table the host fills at load. Drive the address and read the word; the console can peek and poke it.' },
+  { slug: 'two-bit-adder', cell: 5, lede: 'Adds two 2-bit numbers and produces a sum and carry.' },
+  { slug: 'four-bit-adder', cell: 6, lede: 'Adds two 4-bit numbers, passing the carry from one bit to the next.' },
+  { slug: 'rom-lookup', cell: 6, lede: 'Stores the squares of 0 through 15. Set an address to read its square.' },
 ].map(tile => {
   const example = examples.find(example => example.slug === tile.slug);
   if (!example?.wasm) throw new Error(`Missing home-page example artifact: ${tile.slug}`);
@@ -102,15 +102,15 @@ const tiles = [
     <div class="home-text">
       <span class="home-kicker">The whole language</span>
       <h2 class="home-h2">Six primitives. Five macros. One import.</h2>
-      <p class="home-lede">A program is a flat list of declarations — name a pin, place a gate, bind its ports. It stops where the early Nand2Tetris hardware chapters stop: enough to build a CPU from NAND, nothing you'd need a datasheet for.</p>
+      <p class="home-lede">A program is a list of declarations: name input pins, place gates, and connect their ports. Combine circuits with imports to build larger ones. If you know the early Nand2Tetris hardware chapters, these building blocks will look familiar.</p>
     </div>
   </section>
 
   <section class="home-section home-preview">
     <div class="home-text">
       <span class="home-kicker">--preview</span>
-      <h2 class="home-h2">Source on the left. What the compiler saw on the right.</h2>
-      <p class="home-lede">A half-adder. Two inputs, an XOR macro for the sum, an AND for the carry. Every program can print itself like this from the terminal — the same picture the live card above is animating.</p>
+      <h2 class="home-h2">Source on the left. Schematic on the right.</h2>
+      <p class="home-lede">This half-adder uses XOR for the sum and AND for the carry. Run circ-compile with --preview to print its schematic in your terminal.</p>
       <OpenInPlayground class="home-preview-link" id="example:half-adder" label="Open it in the playground" />
     </div>
     <div class="home-figure">
