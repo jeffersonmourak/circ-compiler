@@ -10,7 +10,7 @@ The three faces have been driven together on every shipped example that has some
 ## Scope
 
 **In scope:**
-- The human's walk of `/playground` in both themes: `four-bit-adder` driven from the Data tab, the console (`eval`) and a canvas click, each face showing the same values; `ram-write-read` clocked from the console (`set we 1`, `set clk 0`, `set clk 1`) with the dock and the Data tab following; `rom-lookup` with an image loaded from the dock and read through `peek` and the table; `sr-latch` driven from the Data tab's toggles; a recompile mid-session, a theme flip, a `reset`.
+- The human's walk of `/playground` in both themes: `four-bit-adder` driven from the Data tab, the console (`eval`) and a canvas click, each face showing the same values; `ram-write-read` clocked from the console (`set we 1`, `set clk 0`, `set clk 1`) with the Memory tab and the Data tab following; `rom-lookup` with an image loaded from the Memory tab, saved back from it, and read through `peek` and the table; `sr-latch` driven from the Data tab's toggles; a recompile mid-session, a theme flip, a `reset`.
 - The `/playground` lazy chunk measured with `bun run bundle` against the Phase 0 baseline.
 - `DOCS/decisions/playground.md` reread against decisions 1–12; missing entries added.
 - Follow-ups in the final STATUS entry.

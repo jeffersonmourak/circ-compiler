@@ -17,7 +17,7 @@ A reader opens the Data tab on `four-bit-adder` and sees `a`, `b`, `cin` as edit
 - CSS for the table in the `[data-layout='app']` block and the general block, following the truth-table's `.pg-table`.
 
 **Explicitly deferred:**
-- The console (Phase 3) and its dock under this tab.
+- The drawer (Phase 3): the console and the Memory panel's move under this tab.
 - A per-bit editor, a history of values, a waveform.
 
 ## File & Module Topology
@@ -84,7 +84,7 @@ Synchronous rendering on session events (`drive`, `memory`, `rebuilt`) and on `s
 | 1 | The tab value | `OutputTab`, `OUTPUT_TABS`, store test. | `playground-store.test.ts`: `'data'` survives `normalize`; `'console'` falls back to `preview`. |
 | 2 | Rows and edits | `data-view.ts` and its tests. | Rows in pin order with `?` before any drive; `0xA` into a 4-bit pin drives `0xa/0xf`; `x` bits become mask bits; `0x1F` into a 4-bit pin is refused with the renderer's reason and no drive; toggle cycles `? → 1 → 0 → 1`; outputs are read-only. In all three bases. |
 | 3 | The panel | Tab, panel, table, reset, gating, CSS; render on events. | `island-smoke.test.ts` with four tabs; typecheck, build, bundle; the human drives `four-bit-adder` from the tab and watches the canvas follow. |
-| 4 | The dock on the tab | The Memory dock renders whenever a session exists, from either tab. | The human loads `rom-lookup`'s image from the dock while on Data and reads `out` in the table. |
+| 4 | The dock on the tab | The Memory dock (still in the editor dock until Phase 3) renders whenever a session exists, from either tab. | The human loads `rom-lookup`'s image from the dock while on Data and reads `out` in the table. |
 
 ## Tests
 
