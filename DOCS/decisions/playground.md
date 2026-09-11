@@ -228,3 +228,27 @@ The entries below record the decisions of the playground-v2 initiative (the site
 
 **Alternatives.** Always encoding the source (long URLs for text the site already ships, and a copy that never tracks a content edit); always using the id (throws away the reader's edit with no warning at all).
 
+
+### One simulation session, and every face drives through it
+
+**Decision.** `site/src/scripts/sim-session.ts` owns the `CircRuntime` built from the compiled artifact. It holds the root pins and memories by name in declaration order (`origin.length === 0`, inputs then outputs — the collection `lib/engine_session.zig` makes for `--sim`), refuses what `--sim` refuses before touching the runtime (`E_NOPIN`, `E_NOTIN`, `E_WIDTH`, `E_NOMEM`, `E_ADDR`, as values with the protocol's argument), settles after every drive, applies the Memory panel's images as preloads at build and at `reset`, and notifies listeners (`drive`, `memory`, `rebuilt`, `destroyed`). The Simulate canvas is `new CircCanvas(session.runtime, …)` over it and reports its clicks back through `notifyExternal`; the Memory panel reads `session.runtime`; the Data tab drives `session.set`. The island keeps one session per artifact, built on first need, dropped on a new or absent artifact, with the reader's pins replayed by name onto the next.
+
+**Rationale.** `renderCircuit` created the runtime inside the canvas, so nothing else could drive the circuit and the memory dock reached the runtime through the picture. A session that outlives the canvas is what a values view and a console need, and what lets a `reset` be the protocol's — a fresh runtime — while the canvas is rebuilt over it.
+
+**Alternatives.** Driving the runtime from each face directly (three owners of one set of pin values); a renderer change to make `CircCanvas` accept a new runtime (a push and a pin bump for a rebuild the island can do).
+
+### The session loads floating, and the page boots low on purpose
+
+**Decision.** The session loads its runtime with `noInitialPinDrive: true`, so after `init()` every pin is unknown as it is under `--sim`. The page's boot — every root input driven low and settled once, which the renderer's `loadFromBytes` did for the canvas before — is `SessionInit.bootLow`, applied by the island at build and never by `reset`. A transcript test leaves it off.
+
+**Rationale.** `--sim`'s RAM transcript depends on the first defined-high clock not being an edge; a runtime that had driven `clk` low first would write. After a console `reset` the page's session is exactly a fresh `--sim` process; before one, a first `set clk 1` on a freshly compiled circuit is an edge, because the page booted low, which is what the canvas always showed.
+
+**Alternatives.** Booting floating everywhere (every pin `?` on a fresh compile, a visible change to a page whose readers click pins from `0`); driving low in `reset` too (the transcripts would not replay).
+
+### The Data tab is rows over the session, spelled the site's way
+
+**Decision.** `site/src/scripts/data-view.ts` is pure: `rowsFor(session, format)` gives one row per root pin with `formatPinValue` in the reader's base; `editRow` parses with `parsePinValue` and drives `session.set`, refusing a parse failure with the renderer's reason before touching the session; `toggleRow` cycles a one-bit input unknown → 1 → 0 → 1; `describeError` turns a protocol code into a sentence. A typed value is wholly known, as in the bus dialog — the renderer's parser takes no `x` bits — and a half-known value is written `10xx` with no prefix. The island renders a table, rebuilding on a shape change and updating in place otherwise so a field being typed into keeps its text; rows follow the session's events and the settings' base.
+
+**Rationale.** The circuit's values are what an adder or an ALU is for, and the site already has one spelling for a value; a second parser here would be a second set of rules. Rendering in place is what lets the rows follow a canvas click while the reader is mid-edit.
+
+**Alternatives.** A per-bit editor (the renderer's dialog does not have one either); a second value grammar for the tab (two spellings on one page).
