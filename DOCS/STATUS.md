@@ -33,3 +33,11 @@ One entry per shipped slice, newest last. The plan is `DOCS/PLANS_PROMPT.md`; th
 **Tests:** ran `bun test` (479 pass), `bun --bun run typecheck` (0 errors), `bun --bun run build`, `bun run bundle` (`/playground` 90.4 KB raw / 32.8 KB gzip, ok), result pass
 **Next slice:** the human's review of the unchanged page (Phase 0 slice 5), then Phase 1.
 **Notes:** the previous entry's blocker is resolved: the pin moves were the human's, made in this worktree on purpose. The plan prompt's Tech Stack names `7ca8593`; the pin is now `2d973b4` and every later slice builds on it. The `/playground` eager graph's growth to 90.4 KB is the session module; the lazy renderer chunk's growth is the viewport code.
+
+## 2026-09-11 — Phase 0 — review
+
+**What shipped:** the human reviewed the rewired page and approved it ("go for phase 1"). Phase 0 complete.
+**Files touched:** `DOCS/STATUS.md`
+**Tests:** none (review)
+**Next slice:** Phase 1 slice 1: the tab value.
+**Notes:** decisions 1, 3, 8 and 9 go into `DOCS/decisions/playground.md` with Phase 1's entry, so the doc is written once per phase pair rather than mid-phase.
