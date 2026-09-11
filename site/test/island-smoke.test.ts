@@ -313,7 +313,9 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     // No analysis lands in this harness, so the truth view is not blocked and
     // the note beside the switch says nothing.
     expect(doc.querySelector('.pg-view-tab[data-view="truth"]')?.getAttribute('aria-disabled')).toBe('false');
-    expect(doc.querySelector('.pg-truth-chip')?.textContent).toBe('');
+    // No analysis, no rows: the chip says only the cap.
+    expect(doc.querySelector('.pg-truth-chip')?.textContent).toBe('cap 12');
+    expect(doc.querySelector('.pg-truth-card .pg-table')).not.toBeNull();
     // The region wears the view, and the Schematic's size line starts empty.
     expect((doc.querySelector('.pg-output') as unknown as { dataset: Record<string, string> }).dataset.view).toBe('schematic');
     expect(doc.querySelector('.pg-size')?.textContent).toBe('0 × 0 chars');
@@ -435,6 +437,37 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(doc.querySelector('.pg-data-card')?.hasAttribute('hidden')).toBe(true);
     expect(region.dataset.dataOpen).toBe('false');
   }));
+
+  test('the truth table renders as a card of rows that drive', async () => {
+    type Island = { renderTruth(json: string): Promise<void> };
+    // Through the async driver: the view's module is a dynamic import, and
+    // the chunk's preload helper reads `document`, which only the driver has
+    // installed.
+    await driveAsync(async (doc) => {
+      const island = (doc.querySelector('.pg') as unknown as { __playground: Island }).__playground;
+      await island.renderTruth('{"inputs":["a","b[2]"],"outputs":["out"],"rows":[{"in":[0,0],"out":[0]},{"in":[1,3],"out":[1]},{"in":[0,1],"out":[null]}]}');
+      const heads = Array.from(doc.querySelectorAll('.pg-truth-card th'), (th) => (th as { textContent: string }).textContent);
+      expect(heads).toEqual(['a', 'b[2]', 'out']);
+      expect(doc.querySelector('.pg-truth-card th[data-symbol-name="b"]')).not.toBeNull();
+      expect(doc.querySelector('.pg-truth-card th.pg-truth-first-out')?.textContent).toBe('out');
+      const rows = Array.from(doc.querySelectorAll('.pg-truth-card tr[data-row]'));
+      expect(rows).toHaveLength(3);
+      const cells = (r: unknown) => Array.from((r as { children: ArrayLike<{ textContent: string; className: string }> }).children);
+      // A bit is its digit; a bus is spelled in the reader's base (binary by default); unknown is a question.
+      expect(cells(rows[1]).map((c) => c.textContent)).toEqual(['1', '0b11', '1']);
+      expect(cells(rows[1]).map((c) => c.className)).toEqual(['pg-truth-high', 'pg-truth-high', 'pg-truth-high pg-truth-first-out']);
+      expect(cells(rows[2]).map((c) => c.textContent)).toEqual(['0', '0b01', '?']);
+      expect(cells(rows[2])[2].className).toContain('pg-truth-unknown');
+      // The chip counts the rows now.
+      expect(doc.querySelector('.pg-truth-chip')?.textContent).toBe('3 rows · cap 12');
+      // No session in this harness: a row click is refused in the status
+      // line, and nothing throws.
+      (rows[1] as unknown as { click(): void }).click();
+      await new Promise((r) => setTimeout(r, 50));
+      expect(doc.querySelector('.pg-status')?.textContent).toBe('Compile a circuit first.');
+      expect(doc.querySelector('.pg-truth-card tr[aria-current="true"]')).toBeNull();
+    });
+  });
 
   test('the breadcrumb opens the tree and gives focus back', () => drive((doc) => {
     const press = (el: unknown, key: string) =>

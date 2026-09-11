@@ -208,7 +208,9 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         <button type="button" class="pg-data-btn" aria-pressed="false" aria-controls="pg-data-card">Data <span class="pg-data-count"></span></button>
       </div>
       <div class="pg-view-panel" id="pg-view-schematic" data-view-panel="schematic" role="tabpanel"><pre class="pg-preview"></pre></div>
-      <div class="pg-view-panel" id="pg-view-truth" data-view-panel="truth" role="tabpanel" hidden><div class="pg-table"></div></div>
+      {/* The truth table in a card on the dot grid (design file 3f): the row
+          matching the session's pins tinted, a click on a row driving them. */}
+      <div class="pg-view-panel" id="pg-view-truth" data-view-panel="truth" role="tabpanel" hidden><div class="pg-truth-card"><div class="pg-table"></div></div></div>
       <div class="pg-view-panel pg-live" id="pg-view-live" data-view-panel="live" role="tabpanel" hidden>
         <div class="pg-sim-note"></div>
         <div class="pg-sim-mount" hidden></div>
@@ -401,6 +403,8 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
   import { summarize, summaryLabels } from '../scripts/footer-summary.ts';
   import { pinCountLabel } from '../scripts/pin-count.ts';
   import { formatZoom } from '../scripts/zoom-label.ts';
+  import { chipText } from '../scripts/truth-chip.ts';
+  import type { TruthRows } from '../scripts/truth-view.ts';
   import { joinConflicts, requestFor, rootOf, PLAYGROUND_DIR } from '../utils/split-files.ts';
   import { createSplitter } from '../scripts/splitter.ts';
   import { fnv1a } from '../utils/artifact-hash.ts';
@@ -514,8 +518,6 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
    *  compiler blamed a file with no tab (a `<builtin>/…` source, or a stale
    *  path from a reply that outlived a rename). */
   type MappedRow = TabbedDiagnostic;
-  interface TruthTable { inputs: string[]; outputs: string[]; rows: { in: (number | null)[]; out: (number | null)[] }[] }
-
 
   const root = document.querySelector<HTMLElement>('.pg');
   if (root) init(root);
@@ -632,6 +634,14 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       version: null as LibcircVersion | null,
       simulateEnabled: true,
     };
+    /** The Truth view's table on screen, and how it came to be. Declared
+     *  here, beside the state, because the gate reads it at boot. */
+    const truth = {
+      table: null as TruthRows | null,
+      /** The over-cap path: rows enumerated on the site over the unknown pins. */
+      filtered: false,
+      unknownBits: undefined as number | undefined,
+    };
     // Slice 8 attaches the simulator here.
     const hooks = {
       onArtifact: null as null | ((bytes: Uint8Array | null, reason: 'built' | 'files-changed') => void),
@@ -665,6 +675,9 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       // The footer's list follows `state.mapped`, which only an analysis
       // fills; the smoke test seeds it and calls this.
       renderDiagnostics: () => renderDiagnostics(),
+      // The Truth view's rows come from the worker; the smoke test hands it
+      // the compiler's JSON and reads the card.
+      renderTruth: (json: string) => loadTruthView().then((m) => renderTruth(m.parseTruthTable(json))),
     };
 
     // ---- tabs ----
@@ -699,9 +712,16 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
     function applyTruthGate() {
       const reason = truthBlock();
       truthTab.setAttribute('aria-disabled', String(reason !== null));
-      // The reason sits in the Truth chip, beside the switch, and the tab is
-      // described by it only while there is one to read.
-      truthChip.textContent = reason ?? '';
+      // The chip beside the switch carries the counts and, when the reader is
+      // blocked, why; the tab is described by it only while there is a reason.
+      truthChip.textContent = chipText({
+        bits: rootInputBits(),
+        rows: truth.table?.rows.length ?? null,
+        cap: settings().truthTableCap,
+        blocked: reason,
+        filtered: truth.filtered,
+        unknownBits: truth.unknownBits,
+      });
       if (reason === null) truthTab.removeAttribute('aria-describedby');
       else truthTab.setAttribute('aria-describedby', 'pg-truth-chip');
       // Blocked while it is the open view: say so in the panel rather than
@@ -3209,15 +3229,134 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       return a.symbols.filter((s) => s.file_id === rootId && s.kind === 'input').reduce((n, s) => n + s.width, 0);
     }
 
+    // ---- the Truth view ----
+    let truthViewPromise: Promise<typeof import('../scripts/truth-view.ts')> | null = null;
+    /** The module reaches the renderer, so it loads beside it, on first need. */
+    const loadTruthView = () => (truthViewPromise ??= import('../scripts/truth-view.ts'));
+
+    /** The reader's input pins as the live row is matched against them: the
+     *  session's when there is one, else the ones the page remembers. */
+    function inputPins(): { name: string; value: PinValue }[] {
+      const session = sim.session;
+      if (session && session.isAlive) {
+        return session.pins.filter((p) => p.kind === 'in').map((p) => {
+          const r = session.get(p.name);
+          return { name: p.name, value: r.ok ? r.value : { value: 0n, defined: 0n, width: p.width } };
+        });
+      }
+      return Array.from(sim.pins, ([name, value]) => ({ name, value }));
+    }
+
+    /** The tint follows the session, never the click (decision 11). */
+    async function refreshTruthTint() {
+      if (!truth.table) return;
+      const { liveRowIndex } = await loadTruthView();
+      const at = liveRowIndex(truth.table, inputPins());
+      for (const tr of tableEl.querySelectorAll<HTMLElement>('tr[data-row]')) {
+        if (Number(tr.dataset.row) === at) tr.setAttribute('aria-current', 'true');
+        else tr.removeAttribute('aria-current');
+      }
+    }
+
+    /** Drive every input column of a row through the session, so the canvas,
+     *  the Data panel and the console all follow (decision 11). */
+    async function driveTruthRow(row: number) {
+      const table = truth.table;
+      if (!table) return;
+      const session = await ensureSession();
+      if (!session) {
+        status.textContent = state.simulateEnabled ? 'Compile a circuit first.' : 'Simulate is disabled.';
+        return;
+      }
+      const [{ driveRow }, { describeError }] = await Promise.all([loadTruthView(), loadDataView()]);
+      if (sim.session !== session) return;
+      const r = driveRow(session, table, row);
+      if (!r.ok) {
+        status.textContent = describeError(r.code, r.arg);
+        return;
+      }
+      // The page's memory of the pins, so a rebuilt session replays the row.
+      for (const col of table.inputs) {
+        const v = session.get(col.name);
+        if (v.ok) sim.pins.set(col.name, v.value);
+      }
+    }
+
+    /** Draw the rows: headers that light the schematic and the editor, cells
+     *  by value in the reader's base, rows that drive. */
+    async function renderTruth(table: TruthRows) {
+      const { cellText } = await loadTruthView();
+      truth.table = table;
+      tableEl.innerHTML = '';
+      // Plain elements rather than `insertRow`/`insertCell`: the same DOM,
+      // and the headless harness the smoke test runs in has only the former.
+      const t = document.createElement('table');
+      const thead = document.createElement('thead');
+      const head = document.createElement('tr');
+      thead.appendChild(head);
+      t.appendChild(thead);
+      const cols = [...table.inputs, ...table.outputs];
+      cols.forEach((col, i) => {
+        const th = document.createElement('th');
+        th.textContent = col.width > 1 ? `${col.name}[${col.width}]` : col.name;
+        // The join key is the bare name.
+        th.dataset.symbolName = col.name;
+        if (i === table.inputs.length) th.classList.add('pg-truth-first-out');
+        // Focusable, so this is not a pointer-only affordance.
+        th.tabIndex = 0;
+        const show = () => highlightByName(col.name);
+        const clear = () => highlightByName(null);
+        th.addEventListener('pointerenter', show);
+        th.addEventListener('focus', show);
+        th.addEventListener('pointerleave', clear);
+        th.addEventListener('blur', clear);
+        head.appendChild(th);
+      });
+      const body = document.createElement('tbody');
+      t.appendChild(body);
+      const format = settings().valueFormat;
+      table.rows.forEach((row, r) => {
+        const tr = document.createElement('tr');
+        body.appendChild(tr);
+        tr.dataset.row = String(r);
+        tr.tabIndex = 0;
+        tr.title = 'Drive the inputs to this row';
+        [...row.in, ...row.out].forEach((cell, i) => {
+          const td = document.createElement('td');
+          tr.appendChild(td);
+          td.textContent = cellText(cell, cols[i].width, format);
+          td.className = cell === null ? 'pg-truth-unknown' : cell === 0n ? 'pg-truth-low' : 'pg-truth-high';
+          if (i === table.inputs.length) td.classList.add('pg-truth-first-out');
+        });
+        tr.addEventListener('click', () => void driveTruthRow(r));
+        tr.addEventListener('keydown', (e) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          e.preventDefault();
+          void driveTruthRow(r);
+        });
+      });
+      tableEl.appendChild(t);
+      applyTruthGate();
+      await refreshTruthTint();
+    }
+
+    /** What the card says instead of a table. */
+    function showTruthNote(text: string) {
+      truth.table = null;
+      tableEl.innerHTML = '';
+      tableEl.textContent = text;
+      applyTruthGate();
+    }
+
     async function runTruth(seq: number) {
       if (!state.tabs.files.length || !state.version) return;
-      const bits = rootInputBits();
-      // The same refusal the tab is painted with, so the panel and the tooltip
+      // The same refusal the chip is painted with, so the card and the chip
       // can never disagree about why there is no table.
       const refusal = truthBlock();
       if (refusal) {
-        tableEl.innerHTML = '';
-        tableEl.textContent = refusal;
+        truth.filtered = false;
+        truth.unknownBits = undefined;
+        showTruthNote(refusal);
         return;
       }
       const r = await client.call('truth_table', requestFor(state.tabs.files, optionsFor('truth_table', settings(), preloads())));
@@ -3229,38 +3368,25 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         setStale(tableEl.textContent !== '');
         return;
       }
-      tableEl.innerHTML = '';
-      const table = JSON.parse(r.text!) as TruthTable;
-      const t = document.createElement('table');
-      const head = t.createTHead().insertRow();
-      for (const name of [...table.inputs, ...table.outputs]) {
-        const th = document.createElement('th');
-        th.textContent = name;
-        // Headers are `name` or `name[W]`; the join key is the bare name.
-        const symbol = headerSymbolName(name);
-        th.dataset.symbolName = symbol;
-        // Focusable, so this is not a pointer-only affordance.
-        th.tabIndex = 0;
-        const show = () => highlightByName(symbol);
-        const clear = () => highlightByName(null);
-        th.addEventListener('pointerenter', show);
-        th.addEventListener('focus', show);
-        th.addEventListener('pointerleave', clear);
-        th.addEventListener('blur', clear);
-        head.appendChild(th);
+      const { parseTruthTable } = await loadTruthView();
+      if (!buildStage.isCurrent(seq)) return;
+      truth.filtered = false;
+      truth.unknownBits = undefined;
+      await renderTruth(parseTruthTable(r.text!));
+    }
+
+    /** The copies: the compiler's own markdown or CSV for its table, the
+     *  module's for rows the compiler never saw. */
+    hooks.copySource = (what) => {
+      if (what !== 'markdown' && what !== 'csv') return null;
+      const table = truth.table;
+      if (!table) return Promise.resolve('');
+      if (truth.filtered) {
+        return loadTruthView().then((m) => (what === 'markdown' ? m.toMarkdown : m.toCsv)(table, settings().valueFormat));
       }
-      const body = t.createTBody();
-      for (const row of table.rows) {
-        const tr = body.insertRow();
-        for (const v of [...row.in, ...row.out]) tr.insertCell().textContent = v === null ? '?' : String(v);
-      }
-      if (bits !== null && bits > 10) {
-        const note = document.createElement('p');
-        note.className = 'pg-table-note';
-        note.textContent = `${table.rows.length} rows.`;
-        tableEl.appendChild(note);
-      }
-      tableEl.appendChild(t);
+      return client
+        .call('truth_table', requestFor(state.tabs.files, optionsFor('truth_table', settings(), preloads(), what)))
+        .then((r) => (r.status === 0 ? r.text! : ''));
     }
 
     function messageOf(r: WorkerReply): string {
@@ -3598,6 +3724,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           sim.view?.view.refreshState();
           if (state.dataOpen) renderData();
           if (memVisible()) renderMemory();
+          if (state.view === 'truth') void refreshTruthTint();
           // The console is the record of every face: what another face did
           // is logged as the line that would have done it. The console's own
           // lines are already in the log (it is busy while they run).
