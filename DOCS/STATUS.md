@@ -185,3 +185,11 @@ Rolling log of shipped slices. Newest at the bottom. The plan is `DOCS/PLANS_PRO
 **Tests:** none added; the four gates green at `95d2cb4`
 **Next slice:** Phase 4 — the project switcher (`DOCS/PLANS/PHASE_4_switcher.md`), on the human's word.
 **Notes:** `bun run bundle`, `/playground`: after Phase 2 115.3 KB raw / 40.5 KB gzip; after Phase 3 120.1 KB raw / 42.1 KB gzip (ceiling 120.0 KB gzip). The eager growth is the chip module and the view's wiring; `truth-view.ts` rides behind the renderer's dynamic import beside `data-view.ts`.
+
+## 2026-09-11 — Phase 3 — A header lights the editor before any canvas, and Truth keeps its grid
+
+**What shipped:** `highlightByName` marks the editor from the declaration when the layout table has no entry (`markInEditor` takes the name and kind only), so a page refreshed onto the Truth view lights the source from a header without a Live visit first. The region's static dots now hide only under the Live view with a canvas (`[data-view='live'][data-canvas='true']`), so the Truth card sits on the grid whether or not Live was visited.
+**Files touched:** `site/src/components/Playground.astro`, `site/src/styles/global.css`
+**Tests:** none added (no analysis lands in the harness); 575 pass. Walked on the dev server: a reload onto Truth, hover `a` → one `.cm-circ-linked` span, dots shown; Live then Truth, hover `b` → one span, dots shown.
+**Next slice:** Phase 4, on the human's word.
+**Notes:** Reported by the human: after a refresh on the Truth view the grid showed and the header hover no longer highlighted the code. The grid was the design's (board 3f); what had changed was that a Live visit's `data-canvas` flag hid the static dots on every view after it. The hover went through `link.table`, which `buildCanvas` fills from the layout, so it worked only after a canvas existed; the declaration list from the analysis has the span and is enough.

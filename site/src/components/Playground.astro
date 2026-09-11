@@ -1151,7 +1151,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
      * hover must never steal the reader's place, so a declaration in another
      * file is named in the simulate note instead of switching tabs.
      */
-    function markInEditor(link_: SourceLink | null) {
+    function markInEditor(link_: Pick<SourceLink, 'name' | 'kind'> | null) {
       if (!editor) return;
       if (!link_) {
         editor.setLinkHighlight(null);
@@ -1190,15 +1190,18 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
      * reader's own context behind.
      */
     function highlightByName(name: string | null) {
+      // The editor's span comes from the declaration; the layout table only
+      // adds the box. Before a canvas exists (a page refreshed onto the Truth
+      // view) the table is null, and the declaration alone is enough.
       if (name === null) {
         highlightComponent(link.current);
-        markInEditor(link.current ? (link.table?.byName.get(link.current.name) ?? null) : null);
+        markInEditor(link.current ? (link.table?.byName.get(link.current.name) ?? link.current) : null);
         markTableColumn(link.current);
         return;
       }
       const decl = link.decls.find((d) => d.name === name) ?? null;
       highlightComponent(decl);
-      markInEditor(link.table?.byName.get(name) ?? null);
+      markInEditor(link.table?.byName.get(name) ?? decl);
       markTableColumn(decl);
     }
 

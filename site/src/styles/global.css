@@ -854,7 +854,7 @@ hr {
    is showing. The note sits over the canvas, never in its flow, so a hover
    sentence cannot resize the mount. */
 .pg-live { inset: 0; overflow: hidden; display: flex; flex-direction: column; }
-.pg-output[data-canvas='true']::before { display: none; }
+.pg-output[data-view='live'][data-canvas='true']::before { display: none; }
 .pg-live .pg-sim-note { position: absolute; top: 60px; left: 16px; z-index: 5; margin: 0; }
 .pg-live .pg-sim-note:empty { display: none; }
 .pg-hint,
