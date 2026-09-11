@@ -364,3 +364,51 @@ The entries below record the decisions of the playground-v2 initiative (the site
 **Rationale.** One owner of the runtime was the driver plan's first anchor, and the panel's two direct calls were a leftover of its move; a write around the session is a write the log cannot see.
 
 **Alternatives.** Emitting events from the panel itself (a second source of truth for what was written).
+
+### `Copy script` is the commands only
+
+**Decision.** `console.ts`'s `scriptOf(lines)` keeps an echo without its `> ` and a `#` comment as it is, and drops every reply; the console's Copy script puts that on the clipboard, Copy log the whole transcript. Both go through `navigator.clipboard.writeText`, guarded; the status span says what went, or that the clipboard is unavailable.
+
+**Rationale.** The CLI refuses an echo as written, so a log pasted whole is not a script; the button is the honest way to get one, and the document now says so.
+
+**Alternatives.** Echoing without a mark (a `set a 1` line the reader could not tell from a reply that reads the same); a download instead of the clipboard (a file for a line the reader wants to paste).
+
+### The toolbar is the console's own top edge
+
+**Decision.** A `.pg-console-bar` above the log carries a title — `circ-compile <root>.circ --sim`, the command the terminal is running — and, at the right, Clear, Copy script and Copy log, styled as the dock's toggle. `Ctrl+L` stays.
+
+**Rationale.** An editor's terminal names its shell and keeps its actions at the top edge of its own panel; a strip that took the log's width would push the text about.
+
+**Alternatives.** The actions on the drawer's strip beside the tabs (they would apply to the Memory tab too); a floating button over the log (over the text it acts on).
+
+### Autoscroll holds while the reader reads
+
+**Decision.** The log follows a new line only when it was already at its end, within a line and a half; a submit and a handshake always scroll to the end. No jump-to-end affordance is built.
+
+**Rationale.** A reader scrolled up is reading; a line the page appended for them must not take that away, and the next thing they type brings them back.
+
+**Alternatives.** Always following (the terminal's default, and the reason terminals grew a scroll lock); never following (a prompt that answers off screen).
+
+### The prompt is one line in the terminal
+
+**Decision.** The input has no border and no background of its own; a `>` glyph in the accent colour precedes it on the same baseline; a click anywhere in the panel that is not a button, an input or a selection focuses it; `Escape` clears the line and resets the history cursor; the panel, not the input, shows the focus ring.
+
+**Rationale.** A terminal has one caret and it is where the text goes; a field with its own box reads as a form.
+
+**Alternatives.** A `$` prompt (the echo in the log is `> `, and one glyph is one story); a multi-line prompt (the protocol is line-oriented).
+
+### Line kinds are the stylesheet's
+
+**Decision.** `consoleKind` classifies a line by its first characters — `err`, `echo`, `note`, `reply` — and `data-ok` marks a reply that begins with `ok`; the stylesheet colours them: `ok` replies in `--term-ok`, errors in `--danger`, echoes in `--term-echo` with the mark in the accent colour, comments in `--muted`, page-originated lines at reduced opacity. The two tokens are defined in both themes beside the site's palette. No line gets an icon or a prefix beyond its text.
+
+**Rationale.** Colour is what a terminal has to tell a reply from an error at a glance, and colour costs the text nothing.
+
+**Alternatives.** ANSI sequences in the text (a log that is no longer the CLI's); a per-line icon (a prefix a copy would carry).
+
+### The document says what a script can take
+
+**Decision.** `DOCS/sim-protocol.md`'s browser section says the log records every face, that the CLI refuses an echo as written, that Copy script gives the lines `--sim` accepts, and that a copied `help` prints one `E_PROTO` and goes on.
+
+**Rationale.** The section had claimed the echoes are ignored, and they are not; a reader who saved a log would have met an error the document said could not happen.
+
+**Alternatives.** None: a false sentence in a reference is a defect.

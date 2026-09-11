@@ -228,9 +228,17 @@ browser having no process, no working directory and no stdin.
 
 - **The handshake prints when the session is built**, which is the first
   time the Simulate or Data tab is opened with a compiled circuit, and again
-  after every `reset`, preceded by a `# reset` comment. Its `<file>` is the
-  root file's name. Its `warnings` count and `diag` lines come from the
-  analysis the page ran on the same source.
+  after every `reset`, whichever face caused it. Its `<file>` is the root
+  file's name. Its `warnings` count and `diag` lines come from the analysis
+  the page ran on the same source.
+- **The log records every face.** A pin clicked on the canvas, a value typed
+  on the Data tab, a cell written or a memory cleared in the Memory tab, and a
+  Reset pressed anywhere are logged as the line that would have done the
+  same — `> set a 0x1`, `> poke data 0x2 0x5a`, `> clear data`, `> reset` —
+  followed by the reply the session gave, in the order they happened. A
+  partly-known value carries its mask (`> set a 0x1 0x3`). A ROM image edited
+  or loaded in the Memory tab is applied as a `--mem` preload, not as a
+  `load`, so it is logged as a comment naming the memory and the word count.
 - **The page boots low.** Before the first `reset` the circuit is in the
   state the canvas has always shown: every root input driven to 0 and
   settled once. `reset` (and `quit`) leave every pin undefined, as after
@@ -254,10 +262,14 @@ browser having no process, no working directory and no stdin.
   write. Preloads are the Memory tab's images: they are applied when the
   session is built and again on every `reset`, as `--mem` is.
 - **`help` is a browser-only verb.** It prints the command table as `#`
-  comment lines, so a log that contains it still replays as a script.
+  comment lines. The CLI answers `help` itself with `err E_PROTO malformed
+  command`, so a copied script that contains it prints one error and goes on.
 - **No line-length cap.** The CLI's `err E_PROTO command line exceeds limit`
   is never printed; a browser line has no 8 KiB buffer to overflow.
-- **The log is the transcript.** Every line in the Console's scrollback is a
-  reply, the echo of a submitted line (`> …`) or a comment (`# …`), so it
-  pastes into a `.script` file: the echoes and comments are ignored, and the
-  replies are what the CLI would print.
+- **The log is a transcript; `Copy script` is the script.** Every line in
+  the Console's scrollback is a reply, the echo of a line (`> …`) or a comment
+  (`# …`). The CLI would refuse an echo as written (`> set a 1` is a malformed
+  command), so the console's `Copy script` button copies the lines `--sim`
+  accepts — each echo without its `> `, and the comments — and drops every
+  reply. Saved as a `.script` and fed to `circ-compile <file>.circ --sim`,
+  it replays what the reader did; `Copy log` copies the whole scrollback.

@@ -65,3 +65,11 @@ One entry per shipped slice, newest last. The plan is `DOCS/PLANS_PROMPT.md`; th
 **Tests:** ran `bun test` (532 pass), `bun --bun run typecheck` (0 errors), `bun --bun run build`, `bun run bundle` (`/playground` 107.6 KB raw / 38.2 KB gzip, ok; +1.5 KB raw over Phase 0 for the bar's handlers, the scroll lock and the focus), result pass
 **Next slice:** the document and the decisions.
 **Notes:** the scroll lock reads `scrollHeight`, `scrollTop` and `clientHeight`, all zero in happy-dom, so the log counts as at its end there and the smoke cases see every line. The colours are the human's to judge in both themes.
+
+## 2026-09-11 — Phase 1 — the document and the decisions
+
+**What shipped:** `DOCS/sim-protocol.md`'s browser section: the handshake bullet no longer names a `# reset` comment; a new bullet says the log records every face and how each is spelled, and that a ROM image is a comment; the `help` bullet says the CLI refuses it; the last bullet replaces "the echoes and comments are ignored" with the truth — the CLI refuses an echo as written, `Copy script` gives the lines it accepts, `Copy log` the whole scrollback. `DOCS/decisions/playground.md` gains the entries for decisions 5–10.
+**Files touched:** `DOCS/sim-protocol.md`, `DOCS/decisions/playground.md`, `DOCS/STATUS.md`
+**Tests:** none (documents)
+**Next slice:** the human's review of Phase 1 on the page, in both themes, with a script copied from `ram-write-read` and replayed through `zig-out/bin/circ-compile tests/fixtures/circuits/sim_ram_write_read.circ --sim`.
+**Notes:** none.
