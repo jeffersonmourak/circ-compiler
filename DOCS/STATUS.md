@@ -25,3 +25,11 @@ One entry per shipped slice, newest last. The plan is `DOCS/PLANS_PROMPT.md`; th
 **Tests:** added three (a drive's spellings and masks, every echo re-parsing once its mark is stripped; the three memory shapes; rebuilt and destroyed); ran `bun test test/console.test.ts` (10 pass), `bun --bun run typecheck` (0 errors), result pass
 **Next slice:** the echo on the page.
 **Notes:** `console.ts` now imports `widthMask` from the topology entry point and `writeHex` from the grammar, both already in the eager bundle.
+
+## 2026-09-11 — Phase 0 — the echo on the page
+
+**What shipped:** the island's session listener logs what another face did: on `drive` and `memory`, when the console is not running a line of its own, it appends `commandFor(event, session)` with `data-origin="page"` on each span; on `rebuilt` from another face it appends `> reset`, `ok` and the handshake; a `rebuilt` caused by the console's own `reset` or `quit` prints only the handshake after the reply, since the echo and its `ok` are already there. The `# reset` comment is gone. `consoleAppend` takes an origin. `applyToView` calls the loud `applyPreloads`, so a ROM edited in the Memory tab logs its comment.
+**Files touched:** `site/src/components/Playground.astro`, `DOCS/STATUS.md`
+**Tests:** ran `bun --bun run build`, `bun test` (528 pass; `island-smoke` unchanged, nothing prints at mount), `bun --bun run typecheck` (0 errors), `bun run bundle` (`/playground` 106.1 KB raw / 37.7 KB gzip, ok; +1.2 KB raw for `commandFor` and the echo), result pass
+**Next slice:** the human's review of Phase 0 on the page: a canvas click, a Data-tab toggle and edit, a Memory-tab cell write and clear on `ram-write-read`, an image edit on `rom-lookup`, the Data tab's Reset; each typed line once.
+**Notes:** the handshake after a console-typed `reset` follows the `ok` as it did, so the executor's reply order is untouched and the transcript test's replies are not what the page logs around them.

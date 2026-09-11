@@ -363,7 +363,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
   // `--sim`, and the prompt's own memory. Small, and the session already
   // pulls their one shared dependency, so they ride in the eager bundle.
   import { execute, handshake } from '../scripts/sim-executor.ts';
-  import { HELP_VERB, HistoryRing, MemoryTabFiles, Transcript, helpLines, promptEcho } from '../scripts/console.ts';
+  import { HELP_VERB, HistoryRing, MemoryTabFiles, Transcript, commandFor, helpLines, promptEcho } from '../scripts/console.ts';
   import { joinConflicts, requestFor, rootOf, PLAYGROUND_DIR } from '../utils/split-files.ts';
   import { createSplitter } from '../scripts/splitter.ts';
   import { fnv1a } from '../utils/artifact-hash.ts';
@@ -779,13 +779,15 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       return 'reply';
     }
 
-    function consoleAppend(lines: readonly string[]) {
+    /** Append lines to the log. `page` marks lines another face caused, for the stylesheet only. */
+    function consoleAppend(lines: readonly string[], origin: 'prompt' | 'page' = 'prompt') {
       if (lines.length === 0) return;
       consoleState.transcript.append(lines);
       for (const line of lines) {
         const row = document.createElement('span');
         row.className = 'pg-console-line';
         row.dataset.kind = consoleKind(line);
+        if (origin === 'page') row.dataset.origin = 'page';
         row.textContent = `${line}\n`;
         consoleLog.appendChild(row);
       }
@@ -828,11 +830,10 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
       } finally {
         consoleState.busy = false;
         if (consoleState.rebuilt) {
+          // The `> reset` and its `ok` are already in the log; the new
+          // session's handshake follows them, as it would a fresh process.
           consoleState.rebuilt = false;
-          if (sim.session) {
-            consoleAppend(['# reset']);
-            consoleHandshake(sim.session);
-          }
+          if (sim.session) consoleHandshake(sim.session);
         }
         refreshConsoleGate();
       }
@@ -3144,6 +3145,10 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           sim.view?.view.refreshState();
           if (state.tab === 'data') renderData();
           if (memVisible()) renderMemory();
+          // The console is the record of every face: what another face did
+          // is logged as the line that would have done it. The console's own
+          // lines are already in the log (it is busy while they run).
+          if (!consoleState.busy) consoleAppend(commandFor(event, session), 'page');
         } else if (event.kind === 'rebuilt') {
           // The protocol's reset: a new runtime, so a canvas over the old one
           // is rebuilt over the new, and the rows read the new.
@@ -3154,7 +3159,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           // when another face reset the session.
           if (consoleState.busy) consoleState.rebuilt = true;
           else {
-            consoleAppend(['# reset']);
+            consoleAppend(commandFor(event, session), 'page');
             consoleHandshake(session);
           }
         } else if (event.kind === 'destroyed') {
