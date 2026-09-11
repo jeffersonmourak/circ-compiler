@@ -67,6 +67,9 @@ describe('app layout', () => {
       ".lc[data-circ-fit='parent'] .lc-mount",
       ".lc[data-circ-fit='parent'] .lc-mount[hidden]",
       ".lc[data-circ-fit='parent'] .lc-mount canvas",
+      '.lc[data-circ-thumbnail] .lc-mount, .lc[data-circ-thumbnail] .lc-launch',
+      '.lc[data-circ-thumbnail] .lc-mount canvas',
+      '.lc[data-circ-thumbnail] .lc-mount[hidden], .lc[data-circ-thumbnail] .lc-launch[hidden]',
     ];
     const mentioning = selectorsOf(css).filter((s) => s.includes('.lc-mount'));
     expect([...new Set(mentioning)].sort()).toEqual([...new Set(frozen)].sort());

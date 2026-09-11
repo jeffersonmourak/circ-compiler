@@ -1503,7 +1503,7 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     const landingWindow = new Window();
     landingWindow.document.write(landing);
     const landingDoc = landingWindow.document;
-    const heroCards = landingDoc.querySelectorAll('.lc');
+    const heroCards = landingDoc.querySelectorAll('.home-hero .lc');
     expect(heroCards).toHaveLength(1);
     expect(heroCards[0].getAttribute('data-circ-fit')).toBe('parent');
     expect(heroCards[0].hasAttribute('data-circ-values')).toBe(true);
@@ -1515,8 +1515,17 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
       'A small language for building and simulating logic circuits, made for people learning how computers work.',
     );
     expect(Array.from(landingDoc.querySelectorAll('main > section')).map(el =>
-      el.classList.contains('home-hero') ? 'hero' : el.classList.contains('home-lang') ? 'language' : 'preview',
-    )).toEqual(['hero', 'language', 'preview']);
+      el.classList.contains('home-hero') ? 'hero' : el.classList.contains('home-lang') ? 'language' : el.classList.contains('home-gallery') ? 'gallery' : 'preview',
+    )).toEqual(['hero', 'language', 'preview', 'gallery']);
+    expect(landingDoc.querySelectorAll('.lc[data-circ-autorun]')).toHaveLength(4);
+    const thumbnails = Array.from(landingDoc.querySelectorAll('[data-circ-thumbnail]'));
+    expect(thumbnails).toHaveLength(3);
+    for (const [i, slug] of ['two-bit-adder', 'four-bit-adder', 'rom-lookup'].entries()) {
+      expect(thumbnails[i].getAttribute('data-circ-wasm')).toEndWith(`${slug}.wasm`);
+      expect(thumbnails[i].closest('a')?.getAttribute('href')).toEndWith(`#${slug}`);
+      expect(thumbnails[i].querySelector('.lc-header, button')).toBeNull();
+    }
+    expect(Array.from(landingDoc.querySelectorAll('.home-tile-meta')).map(el => el.textContent)).toEqual(['2 in · 2 out', '2 in · 2 out', '1 in · 1 out · 16 words']);
     expect(landingDoc.querySelector('.landing-prose')).toBeNull();
     expect(Array.from(landingDoc.querySelectorAll('.home-vocab-key')).map(el => el.textContent)).toEqual(['primitives', 'macros', 'signals', 'files']);
     expect(landingDoc.querySelectorAll('.home-step')).toHaveLength(3);

@@ -4,6 +4,8 @@ import CodePreview from '../components/CodePreview.astro';
 import LiveCanvas from '../components/LiveCanvas.astro';
 import OpenInPlayground from '../components/OpenInPlayground.astro';
 import { url } from '../utils/url.ts';
+import { examples } from '../content/examples.ts';
+import { tileMeta, tileMetaLabel } from '../scripts/tile-meta.ts';
 
 const heroSource = `// half_adder.circ
 import xor "<builtin>/xor.circ"
@@ -35,6 +37,15 @@ const pipeline = [
   { title: 'circ-compile it', body: 'Out comes one self-contained .wasm. Add --preview to print the schematic in your terminal first.' },
   { title: 'Run it anywhere WebAssembly runs', body: "Set input pins from JavaScript, read outputs back. Browser, Node, or the playground's live canvas." },
 ];
+const tiles = [
+  { slug: 'two-bit-adder', cell: 5, lede: 'Two 2-bit operands, sliced into lanes, added with a ripple carry, joined back into a bus.' },
+  { slug: 'four-bit-adder', cell: 6, lede: 'The same adder twice as wide: four lanes, each carrying into the next, 256 rows of truth.' },
+  { slug: 'rom-lookup', cell: 6, lede: 'A lookup table the host fills at load. Drive the address and read the word; the console can peek and poke it.' },
+].map(tile => {
+  const example = examples.find(example => example.slug === tile.slug);
+  if (!example?.wasm) throw new Error(`Missing home-page example artifact: ${tile.slug}`);
+  return { ...tile, example, wasm: example.wasm, meta: tileMetaLabel(tileMeta(example.source)) };
+});
 ---
 <Base>
   <section class="home-hero">
@@ -106,6 +117,17 @@ const pipeline = [
       <CodePreview source={heroSource} preview={heroPreview} />
       <div class="home-status-row"><span>source</span><span>circ-compile --preview</span></div>
     </div>
+  </section>
+
+  <section class="home-section home-gallery">
+    <div class="home-gallery-head"><span class="home-kicker">From the gallery</span><a class="home-gallery-all" href={url('/gallery')}>All examples &rarr;</a></div>
+    <div class="home-tiles">{tiles.map(tile => <a class="home-tile" href={`${url('/gallery')}#${tile.slug}`}>
+      <LiveCanvas wasm={tile.wasm} memory={tile.example.memory} cell={tile.cell} thumbnail autoRun />
+      <div class="home-tile-body">
+        <div class="home-tile-row"><span class="home-tile-name">{tile.slug}</span><span class="home-tile-meta">{tile.meta}</span></div>
+        <p class="home-tile-lede">{tile.lede}</p>
+      </div>
+    </a>)}</div>
   </section>
 
   <a class="install-line" href={url('/download')}>↓ Download circ-compile for Linux, macOS, or Windows</a>

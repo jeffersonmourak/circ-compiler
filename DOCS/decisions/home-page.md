@@ -57,3 +57,19 @@ The entries below record the decisions exercised while redrawing the site's land
 **Rationale.** Readers of Markdown should encounter the same content as browser readers. A heading comparison guards against stale prose surviving a redesign.
 
 **Alternatives.** Leave the previous three prose sections in the twin; describe planned tiles before they ship; generate Markdown by scraping the page.
+
+### Gallery tiles use shipped sources and images
+
+**Decision.** The landing page selects `two-bit-adder`, `four-bit-adder` and `rom-lookup` explicitly and fails the build if an artifact is missing. A pure `tileMeta` helper counts declared pins, not bits, and derives memory capacity from address width. The ROM receives the same source-owned image as its gallery card. Markdown links go to `gallery.md` without fragments because its title-derived anchors differ from the HTML slugs.
+
+**Rationale.** Tile labels and simulations should describe the examples actually shipped. The design's illustrative names and counts are not source data.
+
+**Alternatives.** Copy the board's counts; select examples by tier order; generate duplicate artifacts for the landing page.
+
+### Thumbnails are fixed-cell crops inside links
+
+**Decision.** `LiveCanvas`'s thumbnail variant suppresses the header and disables renderer interaction and navigation. The tile is one anchor; its loading indicator is an inert span rather than a nested button. The existing 200px observer margin defers mounting. Slots are 150px tall, with native-width canvases at cells 5, 6 and 6. Safe vertical centering centers short circuits while oversized circuits retain their top edge.
+
+**Rationale.** Native sizing keeps small circuit details crisp. A single link makes pointer and keyboard navigation unambiguous; the gallery is where pins become interactive.
+
+**Alternatives.** Scale each circuit into its tile; put a button inside the link; make thumbnail pins compete with the tile's navigation.

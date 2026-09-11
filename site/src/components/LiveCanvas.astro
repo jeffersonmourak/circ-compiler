@@ -36,6 +36,8 @@ interface Props {
   link?: { href: string; label: string };
   /** Fit the circuit into the mount and disable navigation. */
   fit?: 'parent';
+  /** Decorative, fixed-cell preview inside a gallery link. */
+  thumbnail?: boolean;
 }
 
 // Padding of 2 cells: the value chip above a pin reaches 1.42 cells over its
@@ -52,6 +54,7 @@ const {
   values = false,
   link,
   fit,
+  thumbnail = false,
 } = Astro.props;
 const wasmHref = url(`/wasm/${wasm}`);
 // Serialised into the markup rather than passed to the script: the script is
@@ -68,11 +71,12 @@ const memoryAttr = memory && Object.keys(memory).length > 0 ? JSON.stringify(mem
   data-circ-autorun={autoRun ? '' : undefined}
   data-circ-fit={fit}
   data-circ-values={values ? '' : undefined}
+  data-circ-thumbnail={thumbnail ? '' : undefined}
 >
-  <div class="lc-header">
+  {!thumbnail && <div class="lc-header">
     <span class="lc-label">{label}</span>
     <span class="lc-hint">click input pins to toggle</span>
-  </div>
+  </div>}
   {source !== undefined ? (
     <div class="lc-body">
       <div class="lc-source">
@@ -86,7 +90,7 @@ const memoryAttr = memory && Object.keys(memory).length > 0 ? JSON.stringify(mem
     </div>
   ) : (
     <>
-      <button class="lc-launch" type="button">▶ Run interactively</button>
+      {thumbnail ? <span class="lc-launch" aria-hidden="true">▶</span> : <button class="lc-launch" type="button">▶ Run interactively</button>}
       <div class="lc-mount" hidden></div>
       <div class="lc-error" hidden></div>
     </>
@@ -177,6 +181,7 @@ const memoryAttr = memory && Object.keys(memory).length > 0 ? JSON.stringify(mem
     const cell = parseInt(container.dataset.circCell ?? '14', 10);
     const padding = parseInt(container.dataset.circPadding ?? String(Math.ceil(cell * 2)), 10);
     const fitToParent = container.dataset.circFit === 'parent';
+    const thumbnail = container.hasAttribute('data-circ-thumbnail');
 
     const launch = container.querySelector<HTMLButtonElement>('.lc-launch');
     const mountEl = container.querySelector<HTMLElement>('.lc-mount');
@@ -203,7 +208,8 @@ const memoryAttr = memory && Object.keys(memory).length > 0 ? JSON.stringify(mem
         url: wasmUrl,
         cell,
         padding,
-        interactive: true,
+        interactive: !thumbnail,
+        ...(thumbnail ? { navigation: false } : {}),
         theme: pickTheme(),
         ...(fitToParent ? { viewport: 'parent' as const, navigation: false } : {}),
         onPinChange: container.dataset.circValues !== undefined ? refreshValues : undefined,
@@ -292,6 +298,7 @@ const memoryAttr = memory && Object.keys(memory).length > 0 ? JSON.stringify(mem
 
   function init() {
     document.querySelectorAll<HTMLElement>('.lc').forEach((container) => {
+      if (container.hasAttribute('data-circ-thumbnail')) return;
       const launch = container.querySelector<HTMLButtonElement>('.lc-launch');
       launch?.addEventListener('click', () => mount(container));
     });

@@ -140,6 +140,8 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - The hero reports the renderer's real all-low boot state
 - The preview section frames the existing figure without changing the gallery component
 - The landing Markdown twin follows visible sections and shares their headings
+- Gallery tiles derive metadata and memory images from shipped examples
+- Thumbnail canvases retain fixed cell sizes, defer mounting and live inside single links
 
 ## Conventions
 

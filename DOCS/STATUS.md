@@ -71,3 +71,35 @@
 **Tests:** `bun --bun run build`, `bun test` (623 pass), `bun --bun run typecheck` (0 errors, 0 warnings, 21 hints), and `bun run bundle` passed. After the final figure CSS adjustment, a fresh build and 40 relevant tests passed. Chrome captures cover light/dark at 1100, 1440 and 700px; section and figure scroll widths match their client widths, with no runtime exceptions. Screenshots: `home-phase1-{light,dark}-{1100,1440,700}.png` in the same scratch directory as the Phase 0 captures.
 **Next slice:** Stop before Phase 2.
 **Notes:** Eager JavaScript remains 5,242 B raw / 2,627 B gzip for `/` and `/gallery`. Shared main width/padding and nav-width edits appeared concurrently in global.css and were preserved. Phase 1 changes remain uncommitted, alongside the staged Phase 0 implementation; the shared stylesheet is not restaged wholesale.
+
+## 2026-09-11 — Phase 2 — The metadata module
+
+**What shipped:** Added source-derived pin counts and memory capacity for single-file tiles, with rejection of file markers and multiple memories.
+**Files touched:** `site/src/scripts/tile-meta.ts`, `site/test/tile-meta.test.ts`
+**Tests:** Four metadata tests pass, including all three shipped examples and concat commas inside output bindings.
+**Next slice:** The thumbnail variant.
+**Notes:** The approved Phase 0–1 implementation and user layout/nav edits were committed together as `aef1cbd` before Phase 2 began.
+
+## 2026-09-11 — Phase 2 — The thumbnail
+
+**What shipped:** Added the optional noninteractive thumbnail variant, native-width cropping, safe vertical centering and an inert loading indicator inside the tile link.
+**Files touched:** `site/src/components/LiveCanvas.astro`, `site/src/styles/global.css`, `site/test/app-layout.test.ts`, `site/test/renderer-pin.test.ts`
+**Tests:** Gallery markup guards pass; browser measurements confirm 150px outer slots and native canvas widths of 400, 840 and 300px at cells 5, 6 and 6.
+**Next slice:** The tiles and twin.
+**Notes:** The plan's nested button was replaced with a span to keep each tile a single interactive anchor. Short circuits center vertically; oversized ones crop from the top.
+
+## 2026-09-11 — Phase 2 — The tiles, twin and record
+
+**What shipped:** Added the three selected tiles with metadata, ledes, source-owned ROM image and gallery links. Updated the landing twin and llms.txt description and recorded decisions 3 and 5.
+**Files touched:** `site/src/pages/index.astro`, `site/scripts/build-llm-mirror.ts`, `site/test/canvas-memory.test.ts`, `site/test/island-smoke.test.ts`, `DOCS/decisions/home-page.md`, `DOCS/decisions/index.md`, `DOCS/STATUS.md`
+**Tests:** Full suite: 628 pass. Typecheck: 0 errors, 0 warnings, 21 hints after narrowing the optional artifact field. Fresh build and bundle gate pass; final CSS adjustment passed 62 targeted tests. Chrome at 1100, 1440 and 700px in both themes: zero thumbnails mounted before scrolling; all three mounted after scrolling; no runtime exceptions; a native click over the ROM thumbnail navigated to `/gallery#rom-lookup` at every width. Captures: `home-phase2-{light,dark}-{1100,1440,700}.png` in the session scratch directory.
+**Next slice:** Stop before Phase 3.
+**Notes:** `/` and `/gallery` each grew from 5,242 B raw / 2,627 B gzip to 5,354 B raw / 2,660 B gzip, below the 10,240 B ceiling. Markdown links omit fragments because Markdown titles do not share the HTML slug anchors. Concurrent user edits gave tiles 2rem spacing, individual borders and hover transitions; those edits are preserved. Phase 2 is implemented but not committed; global.css remains unstaged for combined review.
+
+## 2026-09-11 — Preview code-block correction
+
+**What shipped:** Scoped strict monospace sizing and line height to the landing preview, removed inherited code font shrinkage, and constrained each grid pane so long lines scroll inside it. The two-panel presentation and gallery styles are preserved.
+**Files touched:** `site/src/styles/global.css`, `DOCS/STATUS.md`
+**Tests:** Fresh build, 33 passing token/island tests, and bundle gate. Browser checks at 1100, 1440 and 700px in both themes confirm 13px source text and 12.5px schematic text in the strict monospace stack; both snippets fit at those widths. Captures: `preview-fixed-{light,dark}-{1100,1440,700}.png` in the session scratch directory.
+**Next slice:** Wait for the user's confirmation to commit and begin Phase 3.
+**Notes:** No commit or Phase 3 work was performed.

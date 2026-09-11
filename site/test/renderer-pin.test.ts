@@ -151,6 +151,8 @@ describe('renderer pin', () => {
     expect(liveCanvas).toContain("container.dataset.circFit === 'parent'");
     expect(liveCanvas).toMatch(/fitToParent \? \{ viewport: 'parent' as const, navigation: false \} : \{\}/);
     expect(liveCanvas).toContain('onPinChange: container.dataset.circValues !== undefined ? refreshValues : undefined');
+    expect(liveCanvas).toContain('interactive: !thumbnail');
+    expect(liveCanvas).toContain('...(thumbnail ? { navigation: false } : {})');
   });
 
   test('the value dialog the site styles is the one the installed renderer builds', () => {
