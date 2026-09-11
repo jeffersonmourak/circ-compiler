@@ -358,7 +358,7 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
   import { ComponentKind } from 'circ-renderer/topology';
   // The session the faces share. Pulls nothing of the canvas: its imports are
   // the topology entry point and the rom-image module, both already here.
-  import { SimSession } from '../scripts/sim-session.ts';
+  import { SimSession, type DriveAssign } from '../scripts/sim-session.ts';
   // The console over the session: the grammar and the reply strings of
   // `--sim`, and the prompt's own memory. Small, and the session already
   // pulls their one shared dependency, so they ride in the eager bundle.
@@ -3195,11 +3195,11 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
           // theme would get 0xFF back on the rebuilt canvas. The canvas drove
           // the runtime itself; the session tells the other faces.
           onPinChange: (id: number, value: PinValue) => {
-            const changed: string[] = [];
+            const changed: DriveAssign[] = [];
             for (const [name, pid] of rootInputs(session)) {
               if (pid === id) {
                 sim.pins.set(name, value);
-                changed.push(name);
+                changed.push({ name, value: value.value, defined: value.defined });
               }
             }
             session.notifyExternal(changed);

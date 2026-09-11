@@ -53,7 +53,11 @@ describe('driving pins', () => {
     // An input reads back as what it was driven to, as `get <input>` does.
     const a = session.get('a');
     expect(a.ok && a.value).toEqual({ value: 1n, defined: 1n, width: 1 });
-    expect(events).toEqual([{ kind: 'drive', names: ['a'] }, { kind: 'drive', names: ['b'] }]);
+    // Every drive says what it drove, so a face can spell it as a `set`.
+    expect(events).toEqual([
+      { kind: 'drive', names: ['a'], assigns: [{ name: 'a', value: 1n, defined: 1n }] },
+      { kind: 'drive', names: ['b'], assigns: [{ name: 'b', value: 1n, defined: 1n }] },
+    ]);
   });
 
   test('set refuses what --sim refuses, before touching the runtime', async () => {
@@ -95,7 +99,9 @@ describe('driving pins', () => {
     expect(good.ok && good.values.map((v) => `${v.pin.name}=${v.value.value}/${v.value.defined}`)).toEqual(['out=0/1', 'a=1/1']);
     // Each assignment settles on its own, as `--sim` does.
     expect(rt.calls.filter((c) => c === 'run')).toHaveLength(2);
-    expect(events).toEqual([{ kind: 'drive', names: ['a', 'b'] }]);
+    expect(events).toEqual([
+      { kind: 'drive', names: ['a', 'b'], assigns: [{ name: 'a', value: 1n, defined: 1n }, { name: 'b', value: 0n, defined: 1n }] },
+    ]);
   });
 
   test('a listener that throws does not silence the others', async () => {
@@ -109,8 +115,8 @@ describe('driving pins', () => {
 
   test('a face that drove the runtime itself can tell the others', async () => {
     const { session, events } = await andSession();
-    session.notifyExternal(['a']);
-    expect(events).toEqual([{ kind: 'drive', names: ['a'] }]);
+    session.notifyExternal([{ name: 'a', value: 1n, defined: 1n }]);
+    expect(events).toEqual([{ kind: 'drive', names: ['a'], assigns: [{ name: 'a', value: 1n, defined: 1n }] }]);
   });
 });
 
@@ -164,14 +170,19 @@ describe('memories', () => {
     expect(session.clear('code')).toEqual({ ok: true });
     const after = session.get('q');
     expect(after.ok && after.value.defined).toBe(0n);
-    expect(events.filter((e) => e.kind === 'memory').map((e) => (e as { name: string }).name)).toEqual(['code', 'code']);
+    // Memory events say what changed: the cell and its value, or the whole memory.
+    expect(events.filter((e) => e.kind === 'memory')).toEqual([
+      { kind: 'memory', name: 'code', op: 'poke', addr: 3n, value: 0x2an, defined: 0xffn },
+      { kind: 'memory', name: 'code', op: 'clear' },
+    ]);
   });
 
   test('an image loads whole, stores back, and a ram is never preloaded', async () => {
-    const { session, rt } = await romSession();
+    const { session, rt, events } = await romSession();
     const image = new Uint8Array([0x10, 0x20, 0x30]);
     const loaded = session.loadImage('code', image);
     expect(loaded.ok && loaded.words).toBe(3);
+    expect(events).toEqual([{ kind: 'memory', name: 'code', op: 'load', words: 3 }]);
     const stored = session.storeImage('code');
     expect(stored.ok && Array.from(stored.bytes.slice(0, 4))).toEqual([0x10, 0x20, 0x30, 0]);
     expect(stored.ok && stored.words).toBe(16);
@@ -199,8 +210,27 @@ describe('memories', () => {
     const pc = session.get('pc');
     expect(pc.ok && pc.value.defined).toBe(0n);
     expect(events[events.length - 1]).toEqual({ kind: 'rebuilt' });
+    // The build and the reset applied the preload silently: the handshake is
+    // the record of those moments, so no `load` event was emitted for them.
+    expect(events.filter((e) => e.kind === 'memory' && e.op === 'load')).toEqual([]);
     // Pins and memories are the same topology, so the refs survive.
     expect(session.pins.map((p) => p.name)).toEqual(['pc', 'q']);
+  });
+
+  test('a face applying the preloads is told what was written', async () => {
+    const images = new Map([['code', '2a 2b']]);
+    const { session, events } = await romSession(images);
+    events.length = 0;
+    session.applyPreloads();
+    expect(events).toEqual([{ kind: 'memory', name: 'code', op: 'load', words: 2 }]);
+    // An emptied image clears, and says so.
+    images.set('code', '');
+    events.length = 0;
+    session.applyPreloads();
+    expect(events).toEqual([{ kind: 'memory', name: 'code', op: 'clear' }]);
+    events.length = 0;
+    session.applyPreloads({ silent: true });
+    expect(events).toEqual([]);
   });
 
   test('destroy ends the runtime and tells the faces once', async () => {

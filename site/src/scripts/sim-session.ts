@@ -119,11 +119,22 @@ export interface SessionInit {
   bootLow?: boolean;
 }
 
+/** One pin as it was driven: the value and the mask the runtime received. */
+export interface DriveAssign {
+  name: string;
+  value: bigint;
+  defined: bigint;
+}
+
 export type SessionEvent =
-  /** Pins were driven, by any face. */
-  | { kind: 'drive'; names: readonly string[] }
-  /** A memory's contents changed. */
-  | { kind: 'memory'; name: string }
+  /** Pins were driven, by any face; `names` is `assigns` by name, for a face that only refreshes. */
+  | { kind: 'drive'; names: readonly string[]; assigns: readonly DriveAssign[] }
+  /** One cell written. */
+  | { kind: 'memory'; name: string; op: 'poke'; addr: bigint; value: bigint; defined: bigint }
+  /** Every cell unknown. */
+  | { kind: 'memory'; name: string; op: 'clear' }
+  /** An image of `words` words replaced every cell. */
+  | { kind: 'memory'; name: string; op: 'load'; words: number }
   /** `reset`: a new runtime; a face holding the old one rebuilds. */
   | { kind: 'rebuilt' }
   | { kind: 'destroyed' };
@@ -201,7 +212,7 @@ export class SimSession {
   static async build(init: SessionInit): Promise<SimSession> {
     const runtime = await init.load(init.bytes);
     const session = new SimSession(init, runtime);
-    session.applyPreloads();
+    session.applyPreloads({ silent: true });
     if (init.bootLow) session.bootLow();
     return session;
   }
@@ -239,9 +250,13 @@ export class SimSession {
     }
   }
 
-  /** A face drove the runtime around the session (the canvas's click): tell the others. */
-  notifyExternal(names: readonly string[]): void {
-    this.emit({ kind: 'drive', names });
+  /** A face drove the runtime around the session (the canvas's click): tell the others what it drove. */
+  notifyExternal(assigns: readonly DriveAssign[]): void {
+    this.emitDrive(assigns);
+  }
+
+  private emitDrive(assigns: readonly DriveAssign[]): void {
+    this.emit({ kind: 'drive', names: assigns.map((a) => a.name), assigns });
   }
 
   // ---- pins -----------------------------------------------------------------
@@ -276,7 +291,7 @@ export class SimSession {
     const r = this.resolveDrive({ pin: name, value, defined });
     if (!r.ok) return r;
     this.drive(r.pin, value, r.defined);
-    this.emit({ kind: 'drive', names: [name] });
+    this.emitDrive([{ name, value, defined: r.defined }]);
     return { ok: true };
   }
 
@@ -310,7 +325,7 @@ export class SimSession {
       if (!this.output(q) && !this.input(q)) return fail('E_NOPIN', q);
     }
     for (const r of resolved) this.drive(r.pin, r.value, r.defined);
-    if (resolved.length > 0) this.emit({ kind: 'drive', names: resolved.map((r) => r.pin.name) });
+    if (resolved.length > 0) this.emitDrive(resolved.map((r) => ({ name: r.pin.name, value: r.value, defined: r.defined })));
     const values = queries.map((q) => {
       const pin = (this.output(q) ?? this.input(q))!;
       return { pin, value: this.rt.readValue(pin.id) };
@@ -325,10 +340,26 @@ export class SimSession {
 
   // ---- preloads and reset ---------------------------------------------------
 
-  /** Write the Memory tab's images into the runtime, as `--mem` preloads. */
-  applyPreloads(): ApplyResult {
+  /**
+   * Write the Memory tab's images into the runtime, as `--mem` preloads.
+   * A face's call says what it wrote (a `load` or a `clear` per image); the
+   * build and `reset` apply silently, because the handshake is the record
+   * of those moments.
+   */
+  applyPreloads(opts: { silent?: boolean } = {}): ApplyResult {
     if (this.roms.length === 0 || !this.rt.hasMemory) return { applied: [], errors: new Map() };
-    return applyRomImages(this.rt, romPlan(this.images, this.roms), this.roms);
+    const plan = romPlan(this.images, this.roms);
+    const result = applyRomImages(this.rt, plan, this.roms);
+    if (!opts.silent) {
+      for (const name of result.applied) {
+        const write = plan.writes.find((w) => w.name === name);
+        const mem = this.mem(name);
+        if (!write || !mem) continue;
+        if (write.bytes === null) this.emit({ kind: 'memory', name, op: 'clear' });
+        else this.emit({ kind: 'memory', name, op: 'load', words: write.bytes.length / ((mem.width + 7) >> 3) });
+      }
+    }
+    return result;
   }
 
   /**
@@ -343,7 +374,7 @@ export class SimSession {
       const old = this.rt;
       this.rt = fresh;
       old.destroy();
-      this.applyPreloads();
+      this.applyPreloads({ silent: true });
       this.emit({ kind: 'rebuilt' });
     })().finally(() => {
       this.resetting = null;
@@ -379,7 +410,7 @@ export class SimSession {
     const rc = this.rt.writeMemWord(mem.id, Number(addr), value, mask);
     if (rc !== 0) return fail('E_PROTO', 'write failed');
     this.rt.run();
-    this.emit({ kind: 'memory', name });
+    this.emit({ kind: 'memory', name, op: 'poke', addr, value, defined: mask });
     return { ok: true };
   }
 
@@ -405,7 +436,7 @@ export class SimSession {
     const rc = this.rt.clearMem(mem.id);
     if (rc !== 0) return fail('E_PROTO', 'clear failed');
     this.rt.run();
-    this.emit({ kind: 'memory', name });
+    this.emit({ kind: 'memory', name, op: 'clear' });
     return { ok: true };
   }
 
@@ -423,7 +454,7 @@ export class SimSession {
     const rc = this.rt.loadMemImage(mem.id, bytes);
     if (rc !== 0) return fail('E_MEMFMT', `runtime refused the image (status ${rc})`);
     this.rt.run();
-    this.emit({ kind: 'memory', name });
+    this.emit({ kind: 'memory', name, op: 'load', words: checked.words });
     return { ok: true, mem, words: checked.words };
   }
 
