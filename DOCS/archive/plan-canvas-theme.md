@@ -105,6 +105,6 @@ No diagnostic code, runtime export or CLI flag changed; the compiler is untouche
 
 - `DOCS/decisions/canvas-theme.md` — nineteen entries: the three renderer hooks; the theme split and the assets seam; op-log goldens; the handoff tracked; the design file over its README; the palettes; cell-relative strokes and palette-only colours; the wire hook; pins by shape; the value pill and who draws it; the hover ring; no new component kinds; two sprites tinted and measured; the gate anatomy; slice and concat; the shared chip; the write indicator; the junction rule; padding in CSS pixels — and the map of the plan's sixteen locked decisions onto them.
 - `DOCS/decisions/index.md` — the `canvas-theme.md` topic.
-- `DOCS/archive/design/canvas-theme/` — the handoff: `README.md` (what to port), `circ-site-theme.js` (the port target), the two `.dc.html` sheets, the harness files.
+- The design handoff (`README.md`, `circ-site-theme.js`, the two `.dc.html` sheets, the harness files) was deleted from the tree after the port; `git show c91f12f:DOCS/archive/design/canvas-theme/README.md` recovers it.
 - `circ-renderer/README.md` — the theme colour table, "Drawing a wire yourself" (`TraceOptions`), "Fan-out junctions", the `layoutOptions` row.
 - `site/test/circ-skins.test.ts`, `site/test/circ-theme-hover.test.ts`, `site/test/island-canvas-options.test.ts`, `site/test/renderer-pin.test.ts` — the guards that hold the decisions above.
