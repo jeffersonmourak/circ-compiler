@@ -89,32 +89,111 @@ function nsName(ctx, cell, name, bx, by, bw, bh, color) {
 }
 
 /**
- * Pins narrower than ~7 cells (≤2-char names) put the name BELOW the
- * circle; wider boxes can fit the name inside, replacing the 0/1.
+ * A soft halo under a lit shape: the same disc, one spread wider, at low
+ * alpha. Drawn as one explicit fill inside save/restore, so the op log sees
+ * every context change put back.
  */
-function nameFitsInside(component) {
-  return component.name.length >= 3 || component.width >= 7;
+function nsHalo(ctx, colour, cx, cy, r, spread) {
+  ctx.save();
+  ctx.globalAlpha = 0.22;
+  ctx.fillStyle = colour;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r + spread / 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
 
-/** Filled circle inscribed in the box, with a 0/1 label inside. */
-function drawPinCircle(ctx, cell, bx, by, bw, bh, fill, stroke, label, font, labelColor) {
+/**
+ * Pin circle where SHAPE carries the state as well as colour: HIGH is a
+ * solid disc under a halo, LOW is a hollow ring, undefined is dashed. The
+ * name owns the centre, so greyscale docs and colourblind readers still get
+ * the state from the silhouette. Returns the geometry for the ring and pill.
+ */
+function nsPinCircle(ctx, cell, bx, by, bw, bh, on, undef_, fill, border, t, label) {
   const cx = bx + bw / 2;
   const cy = by + bh / 2;
-  const r = Math.min(bw, bh) / 2 - cell * 0.05;
-  ctx.fillStyle = fill;
-  ctx.strokeStyle = stroke;
-  ctx.lineWidth = Math.max(3, cell * 0.16);
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
+  const r = Math.min(bw, bh) / 2 - cell * 0.08;
+  const lw = Math.max(2, cell * 0.14);
+  if (undef_) {
+    ctx.save();
+    ctx.setLineDash([cell * 0.28, cell * 0.24]);
+    ctx.strokeStyle = t.labelMuted;
+    ctx.lineWidth = lw;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  } else if (on) {
+    nsHalo(ctx, fill, cx, cy, r, cell * 0.7);
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = border;
+    ctx.lineWidth = lw;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+  } else {
+    ctx.fillStyle = t.surface;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = border;
+    ctx.lineWidth = lw * 1.2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  if (label) {
+    ctx.fillStyle = on ? t.labelOnComponent : t.label;
+    ctx.font = nsFont(cell, 700);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, cx, cy + cell * 0.03);
+  }
+  return { cx, cy, r };
+}
 
-  ctx.fillStyle = labelColor;
-  ctx.font = font;
+/**
+ * Value chip above a pin or a box. Solid when HIGH or carrying a bus,
+ * outlined when LOW, dashed when undefined — the same fill-versus-outline
+ * cue the circle uses, so the pair reads as one unit. `bottomY` is the
+ * lowest the chip may reach; callers pass the outer edge of whatever sits
+ * below it (a circle's stroke, a hover ring), so the chip never lands on
+ * it. It reaches 1.34 cells above a 3-row pin box: the islands lay out
+ * with a row gutter of 2 for it.
+ */
+function nsValuePill(ctx, t, cell, cx, bottomY, text, mode, fill, ink) {
+  ctx.save();
+  ctx.font = nsFont(cell, 700);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(label, cx, cy);
+  const h = cell * 0.92;
+  const w = ctx.measureText(text).width + cell * 0.7;
+  const y = bottomY - h;
+  ctx.beginPath();
+  ctx.roundRect(cx - w / 2, y, w, h, h / 2);
+  if (mode === 'solid') {
+    ctx.fillStyle = fill;
+    ctx.fill();
+  } else {
+    ctx.fillStyle = t.surface;
+    ctx.fill();
+    ctx.strokeStyle = mode === 'dashed' ? t.labelMuted : fill;
+    ctx.lineWidth = Math.max(1.5, cell * 0.1);
+    if (mode === 'dashed') ctx.setLineDash([cell * 0.26, cell * 0.22]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  ctx.fillStyle = ink;
+  ctx.fillText(text, cx, y + h / 2 + cell * 0.03);
+  ctx.restore();
 }
+
+/** The radius of a pin's circle in its box, as `nsPinCircle` draws it. */
+const pinRadius = (cell, w, h) => Math.min(w, h) / 2 - cell * 0.08;
 
 /**
  * Compute where a square sprite would land inside a box of (w × h),
@@ -188,74 +267,81 @@ const drawHoverRing = (ctx, cell, component, theme) => {
 /* ───── skins ──────────────────────────────────────────────────────── */
 
 const drawInputPin = ({ ctx, cell, component, outputSignal, hovered, theme }) => {
+  const t = theme.colors;
   const x = component.x * cell;
   const y = component.y * cell;
   const w = component.width * cell;
   const h = component.height * cell;
-  const isOn = outputSignal === 1;
+  const on = outputSignal === 1;
+  const undef_ = outputSignal === 2;
+  const bus = (component.bitWidth ?? 1) > 1;
 
-  const r = Math.min(w, h) / 2 - cell * 0.05;
+  const r = pinRadius(cell, w, h);
   const cx = x + w / 2;
-  const tailEdge = cx + r + cell * 0.45;
+  const cy = y + h / 2;
+  const tailEdge = cx + r + cell * 0.4;
   const portY = component.outPort.y * cell + cell / 2;
-  const portX = component.outPort.x * cell + cell / 2;
-  nsTail(ctx, cell, tailEdge, portX, portY, outputSignal, theme.colors, (component.bitWidth ?? 1) > 1);
+  nsTail(ctx, cell, tailEdge, component.outPort.x * cell + cell / 2, portY, outputSignal, t, bus);
 
-  let fill = isOn ? theme.colors.inputOn : theme.colors.inputOff;
-  let stroke = isOn ? theme.colors.inputBorderOn : theme.colors.inputBorderOff;
+  // The value rides in a chip above and the name sits in the circle, the
+  // same arrangement at one bit or sixty-four. A bus's chip is the canvas's
+  // to draw, through the busValue hook, in the reader's chosen base.
+  if (!bus) {
+    nsValuePill(
+      ctx, t, cell, cx, cy - r - cell * 0.5,
+      undef_ ? '?' : on ? '1' : '0',
+      on ? 'solid' : undef_ ? 'dashed' : 'outline',
+      on ? t.inputOn : t.inputBorderOff,
+      on ? t.labelOnComponent : t.label
+    );
+  }
+  let fill = on ? t.inputOn : t.inputOff;
+  let border = on ? t.inputBorderOn : t.inputBorderOff;
   if (hovered) {
     fill = theme.colors.inputHover;
-    stroke = theme.colors.inputHover;
+    border = theme.colors.inputHover;
   }
-  const inside = nameFitsInside(component) ? component.name : isOn ? '1' : '0';
-  drawPinCircle(
-    ctx, cell, x, y, w, h,
-    fill, stroke,
-    inside,
-    theme.font ?? `600 ${Math.round(cell * 0.8)}px ui-monospace, monospace`,
-    theme.colors.labelOnComponent
-  );
-  if (!nameFitsInside(component)) {
-    nsName(ctx, cell, component.name, x, y, w, h, theme.colors.labelMuted);
-  }
-
-  nsDot(ctx, cell, tailEdge, portY, outputSignal, theme.colors);
+  nsPinCircle(ctx, cell, x, y, w, h, on, undef_, fill, border, t, component.name);
+  nsDot(ctx, cell, tailEdge, portY, outputSignal, t);
 };
 
-const drawOutputPin = ({ ctx, cell, component, inputSignals, inputValues, theme, hovered }) => {
+const drawOutputPin = ({ ctx, cell, component, inputSignals, inputValues, theme }) => {
+  const t = theme.colors;
   const x = component.x * cell;
   const y = component.y * cell;
   const w = component.width * cell;
   const h = component.height * cell;
   const sig = inputSignals[0] ?? 2;
-  const isOn = sig === 1;
+  const on = sig === 1;
+  const undef_ = sig === 2;
+  const bus = (component.bitWidth ?? 1) > 1;
 
-  const r = Math.min(w, h) / 2 - cell * 0.05;
+  const r = pinRadius(cell, w, h);
   const cx = x + w / 2;
-  const tailEdge = cx - r - cell * 0.45;
+  const cy = y + h / 2;
+  const tailEdge = cx - r - cell * 0.4;
   const slot = component.inPorts[0];
   let dotY = 0;
   if (slot) {
-    const portX = slot.coord.x * cell + cell / 2;
     dotY = slot.coord.y * cell + cell / 2;
-    nsTail(ctx, cell, tailEdge, portX, dotY, sig, theme.colors, (inputValues[0]?.width ?? 1) > 1);
+    nsTail(ctx, cell, tailEdge, slot.coord.x * cell + cell / 2, dotY, sig, t, (inputValues[0]?.width ?? 1) > 1);
   }
-
-  const inside = nameFitsInside(component) ? component.name : isOn ? '1' : '0';
-  drawPinCircle(
-    ctx, cell, x, y, w, h,
-    isOn ? theme.colors.outputOn : theme.colors.outputOff,
-    isOn ? theme.colors.outputBorderOn : theme.colors.outputBorderOff,
-    inside,
-    theme.font ?? `600 ${Math.round(cell * 0.7)}px ui-monospace, monospace`,
-    theme.colors.labelOnComponent
+  nsPinCircle(
+    ctx, cell, x, y, w, h, on, undef_,
+    on ? t.outputOn : t.outputOff,
+    on ? t.outputBorderOn : t.outputBorderOff,
+    t, component.name
   );
-  if (!nameFitsInside(component)) {
-    nsName(ctx, cell, component.name, x, y, w, h, theme.colors.labelMuted);
+  if (!bus) {
+    nsValuePill(
+      ctx, t, cell, cx, cy - r - cell * 0.5,
+      undef_ ? '?' : on ? '1' : '0',
+      on ? 'solid' : undef_ ? 'dashed' : 'outline',
+      on ? t.outputOn : t.outputBorderOff,
+      on ? t.labelOnComponent : t.label
+    );
   }
-
-  if (slot) nsDot(ctx, cell, tailEdge, dotY, sig, theme.colors);
-
+  if (slot) nsDot(ctx, cell, tailEdge, dotY, sig, t);
 };
 
 const drawLed = ({ ctx, cell, component, inputSignals, inputValues, theme, hovered }) => {

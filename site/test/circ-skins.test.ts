@@ -337,6 +337,99 @@ describe('circ-skins', () => {
     flush(store);
   });
 
+  test("a pin's shape says its state, and its name owns the centre", () => {
+    const theme = themeWith(true);
+    const run = (kind: 'input_pin' | 'output_pin', sig: Signal, cell = 10) => {
+      const c = component(kind, 1);
+      const { ctx, ops } = recordingContext(cell);
+      const v = valueOf(sig, 1);
+      skinFor(theme, c)({
+        ctx, theme, cell, component: c,
+        inputSignals: c.inPorts.map(() => sig), outputSignal: sig,
+        inputValues: c.inPorts.map(() => v), outputValue: v, hovered: false,
+      });
+      return ops;
+    };
+    const sets = (ops: Op[], prop: string) => ops.filter((op) => op[0] === 'set' && op[1] === prop).map((op) => op[2]);
+    // Box 5×3 at cell 10 from (2,2): centre (45, 35), r = 15 − 0.8.
+    const cx = 45, cy = 35, r = 14.2;
+    for (const kind of ['input_pin', 'output_pin'] as const) {
+      const onFill = kind === 'input_pin' ? colorsDark.inputOn : colorsDark.outputOn;
+      const offBorder = kind === 'input_pin' ? colorsDark.inputBorderOff : colorsDark.outputBorderOff;
+
+      // HIGH: a halo one spread wider, then a filled disc, then the border.
+      const high = run(kind, 1);
+      const arcs = high.filter((op) => op[0] === 'arc');
+      expect(arcs.some((op) => op[1] === cx && op[2] === cy && op[3] === r + 3.5)).toBe(true);
+      expect(sets(high, 'globalAlpha')).toEqual([0.22]);
+      expect(sets(high, 'fillStyle')).toContain(onFill);
+      // The name, not the value, sits in the centre, in the on-component ink.
+      const name = high.find((op) => op[0] === 'fillText' && op[1] === (kind === 'input_pin' ? 'a' : 'q'))!;
+      expect([name[2], name[3]]).toEqual([cx, cy + 0.3]);
+      expect(high.some((op) => op[0] === 'fillText' && op[1] === '1')).toBe(true);
+
+      // LOW: a hollow ring — surface fill, border at 1.2× the line weight.
+      const low = run(kind, 0);
+      expect(sets(low, 'strokeStyle')[0]).toBe(colorsDark.wireIdle); // the tail
+      expect(sets(low, 'fillStyle')).toContain(colorsDark.surface);
+      expect(sets(low, 'strokeStyle')).toContain(offBorder);
+      expect(sets(low, 'lineWidth')).toContain(2.4);
+      expect(low.some((op) => op[0] === 'fillText' && op[1] === '0')).toBe(true);
+      expect(sets(low, 'globalAlpha')).toEqual([]);
+
+      // Undefined: a dashed outline in labelMuted, dash cleared after.
+      const und = run(kind, 2);
+      const dashes = und.filter((op) => op[0] === 'setLineDash').map((op) => op[1]);
+      // The circle's dash and the pill's dash, each cleared after; an input
+      // pin draws its pill first and an output pin its circle first.
+      expect([...dashes].sort()).toEqual(['[2.6,2.2]', '[2.8,2.4]', '[]', '[]']);
+      expect(dashes[1]).toBe('[]');
+      expect(dashes[3]).toBe('[]');
+      expect(sets(und, 'strokeStyle')).toContain(colorsDark.labelMuted);
+      expect(und.some((op) => op[0] === 'fillText' && op[1] === '?')).toBe(true);
+    }
+  });
+
+  test('the single-bit pill sits above the circle, clear of the ring', () => {
+    const theme = themeWith(true);
+    for (const cell of CELLS) {
+      const c = component('input_pin', 1);
+      const { ctx, ops } = recordingContext(cell);
+      skinFor(theme, c)({
+        ctx, theme, cell, component: c, inputSignals: [], outputSignal: 1,
+        inputValues: [], outputValue: valueOf(1, 1), hovered: false,
+      });
+      const pill = ops.find((op) => op[0] === 'roundRect')!;
+      expect(pill).toBeDefined();
+      const r3 = (n: number) => Math.round(n * 1000) / 1000;
+      const cy = (Y + 1.5) * cell;
+      const r = 1.5 * cell - 0.08 * cell;
+      const h = 0.92 * cell;
+      // Height 0.92 cell; bottom edge at cy − r − 0.5 cell.
+      expect(pill[4]).toBe(r3(h));
+      expect(r3(Number(pill[2]) + Number(pill[4]))).toBe(r3(cy - r - 0.5 * cell));
+      // The ring of decision 9 sits at r + 0.38 cell; the pill's bottom is
+      // 0.5 cell above the circle, so 0.12 cell clears it.
+      expect(cy - r - 0.5 * cell).toBeLessThan(cy - (r + 0.38 * cell));
+    }
+  });
+
+  test('a bus pin draws no pill of its own', () => {
+    // At width > 1 the canvas calls busValue with the text in the reader's
+    // base; a pill drawn here would ignore that base.
+    const theme = themeWith(true);
+    for (const kind of ['input_pin', 'output_pin'] as const) {
+      const c = component(kind, 8);
+      const { ctx, ops } = recordingContext(14);
+      const v = valueOf(1, 8);
+      skinFor(theme, c)({
+        ctx, theme, cell: 14, component: c, inputSignals: c.inPorts.map(() => 1), outputSignal: 1,
+        inputValues: c.inPorts.map(() => v), outputValue: v, hovered: false,
+      });
+      expect(ops.some((op) => op[0] === 'roundRect')).toBe(false);
+    }
+  });
+
   test('highlight: the ring for every kind draws as the golden says', () => {
     const theme = themeWith(true);
     for (const kind of KINDS) for (const cell of CELLS) {
