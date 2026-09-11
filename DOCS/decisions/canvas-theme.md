@@ -89,3 +89,27 @@ The entries below record the decisions of the canvas-theme initiative: the site'
 **Rationale.** Hover used to swap the input pin's fill and border for yellow and so hid the value the reader was about to toggle; the design keeps the state visible under the mark. Drawing it from the hook keeps the playground's decision that one hook marks every kind, so an editor cursor on a `rom` still lights it.
 
 **Alternatives.** The design's own placement, a ring drawn from the pin skin (two rings for a hovered pin, or none for a highlighted rom); a fill change with the state kept in the border (a colour-only cue again).
+
+### No new component kinds: a builtin gate is the macro it already is
+
+**Decision.** The six two-input builtins and `not` reach the canvas as collapsed subcircuit boxes (the site lays out in opaque mode; the playground's "Expand macros" setting reaches the compiler's preview, not the canvas), and the `subcircuit` skin draws any name in the recipe table through `nsGate` on a virtual 5-wide box centred in the macro box, its tails running to the real ports. No kind byte is added to `lib/topology/format.zig`, no `ComponentKind` to the renderer, no footprint or port slot anywhere; `buffer` has no source form and is not drawn. The handoff's "new kinds needed in the library" paragraph is superseded by this entry.
+
+**Rationale.** The language locks `or`, `nand`, `nor`, `xor` and `xnor` as auto-imported macros of `and` and `not` (`DOCS/decisions/language.md`); a primitive kind for each would be an engine evaluator, a topology version, a runtime bump and a renderer change, for a picture the macro box already gives. NOR and XNOR, which the site never drew before, come free from the recipe.
+
+**Alternatives.** Six primitive kinds and `buffer` in the compiler (the handoff's ask; out of proportion, and it would make the flattened `.min` blob carry gates the engine does not evaluate); drawing the builtins with the old sprite path (the NAND and XOR PNGs, with a bubble baked in at a different spacing from the vector one).
+
+### Two sprites, tinted and measured, behind the assets seam
+
+**Decision.** `circ-assets.mjs` exports `AND` and `OR` only. A sprite is never drawn raw: `tintedSprite(name, colour, alpha)` recolours it inside its own alpha (`spriteInk` at 0.94 for LOW, `inputOn` at 0.92 for HIGH, `labelMuted` at 0.5 for undefined), `haloSprite(name, colour)` blurs a tinted copy once on a canvas padded by `HALO_PAD = 0.14` and knocks its core out, and the page's `Assets.bounds(name)` measures the painted extent with one 128×128 `getImageData` on the decoded image in the drawn rotation. Each is built once per name and colour into an offscreen canvas from `assets.offscreen` and cached by name; `makeSkins` empties every cache when it rebinds. The symbol is sized from those bounds to span the port rows and fit the gate slot, so the transparent padding in the PNGs no longer misaligns the lobes. Before the PNGs decode an AND or OR is a vector stand-in in the same painted bounds.
+
+**Rationale.** The PNGs have dark interiors that composited unchanged onto the light pane, and a HIGH gate differed from a LOW one by tail colour alone. Tinting inside the alpha keeps the art and gives it the palette; a pre-rendered halo keeps `shadowBlur` out of every frame. Measured bounds are what make one symbol size hold across AND/NAND, OR/NOR and XOR/XNOR.
+
+**Alternatives.** Drawing all seven gates as vectors (throws away art the site's readers know); tinting per frame with `source-atop` on the main canvas (a full-box composite per gate per frame); keying caches on `img.src` (a 20 KB string per key).
+
+### The gate anatomy is three containers, and the geometry is a tested seam
+
+**Decision.** Every gate is laid out from `[exclusive][gate][negate]` inside its box: `NS_INSET = 0.4` cells from the box edge, side slots of `NS_SLOT = 0.55` cells, the gate container between. The symbol is fitted by `nsFitSymbol` to the smaller of the port spread's height (`2(n−1) + 2` cells for `n` inputs) and the gate slot's width, centred on a span an unused slot lends its width to; the negate bubble (`NS_BUBBLE_R = 0.24`) is tangent to the measured tip and clamped inside its slot; the exclusive curve's apex sits `0.14` cells plus half its stroke left of the OR back's apex. `gateGeometry(cell, component, bounds, opts)` returns that layout and is exported so the anatomy tests read it without drawing.
+
+**Rationale.** With the slots always reserved, the symbol is the same size at the same x across the family, and the box, ports and tails never move; NOT and NAND stop relying on a bubble baked into their own PNG at a spacing that differed from NOR and XNOR. A geometry the tests can read is what lets the op-log goldens stay the drawing's contract while the layout is asserted directly.
+
+**Alternatives.** Per-gate hand placement (the spacing drift the handoff named); sizing by the PNG square (the ~28% transparent padding misaligns the lobes).

@@ -137,3 +137,43 @@ One entry per shipped slice, newest last. The plan is `DOCS/PLANS_PROMPT.md`; th
 **Tests:** none (review)
 **Next slice:** Phase 3 slice 1: sprite assets — tint, halo, bounds.
 **Notes:** none.
+
+## 2026-09-10 — Phase 3 — sprite assets: tint, halo, bounds
+
+**What shipped:** `Assets` grows `bounds(name)` (the page measures it with one `getImageData` on the decoded image, rotated as drawn); `tintedSprite`, `haloSprite` (`HALO_PAD = 0.14`), `spriteBounds` and `nsVecHalo` with their caches in `circ-skins.mjs`, built from `assets.offscreen` and emptied by `makeSkins`; `spriteArt` exported as the cache test's seam; the stub counts calls and names offscreen canvases in the log. Commit `d748419`.
+**Files touched:** `site/src/utils/circ-skins.mjs`, `site/src/utils/circ-theme.mjs`, `site/test/canvas-record.ts`, `site/test/circ-skins.test.ts`
+**Tests:** added `a tint, a halo and the bounds are each built once per name and colour`, `before the sprites decode nothing is built, and nothing is cached as missing`; ran `bun test` (446 pass), typecheck (0 errors), result pass
+**Next slice:** gate anatomy.
+**Notes:** the tint and halo producers moved from the page into the skins module (the spec had them in `circ-theme.mjs`) because they need only a canvas to draw into, which the seam provides, and that is what lets the cache test count them; only `bounds` stays with the page, since it needs `getImageData`.
+
+## 2026-09-10 — Phase 3 — gate anatomy
+
+**What shipped:** `nsGateLayout`, `nsFitSymbol`, `gateGeometry` (exported), `symbolInk`/`symbolAlpha`, `nsSpriteRect`, `nsNegate`, `nsExclusive`, `nsTriangle`, `nsVectorGate`; six anatomy tests over the exported geometry. Commit `17924ab`.
+**Files touched:** `site/src/utils/circ-skins.mjs`, `site/test/circ-skins.test.ts`
+**Tests:** added `the three containers are inset and never touch`, `the symbol is sized by the port spread and the gate slot, whichever binds`, `a negated pair, and an exclusive pair, share one symbol size`, `an unused slot lends its width: the symbol recentres, never resizes`, `the negate bubble is tangent to the measured tip, clamped inside its slot`, `the exclusive curve nests in the OR's back, apex just left of the back's own`; ran `bun test` (452 pass), typecheck (0 errors), result pass
+**Next slice:** primitives on the recipe.
+**Notes:** with the stub bounds (painted width 0.64 of the square) on a 5×5 box the art is bound by the gate slot's width and ends inside it, so the bubble sits clamped at the slot's left rather than tangent; the design's clamp is the rule, and the test asserts it. `nsAnatomy` (the sheet's debug overlay) is not ported. The `assets.offscreen` from Phase 0 has its first callers here.
+
+## 2026-09-10 — Phase 3 — primitives on the recipe
+
+**What shipped:** `RECIPES` (seven entries), `nsGate` (tails, containers, qualifier, dots, name; `portsFrom` for a virtual box), `drawAnd` and `drawNot` on it; the NOT PNG no longer read; a vector D-shape or OR stand-in before the sprites decode. Commit `dcab03c`.
+**Files touched:** `site/src/utils/circ-skins.mjs`, `site/test/circ-skins.test.ts`, `site/test/fixtures/skins/{and_gate,not_gate}.json`
+**Tests:** added `an AND is the tinted sprite, haloed when HIGH, and a D-shape before the sprites decode`, `a NOT is the triangle plus the one standard bubble, no PNG`; ran `bun test` (454 pass), typecheck (0 errors), result pass
+**Next slice:** builtins through the recipe.
+**Notes:** the terminal dot and the negate bubble share a radius (0.24 cells), so a test that counts bubbles filters by the negate slot's x range. The vector stand-ins are an addition the design does not have (its gate drew nothing without a sprite); recorded here, not as a decision.
+
+## 2026-09-10 — Phase 3 — builtins through the recipe
+
+**What shipped:** `drawSubcircuit` draws any recipe name on a virtual 5-wide box centred in the macro box with `portsFrom` the real component; `spriteRect`, `drawSprite` and `spriteForSubcircuit` deleted; user subcircuits keep the labelled box until Phase 4. Commit `ff8ca29`.
+**Files touched:** `site/src/utils/circ-skins.mjs`, `site/test/circ-skins.test.ts`, `site/test/fixtures/skins/subcircuit_builtin.json`
+**Tests:** added `a builtin macro draws through the recipe on a virtual box, tails to the real ports` (seven names: tail endpoints, art or triangle, bubble and curve per recipe, name centred on the real box), `a user subcircuit still takes the labelled box`; ran `bun test` (456 pass), typecheck (0 errors), result pass
+**Next slice:** delete the three sprites, measure, review.
+**Notes:** NOR and XNOR draw on the site for the first time. The Phase 3 spec's `TODO(phase3)` on `not`'s single port is covered by the test's `not` case (port `in` at `y+1`, out at `y+1` on a 3-row box).
+
+## 2026-09-10 — Phase 3 — delete the three sprites, measure
+
+**What shipped:** `circ-assets.mjs` exports `AND`, `OR` and `loadAssets` only; the stub's sprite names follow; a source guard holds that no recipe names a sprite that is gone. Commit (see `git log`, "drop the NAND, XOR and NOT sprites").
+**Files touched:** `site/src/utils/circ-assets.mjs`, `site/test/canvas-record.ts`, `site/test/circ-skins.test.ts`
+**Tests:** replaced the sprite-module guard with `only the AND and OR sprites remain`; ran `bun test` (456 pass), typecheck (0 errors), `bun --bun run build`, `bun run bundle` (every route ok), result pass
+**Next slice:** gallery review (the human): `builtin-xor`, `full-adder`, `mux-2to1`, `inverter-chain` at `cell` 10 and 24, both modes; then Phase 4.
+**Notes:** measured: `circ-assets.mjs` 19,940 → 7,594 bytes; the lazy theme chunk 31.7 KB raw / 18.3 KB gzip (end of Phase 2) → 23.6 KB / 11.5 KB, against the Phase 0 baseline of 28.4 KB / 17.2 KB. Decisions 4, 5 and 6 recorded.
