@@ -65,3 +65,19 @@ The entries below record the decisions of the playground-bench initiative: the s
 **Rationale.** The board draws a strip of names and one `+ file`; today files are rows of the tree only, and the tree is a card that is shut most of the time. A switch is what a strip is for, and one state feeding both keeps them from disagreeing.
 
 **Alternatives.** Rename and delete on the strip too (two places to arm a delete, and the tree's keyboard model duplicated); the tree as the only file surface (a card the reader has to open to see which file is showing).
+
+### The view switch is three views and one panel
+
+**Decision.** The output pane's four tabs are a segmented switch of three views, `Schematic · Live · Truth` (`role="tablist"`, one tab stop, arrows and Home/End between them), persisted as `view: 'schematic' | 'live' | 'truth'`; the Data face is a panel, `dataOpen`, that can be open over any view and whose rows are still `data-view.ts`'s over the one session. The Truth view keeps its gate (`truthTableRefusal`) and shows the reason in the toolbar's note beside the switch, where the tab tooltip used to hold it; a blocked Truth view is refused on click and still restorable from the envelope. The region's hint line under the view and the zoom line at its bottom right are part of the switch's furniture: the hint is the view's own sentence, empty for a view that has none yet.
+
+**Rationale.** The boards draw three views and a Data button, not four tabs: the rows are a face of the live session that a reader wants beside the picture, not instead of it. A view and a panel are two fields because they vary independently, and a reader who left the page on the old Data tab lands on the live view with the panel open, which is the nearest thing to where they were.
+
+**Alternatives.** Four views with Data among them (the rows would hide the picture they describe); the Data rows in the drawer (the drawer is the session's log and memory, and the rows want the canvas's height).
+
+### The Live view adopts the renderer's zoom and pan
+
+**Decision.** The canvas is built with `viewport: 'parent'` on a mount that fills the view's inset (`60px 16px 40px`, and `344px` on the right while the Data card is open), `navigation: { wheel: 'modifier', drag: true, touch }` where `touch` is `'own'` above 800px and `'page'` below it (read at construction), and `onViewChange` writing the zoom line's percentage. The first fit is the renderer's own, on its first measurement; a theme flip is `setTheme` in place and the view survives it. The zoom line is `cell 14 · 100% · fit`: the percentage is a button that calls `resetView`, `fit` calls `fit`, both inert until a canvas exists. When the inset changes, the site refits one frame later (`refitIfIdle`), and only when the reader has not zoomed or panned: a view change counts as the reader's only when a wheel, a drag or a touch move on the canvas preceded it within half a second, because the renderer reports its own fits through the same callback. The view is not persisted: a canvas starts fitted, and a saved view is in pixels of an inset that may have changed. The gallery keeps the renderer's defaults.
+
+**Rationale.** The renderer shipped these options for this page (`2.3.0-alpha.4`), and a canvas that fills its region needs to be navigable or a wide circuit is cut off. The modifier wheel rather than `always` keeps the page's own scroll below 800px, where the page scrolls. The gesture window is what keeps the refit from stealing a view the reader chose while still refitting one they never touched; the first screenshot of the walk showed the wires under the card before it existed.
+
+**Alternatives.** Persisting the view (pixels of a stale inset); a synchronous `fit()` on resize (measures the old size, since the mount's observer runs before the renderer's); `wheel: 'always'` (traps the page's scroll on a phone).

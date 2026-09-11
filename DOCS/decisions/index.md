@@ -116,6 +116,8 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - The envelope moves to version 2 by migration, once (`migrateV1` on a literal version-1 fixture; `view`, `footer`, `layout.sourceWidth`)
 - Settings live in the diagnostics footer (a 30px bar with the counts and the stats, the list as a grid, the form behind the gear; no `unicode | ascii` setting exists)
 - The file strip is a switch, over the tree's state (36px, `role="tab"`, `+ file`; rename, delete and reorder stay in the tree)
+- The view switch is three views and one panel (`view` and `dataOpen`; the Truth gate's reason in the toolbar note)
+- The Live view adopts the renderer's zoom and pan (`viewport: 'parent'`, the modifier wheel, `cell 14 · 100% · fit`, a refit only when the reader has not navigated)
 
 ## Conventions
 

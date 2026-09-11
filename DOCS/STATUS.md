@@ -97,3 +97,35 @@ Rolling log of shipped slices. Newest at the bottom. The plan is `DOCS/PLANS_PRO
 **Tests:** none added; the four gates green at `4504885`
 **Next slice:** Phase 2 — the canvas region and the Live view (`DOCS/PLANS/PHASE_2_canvas_live.md`), on the human's word.
 **Notes:** `bun run bundle`, `/playground`: after Phase 0 110.5 KB raw / 39.0 KB gzip; after Phase 1 113.3 KB raw / 40.0 KB gzip (ceiling 120.0 KB gzip). Seen in the walk: at a source column narrower than about 440px the right-hand stats truncate with an ellipsis (`4 ch…`); at the default 480 they fit. With no session the footer's stats show the lines, components and pins from the analysis while the terminal line still says `Compile a circuit first.`, as in Phase 0.
+
+## 2026-09-11 — Phase 2 — Two pure modules
+
+**What shipped:** `zoom-label.ts` (`formatZoom`, `zoomLine`) and `pin-count.ts` (`pinCountLabel`, pins not bits), free of the renderer so they ride in the eager bundle; `dataOpen` in the envelope with its normalisation, and the migration opening the panel for a reader who left the old Data tab open. Commit `37e47d0`.
+**Files touched:** `site/src/scripts/zoom-label.ts`, `site/src/scripts/pin-count.ts`, `site/src/utils/playground-store.ts`, `site/test/zoom-label.test.ts`, `site/test/pin-count.test.ts`, `site/test/playground-store.test.ts`
+**Tests:** added `zoom label › formatZoom rounds to a whole percent`, `› formatZoom's bounds are the renderer's`, `› zoomLine spells the design's line`, `pin count › pinCountLabel counts root pins, not bits`; `dataOpen` cases in the store's defaults, migration and normalisation
+**Next slice:** the region's furniture.
+**Notes:** None.
+
+## 2026-09-11 — Phase 2 — The region's furniture
+
+**What shipped:** The output pane's markup replaced by the canvas region's: the view switch (`.pg-view-switch`, three `role="tab"` buttons, one tab stop, arrows and Home/End), the note beside it carrying the Truth gate's reason, the Data button with its `N → M` count, three `[data-view-panel]` panels in the inset `60px 16px 40px`, the Data rows in a fixed card under the button, the hint line and the zoom line. `showView`/`setDataOpen` replace `showTab`; every `state.tab` site reads `state.view` or `state.dataOpen`; the Simulate tab's build-on-click folded into `showView('live')`. `.pg-tabs`, the tooltip and `.pg-panel` gone from markup and rules; the mount no longer carries `.lc-mount`. Commit `85abf49`.
+**Files touched:** `site/src/components/Playground.astro`, `site/src/styles/global.css`, `site/test/island-smoke.test.ts`, `site/test/app-layout.test.ts`
+**Tests:** added `island-smoke › the view switch shows one view, and the Data button opens the card`; the mount walk's region assertions; `app-layout`'s mount and panel assertions moved to the new rules; 561 pass
+**Next slice:** the Live view fills the inset.
+**Notes:** The edit script died on a malformed regex in its own leftover check after writing the island but before the CSS and tests; the second pass finished them. The region keeps Phase 0's `.pg-output` class (the plan's `.pg-canvas-region` was never introduced).
+
+## 2026-09-11 — Phase 2 — The Live view fills the inset
+
+**What shipped:** `buildCanvas` with `viewport: 'parent'`, `navigation: { wheel: 'modifier', drag: true, touch: narrow ? 'page' : 'own' }` and `onViewChange`; `sim.cell` as the one cell size; the zoom line live (`syncZoom`, the `100%` and `fit` buttons, inert without a canvas); `refitIfIdle` one frame after the mount's ResizeObserver; `renderer-pin.test.ts` probing the six view methods, the option shape and the island's source. Commits `1996ea6`, then `28136ba` for the fix below.
+**Files touched:** `site/src/components/Playground.astro`, `site/test/renderer-pin.test.ts`, `site/test/island-canvas-options.test.ts`
+**Tests:** the pin test's Bench, Phase 2 probes; the padding guard now reads `sim.cell`; 561 pass
+**Next slice:** the record.
+**Notes:** The first capture with the Data card open showed the wires under the card: the renderer reports its own first-measurement fit through `onViewChange`, so `navigated` was set before any gesture and the refit never ran. Fixed by counting a view change as the reader's only within 500 ms of a wheel, a drag or a touch move on the canvas (`sim.gestureAt`). After the fix the two-bit adder refits to 51% beside the card, and to 82% in the full inset.
+
+## 2026-09-11 — Phase 2 — The record
+
+**What shipped:** `DOCS/sim-protocol.md` says "the Live view or the Data panel" and "in the Data panel"; decisions 8 and 9 in `DOCS/decisions/playground-bench.md` and the index; this log. The Live view captured on the two-bit adder in light mode and, with the Data card open, in dark mode (`bench-2a-live-light.png`, `bench-2a-live-data-dark.png`; handed to the human, not committed).
+**Files touched:** `DOCS/sim-protocol.md`, `DOCS/decisions/playground-bench.md`, `DOCS/decisions/index.md`, `DOCS/STATUS.md`
+**Tests:** none added; the four gates green
+**Next slice:** Phase 3 — Schematic and Truth (`DOCS/PLANS/PHASE_3_schematic_truth.md`), on the human's word.
+**Notes:** `bun run bundle`, `/playground`: after Phase 1 113.3 KB raw / 40.0 KB gzip; after Phase 2 115.3 KB raw / 40.5 KB gzip (ceiling 120.0 KB gzip). Not walked by hand: the modifier wheel, the drag, a pinch, and a pin click after a zoom; the smoke test cannot build a canvas, so those are the human's. `touch: 'own'` is read at construction, so a resize across 800px keeps the old gesture until the next artifact (the spec's TODO, left as a papercut).

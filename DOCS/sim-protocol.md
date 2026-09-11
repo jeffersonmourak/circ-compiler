@@ -227,12 +227,12 @@ byte for byte. What follows is the list of differences, all of them about the
 browser having no process, no working directory and no stdin.
 
 - **The handshake prints when the session is built**, which is the first
-  time the Simulate or Data tab is opened with a compiled circuit, and again
+  time the Live view or the Data panel is opened with a compiled circuit, and again
   after every `reset`, whichever face caused it. Its `<file>` is the root
   file's name. Its `warnings` count and `diag` lines come from the analysis
   the page ran on the same source.
 - **The log records every face.** A pin clicked on the canvas, a value typed
-  on the Data tab, a cell written or a memory cleared in the Memory tab, and a
+  in the Data panel, a cell written or a memory cleared in the Memory tab, and a
   Reset pressed anywhere are logged as the line that would have done the
   same — `> set a 0x1`, `> poke data 0x2 0x5a`, `> clear data`, `> reset` —
   followed by the reply the session gave, in the order they happened. A
