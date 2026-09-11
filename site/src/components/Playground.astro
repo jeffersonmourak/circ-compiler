@@ -2239,20 +2239,19 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         : `${mem.name}[${formatAddress(addr, mem.addrWidth)}] ${value === null ? 'is unknown again' : 'set'}.`;
     }
 
-    /** A ram has no image, so it is written straight into the running circuit. */
+    /** A ram has no image, so it is written into the running circuit — through
+     *  the session, which settles, tells the other faces and logs the `poke`. */
     function writeLiveWord(mem: MemorySymbol, addr: number, value: bigint, defined: bigint) {
-      const host = memHost();
-      const id = memIdOf(mem);
-      if (!host || id === null) {
+      const session = sim.session;
+      if (!session || memIdOf(mem) === null) {
         status.textContent = `${mem.name} is not running.`;
         renderMemory({ force: true });
         return;
       }
-      const rc = host.writeMemWord(id, addr, value, defined);
-      status.textContent = rc === 0
+      const r = session.poke(mem.name, BigInt(addr), value, defined);
+      status.textContent = r.ok
         ? `${mem.name}[${formatAddress(addr, mem.addrWidth)}] ${defined === 0n ? 'is unknown again' : 'set'}.`
-        : `${mem.name} refused the write (code ${rc}).`;
-      sim.view?.view.refreshState();
+        : `${mem.name} refused the write (${r.code} ${r.arg}).`;
       renderMemory({ force: true });
     }
 
@@ -2277,14 +2276,12 @@ const groups = CATALOGUE_GROUPS.map((group) => ({
         status.textContent = `${mem.name} cleared; every word is unknown.`;
         return;
       }
-      const host = memHost();
-      const id = memIdOf(mem);
-      if (!host || id === null) return;
-      const rc = host.clearMem(id);
-      status.textContent = rc === 0
+      const session = sim.session;
+      if (!session || memIdOf(mem) === null) return;
+      const r = session.clear(mem.name);
+      status.textContent = r.ok
         ? `${mem.name} cleared; every word is unknown.`
-        : `${mem.name} refused the clear (code ${rc}).`;
-      sim.view?.view.refreshState();
+        : `${mem.name} refused the clear (${r.code} ${r.arg}).`;
       renderMemory({ force: true });
     }
 
