@@ -31,3 +31,11 @@
 **Rationale.** Canonical DOCS, gallery, tour, and validator inputs can be checked against the committed compiler during generation without making browser help calls compile, mutate a workspace, or contact a search service. Immutable corpus and compiler identifiers make citations and returned examples auditable across deployments.
 
 **Alternatives.** Bundling source in the playground island (breaks the lazy/budget boundary); reading repository files in the browser (not available in static deployment); hosted/vector search (adds a backend and nondeterministic results).
+
+### Authoring commits are revision-guarded and reuse the visible workspace
+
+**Decision.** Agent create, open, file mutation, entry selection, compile settings, explicit compilation, and diagnostic reads enter through the same page registry/controller boundary as existing workspace state. Ordered file mutations are fully validated against an immutable draft before changing tabs, storage, revisions, or compiler scheduling. Compiler diagnostic pages retain converted ranges from the exact request that produced them.
+
+**Rationale.** A stale agent call must never partially overwrite a person’s active work, and a delayed compile reply must never be remapped through newer source. Keeping the existing worker and scheduling path means visible UI work and agent work retain the same operation provenance.
+
+**Alternatives.** A separate agent compiler or workspace shadow copy (would drift from the visible editor); applying each batch item immediately (permits partial edits); remapping historical diagnostics through current tabs (can point at unrelated text).

@@ -1,5 +1,6 @@
 export const AGENT_API_VERSION = 1 as const;
 export const MAX_TOOL_RESULT_BYTES = 32 * 1024;
+export const MAX_AGENT_INPUT_BYTES = 128 * 1024;
 
 export type AgentErrorCode =
   | 'UNKNOWN_TOOL'
@@ -23,6 +24,17 @@ export type AgentErrorCode =
   | 'HELP_REMOVED'
   | 'HELP_CANCELLED'
   | 'HELP_BUSY'
+  | 'INPUT_TOO_LARGE'
+  | 'PROJECT_NOT_ACTIVE'
+  | 'TARGET_CONFLICT'
+  | 'OPTIONS_CONFLICT'
+  | 'FILE_CONFLICT'
+  | 'SOURCE_TOO_LARGE'
+  | 'TOO_MANY_FILES'
+  | 'UNSAVED_CHANGES'
+  | 'DIAGNOSTICS_NOT_READY'
+  | 'DIAGNOSTICS_UNAVAILABLE'
+  | 'DIAGNOSTICS_EXPIRED'
   | 'INTERNAL_ERROR';
 
 export interface AgentError {
@@ -115,6 +127,35 @@ export interface FileChunk {
 }
 
 export interface WaitResult { wait: 'terminal' | 'timed_out'; operation: OperationSummary; }
+export interface CompileSettingsStatus { revision: Revision; warningsAsErrors: boolean; }
+export type PersistenceNotice =
+  | { kind: 'evicted'; cause: 'project_cap' | 'quota'; count: number; reportedProjects: { id: string; name: string }[]; omittedCount: number }
+  | { kind: 'images_skipped'; ownerCount: number }
+  | { kind: 'disabled'; reason: 'quota' | 'unavailable' };
+export type PersistenceReceipt =
+  | { state: 'unchanged'; enabled: boolean; persistedActive: null; notices: [] }
+  | { state: 'saved'; enabled: true; persistedActive: { projectId: string; projectRevision: Revision; sourceRevision: Revision; sourceStored: 'inline' | 'catalogue' }; notices: Exclude<PersistenceNotice, { kind: 'disabled' }>[] }
+  | { state: 'memory_only'; enabled: false; persistedActive: null; notices: [Extract<PersistenceNotice, { kind: 'disabled' }>, ...PersistenceNotice[]] };
+export type AuthoringWarning = { kind: 'imports_not_rewritten'; oldName: string; newName: string };
+export interface WorkspaceChangeResult {
+  disposition: 'created' | 'opened' | 'updated' | 'entry_selected' | 'settings_updated' | 'unchanged';
+  workspaceRevision: Revision; project: ProjectSummary; target: TargetRef; compileSettings: CompileSettingsStatus; entryFile: string;
+  forkedFromProjectId: string | null; previousProjectId: string | null; warnings: AuthoringWarning[];
+  operationIds: { analyze: OperationId | null; compile: OperationId | null }; persistence: PersistenceReceipt;
+}
+export type TextEdit = { from: number; to: number; text: string };
+export type FileMutation =
+  | { kind: 'edit'; name: string; edits: TextEdit[] }
+  | { kind: 'create'; name: string; body?: string; before?: string | null }
+  | { kind: 'rename'; name: string; newName: string }
+  | { kind: 'delete'; name: string };
+export interface CompileTicket { target: TargetRef; optionsRevision: Revision; analysis: { operationId: OperationId; disposition: 'started' | 'joined' | 'already_current' }; compile: { operationId: OperationId; disposition: 'started' | 'joined' | 'already_current' }; artifactId: ArtifactId | null; }
+export type NativeDiagnosticRange = { lineBase: 1; columnBase: 1; columnEncoding: 'utf8-bytes'; endExclusive: true; startLine: number; startColumn: number; endLine: number; endColumn: number };
+export type SourceDiagnosticRange = { lineBase: 1; columnBase: 1; columnEncoding: 'utf16'; offsetBase: 0; endExclusive: true; startLine: number; startColumn: number; endLine: number; endColumn: number; startOffset: number; endOffset: number };
+export interface DiagnosticLocation { fileId: number; path: string | null; fileName: string | null; sourceAvailable: boolean; currentlyEditable: boolean; nativeRange: NativeDiagnosticRange; sourceRange: SourceDiagnosticRange | null; }
+export interface AgentDiagnostic { severity: 'error' | 'warning'; code: string; message: string; location: DiagnosticLocation; related: { message: string; location: DiagnosticLocation }[]; }
+export interface DiagnosticCompilerIdentity { version: string; revision: string; parser: string; parserRuntimeSha256: string; grammarSha256: string; topologyVersion: number; fullVersion: number; }
+export interface DiagnosticPage { requestedOperationId: OperationId; producerOperationId: OperationId; diagnosticSetId: string; observationRevision: Revision; requestedInputs: WorkInputs; producerInputs: WorkInputs; compiler: DiagnosticCompilerIdentity; counts: DiagnosticCounts; diagnostics: AgentDiagnostic[]; nextCursor: string | null; }
 export type Freshness = 'absent' | 'current' | 'stale';
 export interface OutputStatus {
   freshness: Freshness;
@@ -232,6 +273,7 @@ export interface PlaygroundStatus {
   simulation?: SessionStatus;
   operationIds?: Record<OperationKind, OperationId | null>;
   compilerTransport?: { state: 'not_started' | 'starting' | 'available' | 'failed'; failure: string | null };
+  configuration?: { compile: CompileSettingsStatus };
   persistence: { enabled: boolean };
   agentAccess: {
     pageRegistry: 'available';
@@ -247,4 +289,11 @@ export interface PlaygroundController extends ObservationMethods {
   getStatus(): PlaygroundStatus;
   cancelWaits(reason?: 'WAIT_CANCELLED' | 'PAGE_SUSPENDED' | 'PAGE_DISPOSED'): void;
   dispose(): void;
+  createProject(input: { expectedWorkspaceRevision: Revision; expectedActiveProjectId: string | null; expectedTargetEpoch: Revision | null; name?: string; files?: { name: string; body: string }[]; entryFile?: string }): DomainResult<WorkspaceChangeResult>;
+  openProject(input: { expectedWorkspaceRevision: Revision; expectedActiveProjectId: string | null; expectedTargetEpoch: Revision | null; projectId: string; expectedRevision: Revision; entryFile?: string }): DomainResult<WorkspaceChangeResult>;
+  updateProject(input: { projectId: string; expectedSourceRevision: Revision; expectedTargetEpoch: Revision; operations: FileMutation[] }): DomainResult<WorkspaceChangeResult>;
+  selectEntry(input: { projectId: string; expectedSourceRevision: Revision; expectedTargetEpoch: Revision; name: string }): DomainResult<WorkspaceChangeResult>;
+  setCompileSettings(input: { projectId: string; expectedTargetEpoch: Revision; expectedOptionsRevision: Revision; warningsAsErrors: boolean }): DomainResult<WorkspaceChangeResult>;
+  compile(input: { projectId: string; expectedSourceRevision: Revision; expectedTargetEpoch: Revision; expectedOptionsRevision: Revision }): DomainResult<CompileTicket>;
+  getDiagnostics(input: { operationId: string; expectedSourceRevision?: Revision; cursor?: string; limit?: number }): DomainResult<DiagnosticPage>;
 }

@@ -4,7 +4,7 @@ The `/playground` page exposes a small browser-resident tool contract for agents
 
 Tool arguments and requested results are delivered to the connected agent through its browser integration or browser-control tooling. Treat source and results as data shared with that client and subject to its provider/tooling policies.
 
-## Phase 2 Capability
+## Phase 3 Capability
 
 All tools are read-only: they do not select a project, flush a debounce, compile, create a session, edit source, or write storage.
 
@@ -22,6 +22,24 @@ All tools are read-only: they do not select a project, flush a debounce, compile
 Results are JSON-safe, bounded to 32 KiB, and include a page ID. After bootstrap, status provenance is `tracked`: an output's producer operation and captured inputs distinguish a current result from a retained last-good result. IDs are page-memory-only and expire after reload; retained terminal operation history is bounded to 128 records.
 
 Source chunks use zero-based UTF-16 offsets and exclusive ends. The default chunk is 2,048 code units; `maxCodeUnits` is 2 through 4,096. A nonzero offset requires the prior `sourceRevision`, and changed source or paging state returns `REVISION_CONFLICT` rather than mixing revisions.
+
+Agents can now author and repair visible projects through the same page registry:
+
+| Tool | Input | Result |
+| --- | --- | --- |
+| `circ_create_project` | Observed workspace/active/target revisions, optional name/files/entry | Creates and opens one scratch project. |
+| `circ_open_project` | Observed workspace/active/target revisions and project revision | Opens an existing project without editing shipped content. |
+| `circ_update_project` | Active project/source/target revisions and ordered edits/creates/renames/deletes | Applies one atomic source revision; a shipped project forks only on its first effective edit. |
+| `circ_select_entry` | Active project/source/target revisions and file name | Selects the visible compilation entry without reordering source. |
+| `circ_set_compile_settings` | Target/options revisions and `warningsAsErrors` | Updates the shared compile option. |
+| `circ_compile` | Active project/source/target/options revisions | Returns exact analyze and compile operation IDs; wait for the compile ID. |
+| `circ_get_diagnostics` | Operation ID, optional source revision/cursor/limit | Returns retained compiler diagnostics with native UTF-8-byte and source UTF-16 locations. |
+
+Mutation calls are revision guarded. Read `circ_get_status` and `circ_read_project` before a write, then use the returned project/source, target, workspace, and compile-setting revisions on the next call. A human edit or target change between the read and call returns a conflict and leaves the workspace unchanged. File-edit ranges are zero-based UTF-16, exclusive at the end, and may not split a surrogate pair. Rename warnings explicitly state that imports are not rewritten.
+
+Successful authoring results include a persistence receipt. `saved` means the accepted active source was written to local storage; `memory_only` means the visible in-memory change succeeded but reload survival is not claimed. Tool inputs are JSON-safe and limited to 128 KiB; results remain limited to 32 KiB.
+
+Diagnostic pages are tied to the operation's captured source and file map, not the current editor. Native ranges remain 1-based UTF-8-byte columns. When captured playground source is available, a file-local UTF-16 range and offsets are included; `currentlyEditable` is an observation at page time and can become false after a rename or later edit.
 
 `circ_help` is read-only and never selects a project, creates a compiler or simulation session, starts a build, or changes memory/runtime state. Its generated corpus is pinned to a SHA-256 corpus ID and the committed compiler identity that validated its examples. Search accepts 1 through 10 results; read chunks use zero-based UTF-16 offsets, default to 4,096 code units, and require `expectedCorpusId` for continuation. `E014` and other validator codes resolve to their canonical `diagnostic:<code>` records; unknown codes return an empty successful search result rather than invented guidance. Complete examples retain sibling files, the default entry file, and normalized little-endian memory images labeled `load-before-driving-inputs`.
 
@@ -103,3 +121,9 @@ The attached OpenCode 1.18.30 session used Chrome DevTools MCP against Chrome 15
 Before reload, both paths returned `ok: true` for page ID `86096362-55d9-49b5-96a2-f160d16aea7c`. The initial snapshot correctly captured the observable startup state: `reportedPipeline.kind` was `compiling`, with no artifact or session yet present. The reload command exceeded its page-stabilization wait, but the navigation completed. Native rediscovery and both call paths then succeeded for a new page ID, `b9d112a9-87f3-4ba2-b214-bf4aa8a5dd09`, proving re-registration. The settled post-reload snapshot was `ready` / `live`, with compiler `0.0.3` / `e8869c8`, a `23995`-byte artifact, a present session, no errors or warnings, `untracked` provenance, and native state `registered` through `document.modelContext.registerTool`.
 
 The same tab then navigated to `about:blank` and back. Both native and registry calls succeeded with the unchanged page ID `b9d112a9-87f3-4ba2-b214-bf4aa8a5dd09`, a live pipeline, and a present session, which demonstrates bfcache restore rather than a new document. No project mutation or visible UI control was used.
+
+### Phase 3 native author-repair acceptance, 2026-09-12
+
+Chrome DevTools MCP attached to Chrome 153.0.0.0 served this worktree's freshly built site at `http://127.0.0.1:4323/playground`. Native `document.modelContext.registerTool` discovered all thirteen tools, including the seven Phase 3 additions. A native call created `scratch:mtyqrikxe2l5` (`WebMCP repair proof`) with an invalid `main.circ`; its persistence receipt was `saved`, with source revision `...:source:106` and compile operation `...:operation:5`.
+
+Waiting for that operation returned `diagnostics` with one error and one warning. `circ_get_diagnostics` returned compile-owned `E004` with captured `/playground/main.circ` native byte columns `2:1-2:18`, UTF-16 offsets `8-25`, and `currentlyEditable: true`. A revision-guarded UTF-16 edit replaced `missing` with `a`, yielding source revision `...:source:118`; explicit native `circ_compile` operation `...:operation:10` finished `succeeded` with artifact `...:artifact:125`. Final tracked status reported that source as both current and build provenance, a 23,913-byte artifact, enabled persistence, and no errors. A deliberately stale update against source `...:source:106` returned `REVISION_CONFLICT` without changing the repaired project. No console warnings/errors were emitted.

@@ -18,8 +18,10 @@ import {
   EditorState,
   StateEffect,
   StateField,
+  Transaction,
   type Extension,
 } from '@codemirror/state';
+import { isolateHistory } from '@codemirror/commands';
 import {
   Decoration,
   EditorView,
@@ -174,6 +176,8 @@ export interface EditorHandle {
   textOf(index: number): string;
   /** Stores diagnostics against one file, visible or not. */
   setDiagnosticsFor(index: number, list: readonly Diagnostic[]): void;
+  /** Replaces one indexed document as an external, isolated history event. */
+  replaceDocument(index: number, text: string): void;
 }
 
 /** Marks a transaction this module dispatched itself, so the update listener
@@ -504,6 +508,16 @@ export function createEditor(parent: HTMLElement, options: EditorOptions = {}): 
       const entry = docs[index];
       if (!entry) return;
       entry.state = entry.state.update(lintSetDiagnostics(entry.state, list)).state;
+    },
+    replaceDocument(index: number, text: string) {
+      const entry = docs[index];
+      if (!entry || entry.state.doc.toString() === text) return;
+      const spec = {
+        changes: { from: 0, to: entry.state.doc.length, insert: text },
+        annotations: [external.of(true), Transaction.userEvent.of('input.agent'), isolateHistory.of('full')],
+      };
+      if (index === active) view.dispatch(spec);
+      else entry.state = entry.state.update(spec).state;
     },
   };
 }

@@ -1,4 +1,4 @@
-import type { AgentError, AgentErrorCode, DomainResult, FileChunk, PlaygroundController, PlaygroundStatus, ProjectManifest, ProjectPage, StatusReader, WaitResult } from './playground-contract.ts';
+import type { AgentError, AgentErrorCode, CompileTicket, DiagnosticPage, DomainResult, FileChunk, PlaygroundController, PlaygroundStatus, ProjectManifest, ProjectPage, StatusReader, WaitResult, WorkspaceChangeResult } from './playground-contract.ts';
 import { listProjects, readFile, readProject, type ReadResult, type WorkspaceSnapshot } from './playground-reads.ts';
 import { OperationStore } from './playground-operations.ts';
 
@@ -6,6 +6,18 @@ export class ControllerDisposedError extends Error {
   constructor() {
     super('The playground page has been disposed. Rediscover its tools after reload.');
   }
+}
+
+/** The island owns DOM, storage, and compiler scheduling. The controller only
+ * gates lifecycle and exposes that single commit boundary to every tool path. */
+export interface AuthoringPort {
+  createProject(input: Parameters<PlaygroundController['createProject']>[0]): DomainResult<WorkspaceChangeResult>;
+  openProject(input: Parameters<PlaygroundController['openProject']>[0]): DomainResult<WorkspaceChangeResult>;
+  updateProject(input: Parameters<PlaygroundController['updateProject']>[0]): DomainResult<WorkspaceChangeResult>;
+  selectEntry(input: Parameters<PlaygroundController['selectEntry']>[0]): DomainResult<WorkspaceChangeResult>;
+  setCompileSettings(input: Parameters<PlaygroundController['setCompileSettings']>[0]): DomainResult<WorkspaceChangeResult>;
+  compile(input: Parameters<PlaygroundController['compile']>[0]): DomainResult<CompileTicket>;
+  getDiagnostics(input: Parameters<PlaygroundController['getDiagnostics']>[0]): DomainResult<DiagnosticPage>;
 }
 
 function cloneStatus(status: PlaygroundStatus): PlaygroundStatus {
@@ -17,7 +29,7 @@ export class PlaygroundControllerImpl implements PlaygroundController {
 
   private abort = new AbortController();
   private readonly abortReasons = new WeakMap<AbortSignal, 'WAIT_CANCELLED' | 'PAGE_SUSPENDED' | 'PAGE_DISPOSED'>();
-  constructor(private readonly reader: StatusReader, private readonly workspace?: () => WorkspaceSnapshot | null, private readonly operations?: OperationStore) {}
+  constructor(private readonly reader: StatusReader, private readonly workspace?: () => WorkspaceSnapshot | null, private readonly operations?: OperationStore, private readonly authoring?: AuthoringPort) {}
 
   getStatus(): PlaygroundStatus {
     if (this.disposed) throw new ControllerDisposedError();
@@ -59,6 +71,14 @@ export class PlaygroundControllerImpl implements PlaygroundController {
     }
   }
 
+  createProject(input: Parameters<PlaygroundController['createProject']>[0]) { return this.write('createProject', input); }
+  openProject(input: Parameters<PlaygroundController['openProject']>[0]) { return this.write('openProject', input); }
+  updateProject(input: Parameters<PlaygroundController['updateProject']>[0]) { return this.write('updateProject', input); }
+  selectEntry(input: Parameters<PlaygroundController['selectEntry']>[0]) { return this.write('selectEntry', input); }
+  setCompileSettings(input: Parameters<PlaygroundController['setCompileSettings']>[0]) { return this.write('setCompileSettings', input); }
+  compile(input: Parameters<PlaygroundController['compile']>[0]) { return this.write('compile', input); }
+  getDiagnostics(input: Parameters<PlaygroundController['getDiagnostics']>[0]) { return this.write('getDiagnostics', input); }
+
   cancelWaits(reason: 'WAIT_CANCELLED' | 'PAGE_SUSPENDED' | 'PAGE_DISPOSED' = 'WAIT_CANCELLED'): void {
     this.abortReasons.set(this.abort.signal, reason);
     this.abort.abort();
@@ -74,6 +94,12 @@ export class PlaygroundControllerImpl implements PlaygroundController {
     return { ok: false, error: readError(result.code, result.message) };
   }
 
+  private write<K extends keyof AuthoringPort>(method: K, input: Parameters<AuthoringPort[K]>[0]): ReturnType<AuthoringPort[K]> {
+    if (this.disposed) throw new ControllerDisposedError();
+    if (!this.authoring) return { ok: false, error: { code: 'NOT_READY', message: 'The playground has not finished installing authoring tools.', retryable: true } } as ReturnType<AuthoringPort[K]>;
+    return this.authoring[method](input as never) as ReturnType<AuthoringPort[K]>;
+  }
+
   dispose(): void {
     this.cancelWaits('PAGE_DISPOSED');
     this.disposed = true;
@@ -84,6 +110,6 @@ function readError(code: Extract<AgentErrorCode, 'INVALID_ARGUMENT' | 'PROJECT_N
   return { code, message, retryable: false };
 }
 
-export function createPlaygroundController(reader: StatusReader, workspace?: () => WorkspaceSnapshot | null, operations?: OperationStore): PlaygroundController {
-  return new PlaygroundControllerImpl(reader, workspace, operations);
+export function createPlaygroundController(reader: StatusReader, workspace?: () => WorkspaceSnapshot | null, operations?: OperationStore, authoring?: AuthoringPort): PlaygroundController {
+  return new PlaygroundControllerImpl(reader, workspace, operations, authoring);
 }

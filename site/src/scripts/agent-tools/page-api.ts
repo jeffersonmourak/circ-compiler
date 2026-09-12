@@ -8,6 +8,9 @@ import type { WorkspaceSnapshot } from '../playground-reads.ts';
 import type { OperationStore } from '../playground-operations.ts';
 import { waitForOperationDescriptor, waitForOperationHandler } from './operations.ts';
 import { helpDescriptor, helpHandler, type HelpToolOptions } from './help.ts';
+import { authoringHandlers, createProjectDescriptor, openProjectDescriptor, selectEntryDescriptor, setCompileSettingsDescriptor, updateProjectDescriptor } from './authoring.ts';
+import { compileDescriptor, compilerHandlers, diagnosticsDescriptor } from './compiler.ts';
+import type { AuthoringPort } from '../playground-controller.ts';
 
 export interface PageApiInstallation {
   readonly api: PlaygroundPageApi;
@@ -23,6 +26,7 @@ export interface InstallPageApiOptions {
   native?: WebMcpAdapter;
   operations?: OperationStore;
   help?: HelpToolOptions;
+  authoring?: AuthoringPort;
 }
 
 declare global {
@@ -43,14 +47,23 @@ export function installPageApi(el: HTMLElement, options: InstallPageApiOptions):
   if (installed) return installed;
   if (facadeHost.circPlayground) throw new Error('A different circ playground tool registry is already installed.');
 
-  const controller = createPlaygroundController({ read: options.readStatus } satisfies StatusReader, options.readWorkspace, options.operations);
+  const controller = createPlaygroundController({ read: options.readStatus } satisfies StatusReader, options.readWorkspace, options.operations, options.authoring);
   const workspace = workspaceHandlers(controller);
+  const authoring = authoringHandlers(controller);
+  const compiler = compilerHandlers(controller);
   const registry = new AgentToolRegistry(options.pageId ?? pageId(), [
     { descriptor: statusDescriptor, handler: statusHandler(controller) },
     { descriptor: listProjectsDescriptor, handler: (input) => workspace.listProjects(input as { cursor?: string; limit?: number }) },
     { descriptor: readProjectDescriptor, handler: (input) => workspace.readProject(input as { projectId?: string; expectedRevision?: string; cursor?: string; limit?: number }) },
     { descriptor: readFileDescriptor, handler: (input) => workspace.readFile(input as { projectId?: string; name: string; expectedSourceRevision?: string; offset?: number; maxCodeUnits?: number }) },
     { descriptor: waitForOperationDescriptor, handler: waitForOperationHandler(controller) },
+    { descriptor: createProjectDescriptor, handler: authoring.createProject },
+    { descriptor: openProjectDescriptor, handler: authoring.openProject },
+    { descriptor: updateProjectDescriptor, handler: authoring.updateProject },
+    { descriptor: selectEntryDescriptor, handler: authoring.selectEntry },
+    { descriptor: setCompileSettingsDescriptor, handler: authoring.setCompileSettings },
+    { descriptor: compileDescriptor, handler: compiler.compile },
+    { descriptor: diagnosticsDescriptor, handler: compiler.diagnostics },
     ...(options.help ? [{ descriptor: helpDescriptor, handler: helpHandler(options.help) }] : []),
   ]);
   const native = options.native ?? new WebMcpAdapter(registry, detectNativeRegistrar());

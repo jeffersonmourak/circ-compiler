@@ -1,5 +1,6 @@
 import {
   AGENT_API_VERSION,
+  MAX_AGENT_INPUT_BYTES,
   MAX_TOOL_RESULT_BYTES,
   type AgentError,
   type AgentErrorCode,
@@ -87,7 +88,12 @@ export class AgentToolRegistry {
     if (descriptor.inputSchema.required.some((key) => !(key in input))) return false;
     return Object.entries(input).every(([key, value]) => {
       const property = properties[key] as { type?: unknown } | undefined;
-      return property?.type === 'string' ? typeof value === 'string' : property?.type === 'number' ? typeof value === 'number' : false;
+      if ((property as { nullable?: boolean } | undefined)?.nullable && value === null) return true;
+      return property?.type === 'string' ? typeof value === 'string'
+        : property?.type === 'number' ? typeof value === 'number'
+          : property?.type === 'boolean' ? typeof value === 'boolean'
+            : property?.type === 'array' ? Array.isArray(value)
+              : property?.type === 'object' ? isPlainObject(value) : false;
     });
   }
 
@@ -106,6 +112,7 @@ export class AgentToolRegistry {
     if (gate) return gate;
     const tool = this.tools.get(name);
     if (!tool) return this.error('UNKNOWN_TOOL', `Unknown tool: ${text(name, 'unknown')}.`);
+    if (plainJson(input) && bytes(input) > MAX_AGENT_INPUT_BYTES) return this.error('INPUT_TOO_LARGE', 'The tool input exceeds the 128 KiB JSON limit.');
     if (!this.validInput(tool.descriptor, input)) {
       return this.error('INVALID_ARGUMENT', 'The tool input does not match its schema.');
     }
