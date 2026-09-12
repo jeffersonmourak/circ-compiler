@@ -2466,7 +2466,7 @@ a.install-line:hover {
 /* ---------- the status line ----------
    Row 4 of the frame (design file: 24px, `1fr auto 1fr`): the compiler
    identity, the signature the site footer signs with, and on the right the
-   promise — or, while one is being made, an announcement. */
+   agent activity — or, while one is being made, an announcement. */
 .pg-statusline {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -2487,6 +2487,17 @@ a.install-line:hover {
 .pg-statusline .signature { margin: 0; font-size: inherit; }
 .pg-statusline-right { display: flex; justify-content: flex-end; gap: 8px; }
 .pg-status:not(:empty) + .pg-promise { display: none; }
+.pg-agent-activity { display: inline-flex; align-items: center; gap: 6px; }
+.pg-agent-activity::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.45;
+}
+.pg-agent-activity[data-state='active'] { color: var(--accent); }
+.pg-agent-activity[data-state='active']::before { opacity: 1; }
 .pg-share-fallback {
   font-family: var(--font-mono);
   font-size: 0.7rem;
@@ -2494,6 +2505,16 @@ a.install-line:hover {
   border: 1px solid var(--accent);
   background: var(--bg);
   color: var(--fg);
+}
+.pg-connect-fallback {
+  position: fixed;
+  top: 64px;
+  right: 16px;
+  width: min(32rem, calc(100vw - 32px));
+  max-height: calc(100dvh - 80px);
+  padding: 12px;
+  z-index: 20;
+  white-space: pre-wrap;
 }
 .pg-status-label { color: var(--fg); }
 .pg-status-identity { opacity: 0.75; }

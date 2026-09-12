@@ -168,6 +168,7 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
   test('the playground mounts its editor, tabs and workbench', async () => {
     const initialWindow = new Window();
     initialWindow.document.write(readFileSync(resolve(DIST, 'playground', 'index.html'), 'utf8'));
+    expect(initialWindow.document.querySelector('.pg-agent-activity')?.textContent).toBe('agent tools ready · no requests yet');
     expect(initialWindow.document.querySelector('.pg-view-tab[aria-selected="true"]')?.getAttribute('data-view')).toBe('live');
     expect(initialWindow.document.querySelector('[data-view-panel="live"]')?.hasAttribute('hidden')).toBe(false);
     initialWindow.close();
@@ -426,7 +427,8 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(doc.querySelector('.pg-nav .theme-toggle')).not.toBeNull();
     expect(doc.querySelector('.pg-statusline .pg-status-identity')).not.toBeNull();
     expect(doc.querySelector('.pg-statusline .signature .heart')).not.toBeNull();
-    expect(doc.querySelector('.pg-statusline .pg-promise')?.textContent).toBe('local computation · connected agents receive requested tool results');
+    expect(doc.querySelector('.pg-statusline .pg-agent-activity')?.textContent).toBe('agent active');
+    expect(doc.querySelector('.pg-statusline .pg-agent-activity')?.getAttribute('data-state')).toBe('active');
     expect(doc.querySelector('.pg-statusline .pg-status[role="status"]')).not.toBeNull();
     // The banner lives inside the source pane, not among the frame's rows.
     expect(doc.querySelector('.pg-editor > .pg-banner')).not.toBeNull();
@@ -1529,6 +1531,42 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
       expect(doc.querySelector('.pg-share')?.getAttribute('data-state')).toBe('done');
       expect(doc.querySelector('.pg-share .pg-action-label')?.textContent).toBe('Copied');
       expect((doc.querySelector('.pg-share') as unknown as { disabled: boolean }).disabled).toBe(false);
+    });
+  });
+
+  test('Connect agent copies browser instructions and offers multiline fallback', async () => {
+    await driveAsync(async (doc) => {
+      const nav = globalThis.navigator;
+      const saved = Object.getOwnPropertyDescriptor(nav, 'clipboard');
+      const button = doc.querySelector('.pg-connect-agent') as unknown as HTMLButtonElement;
+      const indicatorBefore = doc.querySelector('.pg-agent-activity')!.textContent;
+      let copied = '';
+      try {
+        Object.defineProperty(nav, 'clipboard', { configurable: true, value: { writeText: async (text: string) => { copied = text; } } });
+        button.click();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        expect(copied).toContain('native page-provided WebMCP');
+        expect(copied).toContain("window.circPlayground.callTool('circ_get_status', {})");
+        expect(copied).toMatch(/#src0?=[A-Za-z0-9_-]+/);
+        expect(copied).toContain('Ask what I want to do before further edits');
+        expect(button.disabled).toBe(false);
+        expect(doc.querySelector('.pg-status')?.textContent).toContain('paste it into your agent chat');
+        expect(doc.querySelector('.pg-agent-activity')?.textContent).toBe(indicatorBefore);
+
+        Object.defineProperty(nav, 'clipboard', { configurable: true, value: { writeText: async () => { throw new Error('Clipboard denied'); } } });
+        button.click();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const fallback = doc.querySelector('textarea.pg-connect-fallback') as unknown as HTMLTextAreaElement | null;
+        expect(fallback?.value).toBe(copied);
+        expect(fallback?.readOnly).toBe(true);
+        expect(fallback?.selectionEnd).toBe(copied.length);
+        expect(button.disabled).toBe(false);
+        fallback?.blur();
+        expect(doc.querySelector('.pg-connect-fallback')).toBeNull();
+      } finally {
+        if (saved) Object.defineProperty(nav, 'clipboard', saved);
+        else Reflect.deleteProperty(nav, 'clipboard');
+      }
     });
   });
 

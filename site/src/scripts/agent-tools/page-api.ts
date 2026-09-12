@@ -1,6 +1,6 @@
 import type { PlaygroundPageApi, PlaygroundStatus, StatusReader } from '../playground-contract.ts';
 import { createPlaygroundController } from '../playground-controller.ts';
-import { AgentToolRegistry } from './registry.ts';
+import { AgentToolRegistry, type AgentActivity } from './registry.ts';
 import { statusDescriptor, statusHandler } from './status.ts';
 import { listProjectsDescriptor, readFileDescriptor, readProjectDescriptor, workspaceHandlers } from './workspace.ts';
 import { WebMcpAdapter, detectNativeRegistrar } from '../webmcp-adapter.ts';
@@ -38,6 +38,7 @@ export interface InstallPageApiOptions {
   inspection?: InspectionPort;
   workbench?: WorkbenchPort;
   handoff?: HandoffPort;
+  onAgentActivity?: (activity: AgentActivity) => void;
 }
 
 declare global {
@@ -103,7 +104,7 @@ export function installPageApi(el: HTMLElement, options: InstallPageApiOptions):
     { descriptor: downloadMemoryDescriptor, handler: exports.memory },
     { descriptor: getTranscriptDescriptor, handler: exports.transcript },
     ...(options.help ? [{ descriptor: helpDescriptor, handler: helpHandler(options.help) }] : []),
-  ]);
+  ], options.onAgentActivity);
   const native = options.native ?? new WebMcpAdapter(registry, detectNativeRegistrar());
   const api = Object.freeze({
     apiVersion: 1 as const,

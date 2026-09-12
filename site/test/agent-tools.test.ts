@@ -66,6 +66,26 @@ describe('agent tools', () => {
     expect(!disposed.ok && disposed.error.code).toBe('PAGE_DISPOSED');
   });
 
+  test('reports discovery and tool activity without counting registration', async () => {
+    const activity: { activeRequests: number; lastTool: string | null }[] = [];
+    let finish!: () => void;
+    const pending = new Promise<void>((resolve) => { finish = resolve; });
+    const tools = new AgentToolRegistry('page-test', [{ descriptor: statusDescriptor, handler: () => pending }], (event) => {
+      activity.push({ activeRequests: event.activeRequests, lastTool: event.lastTool });
+    });
+    expect(activity).toEqual([]);
+    await tools.listTools();
+    expect(activity).toEqual([
+      { activeRequests: 1, lastTool: null },
+      { activeRequests: 0, lastTool: null },
+    ]);
+    const call = tools.callTool('circ_get_status', {});
+    expect(activity.at(-1)).toEqual({ activeRequests: 1, lastTool: 'circ_get_status' });
+    finish();
+    await call;
+    expect(activity.at(-1)).toEqual({ activeRequests: 0, lastTool: 'circ_get_status' });
+  });
+
   test('workspace_descriptors_validate_declared_arguments_and_preserve_domain_errors', async () => {
     const tools = new AgentToolRegistry('page-test', [{
       descriptor: readFileDescriptor,

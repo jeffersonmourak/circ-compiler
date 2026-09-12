@@ -78,6 +78,12 @@ const groups = displayGroups(catalogue, []);
         </svg>
         <span class="pg-action-label">Share</span>
       </button>
+      <button type="button" class="pg-action pg-connect-agent" title="Copy this project's Share link and instructions for an agent">
+        <svg class="pg-action-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <path d="M5 2v4m6-4v4M3 6h10v1a5 5 0 0 1-5 5v2M3 6v1a5 5 0 0 0 5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span class="pg-action-label">Connect agent</span>
+      </button>
       <ThemeToggle />
     </div>
   </header>
@@ -330,7 +336,7 @@ const groups = displayGroups(catalogue, []);
       {/* The announcement channel: file-tab operations and store notes. While
           it holds a sentence the promise beside it yields the cell. */}
       <span class="pg-status" role="status" aria-live="polite"></span>
-        <span class="pg-promise">local computation · connected agents receive requested tool results</span>
+        <span class="pg-promise pg-agent-activity" data-state="ready" title="Requested tool inputs and results are shared with the agent.">agent tools ready · no requests yet</span>
     </span>
   </footer>
   {/* Page data, not a module: it never enters the eager module graph, so the
@@ -339,6 +345,7 @@ const groups = displayGroups(catalogue, []);
 </div>
 
 <script>
+  import { agentConnectPrompt } from '../scripts/agent-connect.ts';
   import { getSharedClient, type LibcircVersion, type WorkerReply } from '../scripts/libcirc-client.ts';
   // TYPE only: erased at build, so the renderer stays behind its dynamic import.
   import type { BitValue, CircRuntime, CircTheme, CircView } from 'circ-renderer';
@@ -544,6 +551,7 @@ const groups = displayGroups(catalogue, []);
     const importPicker = el.querySelector<HTMLInputElement>('.pg-switch-picker')!;
     const wsError = el.querySelector<HTMLElement>('.pg-switch-error')!;
     const shareBtn = el.querySelector<HTMLButtonElement>('.pg-share')!;
+    const connectAgentBtn = el.querySelector<HTMLButtonElement>('.pg-connect-agent')!;
     const downloadBtn = el.querySelector<HTMLButtonElement>('.pg-download')!;
     const navActions = el.querySelector<HTMLElement>('.pg-nav-right')!;
     const downloadLabel = el.querySelector<HTMLElement>('.pg-download .pg-action-label')!;
@@ -2279,13 +2287,18 @@ const groups = displayGroups(catalogue, []);
     // ---- share ----
     /** Copy `text`, or fall back to a focused read-only input the reader can
      *  select. Never leaves the button pending. */
-    async function copyText(text: string): Promise<boolean> {
+    async function copyText(text: string, multiline = false): Promise<boolean> {
       try {
         await navigator.clipboard.writeText(text);
         return true;
       } catch {
-        const input = document.createElement('input');
+        const input = multiline ? document.createElement('textarea') : document.createElement('input');
         input.className = 'pg-share-fallback';
+        input.setAttribute('aria-label', multiline ? 'Agent connection prompt — copy this text' : 'Copy this text');
+        if (multiline) {
+          input.classList.add('pg-connect-fallback');
+          (input as HTMLTextAreaElement).rows = 8;
+        }
         input.readOnly = true;
         input.value = text;
         navActions.appendChild(input);
@@ -2348,6 +2361,29 @@ const groups = displayGroups(catalogue, []);
           : 'Link selected below — copy it with your keyboard.';
       } finally {
         shareBtn.disabled = false;
+      }
+    });
+
+    connectAgentBtn.addEventListener('click', async () => {
+      if (connectAgentBtn.disabled) return;
+      connectAgentBtn.disabled = true;
+      try {
+        const prompt = await agentConnectPrompt(location.href, {
+          name: activeLabel(),
+          entryFile: activeFile(state.tabs).name,
+          source: toSource(state.tabs),
+        }, webStreamsCodec());
+        const copied = await copyText(prompt, true);
+        flash(connectAgentBtn, copied ? 'Prompt copied' : 'Select below', copied ? 'done' : 'failed');
+        status.textContent = copied
+          ? 'Project handoff copied — paste it into your agent chat.'
+          : 'Project handoff selected below — copy it into your agent chat.';
+        const notice = status.textContent;
+        window.setTimeout(() => {
+          if (status.textContent === notice) status.textContent = '';
+        }, 5_000);
+      } finally {
+        connectAgentBtn.disabled = false;
       }
     });
 
@@ -5511,8 +5547,25 @@ const groups = displayGroups(catalogue, []);
       const end = Math.min(lines.length, start + limit);
       return { ok: true as const, value: { transcriptId: `${agentPageId}:transcript`, revision: observationRevision, truncated: consoleState.transcript.length === consoleState.transcript.cap, lines: lines.slice(start, end), nextCursor: end < lines.length ? String(end) : null, sessionId: sim.id } };
     }
+    const agentActivity = el.querySelector<HTMLElement>('.pg-agent-activity')!;
+    let agentActivityTimer: number | null = null;
     let agentInstallation: PageApiInstallation | null = null;
     agentInstallation = installPageApi(el, {
+      onAgentActivity: (activity) => {
+        if (agentActivityTimer !== null) window.clearTimeout(agentActivityTimer);
+        agentActivity.dataset.state = 'active';
+        agentActivity.textContent = 'agent active';
+        agentActivity.title = activity.lastTool
+          ? `An agent requested ${activity.lastTool}. Requested tool inputs and results are shared with the agent.`
+          : 'An agent discovered the available tools. Requested tool inputs and results are shared with the agent.';
+        if (activity.activeRequests === 0) {
+          agentActivityTimer = window.setTimeout(() => {
+            agentActivity.dataset.state = 'recent';
+            agentActivity.textContent = 'agent used tools recently';
+            agentActivityTimer = null;
+          }, 5_000);
+        }
+      },
       pageId: agentPageId,
       readWorkspace: () => workspaceSnapshot,
       operations,

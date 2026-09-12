@@ -1,8 +1,12 @@
 # Agent Playground
 
+Use **Connect agent** beside Share to copy an active-project handoff into ChatGPT Desktop, Claude Code, Claude in Chrome, or another browser-capable agent. The prompt includes a freshly generated Share URL containing all current file bodies, including unsaved edits, plus the project name and selected entry file. It instructs the agent to restore the snapshot in a new tab and select that entry before asking for its next task. It prefers native WebMCP and includes the public page-registry fallback. Like Share, it transfers source, not ROM images, live state, settings, or artifacts. If the source exceeds the Share URL cap, the prompt includes the combined source as JSON for import instead. If clipboard access is blocked, a selected text area provides the same handoff for manual copying.
+
 `/playground` exposes a browser-resident tool contract for an agent working beside a person. Compilation, simulation, project storage, and knowledge search run locally in the browser. The static deployment has no application backend, relay, custom MCP server, or custom browser extension.
 
 Tool arguments and bounded results requested by a user are shared with the connected agent through that client's browser integration or browser-control tool. They are subject to that client and provider's policies. The early share-fragment scrub prevents source-bearing fragments reaching deferred page integrations; it is not a claim that the page makes no network requests.
+
+The playground status line reports observed tool activity, not a persistent connection. It starts at `agent tools ready · no requests yet`, shows `agent active` while a discovery or tool request is being handled (with a short visible grace period), then settles to `agent used tools recently`. Native registration alone does not activate the indicator, and the page cannot identify or count agents.
 
 ## Setup
 

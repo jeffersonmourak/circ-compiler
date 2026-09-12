@@ -16,6 +16,12 @@ export interface RegisteredTool {
   handler: (input: Record<string, unknown>) => unknown | Promise<unknown>;
 }
 
+export interface AgentActivity {
+  activeRequests: number;
+  lastRequestAt: number;
+  lastTool: string | null;
+}
+
 const text = (value: unknown, fallback: string) =>
   typeof value === 'string' ? value.slice(0, 240) : fallback;
 
@@ -74,8 +80,11 @@ function bytes(value: unknown): number {
 export class AgentToolRegistry {
   private state: 'active' | 'suspended' | 'disposed' = 'active';
   private readonly tools = new Map<string, RegisteredTool>();
+  private activeRequests = 0;
+  private lastRequestAt = 0;
+  private lastTool: string | null = null;
 
-  constructor(readonly pageId: string, tools: readonly RegisteredTool[]) {
+  constructor(readonly pageId: string, tools: readonly RegisteredTool[], private readonly onActivity?: (activity: AgentActivity) => void) {
     for (const tool of tools) {
       if (this.tools.has(tool.descriptor.name)) throw new Error(`Duplicate agent tool: ${tool.descriptor.name}`);
       this.tools.set(tool.descriptor.name, { descriptor: copy(tool.descriptor), handler: tool.handler });
@@ -116,32 +125,62 @@ export class AgentToolRegistry {
   async listTools(): Promise<ToolResult<ToolCatalogue>> {
     const gate = this.gate();
     if (gate) return gate;
-    return this.normalize({
-      apiVersion: AGENT_API_VERSION,
-      pageId: this.pageId,
-      tools: this.descriptors(),
-    });
+    this.beginActivity(null);
+    try {
+      return this.normalize({
+        apiVersion: AGENT_API_VERSION,
+        pageId: this.pageId,
+        tools: this.descriptors(),
+      });
+    } finally {
+      this.endActivity();
+    }
   }
 
   async callTool(name: string, input: unknown): Promise<ToolResult<unknown>> {
     const gate = this.gate();
     if (gate) return gate;
-    const tool = this.tools.get(name);
-    if (!tool) return this.error('UNKNOWN_TOOL', `Unknown tool: ${text(name, 'unknown')}.`);
-    if (plainJson(input) && bytes(input) > MAX_AGENT_INPUT_BYTES) return this.error('INPUT_TOO_LARGE', 'The tool input exceeds the 128 KiB JSON limit.');
-    if (!this.validInput(tool.descriptor, input)) {
-      return this.error('INVALID_ARGUMENT', 'The tool input does not match its schema.');
-    }
+    this.beginActivity(name);
     try {
-      const result = await tool.handler(input);
-      if (isDomainResult(result)) {
-        if (!result.ok) return { apiVersion: AGENT_API_VERSION, pageId: this.pageId, ok: false, error: copy(result.error) };
-        return this.normalize(result.value);
+      const tool = this.tools.get(name);
+      if (!tool) return this.error('UNKNOWN_TOOL', `Unknown tool: ${text(name, 'unknown')}.`);
+      if (plainJson(input) && bytes(input) > MAX_AGENT_INPUT_BYTES) return this.error('INPUT_TOO_LARGE', 'The tool input exceeds the 128 KiB JSON limit.');
+      if (!this.validInput(tool.descriptor, input)) {
+        return this.error('INVALID_ARGUMENT', 'The tool input does not match its schema.');
       }
-      return this.normalize(result);
-    } catch (error) {
-      if (error instanceof ControllerDisposedError) return this.error('PAGE_DISPOSED', error.message);
-      return this.error('INTERNAL_ERROR', 'The tool could not complete.');
+      try {
+        const result = await tool.handler(input);
+        if (isDomainResult(result)) {
+          if (!result.ok) return { apiVersion: AGENT_API_VERSION, pageId: this.pageId, ok: false, error: copy(result.error) };
+          return this.normalize(result.value);
+        }
+        return this.normalize(result);
+      } catch (error) {
+        if (error instanceof ControllerDisposedError) return this.error('PAGE_DISPOSED', error.message);
+        return this.error('INTERNAL_ERROR', 'The tool could not complete.');
+      }
+    } finally {
+      this.endActivity();
+    }
+  }
+
+  private beginActivity(tool: string | null): void {
+    this.activeRequests += 1;
+    this.lastRequestAt = Date.now();
+    this.lastTool = tool;
+    this.emitActivity();
+  }
+
+  private endActivity(): void {
+    this.activeRequests = Math.max(0, this.activeRequests - 1);
+    this.emitActivity();
+  }
+
+  private emitActivity(): void {
+    try {
+      this.onActivity?.({ activeRequests: this.activeRequests, lastRequestAt: this.lastRequestAt, lastTool: this.lastTool });
+    } catch {
+      // Status UI failures must not affect agent calls.
     }
   }
 }
