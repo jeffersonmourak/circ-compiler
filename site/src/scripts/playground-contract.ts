@@ -16,6 +16,13 @@ export type AgentErrorCode =
   | 'OPERATION_EXPIRED'
   | 'WAIT_LIMIT'
   | 'WAIT_CANCELLED'
+  | 'HELP_UNAVAILABLE'
+  | 'HELP_INVALID_CORPUS'
+  | 'HELP_CORPUS_CHANGED'
+  | 'HELP_NOT_FOUND'
+  | 'HELP_REMOVED'
+  | 'HELP_CANCELLED'
+  | 'HELP_BUSY'
   | 'INTERNAL_ERROR';
 
 export interface AgentError {

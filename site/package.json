@@ -4,11 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun run sync && bun run llm-mirror && astro dev",
-    "build": "bun run sync && bun run llm-mirror && astro build",
+    "dev": "bun run sync && bun run llm-mirror && bun run agent-reference && astro dev",
+    "build": "bun run sync && bun run llm-mirror && bun run agent-reference && astro build",
     "preview": "astro preview",
     "sync": "bun run scripts/sync-reference.ts",
     "llm-mirror": "bun run scripts/build-llm-mirror.ts",
+    "agent-reference": "bun run scripts/build-agent-reference.ts",
     "libcirc": "bun run scripts/build-libcirc.ts",
     "bundle": "bun run scripts/check-bundle.ts",
     "test": "bun test",
@@ -26,6 +27,7 @@
   },
   "devDependencies": {
     "@astrojs/check": "0.9.4",
+    "@astrojs/markdown-remark": "6.3.11",
     "@rollup/rollup-darwin-arm64": "4.60.3",
     "@rollup/rollup-darwin-x64": "4.60.3",
     "@types/bun": "1.2.10",

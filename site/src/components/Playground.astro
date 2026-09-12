@@ -9,9 +9,11 @@ import { displayGroups } from '../scripts/ws-tree.ts';
 interface Props {
   manifest: { version: string; revision: string; full_version: number };
   supportedVersions: readonly number[];
+  agentReference: { corpusId: string };
 }
-const { manifest, supportedVersions } = Astro.props;
+const { manifest, supportedVersions, agentReference } = Astro.props;
 const wasmHref = url('/wasm/libcirc.wasm');
+const agentReferenceHref = url('/agent-reference/manifest.json');
 // One call feeds the sidebar rows, the embedded blob and the default pick, so
 // they cannot drift from each other or from the shipped content.
 const catalogue = buildCatalogue(examples, tour);
@@ -27,6 +29,8 @@ const groups = displayGroups(catalogue, []);
   data-manifest-version={manifest.version}
   data-manifest-revision={manifest.revision}
   data-default-pick={initial.id}
+  data-agent-reference-manifest={agentReferenceHref}
+  data-agent-reference-corpus={agentReference.corpusId}
 >
   <!-- A classic script, executed during parsing, so the fragment is gone from
        location.href before any deferred module runs — PostHog's real init
@@ -4922,6 +4926,17 @@ const groups = displayGroups(catalogue, []);
       pageId: agentPageId,
       readWorkspace: () => workspaceSnapshot,
       operations,
+      help: {
+        manifestUrl: el.dataset.agentReferenceManifest ?? '/agent-reference/manifest.json',
+        corpusId: el.dataset.agentReferenceCorpus ?? '',
+        compilerIdentity: () => state.version ? {
+          version: state.version.version,
+          revision: state.version.revision,
+          grammarSha256: state.version.grammar_sha256,
+          topologyVersion: state.version.topology_version,
+          fullVersion: state.version.full_version,
+        } : null,
+      },
       readStatus: () => {
         const activeId = store.envelope.activeId;
         const selected = catalogue.find((item) => item.id === activeId);

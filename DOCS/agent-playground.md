@@ -4,7 +4,7 @@ The `/playground` page exposes a small browser-resident tool contract for agents
 
 Tool arguments and requested results are delivered to the connected agent through its browser integration or browser-control tooling. Treat source and results as data shared with that client and subject to its provider/tooling policies.
 
-## Phase 1 Capability
+## Phase 2 Capability
 
 All tools are read-only: they do not select a project, flush a debounce, compile, create a session, edit source, or write storage.
 
@@ -15,10 +15,17 @@ All tools are read-only: they do not select a project, flush a debounce, compile
 | `circ_read_project` | `{ projectId?, expectedRevision?, cursor?, limit? }` | A revision-bound file manifest without source bodies. |
 | `circ_read_file` | `{ projectId?, name, expectedSourceRevision?, offset?, maxCodeUnits? }` | Exact UTF-16 source chunks, including offsets and EOF metadata. |
 | `circ_wait_for_operation` | `{ operationId, timeoutMs? }` | A retained terminal outcome, or a bounded `timed_out` observation. |
+| `circ_help` | `{ action: 'search', query, kind?, limit?, cursor?, expectedCorpusId? }` | Deterministic local search of shipped references, diagnostics, and examples. |
+| `circ_help` | `{ action: 'read', id, offset?, maxCodeUnits?, expectedCorpusId? }` | UTF-16-safe chunks of a cited reference, diagnostic, source file, or memory image. |
+| `circ_help` | `{ action: 'example', id, expectedCorpusId? }` | Complete named-file gallery/tour project and its required ROM/RAM initialization, or a resource manifest when it cannot fit. |
 
 Results are JSON-safe, bounded to 32 KiB, and include a page ID. After bootstrap, status provenance is `tracked`: an output's producer operation and captured inputs distinguish a current result from a retained last-good result. IDs are page-memory-only and expire after reload; retained terminal operation history is bounded to 128 records.
 
 Source chunks use zero-based UTF-16 offsets and exclusive ends. The default chunk is 2,048 code units; `maxCodeUnits` is 2 through 4,096. A nonzero offset requires the prior `sourceRevision`, and changed source or paging state returns `REVISION_CONFLICT` rather than mixing revisions.
+
+`circ_help` is read-only and never selects a project, creates a compiler or simulation session, starts a build, or changes memory/runtime state. Its generated corpus is pinned to a SHA-256 corpus ID and the committed compiler identity that validated its examples. Search accepts 1 through 10 results; read chunks use zero-based UTF-16 offsets, default to 4,096 code units, and require `expectedCorpusId` for continuation. `E014` and other validator codes resolve to their canonical `diagnostic:<code>` records; unknown codes return an empty successful search result rather than invented guidance. Complete examples retain sibling files, the default entry file, and normalized little-endian memory images labeled `load-before-driving-inputs`.
+
+Knowledge assets are fetched lazily from same-origin `/agent-reference/` content-addressed JSON only after an invocation. Asset hashes and corpus/schema IDs are verified in the browser. `HELP_UNAVAILABLE`, `HELP_INVALID_CORPUS`, `HELP_CORPUS_CHANGED`, `HELP_NOT_FOUND`, `HELP_REMOVED`, and `HELP_BUSY` are structured domain errors; a valid search with no match is successful data.
 
 Waits never start or cancel compiler/runtime work. They default to 5 seconds and allow 0 through 30 seconds. A timeout leaves work running. Suspension returns `PAGE_SUSPENDED`, disposal returns `PAGE_DISPOSED`, and a caller cancellation returns `WAIT_CANCELLED`.
 

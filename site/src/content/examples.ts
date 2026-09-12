@@ -45,7 +45,7 @@ export const examples: Example[] = [
     slug: 'inverter-chain',
     title: 'NOT chain',
     level: 'intro',
-    lede: 'Three inverters in series. The output is just `a`, but the chain still compiles and simulates faithfully.',
+    lede: 'Three inverters in series. The output is the inverse of `a`, and the chain still compiles and simulates faithfully.',
     source: `input a
 not n1(in=a)
 not n2(in=n1.out)

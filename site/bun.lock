@@ -15,6 +15,7 @@
       },
       "devDependencies": {
         "@astrojs/check": "0.9.4",
+        "@astrojs/markdown-remark": "6.3.11",
         "@rollup/rollup-darwin-arm64": "4.60.3",
         "@rollup/rollup-darwin-x64": "4.60.3",
         "@types/bun": "1.2.10",

@@ -190,6 +190,7 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
       'circ_read_project',
       'circ_read_file',
       'circ_wait_for_operation',
+      'circ_help',
     ]);
     const agentStatus = await agentApi!.callTool('circ_get_status', {}) as {
       ok: boolean;

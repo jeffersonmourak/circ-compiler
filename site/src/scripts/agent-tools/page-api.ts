@@ -7,6 +7,7 @@ import { WebMcpAdapter, detectNativeRegistrar } from '../webmcp-adapter.ts';
 import type { WorkspaceSnapshot } from '../playground-reads.ts';
 import type { OperationStore } from '../playground-operations.ts';
 import { waitForOperationDescriptor, waitForOperationHandler } from './operations.ts';
+import { helpDescriptor, helpHandler, type HelpToolOptions } from './help.ts';
 
 export interface PageApiInstallation {
   readonly api: PlaygroundPageApi;
@@ -21,6 +22,7 @@ export interface InstallPageApiOptions {
   pageId?: string;
   native?: WebMcpAdapter;
   operations?: OperationStore;
+  help?: HelpToolOptions;
 }
 
 declare global {
@@ -49,6 +51,7 @@ export function installPageApi(el: HTMLElement, options: InstallPageApiOptions):
     { descriptor: readProjectDescriptor, handler: (input) => workspace.readProject(input as { projectId?: string; expectedRevision?: string; cursor?: string; limit?: number }) },
     { descriptor: readFileDescriptor, handler: (input) => workspace.readFile(input as { projectId?: string; name: string; expectedSourceRevision?: string; offset?: number; maxCodeUnits?: number }) },
     { descriptor: waitForOperationDescriptor, handler: waitForOperationHandler(controller) },
+    ...(options.help ? [{ descriptor: helpDescriptor, handler: helpHandler(options.help) }] : []),
   ]);
   const native = options.native ?? new WebMcpAdapter(registry, detectNativeRegistrar());
   const api = Object.freeze({

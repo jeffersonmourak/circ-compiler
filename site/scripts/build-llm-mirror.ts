@@ -4,6 +4,8 @@ import { resolve, dirname } from 'node:path';
 import { execSync } from 'node:child_process';
 import { docs, DOCS_DIR, PUBLIC_DIR, SITE_URL, type Doc } from './lib/site-config.ts';
 import { examples } from '../src/content/examples.ts';
+import { tour } from '../src/content/tour.ts';
+import { stripDocumentTitle } from './lib/reference-content.ts';
 
 const REPO_ROOT = resolve(PUBLIC_DIR, '..', '..');
 const GITHUB_REPO = process.env.GITHUB_REPO ?? 'https://github.com/jeffersonmourak/circ-compiler';
@@ -63,15 +65,15 @@ function emitDocTwin(d: Doc): void {
   // Strip the source H1 — we re-emit a canonical H1 from the title field so
   // every twin has predictable framing, regardless of whatever heading the
   // upstream `DOCS/*.md` happens to use.
-  body = body.replace(/^# .+\n+/, '');
+  body = stripDocumentTitle(body);
   body = rewriteLinks(body);
-
   writeTwin(d.dst, header(d.title, d.description) + body, srcPath);
 }
 
 function renderExample(ex: (typeof examples)[number]): string {
   const repoNote = ex.repoPath ? `\n\nSource file in the repo: \`${ex.repoPath}\`.` : '';
-  return `## ${ex.title}
+  const memory = ex.memory ? `\n\n### Memory initialization\n\n${Object.entries(ex.memory).map(([name, hex]) => `- \`${name}\` (load before driving inputs): \`${hex}\``).join('\n')}` : '';
+  return `## <a id="${ex.slug}"></a>${ex.title}
 
 ${ex.lede}
 
@@ -81,7 +83,7 @@ ${fence('circ', ex.source)}
 
 ### \`circ-compile --preview\`
 
-${fence('', ex.preview)}${repoNote}`;
+${fence('', ex.preview)}${repoNote}${memory}`;
 }
 
 function emitExamplesTwin(): void {
@@ -92,6 +94,12 @@ function emitExamplesTwin(): void {
   const body = examples.map(renderExample).join('\n\n');
 
   writeTwin('gallery.md', `${intro}\n\n\n${body}\n`, 'src/content/examples.ts');
+}
+
+function emitTourTwin(): void {
+  const intro = header('Tour examples', 'Retained multi-step playground examples with stable source anchors.').trimEnd();
+  const body = tour.map((step) => `## <a id="${step.slug}"></a>${step.title}\n\n${step.prose}\n\n### Source\n\n${fence('circ', step.source)}`).join('\n\n');
+  writeTwin('reference/tour-examples.md', `${intro}\n\n\n${body}\n`, 'src/content/tour.ts');
 }
 
 // Source of truth for the hero snippet on the landing page lives in
@@ -320,11 +328,8 @@ function stripDiscoveryBanner(body: string): string {
 function emitLlmsFullTxt(): void {
   const sections: Array<{ path: string; label: string }> = [
     { path: 'index.md', label: 'Landing page' },
-    { path: 'reference.md', label: 'Language reference' },
-    { path: 'reference/getting-started.md', label: 'Getting started' },
-    { path: 'reference/circuit-format.md', label: 'Circuit file format' },
-    { path: 'reference/wasm-api.md', label: 'WASM runtime API' },
-    { path: 'reference/preview.md', label: 'ASCII preview' },
+    ...docs.map((d) => ({ path: d.dst, label: d.title })),
+    { path: 'reference/tour-examples.md', label: 'Tour examples' },
     { path: 'gallery.md', label: 'Gallery' },
     { path: 'download.md', label: 'Download' },
   ];
@@ -353,6 +358,7 @@ function emitLlmsFullTxt(): void {
 
 for (const d of docs) emitDocTwin(d);
 emitExamplesTwin();
+emitTourTwin();
 emitLandingTwin();
 emitDownloadTwin();
 emitLlmsTxt();
