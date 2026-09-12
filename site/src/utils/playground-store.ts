@@ -517,7 +517,7 @@ export interface PlaygroundStore {
   readonly enabled: boolean;
   update(mutate: (draft: PlaygroundEnvelope) => void): void;
   /** Writes now, cancelling any pending debounce. */
-  flush(): void;
+  flush(): { ok: boolean; note: StoreNote | null; skipped: ScratchProject[] } | null;
   /** Notes buffered before the first subscriber are delivered on subscribe. */
   onNote(fn: (note: StoreNote) => void): () => void;
 }
@@ -584,7 +584,12 @@ export function createStore(opts: {
         timers.clearTimeout(timer);
         timer = null;
       }
-      writeNow();
+      if (!enabled) return null;
+      const result = writeEnvelope(envelope, storage, envelope.activeId);
+      if (!result.ok) enabled = false;
+      emit(result.note);
+      if (result.skipped.length > 0) emit({ kind: 'skipped', names: result.skipped.map((p) => p.name) });
+      return result;
     },
     onNote(fn) {
       listeners.add(fn);

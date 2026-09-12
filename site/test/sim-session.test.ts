@@ -3,7 +3,7 @@
 // after each one, and the reset that hands every face a fresh runtime.
 import { describe, expect, test } from 'bun:test';
 import { widthMask } from 'circ-renderer/topology';
-import { SimSession, collectMems, collectPins, type SessionEvent } from '../src/scripts/sim-session.ts';
+import { SimSession, collectMems, collectPins, type SessionEvent, type SessionLifecycleEvent } from '../src/scripts/sim-session.ts';
 import { AND_GATE, MEMORIES, evaluateAnd, evaluateRom, stubRuntime, type StubRuntime } from './sim-stub.ts';
 
 const bytes = new Uint8Array([0]);
@@ -192,6 +192,8 @@ describe('memories', () => {
 
   test('preloads are the Memory tab images, applied at build and again at reset', async () => {
     const { session, made, events } = await romSession(new Map([['code', '2a 2b']]));
+    const lifecycle: SessionLifecycleEvent[] = [];
+    session.subscribeLifecycle((event) => lifecycle.push(event));
     expect(made[0].calls).toContain('load:1');
     const before = session.peek('code', 1n);
     expect(before.ok && before.value.value).toBe(0x2bn);
@@ -215,6 +217,33 @@ describe('memories', () => {
     expect(events.filter((e) => e.kind === 'memory' && e.op === 'load')).toEqual([]);
     // Pins and memories are the same topology, so the refs survive.
     expect(session.pins.map((p) => p.name)).toEqual(['pc', 'q']);
+    expect(session.preloadResult.applied).toEqual(['code']);
+    expect(lifecycle).toMatchObject([
+      { kind: 'reset-started' },
+      { kind: 'reset-finished', preloads: { applied: ['code'] } },
+    ]);
+  });
+
+  test('destroyed sessions discard a late reset runtime', async () => {
+    let resolve!: (runtime: StubRuntime) => void;
+    let calls = 0;
+    const first = stubRuntime(MEMORIES, evaluateRom);
+    const session = await SimSession.build({
+      bytes,
+      load: async () => {
+        calls += 1;
+        return calls === 1 ? first : new Promise<StubRuntime>((done) => { resolve = done; });
+      },
+    });
+    const events: SessionEvent[] = [];
+    session.subscribe((event) => events.push(event));
+    const resetting = session.reset();
+    const late = stubRuntime(MEMORIES, evaluateRom);
+    session.destroy();
+    resolve(late);
+    await expect(resetting).rejects.toThrow('destroyed during reset');
+    expect(late.destroyed).toBe(true);
+    expect(events).toEqual([{ kind: 'destroyed' }]);
   });
 
   test('a face applying the preloads is told what was written', async () => {
@@ -263,6 +292,15 @@ describe('boot', () => {
     expect(made[1].calls).toEqual([]);
     expect(made[1].values.get(0)!.defined).toBe(0n);
     expect(events).toEqual([{ kind: 'rebuilt' }]);
+  });
+
+  test('run publishes only the separate lifecycle observation', async () => {
+    const { session, events } = await andSession();
+    const lifecycle: SessionLifecycleEvent[] = [];
+    session.subscribeLifecycle((event) => lifecycle.push(event));
+    session.run();
+    expect(lifecycle).toEqual([{ kind: 'run-finished' }]);
+    expect(events).toEqual([]);
   });
 });
 

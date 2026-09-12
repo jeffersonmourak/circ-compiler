@@ -9,9 +9,11 @@ import { displayGroups } from '../scripts/ws-tree.ts';
 interface Props {
   manifest: { version: string; revision: string; full_version: number };
   supportedVersions: readonly number[];
+  agentReference: { corpusId: string };
 }
-const { manifest, supportedVersions } = Astro.props;
+const { manifest, supportedVersions, agentReference } = Astro.props;
 const wasmHref = url('/wasm/libcirc.wasm');
+const agentReferenceHref = url('/agent-reference/manifest.json');
 // One call feeds the sidebar rows, the embedded blob and the default pick, so
 // they cannot drift from each other or from the shipped content.
 const catalogue = buildCatalogue(examples, tour);
@@ -27,6 +29,8 @@ const groups = displayGroups(catalogue, []);
   data-manifest-version={manifest.version}
   data-manifest-revision={manifest.revision}
   data-default-pick={initial.id}
+  data-agent-reference-manifest={agentReferenceHref}
+  data-agent-reference-corpus={agentReference.corpusId}
 >
   <!-- A classic script, executed during parsing, so the fragment is gone from
        location.href before any deferred module runs — PostHog's real init
@@ -73,6 +77,12 @@ const groups = displayGroups(catalogue, []);
           <path d="M6.5 9.5 9.5 6.5M7 4.5l1.3-1.3a2.5 2.5 0 0 1 3.5 3.5L10.5 8M5.5 8 4.2 9.3a2.5 2.5 0 0 0 3.5 3.5L9 11.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
         <span class="pg-action-label">Share</span>
+      </button>
+      <button type="button" class="pg-action pg-connect-agent" title="Copy this project's Share link and instructions for an agent">
+        <svg class="pg-action-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <path d="M5 2v4m6-4v4M3 6h10v1a5 5 0 0 1-5 5v2M3 6v1a5 5 0 0 0 5 5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span class="pg-action-label">Connect agent</span>
       </button>
       <ThemeToggle />
     </div>
@@ -326,7 +336,7 @@ const groups = displayGroups(catalogue, []);
       {/* The announcement channel: file-tab operations and store notes. While
           it holds a sentence the promise beside it yields the cell. */}
       <span class="pg-status" role="status" aria-live="polite"></span>
-      <span class="pg-promise">runs in your browser · nothing leaves the page</span>
+        <span class="pg-promise pg-agent-activity" data-state="ready" title="Requested tool inputs and results are shared with the agent.">agent tools ready · no requests yet</span>
     </span>
   </footer>
   {/* Page data, not a module: it never enters the eager module graph, so the
@@ -335,6 +345,7 @@ const groups = displayGroups(catalogue, []);
 </div>
 
 <script>
+  import { agentConnectPrompt } from '../scripts/agent-connect.ts';
   import { getSharedClient, type LibcircVersion, type WorkerReply } from '../scripts/libcirc-client.ts';
   // TYPE only: erased at build, so the renderer stays behind its dynamic import.
   import type { BitValue, CircRuntime, CircTheme, CircView } from 'circ-renderer';
@@ -344,7 +355,7 @@ const groups = displayGroups(catalogue, []);
   import { ComponentKind } from 'circ-renderer/topology';
   // The session the faces share. Pulls nothing of the canvas: its imports are
   // the topology entry point and the rom-image module, both already here.
-  import { SimSession, type DriveAssign } from '../scripts/sim-session.ts';
+   import { SimSession, type DriveAssign, type MemRef } from '../scripts/sim-session.ts';
   // The console over the session: the grammar and the reply strings of
   // `--sim`, and the prompt's own memory. Small, and the session already
   // pulls their one shared dependency, so they ride in the eager bundle.
@@ -357,25 +368,38 @@ const groups = displayGroups(catalogue, []);
   import { formatZoom } from '../scripts/zoom-label.ts';
   import { chipText } from '../scripts/truth-chip.ts';
   import type { TruthRows } from '../scripts/truth-view.ts';
-  import { joinConflicts, requestFor, rootOf, splitFiles, PLAYGROUND_DIR } from '../utils/split-files.ts';
+   import { joinConflicts, joinFiles, requestFor, rootOf, splitFiles, PLAYGROUND_DIR } from '../utils/split-files.ts';
   import { createSplitter } from '../scripts/splitter.ts';
   import { clampPanel, defaultPos, positionFromDrag, crossedThreshold } from '../scripts/data-panel.ts';
   import type { PanelPos } from '../utils/playground-store.ts';
   import { normalizeEditorPreferences, type EditorPreferences } from '../utils/editor-preferences.ts';
   import { fnv1a } from '../utils/artifact-hash.ts';
-  import { artifactFileName } from '../utils/artifact-name.ts';
+   import { artifactFileName } from '../utils/artifact-name.ts';
+   import { installPageApi, type PageApiInstallation } from '../scripts/agent-tools/page-api.ts';
   import { capRefusal, mountSettingsDrawer, optionsFor, truthTableRefusal } from '../scripts/settings-drawer.ts';
-  import { formatBytes } from '../scripts/pipeline.ts';
+    import { formatBytes } from '../scripts/pipeline.ts';
+    import { RevisionAllocator, RevisionTracker, type SourceFile } from '../scripts/playground-revisions.ts';
+     import { OperationStore } from '../scripts/playground-operations.ts';
+      import type { OperationId, OperationKind, WorkInputs, WorkspaceChangeResult, PersistenceReceipt, CompileTicket, DiagnosticPage, SimulationSnapshot, SimulationRef, RootMemory, DriveInput, DriveResult, MemoryPage, UpdateMemoryInput, UpdateMemoryResult, SetMemoryPreloadInput, SetMemoryPreloadResult, RunVerificationInput, VerificationTicket, TruthScope, DownloadReceipt } from '../scripts/playground-contract.ts';
+     import type { WorkspaceSnapshot } from '../scripts/playground-reads.ts';
+     import { planMutations, utf8Bytes, validFileName, validProjectName, isWellFormed } from '../scripts/playground-mutations.ts';
+     import { convertDiagnostics, DiagnosticStore } from '../scripts/playground-diagnostics.ts';
   import {
     applyRomImages,
     maxWords,
     parseRomImage,
     preloadsFor,
     romPlan,
-    romSymbols,
-    type MemorySymbol,
+     romSymbols,
+     type ApplyResult,
+     type MemorySymbol,
   } from '../utils/rom-image.ts';
-  import { sourceImageKey, type ImportedImages } from '../utils/source-images.ts';
+   import { sourceImageKey, type ImportedImages } from '../utils/source-images.ts';
+   import { canonical, imageBytes, memoryShape, pinValue, parseHex, signal, validateDrive } from '../scripts/playground-simulation.ts';
+    import { VerificationResults, executeVerification, validateVerification } from '../scripts/playground-verification.ts';
+    import { SchematicResults, TruthResults, schematicDimensions } from '../scripts/playground-inspection.ts';
+    import { decodeTopology } from '../scripts/playground-topology.ts';
+    import { SOURCE_OMISSIONS, dispatchDownload, pageExport } from '../scripts/playground-handoff.ts';
   import {
     UNKNOWN,
     cellWidth,
@@ -527,6 +551,7 @@ const groups = displayGroups(catalogue, []);
     const importPicker = el.querySelector<HTMLInputElement>('.pg-switch-picker')!;
     const wsError = el.querySelector<HTMLElement>('.pg-switch-error')!;
     const shareBtn = el.querySelector<HTMLButtonElement>('.pg-share')!;
+    const connectAgentBtn = el.querySelector<HTMLButtonElement>('.pg-connect-agent')!;
     const downloadBtn = el.querySelector<HTMLButtonElement>('.pg-download')!;
     const navActions = el.querySelector<HTMLElement>('.pg-nav-right')!;
     const downloadLabel = el.querySelector<HTMLElement>('.pg-download .pg-action-label')!;
@@ -573,6 +598,24 @@ const groups = displayGroups(catalogue, []);
     // Two independent debounces, each with its own sequence counter.
     const analyzeStage = new Stage(ANALYZE_DEBOUNCE_MS);
     const buildStage = new Stage(BUILD_DEBOUNCE_MS);
+    const agentPageId = globalThis.crypto?.randomUUID?.() ?? `circ-page-${Math.random().toString(36).slice(2)}`;
+    const revisionIds = new RevisionAllocator(agentPageId);
+    const revisions = new RevisionTracker(revisionIds);
+    const operations = new OperationStore(agentPageId);
+    const diagnosticStore = new DiagnosticStore();
+    const schematicResults = new SchematicResults();
+    const truthResults = new TruthResults();
+    let workbenchSettingsRevision = revisionIds.next('workbench-settings');
+    let presentationRevision = revisionIds.next('presentation');
+    const diagnosticSetByOperation = new Map<OperationId, string>();
+    const diagnosticProducerByRequest = new Map<string, { scheduled: ScheduledOperation; analysis: Analysis }>();
+    const operationSlots: Partial<Record<OperationKind, OperationId>> = {};
+    const outputProvenance: Partial<Record<'analysis' | 'diagnostics' | 'artifact' | 'preview' | 'truth', { operationId: OperationId; inputs: WorkInputs; counts: { errors: number; warnings: number } | null }>> = {};
+    let observationRevision = revisionIds.next('observation');
+    const observe = () => { observationRevision = revisionIds.next('observation'); };
+    let workspaceSnapshot: WorkspaceSnapshot | null = null;
+    let workspaceSignature = '';
+    let workspaceRevision = revisionIds.next('workspace');
 
     const state = {
       /** Bumped on every edit; the freshness key the two stages compare. */
@@ -592,15 +635,127 @@ const groups = displayGroups(catalogue, []);
       /** `state.diagnostics` mapped onto absolute offsets in the combined
        *  document. Refreshed by BOTH producers in the pipeline. */
       mapped: [] as MappedRow[],
-      artifact: null as { bytes: Uint8Array; hash: number; size: number; importedImages: ImportedImages } | null,
+      artifact: null as { id: string; bytes: Uint8Array; hash: number; size: number; importedImages: ImportedImages } | null,
       view: 'live' as StoredView,
       /** The Data card: open over whichever view; its rows are the session's. */
       dataOpen: false,
       version: null as LibcircVersion | null,
       simulateEnabled: true,
     };
+    const bootstrapState = {
+      lifecycle: 'initializing' as 'initializing' | 'ready' | 'failed',
+      error: null as string | null,
+    };
+    function imageSnapshot(id: string, files: readonly SourceFile[]) {
+      return new Map(files.map((file) => {
+        const key = sourceImageKey(id, file.name);
+        const active = id === store.envelope.activeId ? imageContexts.get(key)?.images : undefined;
+        return [file.name, new Map(active ?? Object.entries(store.envelope.sourceImages[key] ?? {}))];
+      }));
+    }
+    /** Capture readable state at mutation boundaries. Tool reads only return this snapshot. */
+    function refreshWorkspaceSnapshot() {
+      const activeId = store.envelope.activeId;
+      const catalogueProjects = catalogue.map((project) => ({
+        id: project.id, name: project.label, kind: idKind(project.id)!,
+        files: project.id === activeId ? state.tabs.files : fromSource(project.source).files,
+        sourceOrigin: project.id === activeId ? 'active_buffer' as const : 'catalogue' as const,
+      }));
+      const scratchProjects = [...store.envelope.scratch]
+        .sort((left, right) => right.updatedAt - left.updatedAt || left.id.localeCompare(right.id))
+        .map((project) => ({
+          id: project.id, name: project.name, kind: 'scratch' as const,
+          files: project.id === activeId ? state.tabs.files : fromSource(project.source).files,
+          sourceOrigin: project.id === activeId ? 'active_buffer' as const : 'scratch_record' as const,
+        }));
+      const projects = [...catalogueProjects, ...scratchProjects].map((project) => {
+        const files = project.files.map((file) => ({ name: file.name, body: file.body }));
+        const version = revisions.observeProject({ id: project.id, name: project.name, files, images: imageSnapshot(project.id, files) });
+        return { ...project, active: project.id === activeId, version, files, selectedEntryFile: project.id === activeId ? activeFile(state.tabs).name : null };
+      });
+      const signature = JSON.stringify(projects.map((project) => [project.id, project.active, project.name, project.version]));
+      if (signature !== workspaceSignature) {
+        workspaceSignature = signature;
+        workspaceRevision = revisionIds.next('workspace');
+      }
+      workspaceSnapshot = { revision: workspaceRevision, projects };
+    }
     function activeRequest(options?: Record<string, unknown>) {
       return requestFor(state.tabs.files, options, activeFile(state.tabs).name);
+    }
+    type CapturedRequest = ReturnType<typeof activeRequest>;
+    interface ScheduledOperation {
+      id: OperationId;
+      inputs: WorkInputs;
+      request: CapturedRequest;
+      bodies: string[];
+      doc: number;
+    }
+    type InputBindings = Pick<WorkInputs, 'imageRevision' | 'artifactId' | 'liveStateRevision'>;
+    function sameInputs(left: WorkInputs, right: WorkInputs): boolean {
+      return left.target.projectId === right.target.projectId && left.target.sourceRevision === right.target.sourceRevision &&
+        left.target.entryFile === right.target.entryFile && left.target.targetEpoch === right.target.targetEpoch &&
+        left.optionsRevision === right.optionsRevision && left.imageRevision === right.imageRevision &&
+        left.artifactId === right.artifactId && left.liveStateRevision === right.liveStateRevision;
+    }
+    function inputsFor(kind: OperationKind, options: Record<string, unknown>, bindings: Partial<InputBindings> = {}): WorkInputs {
+      const activeId = store.envelope.activeId;
+      if (!activeId) throw new Error('Cannot schedule without an active project.');
+      const entryFile = activeFile(state.tabs).name;
+      const current = revisions.currentTarget;
+      const target = !current || current.projectId !== activeId || current.entryFile !== entryFile
+        ? revisions.selectTarget(activeId, entryFile)
+        : current;
+      return {
+        target,
+        optionsRevision: revisions.optionsRevision(kind, options),
+        imageRevision: bindings.imageRevision ?? null,
+        artifactId: bindings.artifactId ?? ((kind === 'session_build' || kind === 'session_reset') ? state.artifact?.id ?? null : null),
+        liveStateRevision: bindings.liveStateRevision ?? null,
+      };
+    }
+    function queueOperation(kind: OperationKind, options?: Record<string, unknown>, bindings?: Partial<InputBindings>): ScheduledOperation {
+      const projected = options ?? (kind === 'analyze' || kind === 'compile' || kind === 'preview' || kind === 'truth_table'
+        ? optionsFor(kind, settings())
+        : {});
+      const inputs = inputsFor(kind, projected, bindings);
+      const operation = operations.create(kind, inputs);
+      const previous = operationSlots[kind];
+      if (previous) {
+        const before = operations.lookup(previous);
+        const reason = before.kind === 'found' && sameInputs(before.operation.inputs, inputs) ? 'new_request' :
+          (before.kind === 'found' && before.operation.inputs.target.targetEpoch !== inputs.target.targetEpoch ? 'target_changed' : 'new_inputs');
+        operations.supersede(previous, operation.id, reason);
+      }
+      operationSlots[kind] = operation.id;
+      observe();
+      const scheduled = {
+        id: operation.id,
+        inputs,
+        // `requestFor` only contains strings and plain option values. Copy it
+        // before the first await so later editor/settings changes cannot leak in.
+        request: JSON.parse(JSON.stringify(activeRequest(projected))) as CapturedRequest,
+        bodies: snapshotBodies(),
+        doc: state.doc,
+      };
+      return scheduled;
+    }
+    function publishOutput(kind: 'analysis' | 'diagnostics' | 'artifact' | 'preview' | 'truth', scheduled: ScheduledOperation, counts: { errors: number; warnings: number } | null = null) {
+      outputProvenance[kind] = { operationId: scheduled.id, inputs: scheduled.inputs, counts };
+      observe();
+    }
+    function outputStatus(kind: 'analysis' | 'diagnostics' | 'artifact' | 'preview' | 'truth') {
+      const provenance = outputProvenance[kind] ?? null;
+      if (!provenance) return { freshness: 'absent' as const, provenance: null };
+      const target = revisions.currentTarget;
+      const current = target !== null && provenance.inputs.target.projectId === target.projectId &&
+        provenance.inputs.target.sourceRevision === target.sourceRevision && provenance.inputs.target.entryFile === target.entryFile && !state.stale;
+      return { freshness: current ? 'current' as const : 'stale' as const, provenance };
+    }
+    const ownsOperation = (kind: OperationKind, id: OperationId) => operationSlots[kind] === id;
+    function failOperation(id: OperationId, error: unknown, kind: 'transport' | 'internal' | 'runtime' = 'transport') {
+      const message = error instanceof Error ? error.message : String(error);
+      operations.finish(id, 'failed', { failure: { kind, message: message.slice(0, 240), libraryStatus: null } });
     }
     /** The Truth view's table on screen, and how it came to be. Declared
      *  here, beside the state, because the gate reads it at boot. */
@@ -612,6 +767,11 @@ const groups = displayGroups(catalogue, []);
       /** How long the last enumeration on the site took, for the record. */
       lastMs: null as number | null,
     };
+    const compilerIdentity = () => state.version ? {
+      version: state.version.version, revision: state.version.revision, parser: state.version.parser,
+      parserRuntimeSha256: state.version.parser_runtime_sha256, grammarSha256: state.version.grammar_sha256,
+      topologyVersion: state.version.topology_version, fullVersion: state.version.full_version,
+    } : null;
     // Slice 8 attaches the simulator here.
     const hooks = {
       onDataOpen: null as null | (() => void),
@@ -639,6 +799,8 @@ const groups = displayGroups(catalogue, []);
       state,
       hooks,
       compiler: client,
+      operations,
+      operationSlots,
       flushPipeline: () => flushPipeline(),
       renderMemory: () => renderMemory({ force: true }),
       refreshActions: () => hooks.refreshActions?.(),
@@ -725,6 +887,7 @@ const groups = displayGroups(catalogue, []);
     };
 
     function showView(view: StoredView, opts: { persist?: boolean } = {}) {
+      const changed = state.view !== view;
       state.view = view;
       if (opts.persist !== false) store.update((draft) => { draft.view = view; });
       for (const b of viewTabs) {
@@ -747,6 +910,7 @@ const groups = displayGroups(catalogue, []);
       // Through the hook: `sim` is declared after the restore that calls this
       // at boot, and the artifact that lands later builds the canvas itself.
       if (view === 'live') hooks.onLive?.();
+      if (changed) { presentationRevision = revisionIds.next('presentation'); observe(); }
     }
     for (const b of viewTabs) {
       b.addEventListener('click', () => {
@@ -782,6 +946,7 @@ const groups = displayGroups(catalogue, []);
 
     /** The Data card: open over whichever view, its rows the session's. */
     function setDataOpen(open: boolean, opts: { persist?: boolean; focus?: boolean } = {}) {
+      const changed = state.dataOpen !== open;
       if (!open) cancelDataDrag();
       state.dataOpen = open;
       if (opts.persist !== false) store.update((draft) => { draft.dataOpen = open; });
@@ -793,6 +958,7 @@ const groups = displayGroups(catalogue, []);
         hooks.onDataOpen?.();
       }
       if (opts.focus !== false) (open ? dataCard : dataBtn).focus();
+      if (changed) { presentationRevision = revisionIds.next('presentation'); observe(); }
     }
     dataBtn.addEventListener('click', () => setDataOpen(!state.dataOpen));
     dataClose.addEventListener('click', () => setDataOpen(false));
@@ -1126,6 +1292,7 @@ const groups = displayGroups(catalogue, []);
       decls: [] as Declaration[],
       table: null as LinkTable | null,
       current: null as Declaration | null,
+      agent: null as Declaration | null,
     };
 
     /** Highlight the box a declaration draws as, or clear the highlight. */
@@ -1188,9 +1355,10 @@ const groups = displayGroups(catalogue, []);
       // adds the box. Before a canvas exists (a page refreshed onto the Truth
       // view) the table is null, and the declaration alone is enough.
       if (name === null) {
-        highlightComponent(link.current);
-        markInEditor(link.current ? (link.table?.byName.get(link.current.name) ?? link.current) : null);
-        markTableColumn(link.current);
+        const held = link.current ?? link.agent;
+        highlightComponent(held);
+        markInEditor(held ? (link.table?.byName.get(held.name) ?? held) : null);
+        markTableColumn(held);
         return;
       }
       const decl = link.decls.find((d) => d.name === name) ?? null;
@@ -1203,8 +1371,9 @@ const groups = displayGroups(catalogue, []);
     function setCurrentDeclaration(decl: Declaration | null) {
       if (decl === link.current) return;
       link.current = decl;
-      highlightComponent(decl);
-      markTableColumn(decl);
+      const held = decl ?? link.agent;
+      highlightComponent(held);
+      markTableColumn(held);
     }
 
     // ---- the status bar ----
@@ -2118,13 +2287,18 @@ const groups = displayGroups(catalogue, []);
     // ---- share ----
     /** Copy `text`, or fall back to a focused read-only input the reader can
      *  select. Never leaves the button pending. */
-    async function copyText(text: string): Promise<boolean> {
+    async function copyText(text: string, multiline = false): Promise<boolean> {
       try {
         await navigator.clipboard.writeText(text);
         return true;
       } catch {
-        const input = document.createElement('input');
+        const input = multiline ? document.createElement('textarea') : document.createElement('input');
         input.className = 'pg-share-fallback';
+        input.setAttribute('aria-label', multiline ? 'Agent connection prompt — copy this text' : 'Copy this text');
+        if (multiline) {
+          input.classList.add('pg-connect-fallback');
+          (input as HTMLTextAreaElement).rows = 8;
+        }
         input.readOnly = true;
         input.value = text;
         navActions.appendChild(input);
@@ -2190,6 +2364,29 @@ const groups = displayGroups(catalogue, []);
       }
     });
 
+    connectAgentBtn.addEventListener('click', async () => {
+      if (connectAgentBtn.disabled) return;
+      connectAgentBtn.disabled = true;
+      try {
+        const prompt = await agentConnectPrompt(location.href, {
+          name: activeLabel(),
+          entryFile: activeFile(state.tabs).name,
+          source: toSource(state.tabs),
+        }, webStreamsCodec());
+        const copied = await copyText(prompt, true);
+        flash(connectAgentBtn, copied ? 'Prompt copied' : 'Select below', copied ? 'done' : 'failed');
+        status.textContent = copied
+          ? 'Project handoff copied — paste it into your agent chat.'
+          : 'Project handoff selected below — copy it into your agent chat.';
+        const notice = status.textContent;
+        window.setTimeout(() => {
+          if (status.textContent === notice) status.textContent = '';
+        }, 5_000);
+      } finally {
+        connectAgentBtn.disabled = false;
+      }
+    });
+
     // ---- download ----
     /** The name the tree shows for the open project: an example's title, a
      *  scratch project's name. */
@@ -2224,19 +2421,7 @@ const groups = displayGroups(catalogue, []);
 
     /** Hand the reader a file through a Blob link, revoked after the click. */
     function downloadBytes(name: string, bytes: Uint8Array, type: string) {
-      // A copy, not a view: a worker-transferred buffer or a runtime's staging
-      // buffer may be replaced while the download is still being written.
-      const blob = new Blob([bytes.slice() as BlobPart], { type });
-      const href = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = href;
-      link.download = name;
-      link.hidden = true;
-      // In the document for the click, so the page's own listeners see it.
-      navActions.appendChild(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(href), 1000);
+      dispatchDownload(navActions, name, bytes, type as 'application/wasm' | 'application/octet-stream');
     }
 
     downloadBtn.addEventListener('click', () => {
@@ -2275,6 +2460,12 @@ const groups = displayGroups(catalogue, []);
           const key = sourceImageKey(store.envelope.activeId, f.name);
           return [rootPathFor(f.name), imageContexts.get(key)?.images ?? new Map(Object.entries(store.envelope.sourceImages[key] ?? {}))];
         })),
+      };
+    }
+    function copyImportedImages(source: ImportedImages): ImportedImages {
+      return {
+        files: new Map(source.files),
+        images: new Map([...source.images].map(([file, images]) => [file, new Map(images)])),
       };
     }
     const hasImportedImages = () => state.tabs.files.some((f) => f.name !== activeFile(state.tabs).name &&
@@ -2750,6 +2941,7 @@ const groups = displayGroups(catalogue, []);
       const key = sourceImageKey(store.envelope.activeId, activeFile(state.tabs).name);
       store.update((draft) => { draft.sourceImages[key] = Object.fromEntries(romImages); });
       romImplied.set(mem.name, new Set(implied));
+      refreshWorkspaceSnapshot();
       applyToView();
       void runTruth(buildStage.seq);
       if (opts.redraw !== false) renderMemory({ force: true });
@@ -2954,6 +3146,10 @@ const groups = displayGroups(catalogue, []);
       const session = sim.session;
       if (!session) return;
       const result = session.applyPreloads();
+      setPreloadStatus(result);
+      const activeId = store.envelope.activeId;
+      sim.imageRevision = activeId ? revisions.projectVersion(activeId)?.imageRevision ?? null : null;
+      observe();
       for (const mem of currentRoms()) updateRomStatus(mem);
       if (result.applied.length > 0) {
         sim.view?.view.refreshState();
@@ -2966,6 +3162,8 @@ const groups = displayGroups(catalogue, []);
       set: (mutate) => {
         const before = settings().valueFormat;
         store.update((draft) => mutate(draft.settings));
+        workbenchSettingsRevision = revisionIds.next('workbench-settings');
+        observe();
         // The cap is a setting, so changing one can unblock or block the tab.
         applyTruthGate();
         // Both output panes read a setting, so both are re-run.
@@ -3030,6 +3228,8 @@ const groups = displayGroups(catalogue, []);
       renderFooterBar();
       applyTruthGate();
       renderWorkspace();
+      bootstrapState.lifecycle = 'ready';
+      refreshWorkspaceSnapshot();
 
       whenIdle(() => {
         void loadEditor().then(mountEditor, () => {
@@ -3274,7 +3474,10 @@ const groups = displayGroups(catalogue, []);
     /** Edits debounce both stages. A new file or project changes the circuit
      *  immediately, so its old outputs and pending replies are discarded. */
     function schedule() {
+      refreshWorkspaceSnapshot();
       state.doc += 1;
+      const analyze = queueOperation('analyze');
+      const build = queueOperation('compile');
       const changedCircuit = state.circuitFile !== activeFile(state.tabs).name;
       const names = state.tabs.files.map((f) => f.name);
       if (changedCircuit || outputsShouldClear(state.renderedFiles, names)) {
@@ -3299,18 +3502,21 @@ const groups = displayGroups(catalogue, []);
         pipe.errors = 0; pipe.warnings = 0; pipe.failure = null;
         markOutputs(names, true);
         renderDiagnostics(); renderDataCount(); renderMemory();
-        void flushPipeline();
+        void flushPipeline(analyze, build);
         return;
       }
       state.stale = true;
-      analyzeStage.schedule((seq) => void runAnalyze(seq));
-      buildStage.schedule((seq) => void runBuild(seq));
+      analyzeStage.schedule((seq) => void runAnalyze(seq, analyze));
+      buildStage.schedule((seq) => void runBuild(seq, build));
     }
-    async function flushPipeline(): Promise<void> {
+    async function flushPipeline(
+      analyze: ScheduledOperation = queueOperation('analyze'),
+      compile: ScheduledOperation = queueOperation('compile'),
+    ): Promise<void> {
       let analysis: Promise<void> | undefined;
       let build: Promise<void> | undefined;
-      analyzeStage.flush((seq) => { analysis = runAnalyze(seq); });
-      buildStage.flush((seq) => { build = runBuild(seq); });
+      analyzeStage.flush((seq) => { analysis = runAnalyze(seq, analyze); });
+      buildStage.flush((seq) => { build = runBuild(seq, compile); });
       await Promise.all([analysis, build]);
     }
     // The fallback surface edits the COMBINED text; re-splitting on every
@@ -3388,7 +3594,11 @@ const groups = displayGroups(catalogue, []);
       if (typeof ric === 'function') ric(fn);
       else window.setTimeout(fn, 0);
     };
-    void bootstrap();
+    void bootstrap().catch((error) => {
+      bootstrapState.lifecycle = 'failed';
+      bootstrapState.error = error instanceof Error ? error.message.slice(0, 240) : 'The playground could not finish restoring.';
+      status.textContent = bootstrapState.error;
+    });
 
     // ---- version handshake ----
     async function ensureReady(): Promise<boolean> {
@@ -3470,34 +3680,61 @@ const groups = displayGroups(catalogue, []);
 
     const pendingAnalyses = new Map<string, Promise<WorkerReply>>();
     function analysisFor(request: ReturnType<typeof activeRequest>) {
-      const key = JSON.stringify(request);
+      // Analyze has no options. Compile metadata must join the editor's
+      // matching analysis instead of issuing a second request with
+      // compile-only options attached.
+      const analyzeRequest = { root: request.root, files: request.files };
+      const key = JSON.stringify(analyzeRequest);
       const pending = pendingAnalyses.get(key);
       if (pending) return pending;
-      const promise = client.call('analyze', request);
+      const promise = client.call('analyze', analyzeRequest);
       pendingAnalyses.set(key, promise);
       const clear = () => { if (pendingAnalyses.get(key) === promise) pendingAnalyses.delete(key); };
       void promise.then(clear, clear);
       return promise;
     }
 
-    async function runAnalyze(seq: number) {
-      const doc = state.doc;
-      if (!(await ensureReady())) return;
-      if (!analyzeStage.isCurrent(seq)) return;
-      const snapshot = snapshotBodies();
+    async function runAnalyze(seq: number, scheduled: ScheduledOperation) {
+      const doc = scheduled.doc;
+      operations.start(scheduled.id);
+      if (!(await ensureReady())) {
+        failOperation(scheduled.id, pipe.failure ?? 'Compiler initialization failed.');
+        return;
+      }
+      if (!analyzeStage.isCurrent(seq) || !ownsOperation('analyze', scheduled.id)) return;
       setBusy(true, pipe.building);
 
-      const an = await analysisFor(activeRequest());
-      if (!analyzeStage.isCurrent(seq)) return;
+      let an: WorkerReply;
+      try {
+        an = await analysisFor(scheduled.request);
+      } catch (error) {
+        if (analyzeStage.isCurrent(seq) && ownsOperation('analyze', scheduled.id)) pipe.failure = `analyze failed: ${error instanceof Error ? error.message : String(error)}`;
+        failOperation(scheduled.id, error);
+        if (analyzeStage.isCurrent(seq) && ownsOperation('analyze', scheduled.id)) setBusy(false, pipe.building);
+        return;
+      }
+      if (!analyzeStage.isCurrent(seq) || !ownsOperation('analyze', scheduled.id)) return;
       if (an.status !== 0) {
         pipe.failure = `analyze failed: ${an.error ?? an.status}`;
+        operations.finish(scheduled.id, an.status === 3 ? 'refused' : 'failed', an.status === 3
+          ? { refusal: { message: an.error ?? 'Analyze request refused.', libraryStatus: an.status } }
+          : { failure: { kind: 'bad_request', message: an.error ?? `analyze failed (${an.status})`, libraryStatus: an.status } });
         setBusy(false, pipe.building);
         return;
       }
       pipe.failure = null;
-      state.analysis = JSON.parse(an.text!) as Analysis;
+      try {
+        state.analysis = JSON.parse(an.text!) as Analysis;
+      } catch (error) {
+        pipe.failure = 'analyze failed: invalid response';
+        failOperation(scheduled.id, error, 'internal');
+        setBusy(false, pipe.building);
+        return;
+      }
       state.diagnostics = state.analysis.diagnostics;
-      publishDiagnostics(snapshot, state.analysis);
+      publishDiagnostics(scheduled.bodies, state.analysis);
+      retainDiagnostics(scheduled, scheduled, state.analysis);
+      diagnosticProducerByRequest.set(JSON.stringify({ root: scheduled.request.root, files: scheduled.request.files }), { scheduled, analysis: state.analysis });
       // So the badge survives switching away from this project.
       const openId = store.envelope.activeId;
       if (openId) remembered.set(openId, sumCounts(countsByFile(state.tabs.files, state.analysis)));
@@ -3509,66 +3746,116 @@ const groups = displayGroups(catalogue, []);
       state.analyzedDoc = doc;
       pipe.errors = errors;
       pipe.warnings = state.diagnostics.length - errors;
+      operations.finish(scheduled.id, errors > 0 ? 'diagnostics' : 'succeeded', {
+        counts: { errors, warnings: pipe.warnings },
+      });
+      publishOutput('analysis', scheduled, { errors, warnings: pipe.warnings });
+      publishOutput('diagnostics', scheduled, { errors, warnings: pipe.warnings });
       setBusy(false, pipe.building);
     }
 
-    async function runBuild(seq: number) {
-      const doc = state.doc;
-      if (!(await ensureReady())) return;
-      if (!buildStage.isCurrent(seq)) return;
+    async function runBuild(seq: number, scheduled: ScheduledOperation) {
+      const doc = scheduled.doc;
+      operations.start(scheduled.id);
+      if (!(await ensureReady())) {
+        failOperation(scheduled.id, pipe.failure ?? 'Compiler initialization failed.');
+        return;
+      }
+      if (!buildStage.isCurrent(seq) || !ownsOperation('compile', scheduled.id)) return;
 
       markOutputs(state.tabs.files.map((f) => f.name));
       // Skip the compile only when a FRESH analysis already found errors; a
       // stale or missing one builds anyway, so neither timer can wedge the
       // other.
-      const fresh = state.analyzedDoc === doc ? { doc, errors: pipe.errors } : null;
-      if (!shouldCompile(fresh, doc)) {
+      const fresh = state.analyzedDoc === doc ? { doc, errors: pipe.errors, warnings: pipe.warnings } : null;
+      if (!shouldCompile(fresh, doc, settings().warningsAsErrors)) {
+        operations.finish(scheduled.id, 'diagnostics', { counts: { errors: pipe.errors, warnings: pipe.warnings } });
         setStale(state.artifact !== null);
         setBusy(pipe.analyzing, false);
         return;
       }
 
-      const snapshot = snapshotBodies();
       setBusy(pipe.analyzing, true);
-      const request = activeRequest();
       // File IDs are local to this exact request. Never pair topology with a
       // later editor analysis, including while a last-good artifact is shown.
-      const [c, metadata] = await Promise.all([
-        client.call('compile', request),
-        state.tabs.files.length > 1 ? analysisFor(request) : Promise.resolve(null),
-      ]);
-      if (!buildStage.isCurrent(seq)) return;
+      let c: WorkerReply;
+      let metadata: WorkerReply | null;
+      try {
+        [c, metadata] = await Promise.all([
+          client.call('compile', scheduled.request),
+          scheduled.bodies.length > 1 ? analysisFor(scheduled.request) : Promise.resolve(null),
+        ]);
+      } catch (error) {
+        if (buildStage.isCurrent(seq) && ownsOperation('compile', scheduled.id)) {
+          pipe.failure = `compile failed: ${error instanceof Error ? error.message : String(error)}`;
+          setStale(state.artifact !== null);
+          setBusy(pipe.analyzing, false);
+        }
+        failOperation(scheduled.id, error);
+        return;
+      }
+      if (!buildStage.isCurrent(seq) || !ownsOperation('compile', scheduled.id)) return;
 
       if (c.status === 0 && c.bytes) {
         // Captured now: the worker transfers the buffer, and a detached view
         // reports 0.
         const size = c.bytes.length;
         const hash = fnv1a(c.bytes);
-        const analysis = metadata?.status === 0 && metadata.text ? JSON.parse(metadata.text) as Analysis : null;
+        let analysis: Analysis | null = null;
+        try {
+          analysis = metadata?.status === 0 && metadata.text ? JSON.parse(metadata.text) as Analysis : null;
+        } catch (error) {
+          pipe.failure = 'compile failed: invalid analysis metadata';
+          setStale(state.artifact !== null);
+          failOperation(scheduled.id, error, 'internal');
+          setBusy(pipe.analyzing, false);
+          return;
+        }
         const importedImages = importedImagesFor(analysis);
+        const producer = diagnosticProducerByRequest.get(JSON.stringify({ root: scheduled.request.root, files: scheduled.request.files }));
+        if (producer) retainDiagnostics(scheduled, producer.scheduled, producer.analysis);
         if (!state.artifact || state.artifact.hash !== hash ||
           JSON.stringify([...(state.artifact.importedImages?.files ?? [])]) !== JSON.stringify([...importedImages.files])) {
-          state.artifact = { bytes: c.bytes, hash, size, importedImages };
+          state.artifact = { id: revisionIds.next('artifact'), bytes: c.bytes, hash, size, importedImages };
           hooks.onArtifact?.(c.bytes, 'built');
           hooks.refreshActions?.();
         }
         pipe.artifactBytes = size;
         pipe.failure = null;
         setStale(false);
+        operations.finish(scheduled.id, 'succeeded', { artifactId: state.artifact.id });
+        publishOutput('artifact', scheduled);
       } else if (c.status === 1 && c.text) {
         // A second, independent producer: the compile reply carries its own
         // `files[]`, which the mapping needs, so map THAT analysis.
-        const compileAnalysis = JSON.parse(c.text) as Analysis;
+        let compileAnalysis: Analysis;
+        try {
+          compileAnalysis = JSON.parse(c.text) as Analysis;
+        } catch (error) {
+          pipe.failure = 'compile failed: invalid diagnostics';
+          setStale(state.artifact !== null);
+          failOperation(scheduled.id, error, 'internal');
+          setBusy(pipe.analyzing, false);
+          return;
+        }
         state.diagnostics = compileAnalysis.diagnostics;
-        publishDiagnostics(snapshot, compileAnalysis);
+        publishDiagnostics(scheduled.bodies, compileAnalysis);
+        retainDiagnostics(scheduled, scheduled, compileAnalysis);
         renderTree();
         pipe.errors = Math.max(1, state.diagnostics.filter((d) => d.severity === 'error').length);
         // The artifact and the canvas are LEFT ALONE: the last good build stays
         // on screen, dimmed, until the source builds again.
         setStale(state.artifact !== null);
+        operations.finish(scheduled.id, 'diagnostics', {
+          counts: { errors: pipe.errors, warnings: state.diagnostics.length - pipe.errors },
+        });
+        publishOutput('diagnostics', scheduled, { errors: pipe.errors, warnings: state.diagnostics.length - pipe.errors });
       } else {
         pipe.failure = `compile failed: ${c.error ?? c.status}`;
         setStale(state.artifact !== null);
+        operations.finish(scheduled.id, c.status === 3 ? 'refused' : 'failed', c.status === 3
+          ? { refusal: { message: c.error ?? 'Compile request refused.', libraryStatus: c.status } }
+          : { failure: { kind: 'bad_request', message: c.error ?? `compile failed (${c.status})`, libraryStatus: c.status } });
       }
       setBusy(pipe.analyzing, false);
 
@@ -3578,18 +3865,37 @@ const groups = displayGroups(catalogue, []);
 
     async function runPreview(seq: number) {
       if (!state.tabs.files.length || !state.version) return;
-      const r = await client.call('preview', activeRequest(optionsFor('preview', settings())));
+      const scheduled = queueOperation('preview');
+      operations.start(scheduled.id);
+      let r: WorkerReply;
+      try {
+        r = await client.call('preview', scheduled.request);
+      } catch (error) {
+        failOperation(scheduled.id, error);
+        return;
+      }
       // The follow-on call re-checks the SAME stage: this is the guard the
       // langlang playground omits on its second stage.
-      if (!buildStage.isCurrent(seq)) return;
+      if (!buildStage.isCurrent(seq) || !ownsOperation('preview', scheduled.id)) return;
       if (r.status === 0) {
         previewEl.textContent = r.text!;
         renderSizeLine();
+        operations.finish(scheduled.id, 'succeeded');
+        publishOutput('preview', scheduled);
+        const compiler = compilerIdentity();
+        if (compiler) schematicResults.admit({ operationId: scheduled.id, page: {
+          operationId: scheduled.id, inputs: scheduled.inputs, compiler,
+          settings: { expandMacros: settings().expandMacros, expandDisplay: settings().expandDisplay, color: 'never' },
+          dimensions: schematicDimensions(r.text!), text: r.text!,
+        } });
         return;
       }
       // Leave the last good schematic in place and say so in the status bar.
       pipe.failure = messageOf(r);
       setStale(previewEl.textContent !== '');
+      operations.finish(scheduled.id, r.status === 3 ? 'refused' : 'failed', r.status === 3
+        ? { refusal: { message: pipe.failure, libraryStatus: r.status } }
+        : { failure: { kind: 'bad_request', message: pipe.failure, libraryStatus: r.status } });
     }
 
     /** `rows × cols chars` of the schematic on screen (design file 3e). */
@@ -3750,6 +4056,15 @@ const groups = displayGroups(catalogue, []);
       tableEl.textContent = text;
       applyTruthGate();
     }
+    function retainTruth(operationId: OperationId, inputs: WorkInputs, table: TruthRows, scope: TruthScope) {
+      const compiler = compilerIdentity();
+      if (!compiler) return false;
+      const columns = [...table.inputs.map((column) => ({ ...column, kind: 'in' as const })), ...table.outputs.map((column) => ({ ...column, kind: 'out' as const }))];
+      return truthResults.admit({ operationId, page: {
+        operationId, inputs, compiler, scope, columns,
+        rows: table.rows.map((row, index) => ({ index, inputs: row.in.map((cell) => cell === null ? null : `0x${cell.toString(16)}`), outputs: row.out.map((cell) => cell === null ? null : `0x${cell.toString(16)}`) })),
+      } });
+    }
 
     async function runTruth(seq: number) {
       if (!state.tabs.files.length || !state.version) return;
@@ -3763,24 +4078,53 @@ const groups = displayGroups(catalogue, []);
         return;
       }
       const overCap = capRefusal(rootInputBits(), settings()) !== null;
+      const bits = rootInputBits();
+      if (!overCap && bits !== null && bits > 12) {
+        showTruthNote('Truth table refused: the fixed 4,096-row safety budget would be exceeded. Set live pins to filter the table.');
+        return;
+      }
       if (overCap || hasImportedImages()) {
         await runScratchTruth(seq, overCap);
         return;
       }
-      const r = await client.call('truth_table', activeRequest(optionsFor('truth_table', settings(), preloads())));
-      if (!buildStage.isCurrent(seq)) return;
+      const activeId = store.envelope.activeId;
+      const scheduled = queueOperation('truth_table', optionsFor('truth_table', settings(), preloads()), {
+        imageRevision: activeId ? revisions.projectVersion(activeId)?.imageRevision ?? null : null,
+      });
+      operations.start(scheduled.id);
+      let r: WorkerReply;
+      try {
+        r = await client.call('truth_table', scheduled.request);
+      } catch (error) {
+        failOperation(scheduled.id, error);
+        return;
+      }
+      if (!buildStage.isCurrent(seq) || !ownsOperation('truth_table', scheduled.id)) return;
       if (r.status !== 0) {
         // A refusal leaves the last good table on screen; the reason goes to
         // the status bar rather than replacing what the reader was reading.
         pipe.failure = messageOf(r);
         setStale(tableEl.textContent !== '');
+        operations.finish(scheduled.id, r.status === 3 ? 'refused' : 'failed', r.status === 3
+          ? { refusal: { message: pipe.failure, libraryStatus: r.status } }
+          : { failure: { kind: 'bad_request', message: pipe.failure, libraryStatus: r.status } });
         return;
       }
-      const { parseTruthTable } = await loadTruthView();
-      if (!buildStage.isCurrent(seq)) return;
+      let parseTruthTable: (text: string) => TruthRows;
+      try {
+        ({ parseTruthTable } = await loadTruthView());
+      } catch (error) {
+        failOperation(scheduled.id, error, 'internal');
+        return;
+      }
+      if (!buildStage.isCurrent(seq) || !ownsOperation('truth_table', scheduled.id)) return;
       truth.filtered = false;
       truth.unknownBits = undefined;
-      await renderTruth(parseTruthTable(r.text!));
+      const table = parseTruthTable(r.text!);
+      await renderTruth(table);
+      operations.finish(scheduled.id, 'succeeded', { truthScope: 'exhaustive', truthPath: 'compiler' });
+      publishOutput('truth', scheduled);
+      retainTruth(scheduled.id, scheduled.inputs, table, { kind: 'exhaustive', engine: 'compiler', inputBits: rootInputBits() ?? 0, enumeratedBits: rootInputBits() ?? 0, rowCount: table.rows.length, cap: settings().truthTableCap, heldInputs: [], unknownInputs: table.inputs.map((column) => ({ name: column.name, width: column.width })), partialBusPolicy: 'whole_bus_unknown' });
     }
 
     /**
@@ -3803,21 +4147,49 @@ const groups = displayGroups(catalogue, []);
       }
       const bytes = sim.bytes;
       if (!bytes) return;
-      const [{ rowsForPins }, { CircRuntime: Runtime }] = await Promise.all([loadTruthView(), loadRenderer()]);
-      if (!buildStage.isCurrent(seq) || sim.bytes !== bytes) return;
-      const scratch = await SimSession.build({
-        bytes,
-        load: (b) => Runtime.loadFromBytes(b, { noInitialPinDrive: true }),
-        roms: currentRoms(),
-        images: romImages,
-        importedImages: state.artifact?.importedImages,
+      const activeId = store.envelope.activeId;
+      const scheduled = queueOperation('truth_table', optionsFor('truth_table', settings(), preloads()), {
+        artifactId: state.artifact?.id ?? null,
+        imageRevision: activeId ? revisions.projectVersion(activeId)?.imageRevision ?? null : null,
+        liveStateRevision: filtered ? sim.liveStateRevision : null,
       });
-      if (!buildStage.isCurrent(seq) || sim.bytes !== bytes || sim.session !== live) {
+      operations.start(scheduled.id);
+      // Scratch Truth has runtime-only inputs. Freeze them before lazy module
+      // loads so a later pin/image edit cannot be published as this table.
+      const fixedInputs = filtered ? inputPins().map(({ name, value }) => ({ name, width: value.width, value })) : [];
+      const enumeratedBits = filtered
+        ? fixedInputs.filter((pin) => (pin.value.defined & ((1n << BigInt(pin.width)) - 1n)) !== ((1n << BigInt(pin.width)) - 1n)).reduce((sum, pin) => sum + pin.width, 0)
+        : rootInputBits() ?? 0;
+      if (enumeratedBits > 12) {
+        truth.filtered = false;
+        showTruthNote('Truth table refused: the fixed 4,096-row safety budget would be exceeded.');
+        operations.finish(scheduled.id, 'refused', { truthPath: 'scratch', refusal: { message: tableEl.textContent ?? 'Truth table refused.', libraryStatus: null } });
+        return;
+      }
+      const roms = currentRoms().map((rom) => ({ ...rom }));
+      const images = new Map(romImages);
+      const importedImages = copyImportedImages(state.artifact?.importedImages ?? { files: new Map(), images: new Map() });
+      const [{ rowsForPins }, { CircRuntime: Runtime }] = await Promise.all([loadTruthView(), loadRenderer()]);
+      if (!buildStage.isCurrent(seq) || !ownsOperation('truth_table', scheduled.id) || sim.bytes !== bytes) return;
+      let scratch: SimSession;
+      try {
+        scratch = await SimSession.build({
+          bytes,
+          load: (b) => Runtime.loadFromBytes(b, { noInitialPinDrive: true }),
+          roms,
+          images,
+          importedImages,
+        });
+      } catch (error) {
+        failOperation(scheduled.id, error, 'runtime');
+        return;
+      }
+      if (!buildStage.isCurrent(seq) || !ownsOperation('truth_table', scheduled.id) || sim.bytes !== bytes || sim.session !== live) {
         scratch.destroy();
         return;
       }
       const t0 = performance.now();
-      const outcome = rowsForPins(scratch, filtered ? live : scratch, cap);
+      const outcome = rowsForPins(scratch, filtered ? live : scratch, cap, filtered ? fixedInputs : undefined);
       truth.lastMs = performance.now() - t0;
       scratch.destroy();
       truth.unknownBits = filtered ? outcome.unknownBits : undefined;
@@ -3828,10 +4200,17 @@ const groups = displayGroups(catalogue, []);
             ? 'A truth table needs a circuit without ram.'
             : `${outcome.unknownBits} unknown input bits are over the cap of ${cap}. Set more pins, on the canvas or in the Data panel, or raise the cap.`,
         );
+        operations.finish(scheduled.id, 'refused', { truthPath: 'scratch', refusal: { message: tableEl.textContent ?? 'Truth table refused.', libraryStatus: null } });
         return;
       }
       truth.filtered = filtered;
       await renderTruth(outcome.table);
+      if (!buildStage.isCurrent(seq) || !ownsOperation('truth_table', scheduled.id)) return;
+      operations.finish(scheduled.id, 'succeeded', { truthScope: filtered ? 'filtered' : 'exhaustive', truthPath: 'scratch' });
+      publishOutput('truth', scheduled);
+      const heldInputs = fixedInputs.filter((pin) => (pin.value.defined & ((1n << BigInt(pin.width)) - 1n)) === ((1n << BigInt(pin.width)) - 1n)).map((pin) => ({ name: pin.name, state: signal(pin.value, pin.width) }));
+      const unknown = outcome.table.inputs.filter((column) => !heldInputs.some((pin) => pin.name === column.name)).map((column) => ({ name: column.name, width: column.width }));
+      retainTruth(scheduled.id, scheduled.inputs, outcome.table, { kind: filtered ? 'filtered' : 'exhaustive', engine: 'scratch_session', inputBits: rootInputBits() ?? 0, enumeratedBits: outcome.unknownBits, rowCount: outcome.table.rows.length, cap, heldInputs, unknownInputs: unknown, partialBusPolicy: 'whole_bus_unknown' });
     }
 
     /** The copies: the compiler's own markdown or CSV for its table, the
@@ -3885,6 +4264,23 @@ const groups = displayGroups(catalogue, []);
         if (snapshot[i] !== f.body) return;
         editor!.setDiagnosticsFor(i, toLintDiagnostics(perTab[i]));
       });
+    }
+    /** Capture converted ranges while the exact worker request bodies still
+     * exist. Later tabs may be renamed or edited without changing history. */
+    function retainDiagnostics(requested: ScheduledOperation, producer: ScheduledOperation, analysis: Analysis) {
+      const diagnostics = convertDiagnostics(analysis, producer.request.files);
+      if (!diagnostics || !state.version) return;
+      const errors = diagnostics.filter((diagnostic) => diagnostic.severity === 'error').length;
+      const id = diagnosticStore.retain({
+        requestedOperationId: requested.id, producerOperationId: producer.id,
+        requestedInputs: requested.inputs, producerInputs: producer.inputs,
+        compiler: {
+          version: state.version.version, revision: state.version.revision, parser: state.version.parser,
+          parserRuntimeSha256: state.version.parser_runtime_sha256, grammarSha256: state.version.grammar_sha256,
+          topologyVersion: state.version.topology_version, fullVersion: state.version.full_version,
+        }, counts: { errors, warnings: diagnostics.length - errors }, diagnostics,
+      });
+      if (id) diagnosticSetByOperation.set(requested.id, id);
     }
 
     /** The bar: the counts on the left, what the source is made of on the
@@ -3995,7 +4391,15 @@ const groups = displayGroups(catalogue, []);
       session: null as SimSession | null,
       /** The bytes the session was built from, so a new artifact is told apart. */
       sessionBytes: null as Uint8Array | null,
+      id: null as string | null,
+      liveStateRevision: null as string | null,
+      imageRevision: null as string | null,
+      operationId: null as OperationId | null,
+      lifecycle: 'absent' as 'absent' | 'building' | 'ready' | 'resetting' | 'failed',
+      preloadState: 'none' as 'none' | 'applied' | 'partial' | 'failed' | 'unknown',
+      preload: { applied: 0, errors: 0 },
       unsubscribe: null as null | (() => void),
+      lifecycleUnsubscribe: null as null | (() => void),
       view: null as View | null,
       bytes: null as Uint8Array | null,
       renderedHash: -1,
@@ -4019,6 +4423,13 @@ const groups = displayGroups(catalogue, []);
       gestureAt: 0,
     };
     const GESTURE_WINDOW_MS = 500;
+
+    function setPreloadStatus(result: ApplyResult) {
+      sim.preload = { applied: result.applied.length, errors: result.errors.size };
+      sim.preloadState = result.errors.size > 0
+        ? result.applied.length > 0 ? 'partial' : 'failed'
+        : result.applied.length > 0 ? 'applied' : 'none';
+    }
 
     /** The furniture's bands: the switch at the top, the two lines at the
      *  bottom. The canvas covers the whole region under them, so the fit
@@ -4127,12 +4538,20 @@ const groups = displayGroups(catalogue, []);
     function dropSession() {
       sim.unsubscribe?.();
       sim.unsubscribe = null;
+      sim.lifecycleUnsubscribe?.();
+      sim.lifecycleUnsubscribe = null;
       sim.view?.destroy();
       sim.view = null;
       simMount.innerHTML = '';
       sim.session?.destroy();
       sim.session = null;
       sim.sessionBytes = null;
+      sim.id = null;
+      sim.liveStateRevision = null;
+      sim.imageRevision = null;
+      sim.lifecycle = 'absent';
+      sim.preloadState = 'none';
+      sim.preload = { applied: 0, errors: 0 };
       refreshConsoleGate();
       syncZoom();
     }
@@ -4157,28 +4576,73 @@ const groups = displayGroups(catalogue, []);
       return pending.promise;
     }
     async function buildSession(bytes: Uint8Array): Promise<SimSession | null> {
-      const { CircRuntime: Runtime } = await loadRenderer();
-      if (sim.bytes !== bytes) return null;
-      dropSession();
-      const session = await SimSession.build({
-        bytes,
-        load: (b) => Runtime.loadFromBytes(b, { noInitialPinDrive: true }),
-        roms: currentRoms(),
-        images: romImages,
-        importedImages: state.artifact?.importedImages,
-        // The handshake's `diag warning` lines, from the analysis this
-        // artifact was built beside; `--sim` prints its own the same way.
-        warnings: state.mapped
-          .filter((m) => m.severity === 'warning')
-          .map((m) => ({ code: m.code, file: m.fileName, line: m.line, col: m.column, message: m.message })),
-        bootLow: true,
+      const activeId = store.envelope.activeId;
+      const artifact = state.artifact;
+      const roms = currentRoms().map((rom) => ({ ...rom }));
+      // The visible Memory editor updates this session in place. Its map stays
+      // live here; scratch Truth above receives a detached image snapshot.
+      const images = romImages;
+      const importedImages = artifact?.importedImages;
+      const warnings = state.mapped
+        .filter((m) => m.severity === 'warning')
+        .map((m) => ({ code: m.code, file: m.fileName, line: m.line, col: m.column, message: m.message }));
+      const scheduled = queueOperation('session_build', {}, {
+        artifactId: artifact?.id ?? null,
+        imageRevision: activeId ? revisions.projectVersion(activeId)?.imageRevision ?? null : null,
       });
+      sim.operationId = scheduled.id;
+      sim.lifecycle = 'building';
+      sim.preloadState = 'unknown';
+      sim.preload = { applied: 0, errors: 0 };
+      operations.start(scheduled.id);
+      observe();
+      let Runtime: typeof import('circ-renderer')['CircRuntime'];
+      try {
+        ({ CircRuntime: Runtime } = await loadRenderer());
+      } catch (error) {
+        if (ownsOperation('session_build', scheduled.id)) sim.lifecycle = 'failed';
+        failOperation(scheduled.id, error, 'runtime');
+        observe();
+        return null;
+      }
+      if (sim.bytes !== bytes) {
+        operations.supersede(scheduled.id, null, 'new_inputs');
+        return null;
+      }
+      dropSession();
+      let session: SimSession;
+      try {
+        session = await SimSession.build({
+          bytes,
+          load: (b) => Runtime.loadFromBytes(b, { noInitialPinDrive: true }),
+          roms,
+          images,
+          importedImages,
+          // The handshake's `diag warning` lines, from the analysis this
+          // artifact was built beside; `--sim` prints its own the same way.
+          warnings,
+          bootLow: true,
+        });
+      } catch (error) {
+        if (ownsOperation('session_build', scheduled.id)) sim.lifecycle = 'failed';
+        failOperation(scheduled.id, error, 'runtime');
+        observe();
+        return null;
+      }
       if (sim.bytes !== bytes) {
         session.destroy();
+        operations.supersede(scheduled.id, null, 'new_inputs');
         return null;
       }
       sim.session = session;
       sim.sessionBytes = bytes;
+      sim.id = revisionIds.next('session');
+      sim.liveStateRevision = revisionIds.next('live-state');
+      sim.imageRevision = scheduled.inputs.imageRevision;
+      sim.lifecycle = 'ready';
+      setPreloadStatus(session.preloadResult);
+      operations.finish(scheduled.id, 'succeeded', { sessionId: sim.id, artifactId: artifact?.id ?? null });
+      observe();
       // The console's handshake, before the replay below: the replayed pins
       // are the page's state, silent like the boot, not lines of the session.
       consoleHandshake(session);
@@ -4188,8 +4652,49 @@ const groups = displayGroups(catalogue, []);
       const ids = rootInputs(session);
       for (const name of Array.from(sim.pins.keys())) if (!ids.has(name)) sim.pins.delete(name);
       for (const [name, v] of sim.pins) session.set(name, v.value, v.defined);
+      sim.lifecycleUnsubscribe = session.subscribeLifecycle((event) => {
+        if (sim.session !== session) return;
+        if (event.kind === 'reset-started') {
+          const current = sim.operationId ? operations.lookup(sim.operationId) : { kind: 'not_found' as const };
+          if (current.kind !== 'found' || (current.operation.state !== 'queued' && current.operation.state !== 'running') || current.operation.kind !== 'session_reset') {
+            const reset = queueOperation('session_reset', {}, {
+              artifactId: artifact?.id ?? null,
+              imageRevision: activeId ? revisions.projectVersion(activeId)?.imageRevision ?? null : null,
+              liveStateRevision: sim.liveStateRevision,
+            });
+            sim.operationId = reset.id;
+            operations.start(reset.id);
+          }
+          sim.lifecycle = 'resetting';
+          sim.id = null;
+          sim.liveStateRevision = null;
+          observe();
+        } else if (event.kind === 'reset-finished') {
+          sim.lifecycle = 'ready';
+          setPreloadStatus(event.preloads);
+          const reset = sim.operationId ? operations.lookup(sim.operationId) : null;
+          if (reset?.kind === 'found') sim.imageRevision = reset.operation.inputs.imageRevision;
+          if (sim.operationId) operations.finish(sim.operationId, 'succeeded', { sessionId: sim.id, artifactId: artifact?.id ?? null });
+          observe();
+        } else if (event.kind === 'reset-failed') {
+          sim.lifecycle = session.isAlive ? 'ready' : 'failed';
+          if (session.isAlive) {
+            sim.id = revisionIds.next('session');
+            sim.liveStateRevision = revisionIds.next('live-state');
+          }
+          if (sim.operationId) {
+            operations.finish(sim.operationId, 'failed', { failure: { kind: 'runtime', message: event.message, libraryStatus: null } });
+          }
+          observe();
+        } else if (event.kind === 'run-finished') {
+          sim.liveStateRevision = revisionIds.next('live-state');
+          observe();
+        }
+      });
       sim.unsubscribe = session.subscribe((event) => {
         if (event.kind === 'drive' || event.kind === 'memory') {
+          sim.liveStateRevision = revisionIds.next('live-state');
+          observe();
           // Another face drove the circuit: the picture, the rows and the dump
           // follow. Only redrawn while on screen: each visible word costs a
           // call across the boundary.
@@ -4207,6 +4712,9 @@ const groups = displayGroups(catalogue, []);
           // lines are already in the log (it is busy while they run).
           if (!consoleState.busy) consoleAppend(commandFor(event, session), 'page');
         } else if (event.kind === 'rebuilt') {
+          sim.id = revisionIds.next('session');
+          sim.liveStateRevision = revisionIds.next('live-state');
+          observe();
           // The protocol's reset: a new runtime, so a canvas over the old one
           // is rebuilt over the new, and the rows read the new.
           if (sim.view) void buildCanvas();
@@ -4463,7 +4971,21 @@ const groups = displayGroups(catalogue, []);
       // The reader's remembered pins go with it, so a recompile does not
       // bring them back.
       sim.pins.clear();
-      void session.reset().finally(() => { dataReset.disabled = false; });
+      const activeId = store.envelope.activeId;
+      const scheduled = queueOperation('session_reset', {}, {
+        artifactId: state.artifact?.id ?? null,
+        imageRevision: activeId ? revisions.projectVersion(activeId)?.imageRevision ?? null : null,
+        liveStateRevision: sim.liveStateRevision,
+      });
+      sim.operationId = scheduled.id;
+      operations.start(scheduled.id);
+      void session.reset().then(() => {
+        if (sim.session !== session) return;
+        operations.finish(scheduled.id, 'succeeded', { sessionId: sim.id, artifactId: state.artifact?.id ?? null });
+        observe();
+      }, (error) => {
+        failOperation(scheduled.id, error, 'runtime');
+      }).finally(() => { dataReset.disabled = false; });
     });
 
     hooks.onCircuitChanged = () => { sim.pins.clear(); };
@@ -4477,6 +4999,9 @@ const groups = displayGroups(catalogue, []);
       }
     };
     hooks.onArtifact = (bytes, reason) => {
+      if (bytes !== sim.sessionBytes && (sim.lifecycle === 'building' || sim.lifecycle === 'resetting') && sim.operationId) {
+        operations.supersede(sim.operationId, null, 'new_inputs');
+      }
       sim.bytes = bytes;
       // A new artifact is a new session; the reader's pins are replayed onto it
       // by name when a face next asks for it.
@@ -4505,6 +5030,653 @@ const groups = displayGroups(catalogue, []);
         void buildCanvas();
       }
     };
+
+    const agentError = (code: any, message: string, retryable = false, details?: Record<string, string>) => ({ ok: false as const, error: { code, message, retryable, ...(details ? { details } : {}) } });
+    const agentStringsAreWellFormed = (value: unknown): boolean => {
+      if (typeof value === 'string') return isWellFormed(value);
+      if (Array.isArray(value)) return value.every(agentStringsAreWellFormed);
+      return !value || typeof value !== 'object' || Object.values(value as Record<string, unknown>).every(agentStringsAreWellFormed);
+    };
+    function agentReceipt(changed: boolean): PersistenceReceipt {
+      if (!changed) return { state: 'unchanged', enabled: store.enabled, persistedActive: null, notices: [] };
+      const written = store.flush();
+      if (!written?.ok) return { state: 'memory_only', enabled: false, persistedActive: null, notices: [{ kind: 'disabled', reason: written?.note?.kind === 'disabled' ? written.note.reason : 'unavailable' }] };
+      const active = store.envelope.activeId ? revisions.projectVersion(store.envelope.activeId) : null;
+      if (!active || !store.envelope.activeId) return { state: 'memory_only', enabled: false, persistedActive: null, notices: [{ kind: 'disabled', reason: 'unavailable' }] };
+      const notices = written.note?.kind === 'images-skipped' ? [{ kind: 'images_skipped' as const, ownerCount: Object.keys(store.envelope.sourceImages).length }] : written.note?.kind === 'evicted' ? [{ kind: 'evicted' as const, cause: 'quota' as const, count: written.note.names.length, reportedProjects: [], omittedCount: written.note.names.length }] : [];
+      return { state: 'saved', enabled: true, persistedActive: { projectId: active.projectId, projectRevision: active.revision, sourceRevision: active.sourceRevision, sourceStored: 'inline' }, notices };
+    }
+    function agentResult(disposition: WorkspaceChangeResult['disposition'], previousProjectId: string | null, forkedFromProjectId: string | null, warnings: WorkspaceChangeResult['warnings'], changed = true): { ok: true; value: WorkspaceChangeResult } {
+      refreshWorkspaceSnapshot();
+      const activeId = store.envelope.activeId!;
+      const project = workspaceSnapshot!.projects.find((item) => item.id === activeId)!;
+      const target = revisions.currentTarget ?? revisions.selectTarget(activeId, activeFile(state.tabs).name);
+      const compileSettings = { revision: revisions.optionsRevision('compile', optionsFor('compile', settings())), warningsAsErrors: settings().warningsAsErrors };
+      return { ok: true, value: { disposition, workspaceRevision, project: { id: project.id, name: project.name, kind: project.kind, active: true, version: project.version, fileCount: project.files.length }, target, compileSettings, entryFile: target.entryFile, forkedFromProjectId, previousProjectId, warnings, operationIds: { analyze: operationSlots.analyze ?? null, compile: operationSlots.compile ?? null }, persistence: agentReceipt(changed) } };
+    }
+    function agentPreconditions(projectId: string, sourceRevision: string, targetEpoch: string) {
+      refreshWorkspaceSnapshot();
+      const target = revisions.currentTarget;
+      const project = revisions.projectVersion(projectId);
+      if (!store.envelope.activeId || store.envelope.activeId !== projectId) return agentError('PROJECT_NOT_ACTIVE', 'The requested project is not the visible active project. Open it and reread status.');
+      if (!project || project.sourceRevision !== sourceRevision) return agentError('REVISION_CONFLICT', 'Source changed; reread the project before mutating it.');
+      if (!target || target.targetEpoch !== targetEpoch) return agentError('TARGET_CONFLICT', 'The visible compilation target changed; reread status.');
+      return null;
+    }
+    function reconcileAgentDocuments(previous: readonly { name: string; body: string }[], next: readonly { name: string; body: string }[], renamed: readonly { oldName: string; newName: string }[]) {
+      if (!editor) return;
+      const handle = editor;
+      const names = previous.map((file) => file.name);
+      for (const rename of renamed) { const index = names.indexOf(rename.oldName); if (index >= 0) names[index] = rename.newName; }
+      for (let index = names.length - 1; index >= 0; index -= 1) if (!next.some((file) => file.name === names[index])) { handle.removeDocument(index); names.splice(index, 1); }
+      next.forEach((file, index) => { if (names[index] === file.name) return; if (!names.includes(file.name)) { handle.insertDocument(index, file.body); names.splice(index, 0, file.name); } });
+      next.forEach((file, index) => handle.replaceDocument(index, file.body));
+    }
+    function createAgentProject(input: any) {
+      if (!agentStringsAreWellFormed(input)) return agentError('INVALID_ARGUMENT', 'All strings must be well-formed UTF-16.');
+      refreshWorkspaceSnapshot();
+      const target = revisions.currentTarget;
+      if (input.expectedWorkspaceRevision !== workspaceRevision || input.expectedActiveProjectId !== store.envelope.activeId || input.expectedTargetEpoch !== (target?.targetEpoch ?? null)) return agentError('REVISION_CONFLICT', 'Workspace changed; reread status before creating a project.');
+      const name = input.name === undefined ? 'Untitled' : validProjectName(input.name);
+      if (!name) return agentError('INVALID_ARGUMENT', 'Project name is invalid.');
+      const files = input.files === undefined ? fromSource(NEW_PROJECT_SOURCE).files : input.files;
+      if (!Array.isArray(files) || files.length === 0 || files.some((file) => !file || typeof file.name !== 'string' || typeof file.body !== 'string' || !validFileName(file.name) || !isWellFormed(file.body))) return agentError('FILE_CONFLICT', 'files must be a nonempty ordered array of valid named files.');
+      const sourceText = joinFiles(files);
+      if (utf8Bytes(sourceText) > 32 * 1024) return agentError('SOURCE_TOO_LARGE', 'The final project source exceeds 32 KiB.');
+      const entry = input.entryFile ?? files.at(-1)!.name;
+      if (!files.some((file) => file.name === entry)) return agentError('FILE_NOT_FOUND', 'entryFile is not present in files.');
+      let created: string | null = null;
+      const previous = store.envelope.activeId;
+      store.update((draft) => {
+        const result = createScratch(draft.scratch, { name, source: sourceText, now: nowMs(), keep: draft.activeId });
+        if (!result.created) return;
+        draft.scratch = result.list; created = result.created.id;
+      });
+      if (!created) return agentError('SOURCE_TOO_LARGE', 'The project could not be represented by the workspace store.');
+      loadProject(created, { restoreFile: entry });
+      return agentResult('created', previous, null, []);
+    }
+    function openAgentProject(input: any) {
+      refreshWorkspaceSnapshot();
+      const target = revisions.currentTarget;
+      if (input.expectedWorkspaceRevision !== workspaceRevision || input.expectedActiveProjectId !== store.envelope.activeId || input.expectedTargetEpoch !== (target?.targetEpoch ?? null)) return agentError('REVISION_CONFLICT', 'Workspace changed; reread status before opening a project.');
+      const project = workspaceSnapshot?.projects.find((item) => item.id === input.projectId);
+      if (!project) return agentError('PROJECT_NOT_FOUND', 'The requested project is not available.');
+      if (project.version.revision !== input.expectedRevision) return agentError('REVISION_CONFLICT', 'Project changed; reread its manifest.');
+      if (input.projectId === store.envelope.activeId && input.entryFile && input.entryFile !== activeFile(state.tabs).name) return agentError('TARGET_CONFLICT', 'Use circ_select_entry to change the active entry.');
+      if (input.projectId === store.envelope.activeId) return agentResult('unchanged', null, null, [], false);
+      const previous = store.envelope.activeId;
+      if (!loadProject(input.projectId, { restoreFile: input.entryFile })) return agentError('PROJECT_NOT_FOUND', 'The requested project is not available.');
+      return agentResult('opened', previous, null, []);
+    }
+    function updateAgentProject(input: any) {
+      if (!agentStringsAreWellFormed(input)) return agentError('INVALID_ARGUMENT', 'All strings must be well-formed UTF-16.');
+      const rejected = agentPreconditions(input.projectId, input.expectedSourceRevision, input.expectedTargetEpoch); if (rejected) return rejected;
+      const plan = planMutations(state.tabs.files, activeFile(state.tabs).name, input.operations);
+      if (!plan.ok) return agentError('FILE_CONFLICT', `Operation ${plan.error.operation}: ${plan.error.reason}`, false, { operation: String(plan.error.operation), ...(plan.error.file ? { file: plan.error.file } : {}) });
+      const finalSource = joinFiles(plan.value.files);
+      if (utf8Bytes(finalSource) > 32 * 1024) return agentError('SOURCE_TOO_LARGE', 'The final project source exceeds 32 KiB.');
+      if (!plan.value.changed) return agentResult('unchanged', null, null, [], false);
+      const previousFiles = state.tabs.files;
+      const oldId = store.envelope.activeId!;
+      let activeId = oldId;
+      let forked: string | null = null;
+      store.update((draft) => {
+        if (idKind(oldId) === 'scratch') draft.scratch = touchScratch(draft.scratch, oldId, finalSource, nowMs()).list;
+        else {
+          const created = createScratch(draft.scratch, { name: catalogue.find((item) => item.id === oldId)?.label ?? 'Untitled', source: finalSource, now: nowMs(), keep: oldId });
+          if (!created.created) return;
+          draft.scratch = created.list; activeId = created.created.id; forked = activeId; draft.activeId = activeId;
+          for (const file of previousFiles) { const images = draft.sourceImages[sourceImageKey(oldId, file.name)]; if (images) draft.sourceImages[sourceImageKey(activeId, file.name)] = { ...images }; }
+        }
+        for (const rename of plan.value.renamed) { const oldKey = sourceImageKey(activeId, rename.oldName); const newKey = sourceImageKey(activeId, rename.newName); if (draft.sourceImages[oldKey]) draft.sourceImages[newKey] = draft.sourceImages[oldKey]; delete draft.sourceImages[oldKey]; }
+        for (const name of plan.value.deleted) delete draft.sourceImages[sourceImageKey(activeId, name)];
+        draft.activeFile = plan.value.files[plan.value.active]!.name;
+      });
+      state.tabs = { files: plan.value.files, active: plan.value.active };
+      source.value = finalSource;
+      reconcileAgentDocuments(previousFiles, state.tabs.files, plan.value.renamed);
+      editor?.showDocument(state.tabs.active);
+      selectImages(); renderTree(); renderWorkspace(); schedule();
+      return agentResult('updated', oldId, forked, plan.value.renamed.map((rename) => ({ kind: 'imports_not_rewritten' as const, oldName: rename.oldName, newName: rename.newName })));
+    }
+    function selectAgentEntry(input: any) {
+      const rejected = agentPreconditions(input.projectId, input.expectedSourceRevision, input.expectedTargetEpoch); if (rejected) return rejected;
+      const index = state.tabs.files.findIndex((file) => file.name === input.name);
+      if (index < 0) return agentError('FILE_NOT_FOUND', 'The requested entry file is not present.');
+      if (index === state.tabs.active) return agentResult('unchanged', null, null, [], false);
+      state.tabs = selectTab(state.tabs, index); store.update((draft) => { draft.activeFile = input.name; }); editor?.showDocument(index); schedule(); renderTree();
+      return agentResult('entry_selected', null, null, []);
+    }
+    function setAgentCompileSettings(input: any) {
+      const target = revisions.currentTarget;
+      if (!target || input.projectId !== store.envelope.activeId || input.expectedTargetEpoch !== target.targetEpoch) return agentError('TARGET_CONFLICT', 'The visible target changed; reread status.');
+      const currentRevision = revisions.optionsRevision('compile', optionsFor('compile', settings()));
+      if (input.expectedOptionsRevision !== currentRevision) return agentError('OPTIONS_CONFLICT', 'Compile settings changed; reread status.');
+      if (typeof input.warningsAsErrors !== 'boolean') return agentError('INVALID_ARGUMENT', 'warningsAsErrors must be boolean.');
+      if (input.warningsAsErrors === settings().warningsAsErrors) return agentResult('unchanged', null, null, [], false);
+      store.update((draft) => { draft.settings.warningsAsErrors = input.warningsAsErrors; });
+      const checkbox = el.querySelector<HTMLInputElement>('#pg-compiler-warn-as-error'); if (checkbox) checkbox.checked = input.warningsAsErrors;
+      schedule();
+      return agentResult('settings_updated', null, null, []);
+    }
+    function compileAgentProject(input: any) {
+      const rejected = agentPreconditions(input.projectId, input.expectedSourceRevision, input.expectedTargetEpoch); if (rejected) return rejected;
+      const optionsRevision = revisions.optionsRevision('compile', optionsFor('compile', settings()));
+      if (input.expectedOptionsRevision !== optionsRevision) return agentError('OPTIONS_CONFLICT', 'Compile settings changed; reread status.');
+      const analyzeInputs = inputsFor('analyze', optionsFor('analyze', settings()));
+      const compileInputs = inputsFor('compile', optionsFor('compile', settings()));
+      const reusable = (kind: 'analyze' | 'compile', inputs: WorkInputs) => {
+        const id = operationSlots[kind];
+        const lookup = id ? operations.lookup(id) : null;
+        if (!id || !lookup || lookup.kind !== 'found' || !sameInputs(lookup.operation.inputs, inputs)) return null;
+        const state = lookup.operation.state;
+        const terminal = kind === 'analyze'
+          ? state === 'succeeded' || state === 'diagnostics'
+          : state === 'succeeded' || state === 'diagnostics' || state === 'refused';
+        return { id, disposition: terminal ? 'already_current' as const : state === 'queued' || state === 'running' ? 'joined' as const : null };
+      };
+      const oldAnalyze = reusable('analyze', analyzeInputs);
+      const oldCompile = reusable('compile', compileInputs);
+      if (oldAnalyze?.disposition && oldCompile?.disposition) {
+        return { ok: true as const, value: { target: analyzeInputs.target, optionsRevision, analysis: { operationId: oldAnalyze.id, disposition: oldAnalyze.disposition }, compile: { operationId: oldCompile.id, disposition: oldCompile.disposition }, artifactId: state.artifact?.id ?? null } satisfies CompileTicket };
+      }
+      // A non-reusable member must be paired with a fresh request; queued work
+      // is superseded by queueOperation and the shared worker still deduplicates
+      // its byte-identical physical analysis request.
+      const analyze = queueOperation('analyze'); const compile = queueOperation('compile');
+      void flushPipeline(analyze, compile);
+      const ticket: CompileTicket = { target: analyze.inputs.target, optionsRevision, analysis: { operationId: analyze.id, disposition: 'started' }, compile: { operationId: compile.id, disposition: 'started' }, artifactId: state.artifact?.id ?? null };
+      return { ok: true as const, value: ticket };
+    }
+    function diagnosticsForAgent(input: any) {
+      const operation = operations.lookup(input.operationId);
+      if (operation.kind === 'not_found') return agentError('OPERATION_NOT_FOUND', 'The requested operation is not known.');
+      if (operation.kind === 'expired') return agentError('OPERATION_EXPIRED', 'The requested operation expired.');
+      if (operation.operation.state === 'queued' || operation.operation.state === 'running') return agentError('DIAGNOSTICS_NOT_READY', 'The operation has not produced diagnostics yet.', true);
+      if (!diagnosticSetByOperation.has(input.operationId)) return agentError('DIAGNOSTICS_UNAVAILABLE', 'This operation has no retained compiler diagnostic payload.');
+      const current = { projectId: store.envelope.activeId ?? '', sourceRevision: revisions.currentTarget?.sourceRevision ?? '', files: state.tabs.files.map((file) => file.name) };
+      const page = diagnosticStore.page(input.operationId, input.expectedSourceRevision, input.cursor, input.limit, observationRevision, current);
+      return page.ok ? { ok: true as const, value: page.value as DiagnosticPage } : agentError(page.code, page.message);
+    }
+    // Phase 4's public simulation boundary. Human controls continue to use the
+    // same SimSession; these methods only add revision checks and result shaping.
+    const verificationResults = new VerificationResults();
+    const sourceMemory = (file: string, declaration: string): MemorySymbol | null => {
+      const analysis = state.analysis;
+      if (!analysis) return null;
+      const id = analysis.files.find((item) => item.path === rootPathFor(file))?.file_id;
+      if (id === undefined) return null;
+      const symbol = analysis.symbols.find((item) => item.file_id === id && item.name === declaration && (item.kind === 'rom' || item.kind === 'ram'));
+      return symbol && typeof symbol.addr_width === 'number' ? { name: symbol.name, kind: symbol.kind as 'rom' | 'ram', width: symbol.width, addrWidth: symbol.addr_width } : null;
+    };
+    const simulationError = (code: any, message: string, retryable = false, details?: Record<string, string>) => agentError(code, message, retryable, details);
+    function currentSimulationRef(): SimulationRef | null {
+      const target = revisions.currentTarget;
+      if (!target || !state.artifact || !sim.session || !sim.id || !sim.liveStateRevision || !sim.imageRevision) return null;
+      return { target, artifactId: state.artifact.id, sessionId: sim.id, liveStateRevision: sim.liveStateRevision, imageRevision: sim.imageRevision, initialization: 'page_boot_low', preloadState: sim.preloadState };
+    }
+    function rootMemory(mem: MemRef): RootMemory {
+      const shape = memoryShape(mem);
+      const activeId = store.envelope.activeId;
+      return { ...shape, sourceOwner: mem.kind === 'rom' && activeId ? { projectId: activeId, file: activeFile(state.tabs).name, declaration: mem.name } : null };
+    }
+    function simulationPreconditions(input: { projectId?: unknown; expectedTargetEpoch?: unknown; expectedArtifactId?: unknown; expectedSessionId?: unknown; expectedLiveStateRevision?: unknown }, live = true) {
+      const target = revisions.currentTarget;
+      if (!target || input.projectId !== target.projectId || input.expectedTargetEpoch !== target.targetEpoch) return simulationError('TARGET_CONFLICT', 'The visible target changed; reread status.');
+      if (!state.artifact || input.expectedArtifactId !== state.artifact.id) return simulationError('ARTIFACT_CONFLICT', 'The compiled artifact changed; reread status and prepare it.');
+      if (!live) return null;
+      if (!sim.session || sim.lifecycle !== 'ready' || !sim.id || !sim.liveStateRevision) return simulationError('SESSION_NOT_READY', 'No ready simulation session exists.', true);
+      if (input.expectedSessionId !== sim.id) return simulationError('SESSION_CONFLICT', 'The simulation session changed; reread it.');
+      if (input.expectedLiveStateRevision !== sim.liveStateRevision) return simulationError('LIVE_STATE_CONFLICT', 'Live simulation state changed; reread it.');
+      return null;
+    }
+    function getSimulationForAgent(input: any) {
+      const session = sim.session;
+      const ref = currentSimulationRef();
+      if (input.expectedSessionId !== undefined && input.expectedSessionId !== sim.id) return simulationError('SESSION_CONFLICT', 'The observed session is no longer current.');
+      if (input.expectedLiveStateRevision !== undefined && input.expectedLiveStateRevision !== sim.liveStateRevision) return simulationError('LIVE_STATE_CONFLICT', 'The observed live state is no longer current.');
+      const status = {
+        state: sim.lifecycle, id: sim.id, artifactId: state.artifact?.id ?? null, liveStateRevision: sim.liveStateRevision, imageRevision: sim.imageRevision,
+        matchesCurrentTarget: Boolean(session && !state.stale), matchesCurrentImages: sim.imageRevision === (store.envelope.activeId ? revisions.projectVersion(store.envelope.activeId)?.imageRevision ?? null : null) && sim.preloadState !== 'partial' && sim.preloadState !== 'failed',
+        preloadState: sim.preloadState, operationId: sim.operationId, preload: { ...sim.preload },
+      } as const;
+      if (!session || !ref) return { ok: true as const, value: { observationRevision, status, simulation: null, pins: [], memories: [] } satisfies SimulationSnapshot };
+      return { ok: true as const, value: { observationRevision, status, simulation: ref, pins: session.pins.map((pin) => { const read = session.get(pin.name); return pinValue(pin, read.ok ? read.value : { value: 0n, defined: 0n, width: pin.width }); }), memories: session.mems.map(rootMemory) } satisfies SimulationSnapshot };
+    }
+    function prepareSimulationForAgent(input: any) {
+      const target = revisions.currentTarget;
+      const version = store.envelope.activeId ? revisions.projectVersion(store.envelope.activeId) : null;
+      if (!target || input.projectId !== target.projectId || input.expectedTargetEpoch !== target.targetEpoch || input.expectedSourceRevision !== target.sourceRevision) return simulationError('TARGET_CONFLICT', 'The visible target changed; reread status.');
+      if (!state.artifact || input.expectedArtifactId !== state.artifact.id) return simulationError('ARTIFACT_CONFLICT', 'The compiled artifact changed; reread status.');
+      if (!version || input.expectedImageRevision !== version.imageRevision) return simulationError('IMAGE_CONFLICT', 'Source images changed; reread status.');
+      const ready = currentSimulationRef();
+      if (ready && ready.imageRevision === version.imageRevision) {
+        const operationId = operationSlots.session_build ?? sim.operationId;
+        if (!operationId) return simulationError('SESSION_NOT_READY', 'The session has no build operation.', true);
+        const operation = operations.lookup(operationId);
+        return operation.kind === 'found' ? { ok: true as const, value: { operationId, kind: 'session_build' as const, disposition: 'already_current' as const, inputs: operation.operation.inputs, sessionId: ready.sessionId } } : simulationError('SESSION_NOT_READY', 'The session build record expired.', true);
+      }
+      void ensureSession();
+      const operationId = sim.operationId ?? operationSlots.session_build;
+      if (!operationId) return simulationError('SESSION_NOT_READY', 'Simulation preparation did not start.', true);
+      const operation = operations.lookup(operationId);
+      return operation.kind === 'found' ? { ok: true as const, value: { operationId, kind: 'session_build' as const, disposition: operation.operation.state === 'queued' || operation.operation.state === 'running' ? 'started' as const : 'joined' as const, inputs: operation.operation.inputs, sessionId: null } } : simulationError('SESSION_NOT_READY', 'Simulation preparation did not start.', true);
+    }
+    function driveForAgent(input: DriveInput) {
+      if (!Array.isArray(input.assignments) || input.assignments.length > 64 || (input.queries !== undefined && (!Array.isArray(input.queries) || input.queries.length > 128)) || (input.assignments.length === 0 && (!input.queries || input.queries.length === 0))) return simulationError('INVALID_ARGUMENT', 'assignments and queries exceed their limits.');
+      const blocked = simulationPreconditions(input); if (blocked) return blocked;
+      const session = sim.session!;
+      const queries = input.queries ?? session.pins.filter((pin) => pin.kind === 'out').map((pin) => pin.name);
+      const checked = validateDrive(session, input.assignments, queries);
+      if (!checked.ok) {
+        const failure = checked.failure;
+        return failure ? simulationError('SIMULATION_REFUSED', 'Simulation refused a pin operation.', false, { simCode: failure.code, arg: failure.arg }) : simulationError('INVALID_ARGUMENT', checked.message ?? 'Drive input is invalid.');
+      }
+      try {
+        const result = session.eval(checked.assignments, queries);
+        if (!result.ok) return simulationError('SIMULATION_REFUSED', 'Simulation refused a pin operation.', false, { simCode: result.code, arg: result.arg });
+        const ref = currentSimulationRef(); if (!ref) return simulationError('SESSION_CONFLICT', 'The session changed while driving.');
+        return { ok: true as const, value: { simulation: ref, disposition: input.assignments.length === 0 ? 'unchanged' as const : 'driven' as const, assignments: checked.assignments.map((item) => { const pin = session.pins.find((p) => p.name === item.pin)!; return { pin: item.pin, state: canonical(item.value, item.defined ?? ((1n << BigInt(pin.width)) - 1n), pin.width) }; }), values: result.values.map((item) => pinValue(item.pin, item.value)), consoleRecord: { recorded: true as const, lines: input.assignments.length * 2 } } satisfies DriveResult };
+      } catch {
+        return simulationError('SIMULATION_FAILED', 'The runtime failed while driving the session.');
+      }
+    }
+    function resetForAgent(input: any) {
+      const blocked = simulationPreconditions(input); if (blocked) return blocked;
+      const session = sim.session!;
+      const activeId = store.envelope.activeId!;
+      const scheduled = queueOperation('session_reset', {}, { artifactId: state.artifact!.id, imageRevision: revisions.projectVersion(activeId)?.imageRevision ?? null, liveStateRevision: sim.liveStateRevision });
+      sim.operationId = scheduled.id; sim.lifecycle = 'resetting'; sim.id = null; sim.liveStateRevision = null; sim.pins.clear(); operations.start(scheduled.id); observe();
+      void session.reset().catch((error) => failOperation(scheduled.id, error, 'runtime'));
+      return { ok: true as const, value: { operationId: scheduled.id, kind: 'session_reset' as const, disposition: 'started' as const, inputs: scheduled.inputs, sessionId: null } };
+    }
+    function readMemoryForAgent(input: any) {
+      if (!state.artifact || input.expectedArtifactId !== state.artifact.id) return simulationError('ARTIFACT_CONFLICT', 'The compiled artifact changed; reread status.');
+      if (!sim.session || sim.lifecycle !== 'ready') return simulationError('SESSION_NOT_READY', 'No ready simulation session exists.', true);
+      if (input.expectedSessionId !== sim.id) return simulationError('SESSION_CONFLICT', 'The simulation session changed; reread it.');
+      const mem = sim.session.mems.find((item) => item.name === input.memory);
+      if (!mem) return sourceMemory(activeFile(state.tabs).name, input.memory) ? simulationError('MEMORY_NOT_ROOT', 'That memory is not a root live memory.') : simulationError('SIMULATION_REFUSED', 'Simulation refused the memory name.', false, { simCode: 'E_NOMEM', arg: String(input.memory) });
+      const start = input.start === undefined ? 0n : parseHex(input.start);
+      const count = input.count ?? 64;
+      if (start === null || !Number.isSafeInteger(count) || count < 1 || count > 256) return simulationError('INVALID_ARGUMENT', 'Memory start or count is invalid.');
+      const page = sim.session.dumpMem(mem.name, start, BigInt(count));
+      if (!page.ok) return simulationError('SIMULATION_REFUSED', 'Simulation refused the memory read.', false, { simCode: page.code, arg: page.arg });
+      const ref = currentSimulationRef(); if (!ref) return simulationError('SESSION_CONFLICT', 'The session changed while reading.');
+      const next = start + BigInt(page.cells.length);
+      return { ok: true as const, value: { simulation: ref, memory: rootMemory(mem), start: `0x${start.toString(16)}`, cells: page.cells.map((cell) => ({ address: `0x${cell.addr.toString(16)}`, state: signal(cell.value, mem.width) })), nextStart: next < (1n << BigInt(mem.addrWidth)) ? `0x${next.toString(16)}` : null } satisfies MemoryPage };
+    }
+    function updateMemoryForAgent(input: UpdateMemoryInput) {
+      const blocked = simulationPreconditions(input); if (blocked) return blocked;
+      const session = sim.session!; const mem = session.mems.find((item) => item.name === input.memory);
+      if (!mem) return simulationError('SIMULATION_REFUSED', 'Simulation refused the memory name.', false, { simCode: 'E_NOMEM', arg: input.memory });
+      let result: any; let words: number | null = null;
+      if (!input.action || typeof input.action !== 'object') return simulationError('INVALID_ARGUMENT', 'Memory action is invalid.');
+      if (input.action.kind === 'poke') { const address = parseHex(input.action.address); const value = parseHex(input.action.value, mem.width); const defined = input.action.defined === undefined ? undefined : parseHex(input.action.defined, mem.width); if (address === null || value === null || (input.action.defined !== undefined && defined === null)) return simulationError('INVALID_ARGUMENT', 'Memory poke is invalid.'); result = session.poke(mem.name, address, value, defined ?? undefined); }
+      else if (input.action.kind === 'clear') result = session.clear(mem.name);
+      else if (input.action.kind === 'load') { const bytes = imageBytes(input.action.hex, mem); if (!bytes.ok) return simulationError('INVALID_ARGUMENT', bytes.message); result = session.loadImage(mem.name, bytes.bytes); if (result.ok) words = result.words; }
+      else return simulationError('INVALID_ARGUMENT', 'Memory action is invalid.');
+      if (!result.ok) return simulationError('SIMULATION_REFUSED', 'Simulation refused the memory mutation.', false, { simCode: result.code, arg: result.arg });
+      const ref = currentSimulationRef(); if (!ref) return simulationError('SESSION_CONFLICT', 'The session changed while updating memory.');
+      return { ok: true as const, value: { simulation: ref, memory: rootMemory(mem), action: input.action.kind, wordsLoaded: words, consoleRecord: { recorded: true, lines: input.action.kind === 'load' ? 1 : 2 } } satisfies UpdateMemoryResult };
+    }
+    function setMemoryPreloadForAgent(input: SetMemoryPreloadInput) {
+      const target = revisions.currentTarget; const version = revisions.projectVersion(input.projectId);
+      if (!target || target.projectId !== input.projectId || target.targetEpoch !== input.expectedTargetEpoch) return simulationError('TARGET_CONFLICT', 'The visible target changed; reread status.');
+      if (!version || version.sourceRevision !== input.expectedSourceRevision) return simulationError('REVISION_CONFLICT', 'Source changed; reread the project.');
+      if (version.imageRevision !== input.expectedImageRevision) return simulationError('IMAGE_CONFLICT', 'Images changed; reread the project.');
+      const mem = sourceMemory(input.file, input.declaration);
+      if (!mem || mem.kind !== 'rom') return simulationError('PRELOAD_CONFLICT', 'The source declaration is not a current ROM.');
+      if (input.hex !== null && !imageBytes(input.hex, mem).ok) return simulationError('INVALID_ARGUMENT', 'The ROM image is invalid.');
+      const key = sourceImageKey(input.projectId, input.file); const before = store.envelope.sourceImages[key]?.[input.declaration];
+      if (before === input.hex || (before === undefined && input.hex === null)) return simulationError('PRELOAD_CONFLICT', 'The requested preload is already current.');
+      store.update((draft) => { const images = { ...(draft.sourceImages[key] ?? {}) }; if (input.hex === null) delete images[input.declaration]; else images[input.declaration] = input.hex; if (Object.keys(images).length) draft.sourceImages[key] = images; else delete draft.sourceImages[key]; });
+      const context = imageContexts.get(key) ?? { images: new Map(Object.entries(store.envelope.sourceImages[key] ?? {})), implied: new Map(), files: new Map() };
+      imageContexts.set(key, context); if (input.hex === null) context.images.delete(input.declaration); else context.images.set(input.declaration, input.hex);
+      refreshWorkspaceSnapshot();
+      let application: SetMemoryPreloadResult['liveApplication'] = { state: 'not_running', rootApplied: false, importedInstancesApplied: 0, failedInstances: 0, reportedFailures: [], omittedFailureCount: 0, sessionId: null, liveStateRevision: null };
+      if (sim.session && sim.lifecycle === 'ready') {
+        const applied = sim.session.applyPreloads(); setPreloadStatus(applied); sim.imageRevision = revisions.projectVersion(input.projectId)?.imageRevision ?? null;
+        const imported = applied.applied.filter((name) => name.includes('#')).length;
+        application = { state: applied.errors.size ? applied.applied.length ? 'partial' : 'failed' : 'applied', rootApplied: applied.applied.includes(input.declaration), importedInstancesApplied: imported, failedInstances: applied.errors.size, reportedFailures: [...applied.errors].slice(0, 8).map(([instance, message]) => ({ instance: instance.replace(/#\d+$/, ''), message })), omittedFailureCount: Math.max(0, applied.errors.size - 8), sessionId: sim.id, liveStateRevision: sim.liveStateRevision };
+        sim.view?.view.refreshState(); if (state.dataOpen) renderData(); if (memVisible()) renderMemory();
+      }
+      const base = agentResult('updated', null, null, []);
+      const imageRevision = revisions.projectVersion(input.projectId)!.imageRevision;
+      const parsed = input.hex === null ? null : imageBytes(input.hex, mem);
+      return { ok: true as const, value: { ...base.value, imageRevision, owner: { projectId: input.projectId, file: input.file, declaration: input.declaration }, image: { present: input.hex !== null, hex: input.hex, words: parsed && parsed.ok ? parsed.words : null }, liveApplication: application } satisfies SetMemoryPreloadResult };
+    }
+    function verificationShape() {
+      const analysis = state.analysis; const root = analysis ? rootFileId(analysis.files, rootPathFor(activeFile(state.tabs).name)) : null;
+      const pins = root === null || !analysis ? [] : analysis.symbols.filter((symbol) => symbol.file_id === root && (symbol.kind === 'input' || symbol.kind === 'output')).map((symbol, index) => ({ name: symbol.name, id: index, width: symbol.width, kind: symbol.kind === 'input' ? 'in' as const : 'out' as const }));
+      return { pins, memories: currentRoms().map((mem, index) => ({ ...mem, id: index })) };
+    }
+    function runVerificationForAgent(input: RunVerificationInput) {
+      const target = revisions.currentTarget; const version = revisions.projectVersion(input.projectId);
+      if (!target || target.projectId !== input.projectId || target.targetEpoch !== input.expectedTargetEpoch || !version || version.sourceRevision !== input.expectedSourceRevision) return simulationError('TARGET_CONFLICT', 'The visible target changed; reread status.');
+      if (!state.artifact || state.artifact.id !== input.expectedArtifactId) return simulationError('ARTIFACT_CONFLICT', 'The compiled artifact changed; reread status.');
+      if (version.imageRevision !== input.expectedImageRevision) return simulationError('IMAGE_CONFLICT', 'Images changed; reread status.');
+      const timeout = input.timeoutMs ?? 5000;
+      if (!Number.isSafeInteger(timeout) || timeout < 1 || timeout > 10000 || typeof input.stopOnFailure !== 'undefined' && typeof input.stopOnFailure !== 'boolean') return simulationError('VERIFICATION_INVALID', 'Verification timeout or stop policy is invalid.');
+      const checked = validateVerification(input.cases, verificationShape()); if (!checked.ok) return simulationError('VERIFICATION_INVALID', checked.message);
+      const scheduled = queueOperation('verification', {}, { artifactId: state.artifact.id, imageRevision: version.imageRevision }); operations.start(scheduled.id);
+      const bytes = state.artifact.bytes; const roms = currentRoms().map((item) => ({ ...item })); const capturedImages = new Map(romImages); const capturedImported = copyImportedImages(state.artifact.importedImages);
+      void (async () => {
+        try {
+          const { CircRuntime: Runtime } = await loadRenderer();
+          const result = await executeVerification(scheduled.id, scheduled.inputs, version.imageRevision, input.cases, {
+            create: async (caseInput) => SimSession.build({ bytes, load: (artifact) => Runtime.loadFromBytes(artifact, { noInitialPinDrive: true }), roms, images: caseInput.sourcePreloads === 'current' ? new Map(capturedImages) : new Map(), importedImages: caseInput.sourcePreloads === 'current' ? copyImportedImages(capturedImported) : undefined }),
+            now: () => performance.now(), yield: () => new Promise((resolve) => setTimeout(resolve, 0)), cancelled: () => { const current = operations.lookup(scheduled.id); return current.kind !== 'found' || current.operation.state === 'superseded'; },
+          }, timeout, input.stopOnFailure ?? false);
+          if (!verificationResults.admit(result)) operations.finish(scheduled.id, 'failed', { failure: { kind: 'runtime', message: 'Verification result exceeded retention limits.', libraryStatus: null } });
+          else operations.finish(scheduled.id, 'succeeded');
+        } catch (error) { failOperation(scheduled.id, error, 'runtime'); }
+        observe();
+      })();
+      return { ok: true as const, value: { operationId: scheduled.id, disposition: 'started' as const, inputs: scheduled.inputs, caseCount: checked.caseCount, stepCount: checked.stepCount, assertionCount: checked.assertionCount } satisfies VerificationTicket };
+    }
+    function getVerificationForAgent(input: any) {
+      const operation = operations.lookup(input.operationId);
+      if (operation.kind === 'not_found') return simulationError('OPERATION_NOT_FOUND', 'The verification operation is not known.');
+      if (operation.kind === 'expired') return simulationError('VERIFICATION_EXPIRED', 'The verification operation expired.');
+      if (operation.operation.kind !== 'verification') return simulationError('VERIFICATION_UNAVAILABLE', 'That operation is not verification.');
+      if (operation.operation.state === 'queued' || operation.operation.state === 'running') return simulationError('VERIFICATION_NOT_READY', 'Verification is still running.', true);
+      if (operation.operation.state !== 'succeeded') return simulationError('VERIFICATION_UNAVAILABLE', 'Verification did not produce a result.');
+      const page = verificationResults.get(input.operationId, input.cursor, input.limit, observationRevision);
+      return page.ok ? { ok: true as const, value: page.page } : simulationError(page.reason === 'invalid' ? 'INVALID_ARGUMENT' : 'VERIFICATION_EXPIRED', 'Verification result is unavailable.');
+    }
+    let topologyCache: { artifactId: string; value: Awaited<ReturnType<typeof decodeTopology>> } | null = null;
+    const exactTarget = (input: { projectId: string; expectedSourceRevision: string; expectedTargetEpoch: string }) => agentPreconditions(input.projectId, input.expectedSourceRevision, input.expectedTargetEpoch);
+    function requestSchematicForAgent(input: any) {
+      const blocked = exactTarget(input); if (blocked) return blocked;
+      const options = optionsFor('preview', settings());
+      if (input.expectedPreviewOptionsRevision !== revisions.optionsRevision('preview', options)) return agentError('OPTIONS_CONFLICT', 'Preview settings changed; reread status.');
+      const current = operationSlots.preview ? operations.lookup(operationSlots.preview) : null;
+      if (current?.kind === 'found' && sameInputs(current.operation.inputs, inputsFor('preview', options))) {
+        return { ok: true as const, value: { operationId: current.operation.id, disposition: current.operation.state === 'queued' || current.operation.state === 'running' ? 'joined' as const : 'already_current' as const, inputs: current.operation.inputs } };
+      }
+      if (!state.version) return agentError('INSPECTION_NOT_READY', 'The compiler is not ready to render a schematic.', true);
+      void runPreview(buildStage.seq);
+      const id = operationSlots.preview;
+      const operation = id ? operations.lookup(id) : null;
+      return operation?.kind === 'found' ? { ok: true as const, value: { operationId: id!, disposition: 'started' as const, inputs: operation.operation.inputs } } : agentError('INSPECTION_UNAVAILABLE', 'The schematic operation could not start.', true);
+    }
+    function getSchematicForAgent(input: any) {
+      const page = schematicResults.get(input.operationId, input.cursor, input.maxCodeUnits);
+      if (page) return { ok: true as const, value: page };
+      const operation = operations.lookup(input.operationId);
+      if (operation.kind === 'not_found') return agentError('OPERATION_NOT_FOUND', 'The schematic operation is not known.');
+      if (operation.kind === 'expired') return agentError('INSPECTION_EXPIRED', 'The schematic payload expired.');
+      return agentError(operation.operation.state === 'queued' || operation.operation.state === 'running' ? 'INSPECTION_NOT_READY' : 'INSPECTION_UNAVAILABLE', 'The schematic payload is not available yet.', operation.operation.state === 'queued' || operation.operation.state === 'running');
+    }
+    async function getTopologyForAgent(input: any) {
+      if (!state.artifact || input.expectedArtifactId !== state.artifact.id) return agentError('ARTIFACT_CONFLICT', 'The compiled artifact changed; reread status.');
+      if (input.section !== 'components' && input.section !== 'connections' || input.scope !== undefined && input.scope !== 'root' && input.scope !== 'flattened') return agentError('INVALID_ARGUMENT', 'Topology section or scope is invalid.');
+      const limit = input.limit ?? 50; if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) return agentError('INVALID_ARGUMENT', 'Topology limit is invalid.');
+      if (!topologyCache || topologyCache.artifactId !== state.artifact.id) {
+        const files = new Map(state.analysis?.files.map((file) => [file.file_id, file.path]) ?? []);
+        topologyCache = { artifactId: state.artifact.id, value: await decodeTopology(state.artifact.bytes, files) };
+      }
+      const topology = topologyCache.value;
+      if (!topology) return agentError('TOPOLOGY_UNAVAILABLE', 'The artifact has no valid supported full topology.');
+      const scope = input.scope ?? 'flattened';
+      const components = scope === 'root' ? topology.components.filter((component) => component.origins.length === 0) : topology.components;
+      const kept = new Set(components.map((component) => component.id));
+      const connections = (scope === 'root' ? topology.connections.filter((connection) => kept.has(connection.fromId) && kept.has(connection.toId)) : topology.connections);
+      const values = input.section === 'components' ? components : connections;
+      const start = input.cursor === undefined ? 0 : Number(input.cursor);
+      if (!Number.isSafeInteger(start) || start < 0 || start > values.length) return agentError('CURSOR_CONFLICT', 'The topology cursor does not belong to this artifact snapshot.');
+      const next = start + Math.min(limit, values.length - start);
+      return { ok: true as const, value: { artifactId: state.artifact.id, sourceRevision: outputProvenance.artifact?.inputs.target.sourceRevision ?? revisions.currentTarget!.sourceRevision, topologyVersion: state.version?.full_version ?? 0, section: input.section, scope, totalComponents: components.length, totalConnections: connections.length, ...(input.section === 'components' ? { components: components.slice(start, next) } : { connections: connections.slice(start, next) }), nextCursor: next < values.length ? String(next) : null } };
+    }
+    function requestTruthForAgent(input: any) {
+      const blocked = exactTarget(input); if (blocked) return blocked;
+      const version = revisions.projectVersion(input.projectId);
+      if (!version || input.expectedImageRevision !== version.imageRevision) return agentError('IMAGE_CONFLICT', 'Source images changed; reread status.');
+      if (input.expectedTruthOptionsRevision !== revisions.optionsRevision('truth_table', optionsFor('truth_table', settings()))) return agentError('OPTIONS_CONFLICT', 'Truth settings changed; reread status.');
+      const bits = rootInputBits();
+      const filtered = bits !== null && bits > settings().truthTableCap;
+      if (filtered && (!sim.session || sim.lifecycle !== 'ready' || input.expectedArtifactId !== state.artifact?.id || input.expectedSessionId !== sim.id || input.expectedLiveStateRevision !== sim.liveStateRevision)) return agentError('TRUTH_NEEDS_SESSION', 'Filtered Truth requires the exact ready live session.', true);
+      if (!filtered && bits !== null && bits > 12) return agentError('TRUTH_TOO_LARGE', 'The projected Truth table exceeds the 4,096-row safety budget.');
+      const current = operationSlots.truth_table ? operations.lookup(operationSlots.truth_table) : null;
+      if (current?.kind === 'found' && current.operation.state !== 'failed' && current.operation.state !== 'refused') return { ok: true as const, value: { operationId: current.operation.id, disposition: current.operation.state === 'queued' || current.operation.state === 'running' ? 'joined' as const : 'already_current' as const, inputs: current.operation.inputs } };
+      if (!state.version || !state.artifact) return agentError('INSPECTION_NOT_READY', 'Compile a current artifact before requesting Truth.', true);
+      void runTruth(buildStage.seq);
+      const id = operationSlots.truth_table; const operation = id ? operations.lookup(id) : null;
+      return operation?.kind === 'found' ? { ok: true as const, value: { operationId: id!, disposition: 'started' as const, inputs: operation.operation.inputs } } : agentError('INSPECTION_UNAVAILABLE', 'The Truth operation could not start.', true);
+    }
+    function getTruthForAgent(input: any) {
+      const page = truthResults.get(input.operationId, input.cursor, input.limit);
+      if (page) return { ok: true as const, value: page };
+      const operation = operations.lookup(input.operationId);
+      if (operation.kind === 'not_found') return agentError('OPERATION_NOT_FOUND', 'The Truth operation is not known.');
+      if (operation.kind === 'expired') return agentError('INSPECTION_EXPIRED', 'The Truth result expired.');
+      return agentError(operation.operation.state === 'queued' || operation.operation.state === 'running' ? 'INSPECTION_NOT_READY' : 'INSPECTION_UNAVAILABLE', 'The Truth result is not available yet.', operation.operation.state === 'queued' || operation.operation.state === 'running');
+    }
+    function setWorkbenchSettingsForAgent(input: any) {
+      const target = revisions.currentTarget;
+      if (!target || input.projectId !== target.projectId || input.expectedTargetEpoch !== target.targetEpoch) return agentError('TARGET_CONFLICT', 'The visible target changed; reread status.');
+      if (input.expectedWorkbenchSettingsRevision !== workbenchSettingsRevision) return agentError('WORKBENCH_CONFLICT', 'Workbench settings changed; reread status.');
+      const values = input.values;
+      if (!values || typeof values !== 'object' || Array.isArray(values) || Object.keys(values).length === 0) return agentError('INVALID_ARGUMENT', 'values must contain at least one supported setting.');
+      const allowed = new Set(['expandMacros', 'expandDisplay', 'valueFormat', 'truthTableCap', 'editor']);
+      if (Object.keys(values).some((key) => !allowed.has(key))) return agentError('INVALID_ARGUMENT', 'values contains an unsupported setting.');
+      if (values.expandMacros !== undefined && typeof values.expandMacros !== 'boolean' || values.expandDisplay !== undefined && typeof values.expandDisplay !== 'boolean' || values.valueFormat !== undefined && !['binary', 'hex', 'decimal'].includes(values.valueFormat) || values.truthTableCap !== undefined && (!Number.isInteger(values.truthTableCap) || values.truthTableCap < 1 || values.truthTableCap > 24)) return agentError('INVALID_ARGUMENT', 'A workbench setting is invalid.');
+      if (values.editor !== undefined && (!values.editor || typeof values.editor !== 'object' || Object.keys(values.editor).some((key) => !['wrapLines', 'fontSize', 'tabSize'].includes(key)) || values.editor.wrapLines !== undefined && typeof values.editor.wrapLines !== 'boolean' || values.editor.fontSize !== undefined && (!Number.isInteger(values.editor.fontSize) || values.editor.fontSize < 10 || values.editor.fontSize > 24) || values.editor.tabSize !== undefined && (!Number.isInteger(values.editor.tabSize) || values.editor.tabSize < 1 || values.editor.tabSize > 8))) return agentError('INVALID_ARGUMENT', 'Editor settings are invalid.');
+      const before = JSON.stringify({ ...settings(), editor: store.envelope.editor });
+      store.update((draft) => { if (values.expandMacros !== undefined) draft.settings.expandMacros = values.expandMacros; if (values.expandDisplay !== undefined) draft.settings.expandDisplay = values.expandDisplay; if (values.valueFormat !== undefined) draft.settings.valueFormat = values.valueFormat; if (values.truthTableCap !== undefined) draft.settings.truthTableCap = values.truthTableCap; if (values.editor) draft.editor = { ...draft.editor, ...values.editor }; });
+      if (before === JSON.stringify({ ...settings(), editor: store.envelope.editor })) return agentResult('unchanged', null, null, [], false);
+      workbenchSettingsRevision = revisionIds.next('workbench-settings'); observe(); paintEditorPreferences(); editor?.setPreferences(store.envelope.editor);
+      if (values.valueFormat !== undefined) { sim.view?.view.setValueFormat?.(values.valueFormat); renderData(); renderMemory({ force: true }); if (truth.table) void renderTruth(truth.table); }
+      if (values.expandMacros !== undefined || values.expandDisplay !== undefined) void runPreview(buildStage.seq);
+      if (values.truthTableCap !== undefined && state.view === 'truth') void runTruth(buildStage.seq);
+      return agentResult('settings_updated', null, null, []);
+    }
+    function setViewForAgent(input: any) {
+      if (input.expectedPresentationRevision !== presentationRevision) return agentError('WORKBENCH_CONFLICT', 'Presentation changed; reread status.');
+      if (input.view !== undefined && !['schematic', 'live', 'truth'].includes(input.view) || input.dataOpen !== undefined && typeof input.dataOpen !== 'boolean') return agentError('INVALID_ARGUMENT', 'View input is invalid.');
+      if (input.view === 'truth' && truthBlock()) return agentError('INSPECTION_UNAVAILABLE', truthBlock()!);
+      if (input.view !== undefined) showView(input.view); if (input.dataOpen !== undefined) setDataOpen(input.dataOpen, { focus: false });
+      return {
+        ok: true as const,
+        value: {
+          view: state.view,
+          dataOpen: state.dataOpen,
+          presentationRevision,
+          operationIds: {
+            ...(operationSlots.preview ? { preview: operationSlots.preview } : {}),
+            ...(operationSlots.truth_table ? { truth_table: operationSlots.truth_table } : {}),
+            ...(operationSlots.session_build ? { session_build: operationSlots.session_build } : {}),
+          },
+          persistence: agentReceipt(true),
+        },
+      };
+    }
+    function highlightForAgent(input: any) {
+      const blocked = exactTarget({ projectId: store.envelope.activeId ?? '', expectedSourceRevision: input.expectedSourceRevision, expectedTargetEpoch: input.expectedTargetEpoch }); if (blocked) return blocked;
+      if (input.expectedArtifactId !== (state.artifact?.id ?? null)) return agentError('ARTIFACT_CONFLICT', 'The displayed artifact changed; reread status.');
+      if (input.declaration !== null && (!input.declaration || typeof input.declaration.name !== 'string' || typeof input.declaration.kind !== 'string')) return agentError('INVALID_ARGUMENT', 'declaration is invalid.');
+      const declaration = input.declaration === null ? null : link.decls.find((item) => item.name === input.declaration.name && item.kind === input.declaration.kind) ?? null;
+      if (input.declaration !== null && !declaration) return agentError('HIGHLIGHT_NOT_FOUND', 'No current top-level declaration matches that name and kind.');
+      link.agent = declaration; highlightByName(null);
+      return { ok: true as const, value: { declaration: declaration ? { name: declaration.name, kind: declaration.kind } : null, surfaces: { source: Boolean(editor && declaration), canvas: Boolean(sim.view && declaration && link.table?.byName.has(declaration.name)), truth: Boolean(declaration && tableEl.querySelector(`th[data-symbol-name="${CSS.escape(declaration.name)}"]`)) } } };
+    }
+    function exportSourceForAgent(input: any) {
+      const blocked = exactTarget(input); if (blocked) return blocked;
+      if (input.format !== undefined && input.format !== 'combined' && input.format !== 'files') return agentError('INVALID_ARGUMENT', 'Source export format is invalid.');
+      const target = revisions.currentTarget!;
+      const text = input.format === 'files' ? state.tabs.files.map((file) => `${file.name}\n${file.body}`).join('\n\u0000\n') : joinFiles(state.tabs.files);
+      const page = pageExport({ exportId: `${target.sourceRevision}:source:${input.format ?? 'combined'}`, contentType: input.format === 'files' ? 'application/vnd.circ.files+text' : 'text/plain', text, provenance: { target, sourceRevision: target.sourceRevision, sessionId: sim.id }, contents: input.format === 'files' ? ['ordered named source files'] : ['combined marker source'], omissions: SOURCE_OMISSIONS }, input.cursor, input.maxCodeUnits);
+      return page ? { ok: true as const, value: page } : agentError('CURSOR_CONFLICT', 'The source cursor is invalid.');
+    }
+    async function createShareLinkForAgent(input: any) {
+      const blocked = exactTarget(input); if (blocked) return blocked;
+      const target = revisions.currentTarget!; const result = await encodeShare(joinFiles(state.tabs.files), webStreamsCodec());
+      if (!result.ok) return agentError('SHARE_TOO_LARGE', `The encoded share payload has ${result.chars} characters; the cap is ${result.cap}.`, false, { chars: String(result.chars), cap: String(result.cap), key: result.key });
+      return { ok: true as const, value: { url: shareUrl(location.href, result.fragment), key: result.key, payloadChars: result.chars, cap: 8192, provenance: { target, sourceRevision: target.sourceRevision, sessionId: sim.id }, contents: ['combined marker source'], omissions: SOURCE_OMISSIONS } };
+    }
+    function downloadArtifactForAgent(input: any) {
+      if (!state.artifact || input.expectedArtifactId !== state.artifact.id) return agentError('ARTIFACT_CONFLICT', 'The artifact changed; reread status.');
+      const filename = artifactFileName(artifactLabel()); if (!dispatchDownload(navActions, filename, state.artifact.bytes, 'application/wasm')) return agentError('DOWNLOAD_FAILED', 'The browser could not dispatch the artifact download.', true);
+      const target = outputProvenance.artifact?.inputs.target ?? revisions.currentTarget!;
+      return { ok: true as const, value: { dispatchId: revisionIds.next('download'), state: 'dispatched', filename, mediaType: 'application/wasm', bytes: state.artifact.bytes.byteLength, provenance: { target, artifactId: state.artifact.id, sessionId: null, liveStateRevision: null, imageRevision: null }, contents: ['compiled WASM runtime and topology', state.stale ? 'identified stale last-good artifact' : 'current artifact'], omissions: ['source_images', 'live_ram', 'live_pin_state', 'settings', 'transcript'], completionKnown: false } satisfies DownloadReceipt };
+    }
+    function downloadMemoryForAgent(input: any) {
+      let bytes: Uint8Array; let filename: string; let provenance: DownloadReceipt['provenance']; let contents: string[];
+      if (input.source === 'live_root') {
+        const blocked = simulationPreconditions(input); if (blocked) return blocked;
+        const result = sim.session!.storeImage(input.memory); if (!result.ok) return simulationError('SIMULATION_REFUSED', 'Simulation refused the memory export.', false, { simCode: result.code, arg: result.arg });
+        bytes = result.bytes.slice(); filename = `${result.mem.name}.bin`; provenance = { target: revisions.currentTarget!, artifactId: state.artifact!.id, sessionId: sim.id, liveStateRevision: sim.liveStateRevision, imageRevision: sim.imageRevision }; contents = ['root live memory image', 'little-endian words with undefined bits written as zero'];
+      } else if (input.source === 'source_preload') {
+        const target = revisions.currentTarget; const version = revisions.projectVersion(input.projectId);
+        if (!target || target.projectId !== input.projectId || target.sourceRevision !== input.expectedSourceRevision) return agentError('REVISION_CONFLICT', 'Source changed; reread status.');
+        if (!version || version.imageRevision !== input.expectedImageRevision) return agentError('IMAGE_CONFLICT', 'Source images changed; reread status.');
+        const mem = sourceMemory(input.file, input.declaration); const hex = store.envelope.sourceImages[sourceImageKey(input.projectId, input.file)]?.[input.declaration];
+        if (!mem || mem.kind !== 'rom' || hex === undefined) return agentError('EXPORT_UNAVAILABLE', 'The requested source ROM preload is unavailable.');
+        const parsed = imageBytes(hex, mem); if (!parsed.ok) return agentError('EXPORT_UNAVAILABLE', parsed.message);
+        bytes = parsed.bytes.slice(); filename = `${input.declaration}.bin`; provenance = { target, artifactId: null, sessionId: null, liveStateRevision: null, imageRevision: version.imageRevision }; contents = ['source-owned ROM preload', 'little-endian words'];
+      } else return agentError('INVALID_ARGUMENT', 'Memory export source is invalid.');
+      if (!dispatchDownload(navActions, filename, bytes, 'application/octet-stream')) return agentError('DOWNLOAD_FAILED', 'The browser could not dispatch the memory download.', true);
+      return { ok: true as const, value: { dispatchId: revisionIds.next('download'), state: 'dispatched', filename, mediaType: 'application/octet-stream', bytes: bytes.byteLength, provenance, contents, omissions: ['source_images', 'live_ram', 'live_pin_state', 'settings', 'transcript', 'compiled_artifact'], completionKnown: false } satisfies DownloadReceipt };
+    }
+    function getTranscriptForAgent(input: any) {
+      if (input.format !== 'log' && input.format !== 'script') return agentError('INVALID_ARGUMENT', 'Transcript format is invalid.');
+      const limit = input.limit ?? 100; const start = input.cursor === undefined ? 0 : Number(input.cursor);
+      const lines = input.format === 'log' ? [...consoleState.transcript.lines] : scriptOf(consoleState.transcript.lines);
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500 || !Number.isSafeInteger(start) || start < 0 || start > lines.length) return agentError('CURSOR_CONFLICT', 'The transcript cursor is invalid.');
+      const end = Math.min(lines.length, start + limit);
+      return { ok: true as const, value: { transcriptId: `${agentPageId}:transcript`, revision: observationRevision, truncated: consoleState.transcript.length === consoleState.transcript.cap, lines: lines.slice(start, end), nextCursor: end < lines.length ? String(end) : null, sessionId: sim.id } };
+    }
+    const agentActivity = el.querySelector<HTMLElement>('.pg-agent-activity')!;
+    let agentActivityTimer: number | null = null;
+    let agentInstallation: PageApiInstallation | null = null;
+    agentInstallation = installPageApi(el, {
+      onAgentActivity: (activity) => {
+        if (agentActivityTimer !== null) window.clearTimeout(agentActivityTimer);
+        agentActivity.dataset.state = 'active';
+        agentActivity.textContent = 'agent active';
+        agentActivity.title = activity.lastTool
+          ? `An agent requested ${activity.lastTool}. Requested tool inputs and results are shared with the agent.`
+          : 'An agent discovered the available tools. Requested tool inputs and results are shared with the agent.';
+        if (activity.activeRequests === 0) {
+          agentActivityTimer = window.setTimeout(() => {
+            agentActivity.dataset.state = 'recent';
+            agentActivity.textContent = 'agent used tools recently';
+            agentActivityTimer = null;
+          }, 5_000);
+        }
+      },
+      pageId: agentPageId,
+      readWorkspace: () => workspaceSnapshot,
+      operations,
+      authoring: { createProject: createAgentProject, openProject: openAgentProject, updateProject: updateAgentProject, selectEntry: selectAgentEntry, setCompileSettings: setAgentCompileSettings, compile: compileAgentProject, getDiagnostics: diagnosticsForAgent },
+      simulation: { getSimulation: getSimulationForAgent, prepareSimulation: prepareSimulationForAgent, drive: driveForAgent, reset: resetForAgent, readMemory: readMemoryForAgent, updateMemory: updateMemoryForAgent, setMemoryPreload: setMemoryPreloadForAgent, runVerification: runVerificationForAgent, getVerification: getVerificationForAgent },
+      inspection: { requestSchematic: requestSchematicForAgent, getSchematic: getSchematicForAgent, getTopology: getTopologyForAgent, requestTruthTable: requestTruthForAgent, getTruthTable: getTruthForAgent },
+      workbench: { setWorkbenchSettings: setWorkbenchSettingsForAgent, setView: setViewForAgent, highlight: highlightForAgent },
+      handoff: { exportSource: exportSourceForAgent, createShareLink: createShareLinkForAgent, downloadArtifact: downloadArtifactForAgent, downloadMemory: downloadMemoryForAgent, getTranscript: getTranscriptForAgent },
+      help: {
+        manifestUrl: el.dataset.agentReferenceManifest ?? '/agent-reference/manifest.json',
+        corpusId: el.dataset.agentReferenceCorpus ?? '',
+        compilerIdentity: () => state.version ? {
+          version: state.version.version,
+          revision: state.version.revision,
+          grammarSha256: state.version.grammar_sha256,
+          topologyVersion: state.version.topology_version,
+          fullVersion: state.version.full_version,
+        } : null,
+      },
+      readStatus: () => {
+        const activeId = store.envelope.activeId;
+        const selected = catalogue.find((item) => item.id === activeId);
+        const scratch = store.envelope.scratch.find((item) => item.id === activeId);
+        const version = state.version;
+        const pipeline = statusFor(pipe);
+        return {
+          lifecycle: bootstrapState.lifecycle,
+          bootstrapError: bootstrapState.error,
+          project: bootstrapState.lifecycle === 'ready' && activeId
+            ? {
+                id: activeId,
+                name: selected?.label ?? scratch?.name ?? activeId,
+                entryFile: activeFile(state.tabs).name,
+                fileCount: state.tabs.files.length,
+              }
+            : null,
+          view: state.view,
+          compiler: {
+            ready: pipe.ready,
+            loading: pipe.loading,
+            identity: version
+              ? {
+                  version: version.version,
+                  revision: version.revision,
+                  topologyVersion: version.topology_version,
+                  fullVersion: version.full_version,
+                  grammarSha256: version.grammar_sha256,
+                }
+              : null,
+            simulationCompatible: version ? state.simulateEnabled : null,
+          },
+          reportedPipeline: {
+            kind: pipeline.kind,
+            analyzing: pipe.analyzing,
+            building: pipe.building,
+            analyzePending: analyzeStage.pending,
+            buildPending: buildStage.pending,
+            errors: pipe.errors,
+            warnings: pipe.warnings,
+            stale: state.stale || pipe.stale,
+            failure: pipe.failure,
+          },
+          artifact: { present: state.artifact !== null, bytes: state.artifact?.size ?? null },
+          session: { present: Boolean(sim.session?.isAlive) },
+          provenance: bootstrapState.lifecycle === 'ready'
+            ? {
+                tracking: 'tracked' as const,
+                sourceRevision: revisions.currentTarget?.sourceRevision ?? null,
+                buildRevision: outputProvenance.artifact?.inputs.target.sourceRevision ?? null,
+                sessionId: sim.id,
+              }
+            : { tracking: 'untracked' as const, sourceRevision: null, buildRevision: null, sessionId: null },
+           ...(bootstrapState.lifecycle === 'ready' ? {
+             observationRevision,
+             workspaceRevision,
+             projectVersion: activeId ? revisions.projectVersion(activeId) : null,
+            currentTarget: revisions.currentTarget,
+            outputs: {
+              analysis: outputStatus('analysis'), diagnostics: outputStatus('diagnostics'),
+              artifact: { ...outputStatus('artifact'), id: state.artifact?.id ?? null },
+              preview: outputStatus('preview'), truth: outputStatus('truth'),
+            },
+            simulation: {
+              state: sim.lifecycle,
+              id: sim.id, artifactId: state.artifact?.id ?? null, liveStateRevision: sim.liveStateRevision,
+              imageRevision: sim.imageRevision,
+              matchesCurrentTarget: Boolean(sim.session && !state.stale),
+              matchesCurrentImages: sim.imageRevision === (activeId ? revisions.projectVersion(activeId)?.imageRevision ?? null : null) &&
+                sim.preloadState !== 'partial' && sim.preloadState !== 'failed',
+              preloadState: sim.preloadState, operationId: sim.operationId,
+              preload: { ...sim.preload },
+            },
+            operationIds: {
+              analyze: operationSlots.analyze ?? null, compile: operationSlots.compile ?? null,
+              preview: operationSlots.preview ?? null, truth_table: operationSlots.truth_table ?? null,
+              session_build: operationSlots.session_build ?? null, session_reset: operationSlots.session_reset ?? null,
+              verification: operationSlots.verification ?? null,
+            },
+            compilerTransport: client.transportState(),
+            configuration: { compile: { revision: revisions.optionsRevision('compile', optionsFor('compile', settings())), warningsAsErrors: settings().warningsAsErrors }, workbench: { revision: workbenchSettingsRevision, previewOptionsRevision: revisions.optionsRevision('preview', optionsFor('preview', settings())), truthOptionsRevision: revisions.optionsRevision('truth_table', optionsFor('truth_table', settings())) }, presentationRevision },
+          } : {}),
+          persistence: { enabled: store.enabled },
+          agentAccess: {
+            pageRegistry: 'available',
+            native: agentInstallation?.native.status() ?? {
+              state: 'not-configured', apiVariant: null, reason: 'Native adapter is not installed.',
+            },
+          },
+        };
+      },
+    });
     // Theme flips: circ-renderer captures the theme at construction, so the
     // canvas is rebuilt; the editor reconfigures its theme compartment in place.
     new MutationObserver(() => {

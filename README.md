@@ -101,6 +101,7 @@ The same front end is available without the process: `zig build libcirc` produce
 - `DOCS/wasm-api.md` — runtime API exposed by the compiled `.wasm`.
 - `DOCS/libcirc-api.md` — the compiler as a library (`libcirc.a`, `libcirc.wasm`): request, status codes, C ABI.
 - `DOCS/simulation-engine.md` — the engine the compiler targets.
+- `DOCS/agent-playground.md` — use the browser playground with a connected agent; this is browser operation, not a CLI mode.
 - `DOCS/architecture.md` and `DOCS/decisions/` — design rationale for contributors.
 
 ## License

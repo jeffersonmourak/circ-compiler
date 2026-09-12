@@ -2,6 +2,7 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { docs, BASE_PATH, DOCS_DIR, PAGES_DIR, type Doc } from './lib/site-config.ts';
+import { stripDocumentTitle } from './lib/reference-content.ts';
 
 const base = BASE_PATH;
 
@@ -19,8 +20,7 @@ function syncDoc(d: Doc) {
   let body = readFileSync(srcPath, 'utf8');
 
   // DocsLayout renders the title from frontmatter; strip the source H1.
-  body = body.replace(/^# .+\n+/, '');
-
+  body = stripDocumentTitle(body);
   body = body.replace(/\]\(([^)\s]+\.md)(#[^)]*)?\)/g, (m, file, anchor = '') => {
     const target = linkMap.get(file);
     return target ? `](${target}${anchor})` : m;

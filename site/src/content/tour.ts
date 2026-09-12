@@ -4,6 +4,8 @@
 // the binary with `zig build circ-compile`).
 
 export interface TourStep {
+  /** Stable knowledge identity; positional `tour:<n>` remains a playground selection only. */
+  slug: string;
   title: string;
   prose: string;
   source: string;
@@ -12,6 +14,7 @@ export interface TourStep {
 
 export const tour: TourStep[] = [
   {
+    slug: 'single-not-gate',
     title: 'A single NOT gate',
     prose:
       "The smallest possible circuit. One input pin `a`, one inverter, one output pin. " +
@@ -26,6 +29,7 @@ output out(in=n.out)
 ╰───╯     ╰───╯     ╰─────╯`,
   },
   {
+    slug: 'and-two-inputs',
     title: 'AND of two inputs',
     prose:
       "Two inputs, named `a` and `b`, feed an AND gate. The gate has two input ports, " +
@@ -44,6 +48,7 @@ output out(in=g.out)
 ╰───╯`,
   },
   {
+    slug: 'intermediate-wire',
     title: 'Naming an intermediate signal',
     prose:
       "A `wire` is a one-port pass-through: after evaluation, the value on `in` is " +
@@ -64,6 +69,7 @@ output out(in=gate.out)
 ╰──────╯`,
   },
   {
+    slug: 'anonymous-nested-components',
     title: 'Anonymous nested components',
     prose:
       "You can instantiate a component inline as the value of a port. The inverter " +
@@ -84,6 +90,7 @@ output out(in=gate1.out)
 ╰───╯     ╰───╯`,
   },
   {
+    slug: 'half-adder',
     title: 'A half-adder',
     prose:
       "Two single-bit numbers `a` and `b` sum to `(carry, sum)` where `sum = a XOR b` " +
@@ -111,6 +118,7 @@ output carry(in=c.out)
           ╰───────╯`,
   },
   {
+    slug: 'full-adder-imports',
     title: 'A full-adder, by importing the half-adder',
     prose:
       "Imports glue files together. The root file declares a `half_adder` alias and " +
@@ -149,6 +157,7 @@ output cout(in=cout_or.out)
 ╰─────╯`,
   },
   {
+    slug: 'stable-feedback-wires',
     title: 'Stable feedback through wires',
     prose:
       "The validator rejects combinational feedback at compile time: a chain of gates " +

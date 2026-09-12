@@ -3,12 +3,14 @@ import Base from '../layouts/Base.astro';
 import Playground from '../components/Playground.astro';
 import manifest from '../../public/wasm/libcirc.manifest.json';
 import { SUPPORTED_TOPOLOGY_VERSIONS } from '../utils/renderer-versions.ts';
+import { readFileSync } from 'node:fs';
+const agentReference = JSON.parse(readFileSync(new URL('../../public/agent-reference/manifest.json', import.meta.url), 'utf8')) as { corpusId: string };
 ---
 <Base
   title="Playground — circ"
-  description="Write circ in the browser: diagnostics, the --preview schematic, a truth table, and a live simulation of the compiled circuit — no install, no server."
+  description="Write circ locally in the browser: diagnostics, schematics, Truth, and live simulation with no application backend. Connected agents receive only the requested tool arguments and results."
   mdTwin={null}
   layout="app"
 >
-  <Playground manifest={manifest} supportedVersions={SUPPORTED_TOPOLOGY_VERSIONS} />
+  <Playground manifest={manifest} supportedVersions={SUPPORTED_TOPOLOGY_VERSIONS} agentReference={agentReference} />
 </Base>

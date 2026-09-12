@@ -17,6 +17,7 @@ import { resolve } from 'node:path';
 import { Window } from 'happy-dom';
 import type { SimSession } from '../src/scripts/sim-session.ts';
 import type { LibcircClient, LibcircVersion, WorkerReply } from '../src/scripts/libcirc-client.ts';
+import type { OperationStore } from '../src/scripts/playground-operations.ts';
 import { callOp, callVersion, instantiateLibcirc } from '../src/scripts/libcirc-abi.ts';
 import { toSource, type FileTabsState } from '../src/scripts/file-tabs.ts';
 
@@ -167,6 +168,7 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
   test('the playground mounts its editor, tabs and workbench', async () => {
     const initialWindow = new Window();
     initialWindow.document.write(readFileSync(resolve(DIST, 'playground', 'index.html'), 'utf8'));
+    expect(initialWindow.document.querySelector('.pg-agent-activity')?.textContent).toBe('agent tools ready · no requests yet');
     expect(initialWindow.document.querySelector('.pg-view-tab[aria-selected="true"]')?.getAttribute('data-view')).toBe('live');
     expect(initialWindow.document.querySelector('[data-view-panel="live"]')?.hasAttribute('hidden')).toBe(false);
     initialWindow.close();
@@ -176,6 +178,72 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     // initialization"), and it aborted the rest of the boot with it.
     const { doc, errors } = await runIsland('playground', 'Playground.astro', { ...defaultEnvelope(), activeId: buildCatalogue(examples, tour)[0].id, view: 'live', dataOpen: true });
     expect(errors).toEqual([]);
+    const agentApi = (globalThis as unknown as { circPlayground?: {
+      listTools(): Promise<unknown>;
+      callTool(name: string, input: unknown): Promise<unknown>;
+    } }).circPlayground;
+    expect(agentApi).toBeDefined();
+    const agentCatalogue = await agentApi!.listTools() as { ok: boolean; data?: { tools: { name: string }[] } };
+    expect(agentCatalogue.ok).toBe(true);
+    expect(agentCatalogue.data?.tools.map((tool) => tool.name)).toEqual([
+      'circ_get_status',
+      'circ_list_projects',
+      'circ_read_project',
+      'circ_read_file',
+        'circ_wait_for_operation',
+        'circ_create_project',
+        'circ_open_project',
+        'circ_update_project',
+        'circ_select_entry',
+        'circ_set_compile_settings',
+        'circ_compile',
+        'circ_get_diagnostics',
+        'circ_get_simulation',
+        'circ_prepare_simulation',
+        'circ_drive',
+        'circ_reset',
+        'circ_read_memory',
+        'circ_update_memory',
+        'circ_set_memory_preload',
+        'circ_run_verification',
+        'circ_get_verification',
+        'circ_request_schematic',
+        'circ_get_schematic',
+        'circ_get_topology',
+        'circ_request_truth_table',
+        'circ_get_truth_table',
+        'circ_set_workbench_settings',
+        'circ_set_view',
+        'circ_highlight',
+        'circ_export_source',
+        'circ_create_share_link',
+        'circ_download_artifact',
+        'circ_download_memory',
+        'circ_get_transcript',
+        'circ_help',
+    ]);
+    const agentStatus = await agentApi!.callTool('circ_get_status', {}) as {
+      ok: boolean;
+      data?: {
+        project: { name: string; entryFile: string; fileCount: number } | null;
+        provenance: { tracking: string };
+        workspaceRevision?: string;
+        configuration?: { presentationRevision: string };
+      };
+    };
+    expect(agentStatus.ok).toBe(true);
+    expect(agentStatus.data?.project?.name).toBe((doc.querySelector('.pg-crumb-name')?.textContent ?? '').trim());
+    expect(agentStatus.data?.project?.entryFile).toBe(doc.querySelector('.pg-files [aria-selected="true"]')?.textContent?.trim() ?? '');
+    expect(agentStatus.data?.project?.fileCount).toBe(doc.querySelectorAll('.pg-files .pg-file').length);
+    expect(agentStatus.data?.provenance.tracking).toBe('tracked');
+    expect(agentStatus.data?.workspaceRevision).toMatch(/^.+:workspace:\d+$/);
+    const agentView = await agentApi!.callTool('circ_set_view', {
+      expectedPresentationRevision: agentStatus.data?.configuration?.presentationRevision,
+      view: 'live',
+      dataOpen: true,
+    }) as { ok: boolean; data?: { operationIds: Record<string, string> } };
+    expect(agentView.ok).toBe(true);
+    for (const id of Object.values(agentView.data?.operationIds ?? {})) expect(typeof id).toBe('string');
     expect(doc.querySelector('.pg-data-card')?.hasAttribute('hidden')).toBe(false);
     (doc.querySelector('.pg-data-close') as unknown as HTMLElement).click();
     expect(doc.querySelector('.pg-view-tab[data-view="live"]')?.getAttribute('aria-selected')).toBe('true');
@@ -359,7 +427,8 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(doc.querySelector('.pg-nav .theme-toggle')).not.toBeNull();
     expect(doc.querySelector('.pg-statusline .pg-status-identity')).not.toBeNull();
     expect(doc.querySelector('.pg-statusline .signature .heart')).not.toBeNull();
-    expect(doc.querySelector('.pg-statusline .pg-promise')?.textContent).toBe('runs in your browser · nothing leaves the page');
+    expect(doc.querySelector('.pg-statusline .pg-agent-activity')?.textContent).toBe('agent active');
+    expect(doc.querySelector('.pg-statusline .pg-agent-activity')?.getAttribute('data-state')).toBe('active');
     expect(doc.querySelector('.pg-statusline .pg-status[role="status"]')).not.toBeNull();
     // The banner lives inside the source pane, not among the frame's rows.
     expect(doc.querySelector('.pg-editor > .pg-banner')).not.toBeNull();
@@ -1465,6 +1534,42 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     });
   });
 
+  test('Connect agent copies browser instructions and offers multiline fallback', async () => {
+    await driveAsync(async (doc) => {
+      const nav = globalThis.navigator;
+      const saved = Object.getOwnPropertyDescriptor(nav, 'clipboard');
+      const button = doc.querySelector('.pg-connect-agent') as unknown as HTMLButtonElement;
+      const indicatorBefore = doc.querySelector('.pg-agent-activity')!.textContent;
+      let copied = '';
+      try {
+        Object.defineProperty(nav, 'clipboard', { configurable: true, value: { writeText: async (text: string) => { copied = text; } } });
+        button.click();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        expect(copied).toContain('native page-provided WebMCP');
+        expect(copied).toContain("window.circPlayground.callTool('circ_get_status', {})");
+        expect(copied).toMatch(/#src0?=[A-Za-z0-9_-]+/);
+        expect(copied).toContain('Ask what I want to do before further edits');
+        expect(button.disabled).toBe(false);
+        expect(doc.querySelector('.pg-status')?.textContent).toContain('paste it into your agent chat');
+        expect(doc.querySelector('.pg-agent-activity')?.textContent).toBe(indicatorBefore);
+
+        Object.defineProperty(nav, 'clipboard', { configurable: true, value: { writeText: async () => { throw new Error('Clipboard denied'); } } });
+        button.click();
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const fallback = doc.querySelector('textarea.pg-connect-fallback') as unknown as HTMLTextAreaElement | null;
+        expect(fallback?.value).toBe(copied);
+        expect(fallback?.readOnly).toBe(true);
+        expect(fallback?.selectionEnd).toBe(copied.length);
+        expect(button.disabled).toBe(false);
+        fallback?.blur();
+        expect(doc.querySelector('.pg-connect-fallback')).toBeNull();
+      } finally {
+        if (saved) Object.defineProperty(nav, 'clipboard', saved);
+        else Reflect.deleteProperty(nav, 'clipboard');
+      }
+    });
+  });
+
   test('every canvas that asks to auto-run is watched, and nothing else is', async () => {
     FakeIntersectionObserver.instances.length = 0;
     const { doc, errors } = await runIsland('gallery', 'LiveCanvas.astro');
@@ -1619,7 +1724,7 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
   test('ROM images follow their source file into imports and back', async () => driveAsync(async (doc) => {
     const island = (doc.querySelector('.pg') as unknown as { __playground: {
       state: { version: LibcircVersion | null; artifact: unknown };
-      compiler: LibcircClient;
+       compiler: LibcircClient;
       hooks: { onArtifact(bytes: Uint8Array | null, reason: string): void; copySource(what: string): Promise<string> | null };
       flushPipeline(): Promise<void>; getSession(): Promise<SimSession | null>;
     } }).__playground;
@@ -1691,6 +1796,8 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     const island = (doc.querySelector('.pg') as unknown as { __playground: {
       state: { tabs: FileTabsState; version: LibcircVersion | null; artifact: { hash: number; bytes: Uint8Array } | null; analysis: { symbols: { name: string }[] } | null };
       compiler: LibcircClient;
+      operations: OperationStore;
+      operationSlots: Partial<Record<'analyze' | 'compile', string>>;
       hooks: { onArtifact(bytes: Uint8Array | null, reason: string): void; copySource(what: string): Promise<string> | null };
       flushPipeline(): Promise<void>; getSession(): Promise<SimSession | null>;
     } }).__playground;
@@ -1736,12 +1843,16 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
       pendingParent = island.flushPipeline();
       await new Promise((r) => setTimeout(r, 0));
       expect(held.map((h) => h.op).sort()).toEqual(['analyze', 'compile']);
+      const parentAnalyze = island.operationSlots.analyze!;
+      const parentCompile = island.operationSlots.compile!;
       click('.pg-file[data-file="0"]');
       expect(parent!.isAlive).toBe(false);
       expect(island.state.artifact).toBeNull();
       expect((doc.querySelector('.pg-download') as unknown as HTMLButtonElement).disabled).toBe(true);
       expect(doc.querySelector('.pg-preview')?.textContent).toBe('');
       await island.flushPipeline();
+      expect(island.operations.lookup(parentAnalyze)).toMatchObject({ kind: 'found', operation: { state: 'superseded' } });
+      expect(island.operations.lookup(parentCompile)).toMatchObject({ kind: 'found', operation: { state: 'superseded' } });
       const childHash = island.state.artifact!.hash;
       const child = await island.getSession();
       expect(child!.pins.filter((p) => p.kind === 'in').map((p) => p.name)).toEqual(['a', 'b']);
@@ -1795,4 +1906,5 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
       island.compiler.call = originalCall;
     }
   }));
+
 });
