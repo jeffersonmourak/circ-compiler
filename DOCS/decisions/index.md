@@ -145,6 +145,11 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 - Sections and the install row stack under 800px without rebuilding simulations
 - Browser checks complement structural tests; reviewed user layout and copy changes are recorded explicitly
 
+### [agent-playground.md](agent-playground.md)
+- One typed registry serves native WebMCP and the external page API
+- Native registration is optional, feature-detected, and abort-scoped
+- Phase 0 status is observational and explicitly untracked
+
 ## Conventions
 
 - Decisions use `###` headings inside topic files.

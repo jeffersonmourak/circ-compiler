@@ -176,6 +176,23 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     // initialization"), and it aborted the rest of the boot with it.
     const { doc, errors } = await runIsland('playground', 'Playground.astro', { ...defaultEnvelope(), activeId: buildCatalogue(examples, tour)[0].id, view: 'live', dataOpen: true });
     expect(errors).toEqual([]);
+    const agentApi = (globalThis as unknown as { circPlayground?: {
+      listTools(): Promise<unknown>;
+      callTool(name: string, input: unknown): Promise<unknown>;
+    } }).circPlayground;
+    expect(agentApi).toBeDefined();
+    const agentCatalogue = await agentApi!.listTools() as { ok: boolean; data?: { tools: { name: string }[] } };
+    expect(agentCatalogue.ok).toBe(true);
+    expect(agentCatalogue.data?.tools.map((tool) => tool.name)).toEqual(['circ_get_status']);
+    const agentStatus = await agentApi!.callTool('circ_get_status', {}) as {
+      ok: boolean;
+      data?: { project: { name: string; entryFile: string; fileCount: number } | null; provenance: { tracking: string } };
+    };
+    expect(agentStatus.ok).toBe(true);
+    expect(agentStatus.data?.project?.name).toBe((doc.querySelector('.pg-crumb-name')?.textContent ?? '').trim());
+    expect(agentStatus.data?.project?.entryFile).toBe(doc.querySelector('.pg-files [aria-selected="true"]')?.textContent?.trim() ?? '');
+    expect(agentStatus.data?.project?.fileCount).toBe(doc.querySelectorAll('.pg-files .pg-file').length);
+    expect(agentStatus.data?.provenance.tracking).toBe('untracked');
     expect(doc.querySelector('.pg-data-card')?.hasAttribute('hidden')).toBe(false);
     (doc.querySelector('.pg-data-close') as unknown as HTMLElement).click();
     expect(doc.querySelector('.pg-view-tab[data-view="live"]')?.getAttribute('aria-selected')).toBe('true');
@@ -359,7 +376,7 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(doc.querySelector('.pg-nav .theme-toggle')).not.toBeNull();
     expect(doc.querySelector('.pg-statusline .pg-status-identity')).not.toBeNull();
     expect(doc.querySelector('.pg-statusline .signature .heart')).not.toBeNull();
-    expect(doc.querySelector('.pg-statusline .pg-promise')?.textContent).toBe('runs in your browser · nothing leaves the page');
+    expect(doc.querySelector('.pg-statusline .pg-promise')?.textContent).toBe('runs in your browser · connected agents receive requested results');
     expect(doc.querySelector('.pg-statusline .pg-status[role="status"]')).not.toBeNull();
     // The banner lives inside the source pane, not among the frame's rows.
     expect(doc.querySelector('.pg-editor > .pg-banner')).not.toBeNull();
@@ -1795,4 +1812,5 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
       island.compiler.call = originalCall;
     }
   }));
+
 });

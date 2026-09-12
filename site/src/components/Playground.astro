@@ -326,7 +326,7 @@ const groups = displayGroups(catalogue, []);
       {/* The announcement channel: file-tab operations and store notes. While
           it holds a sentence the promise beside it yields the cell. */}
       <span class="pg-status" role="status" aria-live="polite"></span>
-      <span class="pg-promise">runs in your browser · nothing leaves the page</span>
+       <span class="pg-promise">runs in your browser · connected agents receive requested results</span>
     </span>
   </footer>
   {/* Page data, not a module: it never enters the eager module graph, so the
@@ -363,7 +363,8 @@ const groups = displayGroups(catalogue, []);
   import type { PanelPos } from '../utils/playground-store.ts';
   import { normalizeEditorPreferences, type EditorPreferences } from '../utils/editor-preferences.ts';
   import { fnv1a } from '../utils/artifact-hash.ts';
-  import { artifactFileName } from '../utils/artifact-name.ts';
+   import { artifactFileName } from '../utils/artifact-name.ts';
+   import { installPageApi, type PageApiInstallation } from '../scripts/agent-tools/page-api.ts';
   import { capRefusal, mountSettingsDrawer, optionsFor, truthTableRefusal } from '../scripts/settings-drawer.ts';
   import { formatBytes } from '../scripts/pipeline.ts';
   import {
@@ -598,6 +599,10 @@ const groups = displayGroups(catalogue, []);
       dataOpen: false,
       version: null as LibcircVersion | null,
       simulateEnabled: true,
+    };
+    const bootstrapState = {
+      lifecycle: 'initializing' as 'initializing' | 'ready' | 'failed',
+      error: null as string | null,
     };
     function activeRequest(options?: Record<string, unknown>) {
       return requestFor(state.tabs.files, options, activeFile(state.tabs).name);
@@ -3030,6 +3035,7 @@ const groups = displayGroups(catalogue, []);
       renderFooterBar();
       applyTruthGate();
       renderWorkspace();
+      bootstrapState.lifecycle = 'ready';
 
       whenIdle(() => {
         void loadEditor().then(mountEditor, () => {
@@ -3388,7 +3394,11 @@ const groups = displayGroups(catalogue, []);
       if (typeof ric === 'function') ric(fn);
       else window.setTimeout(fn, 0);
     };
-    void bootstrap();
+    void bootstrap().catch((error) => {
+      bootstrapState.lifecycle = 'failed';
+      bootstrapState.error = error instanceof Error ? error.message.slice(0, 240) : 'The playground could not finish restoring.';
+      status.textContent = bootstrapState.error;
+    });
 
     // ---- version handshake ----
     async function ensureReady(): Promise<boolean> {
@@ -4505,6 +4515,64 @@ const groups = displayGroups(catalogue, []);
         void buildCanvas();
       }
     };
+    let agentInstallation: PageApiInstallation | null = null;
+    agentInstallation = installPageApi(el, {
+      readStatus: () => {
+        const activeId = store.envelope.activeId;
+        const selected = catalogue.find((item) => item.id === activeId);
+        const scratch = store.envelope.scratch.find((item) => item.id === activeId);
+        const version = state.version;
+        const pipeline = statusFor(pipe);
+        return {
+          lifecycle: bootstrapState.lifecycle,
+          bootstrapError: bootstrapState.error,
+          project: bootstrapState.lifecycle === 'ready' && activeId
+            ? {
+                id: activeId,
+                name: selected?.label ?? scratch?.name ?? activeId,
+                entryFile: activeFile(state.tabs).name,
+                fileCount: state.tabs.files.length,
+              }
+            : null,
+          view: state.view,
+          compiler: {
+            ready: pipe.ready,
+            loading: pipe.loading,
+            identity: version
+              ? {
+                  version: version.version,
+                  revision: version.revision,
+                  topologyVersion: version.topology_version,
+                  fullVersion: version.full_version,
+                  grammarSha256: version.grammar_sha256,
+                }
+              : null,
+            simulationCompatible: version ? state.simulateEnabled : null,
+          },
+          reportedPipeline: {
+            kind: pipeline.kind,
+            analyzing: pipe.analyzing,
+            building: pipe.building,
+            analyzePending: analyzeStage.pending,
+            buildPending: buildStage.pending,
+            errors: pipe.errors,
+            warnings: pipe.warnings,
+            stale: state.stale || pipe.stale,
+            failure: pipe.failure,
+          },
+          artifact: { present: state.artifact !== null, bytes: state.artifact?.size ?? null },
+          session: { present: Boolean(sim.session?.isAlive) },
+          provenance: { tracking: 'untracked', sourceRevision: null, buildRevision: null, sessionId: null },
+          persistence: { enabled: store.enabled },
+          agentAccess: {
+            pageRegistry: 'available',
+            native: agentInstallation?.native.status() ?? {
+              state: 'not-configured', apiVariant: null, reason: 'Native adapter is not installed.',
+            },
+          },
+        };
+      },
+    });
     // Theme flips: circ-renderer captures the theme at construction, so the
     // canvas is rebuilt; the editor reconfigures its theme compartment in place.
     new MutationObserver(() => {

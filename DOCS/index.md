@@ -30,6 +30,7 @@ output out(in=inv.out)
 | [preview.md](preview.md)                     | `circ-compile --preview`: ASCII circuit schematic rendering             |
 | [logisim-import.md](logisim-import.md)       | Mapping Logisim `ROM`/`RAM` components onto `rom`/`ram`                 |
 | [benchmark.md](benchmark.md)                 | `zig build bench`: engine regression gate, counters, golden workflow    |
+| [agent-playground.md](agent-playground.md)   | Browser-agent playground setup, tool contract, limits, and compatibility evidence |
 | [Home page archive](archive/plan-home-page.md) | Live-circuit landing page, language and preview sections, gallery tiles and install flow |
 | [decisions/](decisions/index.md)             | Architectural decisions for the `.circ` compiler                        |
 | [Playground bench archive](archive/plan-playground-bench.md) | Canvas-first playground implementation, verification and carried-forward checks |
