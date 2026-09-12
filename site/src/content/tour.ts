@@ -118,7 +118,7 @@ output carry(in=c.out)
           ╰───────╯`,
   },
   {
-    slug: 'imported-half-adder',
+    slug: 'full-adder-imports',
     title: 'A full-adder, by importing the half-adder',
     prose:
       "Imports glue files together. The root file declares a `half_adder` alias and " +

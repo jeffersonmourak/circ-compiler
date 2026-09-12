@@ -330,7 +330,7 @@ const groups = displayGroups(catalogue, []);
       {/* The announcement channel: file-tab operations and store notes. While
           it holds a sentence the promise beside it yields the cell. */}
       <span class="pg-status" role="status" aria-live="polite"></span>
-       <span class="pg-promise">runs in your browser · connected agents receive requested results</span>
+        <span class="pg-promise">local computation · connected agents receive requested tool results</span>
     </span>
   </footer>
   {/* Page data, not a module: it never enters the eager module graph, so the
@@ -5441,7 +5441,20 @@ const groups = displayGroups(catalogue, []);
       if (input.view !== undefined && !['schematic', 'live', 'truth'].includes(input.view) || input.dataOpen !== undefined && typeof input.dataOpen !== 'boolean') return agentError('INVALID_ARGUMENT', 'View input is invalid.');
       if (input.view === 'truth' && truthBlock()) return agentError('INSPECTION_UNAVAILABLE', truthBlock()!);
       if (input.view !== undefined) showView(input.view); if (input.dataOpen !== undefined) setDataOpen(input.dataOpen, { focus: false });
-      return { ok: true as const, value: { view: state.view, dataOpen: state.dataOpen, presentationRevision, operationIds: { preview: operationSlots.preview, truth_table: operationSlots.truth_table, session_build: operationSlots.session_build }, persistence: agentReceipt(true) } };
+      return {
+        ok: true as const,
+        value: {
+          view: state.view,
+          dataOpen: state.dataOpen,
+          presentationRevision,
+          operationIds: {
+            ...(operationSlots.preview ? { preview: operationSlots.preview } : {}),
+            ...(operationSlots.truth_table ? { truth_table: operationSlots.truth_table } : {}),
+            ...(operationSlots.session_build ? { session_build: operationSlots.session_build } : {}),
+          },
+          persistence: agentReceipt(true),
+        },
+      };
     }
     function highlightForAgent(input: any) {
       const blocked = exactTarget({ projectId: store.envelope.activeId ?? '', expectedSourceRevision: input.expectedSourceRevision, expectedTargetEpoch: input.expectedTargetEpoch }); if (blocked) return blocked;
@@ -5572,9 +5585,10 @@ const groups = displayGroups(catalogue, []);
                 sessionId: sim.id,
               }
             : { tracking: 'untracked' as const, sourceRevision: null, buildRevision: null, sessionId: null },
-          ...(bootstrapState.lifecycle === 'ready' ? {
-            observationRevision,
-            projectVersion: activeId ? revisions.projectVersion(activeId) : null,
+           ...(bootstrapState.lifecycle === 'ready' ? {
+             observationRevision,
+             workspaceRevision,
+             projectVersion: activeId ? revisions.projectVersion(activeId) : null,
             currentTarget: revisions.currentTarget,
             outputs: {
               analysis: outputStatus('analysis'), diagnostics: outputStatus('diagnostics'),

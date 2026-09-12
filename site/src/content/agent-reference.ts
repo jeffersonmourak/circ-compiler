@@ -7,7 +7,12 @@ export const sectionOverrides: Record<string, string> = {
   'language:5.3 Multi-bit wires': 'wires-multi-bit-wires',
   'language:3.5 Memories (declaration shape)': 'memories-declaration-shape',
 };
-export const aliases: Record<string, string> = {};
+export const aliases: Record<string, string> = {
+  // The Phase 2 corpus promised this stable ID before the tour source gained
+  // its descriptive display slug. Keep old retrievals resolving to the
+  // canonical two-file full-adder record.
+  'tour-example:imported-half-adder': 'tour-example:full-adder-imports',
+};
 export const removed: Record<string, { replacementId: string | null }> = {};
 export const topicSynonyms: Record<string, string[]> = {
   bus: ['width', 'multi_bit'], multi: ['width'], parametric: ['parameter'], parameter: ['parametric'],

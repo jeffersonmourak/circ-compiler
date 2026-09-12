@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 
 export type Doc = {
   /** Stable public knowledge/document identity. */
-  key: 'language' | 'getting-started' | 'circuit-format' | 'wasm-api' | 'preview' | 'sim-protocol';
+  key: 'language' | 'getting-started' | 'circuit-format' | 'wasm-api' | 'preview' | 'sim-protocol' | 'agent-playground';
   /** Filename inside `../../DOCS/`, relative path. */
   src: string;
   /** Output path under `src/pages/` (drives the HTML route). */
@@ -56,6 +56,13 @@ export const docs: Doc[] = [
     dst: 'reference/sim-protocol.md',
     title: 'Simulation Protocol',
     description: 'The line-oriented protocol for driving circ simulations and memory.',
+  },
+  {
+    key: 'agent-playground',
+    src: 'agent-playground.md',
+    dst: 'reference/agent-playground.md',
+    title: 'Agent Playground',
+    description: 'Set up a browser agent to discover, author, simulate, inspect, and hand off circ playground projects.',
   },
 ];
 

@@ -434,6 +434,8 @@ export interface PlaygroundStatus {
     sessionId: string | null;
   });
   observationRevision?: Revision;
+  /** Current workspace snapshot revision for create/open preconditions. */
+  workspaceRevision?: Revision;
   projectVersion?: ProjectVersion | null;
   currentTarget?: TargetRef | null;
   outputs?: { analysis: OutputStatus; diagnostics: OutputStatus; artifact: OutputStatus & { id: ArtifactId | null }; preview: OutputStatus; truth: OutputStatus };

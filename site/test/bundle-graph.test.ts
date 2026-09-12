@@ -135,4 +135,12 @@ describe('bundle graph', () => {
       ['../components/Nav.astro', '../styles/global.css', '../utils/lazy.ts', '../utils/sillyname', '../utils/url.ts', './re', './types'].sort(),
     );
   });
+
+  test('the agent surface remains playground-route local', () => {
+    const playground = readFileSync(resolve(SITE, 'src', 'components', 'Playground.astro'), 'utf8');
+    const nonPlayground = walkSources(ROOTS);
+    expect(playground).toContain("agent-tools/page-api.ts");
+    expect([...nonPlayground.visited].some((path) => path.includes('agent-tools'))).toBe(false);
+    expect([...nonPlayground.visited].some((path) => path.includes('playground-controller'))).toBe(false);
+  });
 });

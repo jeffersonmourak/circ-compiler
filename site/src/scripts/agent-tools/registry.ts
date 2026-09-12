@@ -35,6 +35,34 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value) && Object.getPrototypeOf(value) === Object.prototype;
 }
 
+function matchesSchema(schema: unknown, value: unknown): boolean {
+  if (!isPlainObject(schema)) return false;
+  if (schema.nullable === true && value === null) return true;
+  if (Array.isArray(schema.oneOf)) return schema.oneOf.filter((option) => matchesSchema(option, value)).length === 1;
+  if ('const' in schema && value !== schema.const) return false;
+  switch (schema.type) {
+    case 'string': return typeof value === 'string';
+    case 'number': return typeof value === 'number' && Number.isFinite(value);
+    case 'boolean': return typeof value === 'boolean';
+    case 'array': {
+      if (!Array.isArray(value)) return false;
+      if (typeof schema.minItems === 'number' && value.length < schema.minItems) return false;
+      if (typeof schema.maxItems === 'number' && value.length > schema.maxItems) return false;
+      return !('items' in schema) || value.every((item) => matchesSchema(schema.items, item));
+    }
+    case 'object': {
+      if (!isPlainObject(value)) return false;
+      const properties = isPlainObject(schema.properties) ? schema.properties : null;
+      const required = Array.isArray(schema.required) ? schema.required : [];
+      if (required.some((key) => typeof key !== 'string' || !(key in value))) return false;
+      if (!properties) return true;
+      if (schema.additionalProperties === false && Object.keys(value).some((key) => !(key in properties))) return false;
+      return Object.entries(value).every(([key, item]) => matchesSchema(properties[key], item));
+    }
+    default: return false;
+  }
+}
+
 function copy<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
@@ -82,19 +110,7 @@ export class AgentToolRegistry {
   }
 
   private validInput(descriptor: ToolDescriptor, input: unknown): input is Record<string, unknown> {
-    if (!isPlainObject(input)) return false;
-    const properties = descriptor.inputSchema.properties;
-    if (Object.keys(input).some((key) => !(key in properties))) return false;
-    if (descriptor.inputSchema.required.some((key) => !(key in input))) return false;
-    return Object.entries(input).every(([key, value]) => {
-      const property = properties[key] as { type?: unknown } | undefined;
-      if ((property as { nullable?: boolean } | undefined)?.nullable && value === null) return true;
-      return property?.type === 'string' ? typeof value === 'string'
-        : property?.type === 'number' ? typeof value === 'number'
-          : property?.type === 'boolean' ? typeof value === 'boolean'
-            : property?.type === 'array' ? Array.isArray(value)
-              : property?.type === 'object' ? isPlainObject(value) : false;
-    });
+    return matchesSchema(descriptor.inputSchema, input);
   }
 
   async listTools(): Promise<ToolResult<ToolCatalogue>> {

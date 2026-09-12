@@ -148,7 +148,8 @@ Each decision follows the format: **decision**, **rationale**, **alternatives**.
 ### [agent-playground.md](agent-playground.md)
 - One typed registry serves native WebMCP and the external page API
 - Native registration is optional, feature-detected, and abort-scoped
-- Phase 0 status is observational and explicitly untracked
+- Page lifetime, revisions, sessions, and bounded retained results are explicit
+- Browser-local computation and connected-agent disclosure remain separate boundaries
 
 ## Conventions
 

@@ -56,6 +56,24 @@ describe('WebMCP adapter', () => {
     expect((await registry.callTool('circ_get_status', {})).ok).toBe(true);
   });
 
+  test('failed_registration_cleans_up_tools_registered_before_the_failure', async () => {
+    const registry = new AgentToolRegistry('page-test', [
+      { descriptor: statusDescriptor, handler: () => ({ ready: true }) },
+      { descriptor: { ...statusDescriptor, name: 'circ_second_status' }, handler: () => ({ ready: true }) },
+    ]);
+    let disposed = 0;
+    const { native } = registrar({
+      register: async (descriptor) => {
+        if (descriptor.name === 'circ_second_status') throw new Error('duplicate stale registration');
+        return { dispose: async () => { disposed += 1; } };
+      },
+    });
+    const adapter = new WebMcpAdapter(registry, native);
+    await adapter.start();
+    expect(disposed).toBe(1);
+    expect(adapter.status()).toMatchObject({ state: 'failed', reason: 'duplicate stale registration' });
+  });
+
   test('native_and_page_calls_share_dispatch', async () => {
     const registry = tools();
     let invoke: ((input: unknown) => Promise<unknown>) | null = null;
@@ -87,5 +105,31 @@ describe('WebMCP adapter', () => {
     await starting;
     expect(disposed).toBe(1);
     expect(adapter.status().state).not.toBe('registered');
+  });
+
+  test('bfcache_suspend_unregisters_before_restoring_native_tools', async () => {
+    const registry = tools();
+    let disposed = 0;
+    let registered = 0;
+    const { native } = registrar({
+      register: async () => {
+        registered += 1;
+        return { dispose: async () => { disposed += 1; } };
+      },
+    });
+    const adapter = new WebMcpAdapter(registry, native);
+    await adapter.start();
+    expect(adapter.status().state).toBe('registered');
+    expect(registered).toBe(1);
+
+    await adapter.suspend();
+    expect(adapter.status().state).toBe('suspended');
+    expect(disposed).toBe(1);
+
+    await adapter.resume();
+    expect(adapter.status().state).toBe('registered');
+    expect(registered).toBe(2);
+    await adapter.dispose();
+    expect(disposed).toBe(2);
   });
 });

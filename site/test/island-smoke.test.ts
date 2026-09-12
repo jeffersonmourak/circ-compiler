@@ -223,13 +223,26 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     ]);
     const agentStatus = await agentApi!.callTool('circ_get_status', {}) as {
       ok: boolean;
-      data?: { project: { name: string; entryFile: string; fileCount: number } | null; provenance: { tracking: string } };
+      data?: {
+        project: { name: string; entryFile: string; fileCount: number } | null;
+        provenance: { tracking: string };
+        workspaceRevision?: string;
+        configuration?: { presentationRevision: string };
+      };
     };
     expect(agentStatus.ok).toBe(true);
     expect(agentStatus.data?.project?.name).toBe((doc.querySelector('.pg-crumb-name')?.textContent ?? '').trim());
     expect(agentStatus.data?.project?.entryFile).toBe(doc.querySelector('.pg-files [aria-selected="true"]')?.textContent?.trim() ?? '');
     expect(agentStatus.data?.project?.fileCount).toBe(doc.querySelectorAll('.pg-files .pg-file').length);
     expect(agentStatus.data?.provenance.tracking).toBe('tracked');
+    expect(agentStatus.data?.workspaceRevision).toMatch(/^.+:workspace:\d+$/);
+    const agentView = await agentApi!.callTool('circ_set_view', {
+      expectedPresentationRevision: agentStatus.data?.configuration?.presentationRevision,
+      view: 'live',
+      dataOpen: true,
+    }) as { ok: boolean; data?: { operationIds: Record<string, string> } };
+    expect(agentView.ok).toBe(true);
+    for (const id of Object.values(agentView.data?.operationIds ?? {})) expect(typeof id).toBe('string');
     expect(doc.querySelector('.pg-data-card')?.hasAttribute('hidden')).toBe(false);
     (doc.querySelector('.pg-data-close') as unknown as HTMLElement).click();
     expect(doc.querySelector('.pg-view-tab[data-view="live"]')?.getAttribute('aria-selected')).toBe('true');
@@ -413,7 +426,7 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     expect(doc.querySelector('.pg-nav .theme-toggle')).not.toBeNull();
     expect(doc.querySelector('.pg-statusline .pg-status-identity')).not.toBeNull();
     expect(doc.querySelector('.pg-statusline .signature .heart')).not.toBeNull();
-    expect(doc.querySelector('.pg-statusline .pg-promise')?.textContent).toBe('runs in your browser · connected agents receive requested results');
+    expect(doc.querySelector('.pg-statusline .pg-promise')?.textContent).toBe('local computation · connected agents receive requested tool results');
     expect(doc.querySelector('.pg-statusline .pg-status[role="status"]')).not.toBeNull();
     // The banner lives inside the source pane, not among the frame's rows.
     expect(doc.querySelector('.pg-editor > .pg-banner')).not.toBeNull();

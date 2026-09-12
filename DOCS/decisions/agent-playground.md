@@ -10,7 +10,7 @@
 
 ### Native registration is abort-scoped and optional
 
-**Decision.** The investigated WebMCP mapping uses `document.modelContext.registerTool(descriptor, { signal })`; the callback returns a text content block containing the shared JSON result. The page aborts registration on suspend/disposal and preserves the external registry when native detection or registration fails.
+**Decision.** The investigated WebMCP mapping uses `document.modelContext.registerTool(descriptor, { signal })`; the callback returns a text content block containing the shared JSON result. The page aborts registration on suspend/disposal through `pagehide`, preserving Chrome bfcache eligibility, and preserves the external registry when native detection or registration fails. Registration is transactional: if a provider rejects one descriptor, every already-registered descriptor is aborted/disposed before reporting failure.
 
 **Rationale.** The WebMCP explainer documents abort-based unregistration. Feature detection avoids user-agent assumptions, while optional registration preserves the serverless external fallback.
 
@@ -39,3 +39,27 @@
 **Rationale.** A stale agent call must never partially overwrite a person’s active work, and a delayed compile reply must never be remapped through newer source. Keeping the existing worker and scheduling path means visible UI work and agent work retain the same operation provenance.
 
 **Alternatives.** A separate agent compiler or workspace shadow copy (would drift from the visible editor); applying each batch item immediately (permits partial edits); remapping historical diagnostics through current tabs (can point at unrelated text).
+
+### Acceptance evidence keeps application and provider boundaries separate
+
+**Decision.** Final acceptance records actual native and page-registry calls with their application provenance, visible agreement, bounded-result identity, and external download capture. Native provider rejection before dispatch is recorded as provider behavior; only page-registry calls can assert application `UNKNOWN_TOOL` or retained-facade `PAGE_DISPOSED`.
+
+**Rationale.** Browser tooling can reject a name before the page callback and browser download dispatch cannot promise a filesystem write. Treating either as an application result would fabricate evidence and hide the boundary a user must diagnose.
+
+**Alternatives.** Treat native rejection as an application code (false attribution); treat a dispatch receipt as disk completion (unsupported); use mocks or a browser runner as real-client proof (does not exercise the selected client).
+
+### Browser-local work and agent disclosure are distinct
+
+**Decision.** Public copy says that compilation, simulation, browser storage, and knowledge search execute locally and that the static deployment has no application backend. It separately says that requested tool arguments and results are shared with the connected agent.
+
+**Rationale.** The first statement explains the architecture and local project-data boundary; the second prevents an inaccurate claim that nothing leaves the page once an agent is connected.
+
+**Alternatives.** "Nothing leaves the page" (false for requested agent calls); "no server" (ambiguous about static hosting and browser requests); a custom relay (outside the static architecture).
+
+### RAM images are live session data, not source preloads
+
+**Decision.** The RAM acceptance workflow loads the corpus image through `circ_update_memory`, verifies the ordered clocked write, then verifies that reset leaves RAM undefined. `circ_set_memory_preload` remains ROM-only and returns `PRELOAD_CONFLICT` for RAM.
+
+**Rationale.** RAM contents belong to the active simulation session, so persisting them as source-owned state would contradict the existing Phase 4 reset, replacement, and reload contract. The corpus image is valid runtime initialization evidence, not a declaration setting.
+
+**Alternatives.** Persist RAM images as source preloads (changes the established state/persistence contract); accept reset restoring a live image (mislabels ephemeral state as source configuration); omit RAM reset evidence (fails to prove lifecycle semantics).

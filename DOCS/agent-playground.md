@@ -1,164 +1,101 @@
 # Agent Playground
 
-The `/playground` page exposes a small browser-resident tool contract for agents working alongside a person. Compilation, simulation, project storage, and the page registry run locally in the browser. The static site has no application backend, relay, or custom MCP bridge.
+`/playground` exposes a browser-resident tool contract for an agent working beside a person. Compilation, simulation, project storage, and knowledge search run locally in the browser. The static deployment has no application backend, relay, custom MCP server, or custom browser extension.
 
-Tool arguments and requested results are delivered to the connected agent through its browser integration or browser-control tooling. Treat source and results as data shared with that client and subject to its provider/tooling policies.
+Tool arguments and bounded results requested by a user are shared with the connected agent through that client's browser integration or browser-control tool. They are subject to that client and provider's policies. The early share-fragment scrub prevents source-bearing fragments reaching deferred page integrations; it is not a claim that the page makes no network requests.
 
-## Phase 5 Capability
+## Setup
 
-Inspection and handoff use the same retained operations, compiler, session, source-image, view, and browser-download paths as the visible workbench. Read `circ_get_status.configuration` for `workbench.revision`, preview/Truth option revisions, and `presentationRevision` before changing controls.
+1. Build the site from `site/` with `bun --bun run build`.
+2. Start one static preview with `bun --bun run preview --host 127.0.0.1` and use its printed loopback URL, or use an authorized static host.
+3. Open `/playground` in the client-specific clean browser profile. Do not reuse another client's profile or storage.
+4. Select the visible tab using the client's verified browser connection mechanism.
+5. Discover tool schemas before invoking a tool. Read `circ_get_status` before every revision-guarded mutation.
 
-| Tool | Result |
-| --- | --- |
-| `circ_request_schematic` / `circ_get_schematic` | Starts or joins an exact preview and returns Unicode-safe retained text pages with explicit expansion settings and `color: never`. |
-| `circ_get_topology` | Pages bounded, artifact-local full-topology components or connections. IDs are inspection-only and cannot drive live components. |
-| `circ_request_truth_table` / `circ_get_truth_table` | Returns retained exhaustive or filtered rows with engine, held/unknown pins, cap, and provenance. RAM, missing filtered sessions, and projected work above 4,096 rows are refused. |
-| `circ_set_workbench_settings`, `circ_set_view`, `circ_highlight` | Persist/apply supported settings and visible view/Data state, or hold a transient root declaration highlight without moving selection. |
-| `circ_export_source`, `circ_create_share_link`, `circ_get_transcript` | Page revision-bound source, source-only share URLs, and immutable log/script lines without clipboard access. |
-| `circ_download_artifact`, `circ_download_memory` | Dispatch exactly one copied browser download and return a receipt. `dispatched` does not claim disk completion or a filesystem path. |
+Native WebMCP is available only when the browser exposes `document.modelContext.registerTool` or `navigator.modelContext.registerTool`. It routes to the same registry as the external API and is abort-scoped on page suspension/disposal. A provider that rejects an undiscovered tool name has not called the application; record that as a provider result, not an application code.
 
-Source and share exports contain ordered source only. WASM contains the compiled runtime/topology only. Neither carries source ROM images, live RAM, live pins, settings, or transcript data. Export required ROM preloads separately with `circ_download_memory` using `source_preload`; root live-memory exports use `live_root` and write undefined bits as zero in raw little-endian words.
-
-All inspection and text cursors bind a retained immutable snapshot. A cursor cannot start computation or cross artifacts/results. Results are bounded to 32 KiB at the registry boundary; topology is limited to a 4 MiB full section, 32,768 components, and 65,536 connections.
-
-## Phase 4 Capability
-
-Read tools remain side-effect free. Live simulation tools explicitly identify the artifact, session, and live-state revision they observed; a stale mutation is refused rather than queued onto a newer session.
-
-| Tool | Input | Result |
-| --- | --- | --- |
-| `circ_get_status` | `{}` | Tracked project/target revisions, output freshness/provenance, current operation IDs, session/preload status, and compiler transport health. |
-| `circ_list_projects` | `{ cursor?, limit? }` | A deterministic, revision-bound page of readable projects. |
-| `circ_read_project` | `{ projectId?, expectedRevision?, cursor?, limit? }` | A revision-bound file manifest without source bodies. |
-| `circ_read_file` | `{ projectId?, name, expectedSourceRevision?, offset?, maxCodeUnits? }` | Exact UTF-16 source chunks, including offsets and EOF metadata. |
-| `circ_wait_for_operation` | `{ operationId, timeoutMs? }` | A retained terminal outcome, or a bounded `timed_out` observation. |
-| `circ_help` | `{ action: 'search', query, kind?, limit?, cursor?, expectedCorpusId? }` | Deterministic local search of shipped references, diagnostics, and examples. |
-| `circ_help` | `{ action: 'read', id, offset?, maxCodeUnits?, expectedCorpusId? }` | UTF-16-safe chunks of a cited reference, diagnostic, source file, or memory image. |
-| `circ_help` | `{ action: 'example', id, expectedCorpusId? }` | Complete named-file gallery/tour project and its required ROM/RAM initialization, or a resource manifest when it cannot fit. |
-
-Results are JSON-safe, bounded to 32 KiB, and include a page ID. After bootstrap, status provenance is `tracked`: an output's producer operation and captured inputs distinguish a current result from a retained last-good result. IDs are page-memory-only and expire after reload; retained terminal operation history is bounded to 128 records.
-
-Source chunks use zero-based UTF-16 offsets and exclusive ends. The default chunk is 2,048 code units; `maxCodeUnits` is 2 through 4,096. A nonzero offset requires the prior `sourceRevision`, and changed source or paging state returns `REVISION_CONFLICT` rather than mixing revisions.
-
-Agents can now author and repair visible projects through the same page registry:
-
-| Tool | Input | Result |
-| --- | --- | --- |
-| `circ_create_project` | Observed workspace/active/target revisions, optional name/files/entry | Creates and opens one scratch project. |
-| `circ_open_project` | Observed workspace/active/target revisions and project revision | Opens an existing project without editing shipped content. |
-| `circ_update_project` | Active project/source/target revisions and ordered edits/creates/renames/deletes | Applies one atomic source revision; a shipped project forks only on its first effective edit. |
-| `circ_select_entry` | Active project/source/target revisions and file name | Selects the visible compilation entry without reordering source. |
-| `circ_set_compile_settings` | Target/options revisions and `warningsAsErrors` | Updates the shared compile option. |
-| `circ_compile` | Active project/source/target/options revisions | Returns exact analyze and compile operation IDs; wait for the compile ID. |
-| `circ_get_diagnostics` | Operation ID, optional source revision/cursor/limit | Returns retained compiler diagnostics with native UTF-8-byte and source UTF-16 locations. |
-
-Mutation calls are revision guarded. Read `circ_get_status` and `circ_read_project` before a write, then use the returned project/source, target, workspace, and compile-setting revisions on the next call. A human edit or target change between the read and call returns a conflict and leaves the workspace unchanged. File-edit ranges are zero-based UTF-16, exclusive at the end, and may not split a surrogate pair. Rename warnings explicitly state that imports are not rewritten.
-
-Successful authoring results include a persistence receipt. `saved` means the accepted active source was written to local storage; `memory_only` means the visible in-memory change succeeded but reload survival is not claimed. Tool inputs are JSON-safe and limited to 128 KiB; results remain limited to 32 KiB.
-
-### Simulation and verification
-
-| Tool | Input | Result |
-| --- | --- | --- |
-| `circ_get_simulation` | Optional observed session/live-state IDs | Observes a ready session only; never creates one. |
-| `circ_prepare_simulation` | Current project/source/target/artifact/image revisions | Starts, joins, or reuses the exact live-session build. |
-| `circ_drive` | Session/live-state provenance, ordered root-input assignments, optional queries | Drives and settles each assignment in order, then returns exact values/masks. |
-| `circ_reset` | Session/live-state/artifact provenance | Starts a reset operation; completion has a new session identity and floating inputs. |
-| `circ_read_memory` | Ready session, root memory, bounded page | Reads 1-256 cells without changing the memory panel or live state. |
-| `circ_update_memory` | Session/live-state provenance and one `poke`, `clear`, or `load` | Mutates one root ROM/RAM and records the same completed console action as the page. |
-| `circ_set_memory_preload` | Source/image/target revisions plus file/declaration/image | Persists one ROM declaration image and applies it to a compatible running session when possible. |
-| `circ_run_verification` | Exact artifact/image inputs and bounded cases | Starts isolated disposable-session verification; it never alters live session/UI/console state. |
-| `circ_get_verification` | Operation ID and bounded cursor | Retrieves complete ordered case/step/assertion records. |
-
-Values, masks, memory addresses, and memory words use lowercase canonical `0x` hexadecimal strings. JSON numbers are never accepted for those values. `circ_drive` preserves `--sim` ordering: every assignment settles before the next. The page boots inputs low; reset and isolated `floating` cases leave them undefined. Live memory access is root-only. Source ROM preloads are declaration-owned and persist through the existing workspace receipt; live pokes/loads and RAM contents are page-memory-only.
-
-Verification cases are fresh sessions, while steps in a case retain state. A case declares `floating` or `low` initialization and `current` or `none` source preloads. Explicit root-memory images are applied in case order. Verification is bounded to 128 cases, 512 steps, 2,048 actions/assertions, a 10-second deadline, and paged retained results. It cooperatively yields between action batches but cannot claim to interrupt a synchronous WASM call already in progress.
-
-Diagnostic pages are tied to the operation's captured source and file map, not the current editor. Native ranges remain 1-based UTF-8-byte columns. When captured playground source is available, a file-local UTF-16 range and offsets are included; `currentlyEditable` is an observation at page time and can become false after a rename or later edit.
-
-`circ_help` is read-only and never selects a project, creates a compiler or simulation session, starts a build, or changes memory/runtime state. Its generated corpus is pinned to a SHA-256 corpus ID and the committed compiler identity that validated its examples. Search accepts 1 through 10 results; read chunks use zero-based UTF-16 offsets, default to 4,096 code units, and require `expectedCorpusId` for continuation. `E014` and other validator codes resolve to their canonical `diagnostic:<code>` records; unknown codes return an empty successful search result rather than invented guidance. Complete examples retain sibling files, the default entry file, and normalized little-endian memory images labeled `load-before-driving-inputs`.
-
-Knowledge assets are fetched lazily from same-origin `/agent-reference/` content-addressed JSON only after an invocation. Asset hashes and corpus/schema IDs are verified in the browser. `HELP_UNAVAILABLE`, `HELP_INVALID_CORPUS`, `HELP_CORPUS_CHANGED`, `HELP_NOT_FOUND`, `HELP_REMOVED`, and `HELP_BUSY` are structured domain errors; a valid search with no match is successful data.
-
-Waits never start or cancel compiler/runtime work. They default to 5 seconds and allow 0 through 30 seconds. A timeout leaves work running. Suspension returns `PAGE_SUSPENDED`, disposal returns `PAGE_DISPOSED`, and a caller cancellation returns `WAIT_CANCELLED`.
-
-The page registry is available at `window.circPlayground`:
+The external page-registry fallback is `window.circPlayground`:
 
 ```js
 async () => window.circPlayground?.listTools()
 async () => window.circPlayground?.callTool('circ_get_status', {})
-async () => window.circPlayground?.callTool('circ_list_projects', { limit: 20 })
 ```
 
-Select the target tab through the installed browser tool before evaluating either expression. Discover schemas before calling tools. Pass user text as browser-tool arguments, never by interpolating it into evaluated JavaScript.
+Select the tab before evaluating either expression. Pass user text as browser-tool arguments, never by interpolating it into evaluated JavaScript. OpenCode and Claude Code require separately configured browser tooling. Native WebMCP tooling also requires its browser/tool-specific experimental support.
 
-## Native WebMCP
+## Workflows
 
-When the browser exposes `document.modelContext.registerTool` or `navigator.modelContext.registerTool`, the page registers the same descriptor and routes calls through the same registry. The native callback returns one text content block containing the JSON `ToolResult`; aborting the registration signal tears it down. Missing or rejected native registration leaves the page registry and human UI usable.
+The public catalogue covers discovery, corpus help, project/file reads, authoring, compilation, diagnostics, simulation, verification, inspection, visible workbench controls, source/share/transcript handoff, and browser download dispatch. Every result is JSON-safe and capped at 32 KiB.
 
-On bfcache suspension the registry reports `PAGE_SUSPENDED` and native exposure is removed. A restored cached page keeps its page ID and re-registers. A normal unload disposes the facade; rediscover after reload.
+For the acceptance fixture, use the frozen corpus records `ref:language:parametric-sub-circuits`, `diagnostic:E014`, `tour-example:full-adder-imports`, `example:half-adder`, `example:rom-lookup`, and `example:ram-write-read`. Read the corpus/compiler identities first; a mismatch is a preflight failure.
 
-## External Clients
+1. Discover schemas and call `circ_get_status`; compare the returned project, selected entry, view, and session state with the visible page.
+2. Use `circ_help` to read the reference and diagnostic, then retrieve the named tour and examples. Help is read-only and does not select, compile, or simulate a project.
+3. Create/open a scratch project, read the manifest, and make only revision-guarded edits. Wait for `circ_compile`, read file-local diagnostics, repair, and compile a current artifact.
+4. Call `circ_prepare_simulation`, wait if necessary, then use `circ_drive` with current artifact/session/live-state provenance. Its `assignments` array contains `{ pin, value, defined? }` items and `queries` contains pin-name strings; assignments settle one at a time. `circ_update_memory.action` is exactly one of `{ kind: 'poke', address, value, defined? }`, `{ kind: 'clear' }`, or `{ kind: 'load', hex }`.
+5. Use `circ_run_verification` for isolated bounded vectors. It never changes the live session, UI, or console.
+6. Request/read schematic and Truth results, read bounded topology, set supported workbench/view state, and apply then clear a source highlight. Confirm each changed state in the visible workbench.
+7. Use `circ_export_source`, `circ_create_share_link`, and `circ_get_transcript` for bounded handoff. Source/share omit images, live RAM, live pins, settings, transcript, and artifacts as applicable.
+8. `circ_download_artifact` and `circ_download_memory` prove dispatch only. Capture browser downloads outside the tool channel to prove completion; compare one captured filename and byte length with each receipt and record SHA-256. WASM validation includes topology/provenance decoding and vectors; source/live memory bytes compare against their source/readback.
 
-OpenCode and Claude Code use separately configured Chrome DevTools MCP or equivalent existing browser tooling. The documented fallback is `evaluate_script` over the page registry. Chrome DevTools MCP's WebMCP tools require its experimental WebMCP category; exact release, Chrome, Node, attachment mode, and flags must be recorded for each acceptance run.
+`example:ram-write-read` supplies runtime RAM initialization, not a source preload. Load its corpus image with `circ_update_memory`, read `q=0xa5/defined=0xff` at `a=0x5`, then perform the ordered `we=1, clk=0, clk=1` write and read `q=0x3c/defined=0xff`. After `circ_reset`, drive the address again and expect an undefined `q`: live RAM is reset/replacement/reload state. `circ_set_memory_preload` accepts only ROM declarations and must return `PRELOAD_CONFLICT` for RAM.
 
-Use a clean browser profile for each client. A separately launched browser has separate local playground storage.
+## Lifecycle And Bounds
 
-## Limits And Privacy
+Page, project, source, target, artifact, image, session, operation, result, cursor, and presentation identities are page-scoped. Re-read after a conflict; stale calls are refused instead of applying to newer work. Reload creates a new page ID and registration. A genuine bfcache restoration retains the page ID, resumes the registry, and re-registers native tools. `pagehide` aborts native registrations before a non-cached page facade is discarded, without an `unload` listener that would disqualify Chrome bfcache.
 
-- Invalid inputs and unknown tools return structured application errors.
-- Native-provider rejection before the page callback is a provider error, not an application result.
-- The source/share fragment is scrubbed before deferred page integrations run, but this is not a claim that the page makes no network requests.
-- Source is exposed only by explicit bounded `circ_read_file` calls. Memory images, diagnostics payloads, compilation, simulation mutations, and exports remain unavailable in this phase.
+Project/files/entry/settings/source preloads use the documented local-storage envelope when persistence succeeds. Sessions, live pins/RAM, highlights, operations, result stores, and page IDs are memory-only. Storage failure is reported as `memory_only` or refusal; never modify local storage behind the app to manufacture a pass.
 
-## Compatibility Evidence
+- Tool input is limited to 128 KiB; result envelopes are limited to 32 KiB.
+- Source and stores have their published caps; text/topology/diagnostic/Truth/verification results page with provenance-bound cursors.
+- Full topology is limited to a 4 MiB section, 32,768 components, and 65,536 connections.
+- Truth refuses RAM and projected work above 4,096 rows; filtered Truth requires its documented live-session scope.
+- Verification permits at most 128 cases, 512 steps, 2,048 actions/assertions, and a 10-second deadline.
+- Unknown semantic tools and retained-facade `PAGE_DISPOSED` are page-registry cases. Native unknown-name rejection and registration disappearance after reload are provider/lifecycle observations.
 
-| Client / product | App + browser version | Connection tool version / mode | Page origin + tested commit | API variant | Discovery evidence | Status-call evidence | Result |
-|------------------|-----------------------|--------------------------------|----------------------------|-------------|--------------------|----------------------|--------|
-| ChatGPT Desktop | Product/browser version not exposed by the client | Native WebMCP | `http://localhost:4321/playground`, uncommitted Phase 0 worktree | `document.modelContext.registerTool` | `circ_get_status` discovered with `{}`-only schema | Two successful calls across reload | Pass |
-| OpenCode 1.18.30 | Attached Chrome 153.0.0.0 | Chrome DevTools MCP with WebMCP tools | `http://localhost:4321/playground`, uncommitted Phase 0 worktree | Page registry and `document.modelContext.registerTool` | Both paths discovered before and after reload | Both paths invoked successfully before and after reload | Pass |
-| Claude Code 2.1.269 | Installed, no attached browser | Chrome DevTools MCP 1.9.0 not configured/attached | Not run | Page registry fallback | Pending actual client | Pending actual client | Blocked: no Chrome/browser-tool connection |
+## Privacy And Exports
 
-The implementation’s automated tests prove the registry and adapter boundary only. They are not evidence that any listed client discovered or invoked a tool.
+Local computation does not make requested tool data private from the connected agent. Do not use credentials, personal source, account information, cookies, or browser-profile paths in acceptance evidence. Record only public fixture inputs, provider/browser/tool versions, app commit, result codes, relevant provenance, payload sizes, and hashes. Replace local origins/paths with neutral labels when publication would reveal machine-specific information.
 
-### Phase 1 local acceptance, 2026-09-12
+Artifact and memory receipts report `state: "dispatched"` and `completionKnown: false`; the application neither reports a filesystem path nor claims a completed download. Normal browser controls cannot reliably induce pre-dispatch `DOWNLOAD_FAILED`; that branch remains automated coverage, while real-client runs record successful dispatch or a provider/browser block after dispatch.
 
-Chrome DevTools MCP on Chrome 153.0.0.0 opened this worktree's built site at `http://127.0.0.1:4322/playground`. Native WebMCP discovered all five Phase 1 tools. Native and page-registry calls returned tracked status, a revision-bound project page, an active-project manifest, and a bounded source chunk without changing the selected project. Waiting through the page registry on the already scheduled session-build operation returned its terminal succeeded record with the same artifact, session, and image revisions status then reported. This was an observational acceptance run; no source, project, or runtime mutation was performed.
+## Troubleshooting
 
-### ChatGPT Desktop acceptance, 2026-09-12
+- `REVISION_CONFLICT`, `TARGET_CONFLICT`, `ARTIFACT_CONFLICT`, `IMAGE_CONFLICT`, or session/live-state conflicts: reread status and retry with the returned provenance.
+- `PAGE_SUSPENDED` or `PAGE_DISPOSED`: return the tab to view or rediscover after reload; do not reuse a retained facade.
+- `HELP_UNAVAILABLE`, `HELP_INVALID_CORPUS`, `HELP_CORPUS_CHANGED`, `HELP_NOT_FOUND`, `HELP_REMOVED`, or `HELP_BUSY`: retain the reported corpus identity and retry only as the code permits.
+- Native tool unavailable/rejected: use the page registry when the client has an evaluator. This fallback does not convert native absence into a native pass.
+- Browser download blocked: preserve the dispatch receipt and record the browser/provider observation. Do not report the receipt as file completion.
 
-ChatGPT Desktop discovered `circ_get_status`, invoked it with exactly `{}`, reloaded the same local playground tab, rediscovered the same `{}`-only schema, and invoked it again. The app/product and embedded-browser version were not exposed by the client context. No project edits or visible UI controls were used.
+## Compatibility And Evidence
 
-First call:
+| Client / product | Access path | Current Phase 6 result |
+| --- | --- | --- |
+| OpenCode | Native WebMCP and page registry through attached Chrome tooling | Partial: isolated-profile author/repair, full-adder, half-adder, ROM, RAM, inspection, handoff, persistence, and reload evidence recorded; download-capture and matrix limits remain. |
+| ChatGPT | Supported browser-integrated native WebMCP | Needs retest in an actual supported client/browser session: rediscover the complete `circ_drive`/`circ_update_memory` schemas, make both calls, then reload and confirm a new-page native result. |
+| Claude Code | Configured browser tooling plus its actual client session | Blocked until the actual client/browser connection is available. |
 
-```json
-{"apiVersion":1,"pageId":"e53efd77-7f0b-4234-8080-d213138b2eb1","ok":true,"data":{"lifecycle":"ready","bootstrapError":null,"project":{"id":"example:inverter-chain","name":"NOT chain","entryFile":"main.circ","fileCount":1},"view":"truth","compiler":{"ready":true,"loading":false,"identity":{"version":"0.0.3","revision":"e8869c8","topologyVersion":3,"fullVersion":3,"grammarSha256":"fedba84c15900db11223fcfbb720ad1061b30d1b1ddbdde17385bdb99600992e"},"simulationCompatible":true},"reportedPipeline":{"kind":"live","analyzing":false,"building":false,"analyzePending":false,"buildPending":false,"errors":0,"warnings":0,"stale":false,"failure":null},"artifact":{"present":true,"bytes":23995},"session":{"present":true},"provenance":{"tracking":"untracked","sourceRevision":null,"buildRevision":null,"sessionId":null},"persistence":{"enabled":true},"agentAccess":{"pageRegistry":"available","native":{"state":"registered","apiVariant":"document.modelContext.registerTool","reason":null}}}}
-```
+Automated tests cover the registry, adapter, built-page public surface, documentation registration, and prior-phase regressions. They are not substitutes for client evidence. `DOCS/STATUS.md` is append-only and records exact command outcomes and acceptance environment facts. A blocked or failed mandatory client/access-path procedure leaves Phase 6 incomplete.
 
-After reload:
+### OpenCode browser evidence, 2026-09-12
 
-```json
-{"apiVersion":1,"pageId":"d183bd30-ecf5-4643-ab59-33f5b90164f5","ok":true,"data":{"lifecycle":"ready","bootstrapError":null,"project":{"id":"example:inverter-chain","name":"NOT chain","entryFile":"main.circ","fileCount":1},"view":"truth","compiler":{"ready":true,"loading":false,"identity":{"version":"0.0.3","revision":"e8869c8","topologyVersion":3,"fullVersion":3,"grammarSha256":"fedba84c15900db11223fcfbb720ad1061b30d1b1ddbdde17385bdb99600992e"},"simulationCompatible":true},"reportedPipeline":{"kind":"live","analyzing":false,"building":false,"analyzePending":false,"buildPending":false,"errors":0,"warnings":0,"stale":false,"failure":null},"artifact":{"present":true,"bytes":23995},"session":{"present":false},"provenance":{"tracking":"untracked","sourceRevision":null,"buildRevision":null,"sessionId":null},"persistence":{"enabled":true},"agentAccess":{"pageRegistry":"available","native":{"state":"registered","apiVariant":"document.modelContext.registerTool","reason":null}}}}
-```
+Attached Chrome DevTools tooling used the visible tab at `[loopback preview]/playground` after the Phase 6 site gate. The application commit was `7af1faafb18770d677a19d5e559953662dd9ea52`; the tested build also contained uncommitted Phase 6 documentation/copy-only changes, so this is not final frozen-commit acceptance. Bun was `1.2.10`, Node was `v24.20.0`, Chrome reported `153.0.0.0` to the attached tooling, and the client was this OpenCode browser-tool session. The native API was `document.modelContext.registerTool`; the compiler was `0.0.3/e8869c8`; corpus ID was `ef1f2fb0918d8fad1248b957784557442b26140e432751767ac091428ecd42c7`.
 
-The page ID changed from `e53efd77-7f0b-4234-8080-d213138b2eb1` to `d183bd30-ecf5-4643-ab59-33f5b90164f5`, as required for a full reload. The project/compiler/artifact state remained coherent. The session was present before reload and absent afterward, which is expected because live sessions are page-memory-only. Native registration remained `registered` after reload.
+- Native discovery listed 33 tools before and after reload. Native status and `diagnostic:E014` help returned `ok: true`; the help result's active compiler comparison was `match`.
+- The page registry independently listed the same 33 tools. A malformed known call returned application `INVALID_ARGUMENT`; `phase6_unknown_tool` returned application `UNKNOWN_TOOL`.
+- On the existing public NOT-chain project, page-registry drive of `a=0x0` returned `out=0x1/defined=0x1`; isolated verification passed 2 cases, 2 steps, and 2 assertions. Schematic returned the three-NOT path, topology returned 5 components/4 connections, and exhaustive Truth returned `0 -> 1`, `1 -> 0`. Source/share/transcript handoff returned the documented omissions. The visible page showed the corresponding Truth view, Data card, source, schematic, and local-computation disclosure.
+- Native artifact dispatch returned receipt `download:126`, `not-chain.wasm`, 23,995 bytes, `state: dispatched`, `completionKnown: false`. This tooling could not expose a captured browser-download file, filename, byte count, or SHA-256; no completion claim is made.
+- Full reload replaced page ID `21bc63f2-be10-4d7d-854a-19aeee8ee733` with `7c0160e4-e1f0-4f4d-a440-9782e0594ce6`; native tools rediscovered and native status again returned `registered`. This proves reload/re-registration, not bfcache.
 
-### Claude Code page-registry acceptance, 2026-09-12
+The initial stable-ID and workspace-revision blockers were corrected and rerun in a new isolated browser context. The regenerated corpus is `a466f055a7de0274ba7531547a09f4e18bfb186772e57b587842fa6c218b6f2a`; `tour-example:full-adder-imports` now returns the existing `half_adder.circ`/`root.circ` project, and status publishes `workspaceRevision` for create/open preconditions.
 
-Claude Code 2.1.269 used the Claude in Chrome extension MCP server's JavaScript evaluation tool against Chrome 153.0.8010.36. The extension could address only its own tab group, so it navigated tab `75063019` to the local playground rather than attaching to an existing visible tab. It discovered and invoked the public page registry before and after re-navigation; no page errors were logged. Chrome DevTools MCP was not configured, so experimental native WebMCP tools were unavailable. This is acceptance evidence for the page-registry fallback only.
+- The isolated profile created a persisted two-file scratch project, changed root `output sum` to `output[2] sum`, received compile-owned `E014`, repaired the exact range, and rebuilt a current artifact. All eight `(a,b,cin)` vectors returned binary-addition `sum`/`cout` values with scalar `defined: 0x1`.
+- `example:half-adder` returned the four required vectors and isolated verification passed 4 cases, 4 steps, and 8 assertions. Full-adder exhaustive Truth returned eight rows; workbench settings/view, source highlight/clear, and visible source/Schematic/Data state agreed. Reload restored the persisted scratch project, replaced the page ID, and re-registered 33 native tools.
+- `example:rom-lookup` accepted its corpus ROM image, returned `out=0x90/defined=0xff` at `pc=0xc`, and dispatched source/share/WASM/preload/transcript handoffs with their stated omissions. No browser download capture/hash is available through this tooling.
+- `example:ram-write-read` is a live-memory acceptance pass: its corpus image loaded with `circ_update_memory` yielded `q=0xa5/defined=0xff` at `a=0x5`, and the ordered write yielded `q=0x3c/defined=0xff`. `circ_set_memory_preload` correctly refused RAM with `PRELOAD_CONFLICT`; after reset and an explicit address drive, `q` was undefined. This is the documented live-RAM reset contract, not a source-preload failure.
 
-The first registry result had page ID `343b38f6-2ee3-4379-be0c-266db1cde365`; after reload it had `82eb3a3b-b9f3-489d-98d8-b061cf857a5a`. Both calls returned `ok: true`, the `NOT chain` project, compiler `0.0.3` / `e8869c8`, artifact `23995` bytes, `untracked` provenance, and native state `unsupported` because that Chrome profile exposed neither native model-context API. The full unredacted call output was supplied to the implementation session and matches the status contract. No mutation was performed.
+The final attached-Chrome rerun reloaded the rebuilt page, rediscovered 33 native tools, and repeated that RAM sequence through the page registry. Its fresh page ID was `bf3c2caf-f2b6-4f64-a123-a582e40170ef`; corpus `a466f055a7de0274ba7531547a09f4e18bfb186772e57b587842fa6c218b6f2a` returned the runtime image. The session reset to `...:session:127`, and the post-reset drive returned `q.value=0x0`, `q.defined=0x0`. Native `circ_set_view` then returned a JSON-safe success response with its retained `session_build` operation ID; the visible Data panel showed `q` as `?`. No console warnings/errors were observed.
 
-### OpenCode Chrome DevTools MCP acceptance, 2026-09-12
+After removing the redundant `unload` teardown listener, attached Chrome navigated same-origin from `/playground` to `/gallery` and Back. The public registry kept page ID `331221c6-734a-48da-8c90-4991ecee286d`; native discovery reappeared and native `circ_get_status` succeeded with that same ID. This demonstrates bfcache restoration in this Chrome/tooling context, not full Phase 6 acceptance.
 
-The attached OpenCode 1.18.30 session used Chrome DevTools MCP against Chrome 153.0.0.0 at `http://localhost:4321/playground`. It discovered `circ_get_status` through both native WebMCP tooling and `window.circPlayground.listTools()`, then invoked it through both `execute_webmcp_tool` and the public registry with exactly `{}`. Native calls returned the same JSON `ToolResult` as page-registry calls.
-
-Before reload, both paths returned `ok: true` for page ID `86096362-55d9-49b5-96a2-f160d16aea7c`. The initial snapshot correctly captured the observable startup state: `reportedPipeline.kind` was `compiling`, with no artifact or session yet present. The reload command exceeded its page-stabilization wait, but the navigation completed. Native rediscovery and both call paths then succeeded for a new page ID, `b9d112a9-87f3-4ba2-b214-bf4aa8a5dd09`, proving re-registration. The settled post-reload snapshot was `ready` / `live`, with compiler `0.0.3` / `e8869c8`, a `23995`-byte artifact, a present session, no errors or warnings, `untracked` provenance, and native state `registered` through `document.modelContext.registerTool`.
-
-The same tab then navigated to `about:blank` and back. Both native and registry calls succeeded with the unchanged page ID `b9d112a9-87f3-4ba2-b214-bf4aa8a5dd09`, a live pipeline, and a present session, which demonstrates bfcache restore rather than a new document. No project mutation or visible UI control was used.
-
-### Phase 3 native author-repair acceptance, 2026-09-12
-
-Chrome DevTools MCP attached to Chrome 153.0.0.0 served this worktree's freshly built site at `http://127.0.0.1:4323/playground`. Native `document.modelContext.registerTool` discovered all thirteen tools, including the seven Phase 3 additions. A native call created `scratch:mtyqrikxe2l5` (`WebMCP repair proof`) with an invalid `main.circ`; its persistence receipt was `saved`, with source revision `...:source:106` and compile operation `...:operation:5`.
-
-Waiting for that operation returned `diagnostics` with one error and one warning. `circ_get_diagnostics` returned compile-owned `E004` with captured `/playground/main.circ` native byte columns `2:1-2:18`, UTF-16 offsets `8-25`, and `currentlyEditable: true`. A revision-guarded UTF-16 edit replaced `missing` with `a`, yielding source revision `...:source:118`; explicit native `circ_compile` operation `...:operation:10` finished `succeeded` with artifact `...:artifact:125`. Final tracked status reported that source as both current and build provenance, a 23,913-byte artifact, enabled persistence, and no errors. A deliberately stale update against source `...:source:106` returned `REVISION_CONFLICT` without changing the repaired project. No console warnings/errors were emitted.
+ChatGPT and Claude Code have no actual supported/configured client session here. The complete native/page-registry edge matrix, storage/quota scenarios, and captured-download byte/hash checks also remain incomplete. Phase 6 is therefore not accepted.

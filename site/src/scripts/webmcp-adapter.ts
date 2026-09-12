@@ -46,11 +46,13 @@ export class WebMcpAdapter {
     const abort = new AbortController();
     this.abort = abort;
     this.current = { state: 'registering', apiVariant: this.registrar.apiVariant, reason: null };
+    const registrations: NativeRegistration[] = [];
     try {
       const descriptors = this.registry.descriptors();
       if (descriptors.length === 0) throw new Error('No tools are available for native registration.');
-      const registrations = await Promise.all(descriptors.map((descriptor) =>
-        this.registrar!.register(descriptor, (input) => this.registry.callTool(descriptor.name, input), abort.signal)));
+      for (const descriptor of descriptors) {
+        registrations.push(await this.registrar.register(descriptor, (input) => this.registry.callTool(descriptor.name, input), abort.signal));
+      }
       if (generation !== this.generation || abort.signal.aborted) {
         await Promise.all(registrations.map((registration) => registration.dispose()));
         return;
@@ -58,6 +60,7 @@ export class WebMcpAdapter {
       this.registrations = registrations;
       this.current = { state: 'registered', apiVariant: this.registrar.apiVariant, reason: null };
     } catch (error) {
+      await Promise.all(registrations.map((registration) => registration.dispose()));
       if (generation !== this.generation || abort.signal.aborted) return;
       this.current = { state: 'failed', apiVariant: this.registrar.apiVariant, reason: message(error) };
     }

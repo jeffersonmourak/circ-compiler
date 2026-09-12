@@ -60,6 +60,18 @@ const h1Of = (page: string): string | null => page.match(/<h1[^>]*>([^<]+)<\/h1>
 const titleOf = (page: string): string | null => page.match(/title="([^"]+)"/)?.[1].trim() ?? null;
 
 describe('the site calls each page one thing', () => {
+  test('the agent guide is one registered public reference', () => {
+    const config = read('scripts', 'lib', 'site-config.ts');
+    const docs = read('..', 'DOCS', 'index.md');
+    const mirror = read('scripts', 'build-llm-mirror.ts');
+    expect(config).toContain("key: 'agent-playground'");
+    expect(config).toContain("src: 'agent-playground.md'");
+    expect(config).toContain("dst: 'reference/agent-playground.md'");
+    expect(config).toContain("title: 'Agent Playground'");
+    expect(docs).toContain('[agent-playground.md](agent-playground.md)');
+    expect(mirror).toContain("...docs.map((d) => ({ path: d.dst, label: d.title }))");
+  });
+
   test('the nav is not empty, or this whole file proves nothing', () => {
     // A regex that silently matches nothing is the way a test like this rots.
     expect(navLinks().length).toBeGreaterThanOrEqual(3);
