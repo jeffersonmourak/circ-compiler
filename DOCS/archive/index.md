@@ -4,6 +4,7 @@ Each file is a highlight view. The full plan prompt, every phase plan, and every
 
 | Archive | Contents |
 | ------- | -------- |
+| [plan-agent-driven-playground.md](plan-agent-driven-playground.md) | Native WebMCP and page-registry tools for authoring, compilation, simulation, verification, inspection, and handoff; local cited help, activity indicator, and Connect agent. Archived on request with remaining acceptance matrices explicitly deferred. |
 | [plan-home-page.md](plan-home-page.md) | Live half-adder hero, language card, preview figure, deferred gallery thumbnails, install section and matching Markdown copy. The plan and deleted design handoff are preserved at the PR #86 merge commit. |
 | [plan-playground-bench.md](plan-playground-bench.md) | Canvas-first workbench: source tabs and diagnostics footer, Live/Schematic/Truth views, project switcher, floating Data panel, console/memory drawer, saved editor preferences, active-file simulation and source-owned ROM images. Archived on request with final sweep checks carried forward; the plan and deleted design handoff remain in git history. |
 | [plan-v0.md](plan-v0.md) | v0 implementation plan (highlights; full bundle in git history) |

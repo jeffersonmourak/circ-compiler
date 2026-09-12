@@ -75,11 +75,11 @@ Artifact and memory receipts report `state: "dispatched"` and `completionKnown: 
 
 | Client / product | Access path | Current Phase 6 result |
 | --- | --- | --- |
-| OpenCode | Native WebMCP and page registry through attached Chrome tooling | Partial: isolated-profile author/repair, full-adder, half-adder, ROM, RAM, inspection, handoff, persistence, and reload evidence recorded; download-capture and matrix limits remain. |
-| ChatGPT | Supported browser-integrated native WebMCP | Needs retest in an actual supported client/browser session: rediscover the complete `circ_drive`/`circ_update_memory` schemas, make both calls, then reload and confirm a new-page native result. |
-| Claude Code | Configured browser tooling plus its actual client session | Blocked until the actual client/browser connection is available. |
+| OpenCode | Native WebMCP and page registry through attached Chrome tooling | Author/repair, full-adder, half-adder, ROM, RAM, inspection, handoff, persistence, and reload observations recorded; same-origin bfcache restoration demonstrated. |
+| ChatGPT/Codex in-app browser | Native WebMCP | Fresh-session retest discovered 35 tools, loaded/drove RAM, and returned successful status with a new page ID after reload. Product/browser versions were not exposed. |
+| Claude Code 2.1.270 / Chrome 153.0.8010.36 | Page registry through Claude in Chrome MCP | RAM load/write/reset, half-adder verification, inspection, handoff, and reload passed in the reported workflow. Native API was unsupported; Back produced a new document. |
 
-Automated tests cover the registry, adapter, built-page public surface, documentation registration, and prior-phase regressions. They are not substitutes for client evidence. `DOCS/STATUS.md` is append-only and records exact command outcomes and acceptance environment facts. A blocked or failed mandatory client/access-path procedure leaves Phase 6 incomplete.
+Automated tests cover the registry, adapter, built-page public surface, documentation registration, and prior-phase regressions. They are not substitutes for client evidence. The repository archive at `DOCS/archive/plan-agent-driven-playground.md` preserves the evidence summary and canonical commit containing the full STATUS history. The initiative was closed for archiving at the user's request with the storage/edge matrix deferred. The original full Phase 6 signoff, including a unified three-client run against one frozen application commit, is not claimed.
 
 ### OpenCode browser evidence, 2026-09-12
 
@@ -102,4 +102,4 @@ The final attached-Chrome rerun reloaded the rebuilt page, rediscovered 33 nativ
 
 After removing the redundant `unload` teardown listener, attached Chrome navigated same-origin from `/playground` to `/gallery` and Back. The public registry kept page ID `331221c6-734a-48da-8c90-4991ecee286d`; native discovery reappeared and native `circ_get_status` succeeded with that same ID. This demonstrates bfcache restoration in this Chrome/tooling context, not full Phase 6 acceptance.
 
-ChatGPT and Claude Code have no actual supported/configured client session here. The complete native/page-registry edge matrix, storage/quota scenarios, and captured-download byte/hash checks also remain incomplete. Phase 6 is therefore not accepted.
+Subsequent user-supplied evidence completed the scoped ChatGPT/Codex native RAM/reload retest and Claude Code page-registry RAM/verification/inspection/handoff/reload workflow summarized above. External filesystem capture found `half-adder.wasm` at 25,140 bytes (matching Claude's receipt), SHA-256 `71a2521b4fc6ad0164a2e883aa96574b2c0ad8975ee6e012b41eef192c5133ba`, and `not-chain.wasm` at 23,995 bytes, SHA-256 `9f674cf5810c67b3959f91fdc232e6f43380f92c03225d035cd9eca191bf738e`. These observations span iterative builds. The complete native/page-registry edge matrix, storage/quota scenarios, and one frozen-commit final rerun remain deferred rather than passed.
