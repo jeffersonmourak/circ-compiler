@@ -2,7 +2,7 @@ import type { PlaygroundController, ToolDescriptor } from '../playground-contrac
 
 export const statusDescriptor: ToolDescriptor = {
   name: 'circ_get_status',
-  description: 'Read the open circ playground project and reported compiler status. Returns connection readiness and existing output availability. This operation does not compile or change the project; revision-verified freshness is reported as untracked in this release.',
+  description: 'Read the open circ playground project, revision-aware output freshness, operation identities, session state, and compiler transport. This operation does not compile or change the project.',
   inputSchema: { type: 'object', properties: {}, required: [], additionalProperties: false },
   readOnly: true,
 };

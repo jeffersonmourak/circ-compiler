@@ -366,15 +366,20 @@ const groups = displayGroups(catalogue, []);
    import { artifactFileName } from '../utils/artifact-name.ts';
    import { installPageApi, type PageApiInstallation } from '../scripts/agent-tools/page-api.ts';
   import { capRefusal, mountSettingsDrawer, optionsFor, truthTableRefusal } from '../scripts/settings-drawer.ts';
-  import { formatBytes } from '../scripts/pipeline.ts';
+    import { formatBytes } from '../scripts/pipeline.ts';
+    import { RevisionAllocator, RevisionTracker, type SourceFile } from '../scripts/playground-revisions.ts';
+    import { OperationStore } from '../scripts/playground-operations.ts';
+    import type { OperationId, OperationKind, WorkInputs } from '../scripts/playground-contract.ts';
+    import type { WorkspaceSnapshot } from '../scripts/playground-reads.ts';
   import {
     applyRomImages,
     maxWords,
     parseRomImage,
     preloadsFor,
     romPlan,
-    romSymbols,
-    type MemorySymbol,
+     romSymbols,
+     type ApplyResult,
+     type MemorySymbol,
   } from '../utils/rom-image.ts';
   import { sourceImageKey, type ImportedImages } from '../utils/source-images.ts';
   import {
@@ -574,6 +579,17 @@ const groups = displayGroups(catalogue, []);
     // Two independent debounces, each with its own sequence counter.
     const analyzeStage = new Stage(ANALYZE_DEBOUNCE_MS);
     const buildStage = new Stage(BUILD_DEBOUNCE_MS);
+    const agentPageId = globalThis.crypto?.randomUUID?.() ?? `circ-page-${Math.random().toString(36).slice(2)}`;
+    const revisionIds = new RevisionAllocator(agentPageId);
+    const revisions = new RevisionTracker(revisionIds);
+    const operations = new OperationStore(agentPageId);
+    const operationSlots: Partial<Record<OperationKind, OperationId>> = {};
+    const outputProvenance: Partial<Record<'analysis' | 'diagnostics' | 'artifact' | 'preview' | 'truth', { operationId: OperationId; inputs: WorkInputs; counts: { errors: number; warnings: number } | null }>> = {};
+    let observationRevision = revisionIds.next('observation');
+    const observe = () => { observationRevision = revisionIds.next('observation'); };
+    let workspaceSnapshot: WorkspaceSnapshot | null = null;
+    let workspaceSignature = '';
+    let workspaceRevision = revisionIds.next('workspace');
 
     const state = {
       /** Bumped on every edit; the freshness key the two stages compare. */
@@ -593,7 +609,7 @@ const groups = displayGroups(catalogue, []);
       /** `state.diagnostics` mapped onto absolute offsets in the combined
        *  document. Refreshed by BOTH producers in the pipeline. */
       mapped: [] as MappedRow[],
-      artifact: null as { bytes: Uint8Array; hash: number; size: number; importedImages: ImportedImages } | null,
+      artifact: null as { id: string; bytes: Uint8Array; hash: number; size: number; importedImages: ImportedImages } | null,
       view: 'live' as StoredView,
       /** The Data card: open over whichever view; its rows are the session's. */
       dataOpen: false,
@@ -604,8 +620,115 @@ const groups = displayGroups(catalogue, []);
       lifecycle: 'initializing' as 'initializing' | 'ready' | 'failed',
       error: null as string | null,
     };
+    function imageSnapshot(id: string, files: readonly SourceFile[]) {
+      return new Map(files.map((file) => {
+        const key = sourceImageKey(id, file.name);
+        const active = id === store.envelope.activeId ? imageContexts.get(key)?.images : undefined;
+        return [file.name, new Map(active ?? Object.entries(store.envelope.sourceImages[key] ?? {}))];
+      }));
+    }
+    /** Capture readable state at mutation boundaries. Tool reads only return this snapshot. */
+    function refreshWorkspaceSnapshot() {
+      const activeId = store.envelope.activeId;
+      const catalogueProjects = catalogue.map((project) => ({
+        id: project.id, name: project.label, kind: idKind(project.id)!,
+        files: project.id === activeId ? state.tabs.files : fromSource(project.source).files,
+        sourceOrigin: project.id === activeId ? 'active_buffer' as const : 'catalogue' as const,
+      }));
+      const scratchProjects = [...store.envelope.scratch]
+        .sort((left, right) => right.updatedAt - left.updatedAt || left.id.localeCompare(right.id))
+        .map((project) => ({
+          id: project.id, name: project.name, kind: 'scratch' as const,
+          files: project.id === activeId ? state.tabs.files : fromSource(project.source).files,
+          sourceOrigin: project.id === activeId ? 'active_buffer' as const : 'scratch_record' as const,
+        }));
+      const projects = [...catalogueProjects, ...scratchProjects].map((project) => {
+        const files = project.files.map((file) => ({ name: file.name, body: file.body }));
+        const version = revisions.observeProject({ id: project.id, name: project.name, files, images: imageSnapshot(project.id, files) });
+        return { ...project, active: project.id === activeId, version, files, selectedEntryFile: project.id === activeId ? activeFile(state.tabs).name : null };
+      });
+      const signature = JSON.stringify(projects.map((project) => [project.id, project.active, project.name, project.version]));
+      if (signature !== workspaceSignature) {
+        workspaceSignature = signature;
+        workspaceRevision = revisionIds.next('workspace');
+      }
+      workspaceSnapshot = { revision: workspaceRevision, projects };
+    }
     function activeRequest(options?: Record<string, unknown>) {
       return requestFor(state.tabs.files, options, activeFile(state.tabs).name);
+    }
+    type CapturedRequest = ReturnType<typeof activeRequest>;
+    interface ScheduledOperation {
+      id: OperationId;
+      inputs: WorkInputs;
+      request: CapturedRequest;
+      bodies: string[];
+      doc: number;
+    }
+    type InputBindings = Pick<WorkInputs, 'imageRevision' | 'artifactId' | 'liveStateRevision'>;
+    function sameInputs(left: WorkInputs, right: WorkInputs): boolean {
+      return left.target.projectId === right.target.projectId && left.target.sourceRevision === right.target.sourceRevision &&
+        left.target.entryFile === right.target.entryFile && left.target.targetEpoch === right.target.targetEpoch &&
+        left.optionsRevision === right.optionsRevision && left.imageRevision === right.imageRevision &&
+        left.artifactId === right.artifactId && left.liveStateRevision === right.liveStateRevision;
+    }
+    function inputsFor(kind: OperationKind, options: Record<string, unknown>, bindings: Partial<InputBindings> = {}): WorkInputs {
+      const activeId = store.envelope.activeId;
+      if (!activeId) throw new Error('Cannot schedule without an active project.');
+      const entryFile = activeFile(state.tabs).name;
+      const current = revisions.currentTarget;
+      const target = !current || current.projectId !== activeId || current.entryFile !== entryFile
+        ? revisions.selectTarget(activeId, entryFile)
+        : current;
+      return {
+        target,
+        optionsRevision: revisions.optionsRevision(kind, options),
+        imageRevision: bindings.imageRevision ?? null,
+        artifactId: bindings.artifactId ?? ((kind === 'session_build' || kind === 'session_reset') ? state.artifact?.id ?? null : null),
+        liveStateRevision: bindings.liveStateRevision ?? null,
+      };
+    }
+    function queueOperation(kind: OperationKind, options?: Record<string, unknown>, bindings?: Partial<InputBindings>): ScheduledOperation {
+      const projected = options ?? (kind === 'analyze' || kind === 'compile' || kind === 'preview' || kind === 'truth_table'
+        ? optionsFor(kind, settings())
+        : {});
+      const inputs = inputsFor(kind, projected, bindings);
+      const operation = operations.create(kind, inputs);
+      const previous = operationSlots[kind];
+      if (previous) {
+        const before = operations.lookup(previous);
+        const reason = before.kind === 'found' && sameInputs(before.operation.inputs, inputs) ? 'new_request' :
+          (before.kind === 'found' && before.operation.inputs.target.targetEpoch !== inputs.target.targetEpoch ? 'target_changed' : 'new_inputs');
+        operations.supersede(previous, operation.id, reason);
+      }
+      operationSlots[kind] = operation.id;
+      observe();
+      return {
+        id: operation.id,
+        inputs,
+        // `requestFor` only contains strings and plain option values. Copy it
+        // before the first await so later editor/settings changes cannot leak in.
+        request: JSON.parse(JSON.stringify(activeRequest(projected))) as CapturedRequest,
+        bodies: snapshotBodies(),
+        doc: state.doc,
+      };
+    }
+    function publishOutput(kind: 'analysis' | 'diagnostics' | 'artifact' | 'preview' | 'truth', scheduled: ScheduledOperation, counts: { errors: number; warnings: number } | null = null) {
+      outputProvenance[kind] = { operationId: scheduled.id, inputs: scheduled.inputs, counts };
+      observe();
+    }
+    function outputStatus(kind: 'analysis' | 'diagnostics' | 'artifact' | 'preview' | 'truth') {
+      const provenance = outputProvenance[kind] ?? null;
+      if (!provenance) return { freshness: 'absent' as const, provenance: null };
+      const target = revisions.currentTarget;
+      const current = target !== null && provenance.inputs.target.projectId === target.projectId &&
+        provenance.inputs.target.sourceRevision === target.sourceRevision && provenance.inputs.target.entryFile === target.entryFile && !state.stale;
+      return { freshness: current ? 'current' as const : 'stale' as const, provenance };
+    }
+    const ownsOperation = (kind: OperationKind, id: OperationId) => operationSlots[kind] === id;
+    function failOperation(id: OperationId, error: unknown, kind: 'transport' | 'internal' | 'runtime' = 'transport') {
+      const message = error instanceof Error ? error.message : String(error);
+      operations.finish(id, 'failed', { failure: { kind, message: message.slice(0, 240), libraryStatus: null } });
     }
     /** The Truth view's table on screen, and how it came to be. Declared
      *  here, beside the state, because the gate reads it at boot. */
@@ -644,6 +767,8 @@ const groups = displayGroups(catalogue, []);
       state,
       hooks,
       compiler: client,
+      operations,
+      operationSlots,
       flushPipeline: () => flushPipeline(),
       renderMemory: () => renderMemory({ force: true }),
       refreshActions: () => hooks.refreshActions?.(),
@@ -2282,6 +2407,12 @@ const groups = displayGroups(catalogue, []);
         })),
       };
     }
+    function copyImportedImages(source: ImportedImages): ImportedImages {
+      return {
+        files: new Map(source.files),
+        images: new Map([...source.images].map(([file, images]) => [file, new Map(images)])),
+      };
+    }
     const hasImportedImages = () => state.tabs.files.some((f) => f.name !== activeFile(state.tabs).name &&
       Object.keys(store.envelope.sourceImages[sourceImageKey(store.envelope.activeId, f.name)] ?? {}).length > 0);
     const currentRoms = (): MemorySymbol[] => {
@@ -2755,6 +2886,7 @@ const groups = displayGroups(catalogue, []);
       const key = sourceImageKey(store.envelope.activeId, activeFile(state.tabs).name);
       store.update((draft) => { draft.sourceImages[key] = Object.fromEntries(romImages); });
       romImplied.set(mem.name, new Set(implied));
+      refreshWorkspaceSnapshot();
       applyToView();
       void runTruth(buildStage.seq);
       if (opts.redraw !== false) renderMemory({ force: true });
@@ -2959,6 +3091,10 @@ const groups = displayGroups(catalogue, []);
       const session = sim.session;
       if (!session) return;
       const result = session.applyPreloads();
+      setPreloadStatus(result);
+      const activeId = store.envelope.activeId;
+      sim.imageRevision = activeId ? revisions.projectVersion(activeId)?.imageRevision ?? null : null;
+      observe();
       for (const mem of currentRoms()) updateRomStatus(mem);
       if (result.applied.length > 0) {
         sim.view?.view.refreshState();
@@ -3036,6 +3172,7 @@ const groups = displayGroups(catalogue, []);
       applyTruthGate();
       renderWorkspace();
       bootstrapState.lifecycle = 'ready';
+      refreshWorkspaceSnapshot();
 
       whenIdle(() => {
         void loadEditor().then(mountEditor, () => {
@@ -3280,7 +3417,10 @@ const groups = displayGroups(catalogue, []);
     /** Edits debounce both stages. A new file or project changes the circuit
      *  immediately, so its old outputs and pending replies are discarded. */
     function schedule() {
+      refreshWorkspaceSnapshot();
       state.doc += 1;
+      const analyze = queueOperation('analyze');
+      const build = queueOperation('compile');
       const changedCircuit = state.circuitFile !== activeFile(state.tabs).name;
       const names = state.tabs.files.map((f) => f.name);
       if (changedCircuit || outputsShouldClear(state.renderedFiles, names)) {
@@ -3305,18 +3445,21 @@ const groups = displayGroups(catalogue, []);
         pipe.errors = 0; pipe.warnings = 0; pipe.failure = null;
         markOutputs(names, true);
         renderDiagnostics(); renderDataCount(); renderMemory();
-        void flushPipeline();
+        void flushPipeline(analyze, build);
         return;
       }
       state.stale = true;
-      analyzeStage.schedule((seq) => void runAnalyze(seq));
-      buildStage.schedule((seq) => void runBuild(seq));
+      analyzeStage.schedule((seq) => void runAnalyze(seq, analyze));
+      buildStage.schedule((seq) => void runBuild(seq, build));
     }
-    async function flushPipeline(): Promise<void> {
+    async function flushPipeline(
+      analyze: ScheduledOperation = queueOperation('analyze'),
+      compile: ScheduledOperation = queueOperation('compile'),
+    ): Promise<void> {
       let analysis: Promise<void> | undefined;
       let build: Promise<void> | undefined;
-      analyzeStage.flush((seq) => { analysis = runAnalyze(seq); });
-      buildStage.flush((seq) => { build = runBuild(seq); });
+      analyzeStage.flush((seq) => { analysis = runAnalyze(seq, analyze); });
+      buildStage.flush((seq) => { build = runBuild(seq, compile); });
       await Promise.all([analysis, build]);
     }
     // The fallback surface edits the COMBINED text; re-splitting on every
@@ -3480,34 +3623,59 @@ const groups = displayGroups(catalogue, []);
 
     const pendingAnalyses = new Map<string, Promise<WorkerReply>>();
     function analysisFor(request: ReturnType<typeof activeRequest>) {
-      const key = JSON.stringify(request);
+      // Analyze has no options. Compile metadata must join the editor's
+      // matching analysis instead of issuing a second request with
+      // compile-only options attached.
+      const analyzeRequest = { root: request.root, files: request.files };
+      const key = JSON.stringify(analyzeRequest);
       const pending = pendingAnalyses.get(key);
       if (pending) return pending;
-      const promise = client.call('analyze', request);
+      const promise = client.call('analyze', analyzeRequest);
       pendingAnalyses.set(key, promise);
       const clear = () => { if (pendingAnalyses.get(key) === promise) pendingAnalyses.delete(key); };
       void promise.then(clear, clear);
       return promise;
     }
 
-    async function runAnalyze(seq: number) {
-      const doc = state.doc;
-      if (!(await ensureReady())) return;
-      if (!analyzeStage.isCurrent(seq)) return;
-      const snapshot = snapshotBodies();
+    async function runAnalyze(seq: number, scheduled: ScheduledOperation) {
+      const doc = scheduled.doc;
+      operations.start(scheduled.id);
+      if (!(await ensureReady())) {
+        failOperation(scheduled.id, pipe.failure ?? 'Compiler initialization failed.');
+        return;
+      }
+      if (!analyzeStage.isCurrent(seq) || !ownsOperation('analyze', scheduled.id)) return;
       setBusy(true, pipe.building);
 
-      const an = await analysisFor(activeRequest());
-      if (!analyzeStage.isCurrent(seq)) return;
+      let an: WorkerReply;
+      try {
+        an = await analysisFor(scheduled.request);
+      } catch (error) {
+        if (analyzeStage.isCurrent(seq) && ownsOperation('analyze', scheduled.id)) pipe.failure = `analyze failed: ${error instanceof Error ? error.message : String(error)}`;
+        failOperation(scheduled.id, error);
+        if (analyzeStage.isCurrent(seq) && ownsOperation('analyze', scheduled.id)) setBusy(false, pipe.building);
+        return;
+      }
+      if (!analyzeStage.isCurrent(seq) || !ownsOperation('analyze', scheduled.id)) return;
       if (an.status !== 0) {
         pipe.failure = `analyze failed: ${an.error ?? an.status}`;
+        operations.finish(scheduled.id, an.status === 3 ? 'refused' : 'failed', an.status === 3
+          ? { refusal: { message: an.error ?? 'Analyze request refused.', libraryStatus: an.status } }
+          : { failure: { kind: 'bad_request', message: an.error ?? `analyze failed (${an.status})`, libraryStatus: an.status } });
         setBusy(false, pipe.building);
         return;
       }
       pipe.failure = null;
-      state.analysis = JSON.parse(an.text!) as Analysis;
+      try {
+        state.analysis = JSON.parse(an.text!) as Analysis;
+      } catch (error) {
+        pipe.failure = 'analyze failed: invalid response';
+        failOperation(scheduled.id, error, 'internal');
+        setBusy(false, pipe.building);
+        return;
+      }
       state.diagnostics = state.analysis.diagnostics;
-      publishDiagnostics(snapshot, state.analysis);
+      publishDiagnostics(scheduled.bodies, state.analysis);
       // So the badge survives switching away from this project.
       const openId = store.envelope.activeId;
       if (openId) remembered.set(openId, sumCounts(countsByFile(state.tabs.files, state.analysis)));
@@ -3519,66 +3687,113 @@ const groups = displayGroups(catalogue, []);
       state.analyzedDoc = doc;
       pipe.errors = errors;
       pipe.warnings = state.diagnostics.length - errors;
+      operations.finish(scheduled.id, errors > 0 ? 'diagnostics' : 'succeeded', {
+        counts: { errors, warnings: pipe.warnings },
+      });
+      publishOutput('analysis', scheduled, { errors, warnings: pipe.warnings });
+      publishOutput('diagnostics', scheduled, { errors, warnings: pipe.warnings });
       setBusy(false, pipe.building);
     }
 
-    async function runBuild(seq: number) {
-      const doc = state.doc;
-      if (!(await ensureReady())) return;
-      if (!buildStage.isCurrent(seq)) return;
+    async function runBuild(seq: number, scheduled: ScheduledOperation) {
+      const doc = scheduled.doc;
+      operations.start(scheduled.id);
+      if (!(await ensureReady())) {
+        failOperation(scheduled.id, pipe.failure ?? 'Compiler initialization failed.');
+        return;
+      }
+      if (!buildStage.isCurrent(seq) || !ownsOperation('compile', scheduled.id)) return;
 
       markOutputs(state.tabs.files.map((f) => f.name));
       // Skip the compile only when a FRESH analysis already found errors; a
       // stale or missing one builds anyway, so neither timer can wedge the
       // other.
-      const fresh = state.analyzedDoc === doc ? { doc, errors: pipe.errors } : null;
-      if (!shouldCompile(fresh, doc)) {
+      const fresh = state.analyzedDoc === doc ? { doc, errors: pipe.errors, warnings: pipe.warnings } : null;
+      if (!shouldCompile(fresh, doc, settings().warningsAsErrors)) {
+        operations.finish(scheduled.id, 'diagnostics', { counts: { errors: pipe.errors, warnings: pipe.warnings } });
         setStale(state.artifact !== null);
         setBusy(pipe.analyzing, false);
         return;
       }
 
-      const snapshot = snapshotBodies();
       setBusy(pipe.analyzing, true);
-      const request = activeRequest();
       // File IDs are local to this exact request. Never pair topology with a
       // later editor analysis, including while a last-good artifact is shown.
-      const [c, metadata] = await Promise.all([
-        client.call('compile', request),
-        state.tabs.files.length > 1 ? analysisFor(request) : Promise.resolve(null),
-      ]);
-      if (!buildStage.isCurrent(seq)) return;
+      let c: WorkerReply;
+      let metadata: WorkerReply | null;
+      try {
+        [c, metadata] = await Promise.all([
+          client.call('compile', scheduled.request),
+          scheduled.bodies.length > 1 ? analysisFor(scheduled.request) : Promise.resolve(null),
+        ]);
+      } catch (error) {
+        if (buildStage.isCurrent(seq) && ownsOperation('compile', scheduled.id)) {
+          pipe.failure = `compile failed: ${error instanceof Error ? error.message : String(error)}`;
+          setStale(state.artifact !== null);
+          setBusy(pipe.analyzing, false);
+        }
+        failOperation(scheduled.id, error);
+        return;
+      }
+      if (!buildStage.isCurrent(seq) || !ownsOperation('compile', scheduled.id)) return;
 
       if (c.status === 0 && c.bytes) {
         // Captured now: the worker transfers the buffer, and a detached view
         // reports 0.
         const size = c.bytes.length;
         const hash = fnv1a(c.bytes);
-        const analysis = metadata?.status === 0 && metadata.text ? JSON.parse(metadata.text) as Analysis : null;
+        let analysis: Analysis | null = null;
+        try {
+          analysis = metadata?.status === 0 && metadata.text ? JSON.parse(metadata.text) as Analysis : null;
+        } catch (error) {
+          pipe.failure = 'compile failed: invalid analysis metadata';
+          setStale(state.artifact !== null);
+          failOperation(scheduled.id, error, 'internal');
+          setBusy(pipe.analyzing, false);
+          return;
+        }
         const importedImages = importedImagesFor(analysis);
         if (!state.artifact || state.artifact.hash !== hash ||
           JSON.stringify([...(state.artifact.importedImages?.files ?? [])]) !== JSON.stringify([...importedImages.files])) {
-          state.artifact = { bytes: c.bytes, hash, size, importedImages };
+          state.artifact = { id: revisionIds.next('artifact'), bytes: c.bytes, hash, size, importedImages };
           hooks.onArtifact?.(c.bytes, 'built');
           hooks.refreshActions?.();
         }
         pipe.artifactBytes = size;
         pipe.failure = null;
         setStale(false);
+        operations.finish(scheduled.id, 'succeeded', { artifactId: state.artifact.id });
+        publishOutput('artifact', scheduled);
       } else if (c.status === 1 && c.text) {
         // A second, independent producer: the compile reply carries its own
         // `files[]`, which the mapping needs, so map THAT analysis.
-        const compileAnalysis = JSON.parse(c.text) as Analysis;
+        let compileAnalysis: Analysis;
+        try {
+          compileAnalysis = JSON.parse(c.text) as Analysis;
+        } catch (error) {
+          pipe.failure = 'compile failed: invalid diagnostics';
+          setStale(state.artifact !== null);
+          failOperation(scheduled.id, error, 'internal');
+          setBusy(pipe.analyzing, false);
+          return;
+        }
         state.diagnostics = compileAnalysis.diagnostics;
-        publishDiagnostics(snapshot, compileAnalysis);
+        publishDiagnostics(scheduled.bodies, compileAnalysis);
         renderTree();
         pipe.errors = Math.max(1, state.diagnostics.filter((d) => d.severity === 'error').length);
         // The artifact and the canvas are LEFT ALONE: the last good build stays
         // on screen, dimmed, until the source builds again.
         setStale(state.artifact !== null);
+        operations.finish(scheduled.id, 'diagnostics', {
+          counts: { errors: pipe.errors, warnings: state.diagnostics.length - pipe.errors },
+        });
+        publishOutput('diagnostics', scheduled, { errors: pipe.errors, warnings: state.diagnostics.length - pipe.errors });
       } else {
         pipe.failure = `compile failed: ${c.error ?? c.status}`;
         setStale(state.artifact !== null);
+        operations.finish(scheduled.id, c.status === 3 ? 'refused' : 'failed', c.status === 3
+          ? { refusal: { message: c.error ?? 'Compile request refused.', libraryStatus: c.status } }
+          : { failure: { kind: 'bad_request', message: c.error ?? `compile failed (${c.status})`, libraryStatus: c.status } });
       }
       setBusy(pipe.analyzing, false);
 
@@ -3588,18 +3803,31 @@ const groups = displayGroups(catalogue, []);
 
     async function runPreview(seq: number) {
       if (!state.tabs.files.length || !state.version) return;
-      const r = await client.call('preview', activeRequest(optionsFor('preview', settings())));
+      const scheduled = queueOperation('preview');
+      operations.start(scheduled.id);
+      let r: WorkerReply;
+      try {
+        r = await client.call('preview', scheduled.request);
+      } catch (error) {
+        failOperation(scheduled.id, error);
+        return;
+      }
       // The follow-on call re-checks the SAME stage: this is the guard the
       // langlang playground omits on its second stage.
-      if (!buildStage.isCurrent(seq)) return;
+      if (!buildStage.isCurrent(seq) || !ownsOperation('preview', scheduled.id)) return;
       if (r.status === 0) {
         previewEl.textContent = r.text!;
         renderSizeLine();
+        operations.finish(scheduled.id, 'succeeded');
+        publishOutput('preview', scheduled);
         return;
       }
       // Leave the last good schematic in place and say so in the status bar.
       pipe.failure = messageOf(r);
       setStale(previewEl.textContent !== '');
+      operations.finish(scheduled.id, r.status === 3 ? 'refused' : 'failed', r.status === 3
+        ? { refusal: { message: pipe.failure, libraryStatus: r.status } }
+        : { failure: { kind: 'bad_request', message: pipe.failure, libraryStatus: r.status } });
     }
 
     /** `rows × cols chars` of the schematic on screen (design file 3e). */
@@ -3777,20 +4005,42 @@ const groups = displayGroups(catalogue, []);
         await runScratchTruth(seq, overCap);
         return;
       }
-      const r = await client.call('truth_table', activeRequest(optionsFor('truth_table', settings(), preloads())));
-      if (!buildStage.isCurrent(seq)) return;
+      const activeId = store.envelope.activeId;
+      const scheduled = queueOperation('truth_table', optionsFor('truth_table', settings(), preloads()), {
+        imageRevision: activeId ? revisions.projectVersion(activeId)?.imageRevision ?? null : null,
+      });
+      operations.start(scheduled.id);
+      let r: WorkerReply;
+      try {
+        r = await client.call('truth_table', scheduled.request);
+      } catch (error) {
+        failOperation(scheduled.id, error);
+        return;
+      }
+      if (!buildStage.isCurrent(seq) || !ownsOperation('truth_table', scheduled.id)) return;
       if (r.status !== 0) {
         // A refusal leaves the last good table on screen; the reason goes to
         // the status bar rather than replacing what the reader was reading.
         pipe.failure = messageOf(r);
         setStale(tableEl.textContent !== '');
+        operations.finish(scheduled.id, r.status === 3 ? 'refused' : 'failed', r.status === 3
+          ? { refusal: { message: pipe.failure, libraryStatus: r.status } }
+          : { failure: { kind: 'bad_request', message: pipe.failure, libraryStatus: r.status } });
         return;
       }
-      const { parseTruthTable } = await loadTruthView();
-      if (!buildStage.isCurrent(seq)) return;
+      let parseTruthTable: (text: string) => TruthRows;
+      try {
+        ({ parseTruthTable } = await loadTruthView());
+      } catch (error) {
+        failOperation(scheduled.id, error, 'internal');
+        return;
+      }
+      if (!buildStage.isCurrent(seq) || !ownsOperation('truth_table', scheduled.id)) return;
       truth.filtered = false;
       truth.unknownBits = undefined;
       await renderTruth(parseTruthTable(r.text!));
+      operations.finish(scheduled.id, 'succeeded', { truthScope: 'exhaustive', truthPath: 'compiler' });
+      publishOutput('truth', scheduled);
     }
 
     /**
@@ -3813,21 +4063,40 @@ const groups = displayGroups(catalogue, []);
       }
       const bytes = sim.bytes;
       if (!bytes) return;
-      const [{ rowsForPins }, { CircRuntime: Runtime }] = await Promise.all([loadTruthView(), loadRenderer()]);
-      if (!buildStage.isCurrent(seq) || sim.bytes !== bytes) return;
-      const scratch = await SimSession.build({
-        bytes,
-        load: (b) => Runtime.loadFromBytes(b, { noInitialPinDrive: true }),
-        roms: currentRoms(),
-        images: romImages,
-        importedImages: state.artifact?.importedImages,
+      const activeId = store.envelope.activeId;
+      const scheduled = queueOperation('truth_table', optionsFor('truth_table', settings(), preloads()), {
+        artifactId: state.artifact?.id ?? null,
+        imageRevision: activeId ? revisions.projectVersion(activeId)?.imageRevision ?? null : null,
+        liveStateRevision: filtered ? sim.liveStateRevision : null,
       });
-      if (!buildStage.isCurrent(seq) || sim.bytes !== bytes || sim.session !== live) {
+      operations.start(scheduled.id);
+      // Scratch Truth has runtime-only inputs. Freeze them before lazy module
+      // loads so a later pin/image edit cannot be published as this table.
+      const fixedInputs = filtered ? inputPins().map(({ name, value }) => ({ name, width: value.width, value })) : [];
+      const roms = currentRoms().map((rom) => ({ ...rom }));
+      const images = new Map(romImages);
+      const importedImages = copyImportedImages(state.artifact?.importedImages ?? { files: new Map(), images: new Map() });
+      const [{ rowsForPins }, { CircRuntime: Runtime }] = await Promise.all([loadTruthView(), loadRenderer()]);
+      if (!buildStage.isCurrent(seq) || !ownsOperation('truth_table', scheduled.id) || sim.bytes !== bytes) return;
+      let scratch: SimSession;
+      try {
+        scratch = await SimSession.build({
+          bytes,
+          load: (b) => Runtime.loadFromBytes(b, { noInitialPinDrive: true }),
+          roms,
+          images,
+          importedImages,
+        });
+      } catch (error) {
+        failOperation(scheduled.id, error, 'runtime');
+        return;
+      }
+      if (!buildStage.isCurrent(seq) || !ownsOperation('truth_table', scheduled.id) || sim.bytes !== bytes || sim.session !== live) {
         scratch.destroy();
         return;
       }
       const t0 = performance.now();
-      const outcome = rowsForPins(scratch, filtered ? live : scratch, cap);
+      const outcome = rowsForPins(scratch, filtered ? live : scratch, cap, filtered ? fixedInputs : undefined);
       truth.lastMs = performance.now() - t0;
       scratch.destroy();
       truth.unknownBits = filtered ? outcome.unknownBits : undefined;
@@ -3838,10 +4107,14 @@ const groups = displayGroups(catalogue, []);
             ? 'A truth table needs a circuit without ram.'
             : `${outcome.unknownBits} unknown input bits are over the cap of ${cap}. Set more pins, on the canvas or in the Data panel, or raise the cap.`,
         );
+        operations.finish(scheduled.id, 'refused', { truthPath: 'scratch', refusal: { message: tableEl.textContent ?? 'Truth table refused.', libraryStatus: null } });
         return;
       }
       truth.filtered = filtered;
       await renderTruth(outcome.table);
+      if (!buildStage.isCurrent(seq) || !ownsOperation('truth_table', scheduled.id)) return;
+      operations.finish(scheduled.id, 'succeeded', { truthScope: filtered ? 'filtered' : 'exhaustive', truthPath: 'scratch' });
+      publishOutput('truth', scheduled);
     }
 
     /** The copies: the compiler's own markdown or CSV for its table, the
@@ -4005,7 +4278,15 @@ const groups = displayGroups(catalogue, []);
       session: null as SimSession | null,
       /** The bytes the session was built from, so a new artifact is told apart. */
       sessionBytes: null as Uint8Array | null,
+      id: null as string | null,
+      liveStateRevision: null as string | null,
+      imageRevision: null as string | null,
+      operationId: null as OperationId | null,
+      lifecycle: 'absent' as 'absent' | 'building' | 'ready' | 'resetting' | 'failed',
+      preloadState: 'none' as 'none' | 'applied' | 'partial' | 'failed' | 'unknown',
+      preload: { applied: 0, errors: 0 },
       unsubscribe: null as null | (() => void),
+      lifecycleUnsubscribe: null as null | (() => void),
       view: null as View | null,
       bytes: null as Uint8Array | null,
       renderedHash: -1,
@@ -4029,6 +4310,13 @@ const groups = displayGroups(catalogue, []);
       gestureAt: 0,
     };
     const GESTURE_WINDOW_MS = 500;
+
+    function setPreloadStatus(result: ApplyResult) {
+      sim.preload = { applied: result.applied.length, errors: result.errors.size };
+      sim.preloadState = result.errors.size > 0
+        ? result.applied.length > 0 ? 'partial' : 'failed'
+        : result.applied.length > 0 ? 'applied' : 'none';
+    }
 
     /** The furniture's bands: the switch at the top, the two lines at the
      *  bottom. The canvas covers the whole region under them, so the fit
@@ -4137,12 +4425,20 @@ const groups = displayGroups(catalogue, []);
     function dropSession() {
       sim.unsubscribe?.();
       sim.unsubscribe = null;
+      sim.lifecycleUnsubscribe?.();
+      sim.lifecycleUnsubscribe = null;
       sim.view?.destroy();
       sim.view = null;
       simMount.innerHTML = '';
       sim.session?.destroy();
       sim.session = null;
       sim.sessionBytes = null;
+      sim.id = null;
+      sim.liveStateRevision = null;
+      sim.imageRevision = null;
+      sim.lifecycle = 'absent';
+      sim.preloadState = 'none';
+      sim.preload = { applied: 0, errors: 0 };
       refreshConsoleGate();
       syncZoom();
     }
@@ -4167,28 +4463,73 @@ const groups = displayGroups(catalogue, []);
       return pending.promise;
     }
     async function buildSession(bytes: Uint8Array): Promise<SimSession | null> {
-      const { CircRuntime: Runtime } = await loadRenderer();
-      if (sim.bytes !== bytes) return null;
-      dropSession();
-      const session = await SimSession.build({
-        bytes,
-        load: (b) => Runtime.loadFromBytes(b, { noInitialPinDrive: true }),
-        roms: currentRoms(),
-        images: romImages,
-        importedImages: state.artifact?.importedImages,
-        // The handshake's `diag warning` lines, from the analysis this
-        // artifact was built beside; `--sim` prints its own the same way.
-        warnings: state.mapped
-          .filter((m) => m.severity === 'warning')
-          .map((m) => ({ code: m.code, file: m.fileName, line: m.line, col: m.column, message: m.message })),
-        bootLow: true,
+      const activeId = store.envelope.activeId;
+      const artifact = state.artifact;
+      const roms = currentRoms().map((rom) => ({ ...rom }));
+      // The visible Memory editor updates this session in place. Its map stays
+      // live here; scratch Truth above receives a detached image snapshot.
+      const images = romImages;
+      const importedImages = artifact?.importedImages;
+      const warnings = state.mapped
+        .filter((m) => m.severity === 'warning')
+        .map((m) => ({ code: m.code, file: m.fileName, line: m.line, col: m.column, message: m.message }));
+      const scheduled = queueOperation('session_build', {}, {
+        artifactId: artifact?.id ?? null,
+        imageRevision: activeId ? revisions.projectVersion(activeId)?.imageRevision ?? null : null,
       });
+      sim.operationId = scheduled.id;
+      sim.lifecycle = 'building';
+      sim.preloadState = 'unknown';
+      sim.preload = { applied: 0, errors: 0 };
+      operations.start(scheduled.id);
+      observe();
+      let Runtime: typeof import('circ-renderer')['CircRuntime'];
+      try {
+        ({ CircRuntime: Runtime } = await loadRenderer());
+      } catch (error) {
+        if (ownsOperation('session_build', scheduled.id)) sim.lifecycle = 'failed';
+        failOperation(scheduled.id, error, 'runtime');
+        observe();
+        return null;
+      }
+      if (sim.bytes !== bytes) {
+        operations.supersede(scheduled.id, null, 'new_inputs');
+        return null;
+      }
+      dropSession();
+      let session: SimSession;
+      try {
+        session = await SimSession.build({
+          bytes,
+          load: (b) => Runtime.loadFromBytes(b, { noInitialPinDrive: true }),
+          roms,
+          images,
+          importedImages,
+          // The handshake's `diag warning` lines, from the analysis this
+          // artifact was built beside; `--sim` prints its own the same way.
+          warnings,
+          bootLow: true,
+        });
+      } catch (error) {
+        if (ownsOperation('session_build', scheduled.id)) sim.lifecycle = 'failed';
+        failOperation(scheduled.id, error, 'runtime');
+        observe();
+        return null;
+      }
       if (sim.bytes !== bytes) {
         session.destroy();
+        operations.supersede(scheduled.id, null, 'new_inputs');
         return null;
       }
       sim.session = session;
       sim.sessionBytes = bytes;
+      sim.id = revisionIds.next('session');
+      sim.liveStateRevision = revisionIds.next('live-state');
+      sim.imageRevision = scheduled.inputs.imageRevision;
+      sim.lifecycle = 'ready';
+      setPreloadStatus(session.preloadResult);
+      operations.finish(scheduled.id, 'succeeded', { sessionId: sim.id, artifactId: artifact?.id ?? null });
+      observe();
       // The console's handshake, before the replay below: the replayed pins
       // are the page's state, silent like the boot, not lines of the session.
       consoleHandshake(session);
@@ -4198,8 +4539,49 @@ const groups = displayGroups(catalogue, []);
       const ids = rootInputs(session);
       for (const name of Array.from(sim.pins.keys())) if (!ids.has(name)) sim.pins.delete(name);
       for (const [name, v] of sim.pins) session.set(name, v.value, v.defined);
+      sim.lifecycleUnsubscribe = session.subscribeLifecycle((event) => {
+        if (sim.session !== session) return;
+        if (event.kind === 'reset-started') {
+          const current = sim.operationId ? operations.lookup(sim.operationId) : { kind: 'not_found' as const };
+          if (current.kind !== 'found' || (current.operation.state !== 'queued' && current.operation.state !== 'running') || current.operation.kind !== 'session_reset') {
+            const reset = queueOperation('session_reset', {}, {
+              artifactId: artifact?.id ?? null,
+              imageRevision: activeId ? revisions.projectVersion(activeId)?.imageRevision ?? null : null,
+              liveStateRevision: sim.liveStateRevision,
+            });
+            sim.operationId = reset.id;
+            operations.start(reset.id);
+          }
+          sim.lifecycle = 'resetting';
+          sim.id = null;
+          sim.liveStateRevision = null;
+          observe();
+        } else if (event.kind === 'reset-finished') {
+          sim.lifecycle = 'ready';
+          setPreloadStatus(event.preloads);
+          const reset = sim.operationId ? operations.lookup(sim.operationId) : null;
+          if (reset?.kind === 'found') sim.imageRevision = reset.operation.inputs.imageRevision;
+          if (sim.operationId) operations.finish(sim.operationId, 'succeeded', { sessionId: sim.id, artifactId: artifact?.id ?? null });
+          observe();
+        } else if (event.kind === 'reset-failed') {
+          sim.lifecycle = session.isAlive ? 'ready' : 'failed';
+          if (session.isAlive) {
+            sim.id = revisionIds.next('session');
+            sim.liveStateRevision = revisionIds.next('live-state');
+          }
+          if (sim.operationId) {
+            operations.finish(sim.operationId, 'failed', { failure: { kind: 'runtime', message: event.message, libraryStatus: null } });
+          }
+          observe();
+        } else if (event.kind === 'run-finished') {
+          sim.liveStateRevision = revisionIds.next('live-state');
+          observe();
+        }
+      });
       sim.unsubscribe = session.subscribe((event) => {
         if (event.kind === 'drive' || event.kind === 'memory') {
+          sim.liveStateRevision = revisionIds.next('live-state');
+          observe();
           // Another face drove the circuit: the picture, the rows and the dump
           // follow. Only redrawn while on screen: each visible word costs a
           // call across the boundary.
@@ -4217,6 +4599,9 @@ const groups = displayGroups(catalogue, []);
           // lines are already in the log (it is busy while they run).
           if (!consoleState.busy) consoleAppend(commandFor(event, session), 'page');
         } else if (event.kind === 'rebuilt') {
+          sim.id = revisionIds.next('session');
+          sim.liveStateRevision = revisionIds.next('live-state');
+          observe();
           // The protocol's reset: a new runtime, so a canvas over the old one
           // is rebuilt over the new, and the rows read the new.
           if (sim.view) void buildCanvas();
@@ -4473,7 +4858,21 @@ const groups = displayGroups(catalogue, []);
       // The reader's remembered pins go with it, so a recompile does not
       // bring them back.
       sim.pins.clear();
-      void session.reset().finally(() => { dataReset.disabled = false; });
+      const activeId = store.envelope.activeId;
+      const scheduled = queueOperation('session_reset', {}, {
+        artifactId: state.artifact?.id ?? null,
+        imageRevision: activeId ? revisions.projectVersion(activeId)?.imageRevision ?? null : null,
+        liveStateRevision: sim.liveStateRevision,
+      });
+      sim.operationId = scheduled.id;
+      operations.start(scheduled.id);
+      void session.reset().then(() => {
+        if (sim.session !== session) return;
+        operations.finish(scheduled.id, 'succeeded', { sessionId: sim.id, artifactId: state.artifact?.id ?? null });
+        observe();
+      }, (error) => {
+        failOperation(scheduled.id, error, 'runtime');
+      }).finally(() => { dataReset.disabled = false; });
     });
 
     hooks.onCircuitChanged = () => { sim.pins.clear(); };
@@ -4487,6 +4886,9 @@ const groups = displayGroups(catalogue, []);
       }
     };
     hooks.onArtifact = (bytes, reason) => {
+      if (bytes !== sim.sessionBytes && (sim.lifecycle === 'building' || sim.lifecycle === 'resetting') && sim.operationId) {
+        operations.supersede(sim.operationId, null, 'new_inputs');
+      }
       sim.bytes = bytes;
       // A new artifact is a new session; the reader's pins are replayed onto it
       // by name when a face next asks for it.
@@ -4517,6 +4919,9 @@ const groups = displayGroups(catalogue, []);
     };
     let agentInstallation: PageApiInstallation | null = null;
     agentInstallation = installPageApi(el, {
+      pageId: agentPageId,
+      readWorkspace: () => workspaceSnapshot,
+      operations,
       readStatus: () => {
         const activeId = store.envelope.activeId;
         const selected = catalogue.find((item) => item.id === activeId);
@@ -4562,7 +4967,40 @@ const groups = displayGroups(catalogue, []);
           },
           artifact: { present: state.artifact !== null, bytes: state.artifact?.size ?? null },
           session: { present: Boolean(sim.session?.isAlive) },
-          provenance: { tracking: 'untracked', sourceRevision: null, buildRevision: null, sessionId: null },
+          provenance: bootstrapState.lifecycle === 'ready'
+            ? {
+                tracking: 'tracked' as const,
+                sourceRevision: revisions.currentTarget?.sourceRevision ?? null,
+                buildRevision: outputProvenance.artifact?.inputs.target.sourceRevision ?? null,
+                sessionId: sim.id,
+              }
+            : { tracking: 'untracked' as const, sourceRevision: null, buildRevision: null, sessionId: null },
+          ...(bootstrapState.lifecycle === 'ready' ? {
+            observationRevision,
+            projectVersion: activeId ? revisions.projectVersion(activeId) : null,
+            currentTarget: revisions.currentTarget,
+            outputs: {
+              analysis: outputStatus('analysis'), diagnostics: outputStatus('diagnostics'),
+              artifact: { ...outputStatus('artifact'), id: state.artifact?.id ?? null },
+              preview: outputStatus('preview'), truth: outputStatus('truth'),
+            },
+            simulation: {
+              state: sim.lifecycle,
+              id: sim.id, artifactId: state.artifact?.id ?? null, liveStateRevision: sim.liveStateRevision,
+              imageRevision: sim.imageRevision,
+              matchesCurrentTarget: Boolean(sim.session && !state.stale),
+              matchesCurrentImages: sim.imageRevision === (activeId ? revisions.projectVersion(activeId)?.imageRevision ?? null : null) &&
+                sim.preloadState !== 'partial' && sim.preloadState !== 'failed',
+              preloadState: sim.preloadState, operationId: sim.operationId,
+              preload: { ...sim.preload },
+            },
+            operationIds: {
+              analyze: operationSlots.analyze ?? null, compile: operationSlots.compile ?? null,
+              preview: operationSlots.preview ?? null, truth_table: operationSlots.truth_table ?? null,
+              session_build: operationSlots.session_build ?? null, session_reset: operationSlots.session_reset ?? null,
+            },
+            compilerTransport: client.transportState(),
+          } : {}),
           persistence: { enabled: store.enabled },
           agentAccess: {
             pageRegistry: 'available',

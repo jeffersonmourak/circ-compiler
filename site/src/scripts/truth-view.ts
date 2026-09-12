@@ -171,6 +171,8 @@ export type ScratchOutcome =
   | { ok: true; table: TruthRows; filtered: true; unknownBits: number }
   | { ok: false; reason: 'over-cap' | 'stateful'; unknownBits: number };
 
+export type FixedInputs = readonly { name: string; width: number; value: BitValue }[];
+
 /**
  * Decision 10: the table over the cap. Every known input pin of `live` is
  * held at its value on `scratch`; the unknown pins' bits are enumerated,
@@ -184,19 +186,24 @@ export function rowsForPins(
   scratch: SessionLike & { mems: readonly { kind: 'rom' | 'ram' }[]; hasRam?: boolean },
   live: SessionLike,
   cap: number,
+  fixedInputs?: FixedInputs,
 ): ScratchOutcome {
-  const unknown = unknownInputs(live);
+  const inputs = live.pins.filter((p) => p.kind === 'in');
+  const outputs = live.pins.filter((p) => p.kind === 'out');
+  const fixed = new Map(fixedInputs?.map((pin) => [pin.name, pin]) ?? []);
+  const unknown = fixedInputs
+    ? inputs.filter((pin) => !fullyDefined(fixed.get(pin.name)?.value ?? { value: 0n, defined: 0n, width: pin.width }))
+    : unknownInputs(live);
   const unknownBits = unknown.reduce((n, p) => n + p.width, 0);
   if (unknownBits > cap) return { ok: false, reason: 'over-cap', unknownBits };
   if (scratch.hasRam || scratch.mems.some((m) => m.kind === 'ram')) return { ok: false, reason: 'stateful', unknownBits };
 
-  const inputs = live.pins.filter((p) => p.kind === 'in');
-  const outputs = live.pins.filter((p) => p.kind === 'out');
   const unknownNames = new Set(unknown.map((p) => p.name));
   const known = new Map<string, bigint>();
   for (const pin of inputs) {
     if (unknownNames.has(pin.name)) continue;
-    const r = live.get(pin.name);
+    const captured = fixed.get(pin.name)?.value;
+    const r = captured ? { ok: true as const, value: captured } : live.get(pin.name);
     const value = r.ok ? r.value.value & widthMask(pin.width) : 0n;
     known.set(pin.name, value);
     scratch.set(pin.name, value, widthMask(pin.width));

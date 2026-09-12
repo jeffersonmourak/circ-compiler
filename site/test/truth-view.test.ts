@@ -135,6 +135,19 @@ describe('truth view', () => {
     expect(rt.calls.filter((c) => c.startsWith('set:'))).toEqual(['set:0', 'set:1', 'set:1']);
   });
 
+  test('rowsForPins uses a captured fixed-input snapshot', async () => {
+    const { session: live } = await andSession();
+    const { session: scratch } = await andSession();
+    live.set('a', 1n, 1n);
+    const fixed = live.pins.filter((pin) => pin.kind === 'in').map((pin) => {
+      const value = live.get(pin.name);
+      return { name: pin.name, width: pin.width, value: value.ok ? value.value : { value: 0n, defined: 0n, width: pin.width } };
+    });
+    live.set('a', 0n, 1n);
+    const result = rowsForPins(scratch, live, 12, fixed);
+    expect(result).toMatchObject({ ok: true, table: { rows: [{ in: [1n, 0n] }, { in: [1n, 1n] }] } });
+  });
+
   test('rowsForPins refuses over the cap and on a ram', async () => {
     const { session: live } = await andSession();
     const { session: scratch } = await andSession();

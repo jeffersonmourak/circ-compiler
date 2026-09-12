@@ -23,7 +23,7 @@ export interface NativeConnectionStatus {
 export class WebMcpAdapter {
   private generation = 0;
   private abort: AbortController | null = null;
-  private registration: NativeRegistration | null = null;
+  private registrations: NativeRegistration[] = [];
   private cleanup: Promise<void> = Promise.resolve();
   private current: NativeConnectionStatus;
 
@@ -47,14 +47,15 @@ export class WebMcpAdapter {
     this.abort = abort;
     this.current = { state: 'registering', apiVariant: this.registrar.apiVariant, reason: null };
     try {
-      const descriptor = this.registry.descriptors()[0];
-      if (!descriptor) throw new Error('The status tool is unavailable for native registration.');
-      const registration = await this.registrar.register(descriptor, (input) => this.registry.callTool(descriptor.name, input), abort.signal);
+      const descriptors = this.registry.descriptors();
+      if (descriptors.length === 0) throw new Error('No tools are available for native registration.');
+      const registrations = await Promise.all(descriptors.map((descriptor) =>
+        this.registrar!.register(descriptor, (input) => this.registry.callTool(descriptor.name, input), abort.signal)));
       if (generation !== this.generation || abort.signal.aborted) {
-        await registration.dispose();
+        await Promise.all(registrations.map((registration) => registration.dispose()));
         return;
       }
-      this.registration = registration;
+      this.registrations = registrations;
       this.current = { state: 'registered', apiVariant: this.registrar.apiVariant, reason: null };
     } catch (error) {
       if (generation !== this.generation || abort.signal.aborted) return;
@@ -82,10 +83,10 @@ export class WebMcpAdapter {
   }
 
   private async clearRegistration(): Promise<void> {
-    const registration = this.registration;
-    this.registration = null;
-    if (!registration) return this.cleanup;
-    this.cleanup = this.cleanup.then(() => registration.dispose()).catch(() => undefined);
+    const registrations = this.registrations;
+    this.registrations = [];
+    if (registrations.length === 0) return this.cleanup;
+    this.cleanup = this.cleanup.then(() => Promise.all(registrations.map((registration) => registration.dispose())).then(() => undefined)).catch(() => undefined);
     await this.cleanup;
   }
 }

@@ -143,6 +143,15 @@ export type SessionEvent =
 
 export type SessionListener = (event: SessionEvent) => void;
 
+/** Lifecycle bookkeeping is separate from the stable face/console event stream. */
+export type SessionLifecycleEvent =
+  | { kind: 'reset-started' }
+  | { kind: 'reset-finished'; preloads: ApplyResult }
+  | { kind: 'reset-failed'; message: string }
+  | { kind: 'run-finished' };
+
+export type SessionLifecycleListener = (event: SessionLifecycleEvent) => void;
+
 export interface Assign {
   pin: string;
   value: bigint;
@@ -193,8 +202,11 @@ export class SimSession {
   private readonly images: RomImageMap;
   private readonly importedImages?: ImportedImages;
   private readonly listeners = new Set<SessionListener>();
+  private readonly lifecycleListeners = new Set<SessionLifecycleListener>();
   private alive = true;
+  private generation = 0;
   private resetting: Promise<void> | null = null;
+  private preloads: ApplyResult = { applied: [], errors: new Map() };
 
   readonly pins: readonly PinRef[];
   readonly mems: readonly MemRef[];
@@ -247,6 +259,11 @@ export class SimSession {
     };
   }
 
+  subscribeLifecycle(listener: SessionLifecycleListener): () => void {
+    this.lifecycleListeners.add(listener);
+    return () => this.lifecycleListeners.delete(listener);
+  }
+
   private emit(event: SessionEvent): void {
     for (const listener of Array.from(this.listeners)) {
       try {
@@ -254,6 +271,16 @@ export class SimSession {
       } catch (err) {
         // One face's throw must not silence the others.
         console.error('sim-session: listener failed', err);
+      }
+    }
+  }
+
+  private emitLifecycle(event: SessionLifecycleEvent): void {
+    for (const listener of Array.from(this.lifecycleListeners)) {
+      try {
+        listener(event);
+      } catch (err) {
+        console.error('sim-session: lifecycle listener failed', err);
       }
     }
   }
@@ -344,6 +371,7 @@ export class SimSession {
   /** Drain the event queue. Redundant after `set`; kept for parity with the artifact's `run()`. */
   run(): void {
     this.rt.run();
+    this.emitLifecycle({ kind: 'run-finished' });
   }
 
   // ---- preloads and reset ---------------------------------------------------
@@ -372,7 +400,13 @@ export class SimSession {
         else this.emit({ kind: 'memory', name, op: 'load', words: write.bytes.length / ((mem.width + 7) >> 3) });
       }
     }
-    return result;
+    this.preloads = { applied: [...result.applied], errors: new Map(result.errors) };
+    return { applied: [...result.applied], errors: new Map(result.errors) };
+  }
+
+  /** The result of the most recent build/reset/manual preload application. */
+  get preloadResult(): ApplyResult {
+    return { applied: [...this.preloads.applied], errors: new Map(this.preloads.errors) };
   }
 
   /**
@@ -382,13 +416,28 @@ export class SimSession {
    */
   reset(): Promise<void> {
     if (this.resetting) return this.resetting;
+    if (!this.alive) return Promise.reject(new Error('Session was destroyed.'));
+    const generation = this.generation;
+    this.emitLifecycle({ kind: 'reset-started' });
     this.resetting = (async () => {
-      const fresh = await this.load(this.bytes);
-      const old = this.rt;
-      this.rt = fresh;
-      old.destroy();
-      this.applyPreloads({ silent: true });
-      this.emit({ kind: 'rebuilt' });
+      try {
+        const fresh = await this.load(this.bytes);
+        if (!this.alive || generation !== this.generation) {
+          fresh.destroy();
+          throw new Error('Session was destroyed during reset.');
+        }
+        const old = this.rt;
+        this.rt = fresh;
+        old.destroy();
+        const preloads = this.applyPreloads({ silent: true });
+        this.emit({ kind: 'rebuilt' });
+        this.emitLifecycle({ kind: 'reset-finished', preloads });
+      } catch (error) {
+        if (this.alive && generation === this.generation) {
+          this.emitLifecycle({ kind: 'reset-failed', message: error instanceof Error ? error.message : String(error) });
+        }
+        throw error;
+      }
     })().finally(() => {
       this.resetting = null;
     });
@@ -489,8 +538,10 @@ export class SimSession {
   destroy(): void {
     if (!this.alive) return;
     this.alive = false;
+    this.generation += 1;
     this.rt.destroy();
     this.emit({ kind: 'destroyed' });
     this.listeners.clear();
+    this.lifecycleListeners.clear();
   }
 }

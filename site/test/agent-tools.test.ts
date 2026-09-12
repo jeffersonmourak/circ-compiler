@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { AgentToolRegistry } from '../src/scripts/agent-tools/registry.ts';
 import { statusDescriptor } from '../src/scripts/agent-tools/status.ts';
+import { readFileDescriptor } from '../src/scripts/agent-tools/workspace.ts';
 
 function registry(result: unknown = { value: 'ok' }) {
   let calls = 0;
@@ -62,5 +63,17 @@ describe('agent tools', () => {
     tools.dispose();
     const disposed = await tools.callTool('circ_get_status', {});
     expect(!disposed.ok && disposed.error.code).toBe('PAGE_DISPOSED');
+  });
+
+  test('workspace_descriptors_validate_declared_arguments_and_preserve_domain_errors', async () => {
+    const tools = new AgentToolRegistry('page-test', [{
+      descriptor: readFileDescriptor,
+      handler: (input) => input.name === 'missing.circ'
+        ? { ok: false, error: { code: 'FILE_NOT_FOUND', message: 'missing', retryable: false } }
+        : { ok: true, value: { name: input.name } },
+    }]);
+    expect(await tools.callTool('circ_read_file', {})).toMatchObject({ ok: false, error: { code: 'INVALID_ARGUMENT' } });
+    expect(await tools.callTool('circ_read_file', { name: 'missing.circ' })).toMatchObject({ ok: false, error: { code: 'FILE_NOT_FOUND' } });
+    expect(await tools.callTool('circ_read_file', { name: 'main.circ', extra: true })).toMatchObject({ ok: false, error: { code: 'INVALID_ARGUMENT' } });
   });
 });

@@ -2,7 +2,11 @@ import type { PlaygroundPageApi, PlaygroundStatus, StatusReader } from '../playg
 import { createPlaygroundController } from '../playground-controller.ts';
 import { AgentToolRegistry } from './registry.ts';
 import { statusDescriptor, statusHandler } from './status.ts';
+import { listProjectsDescriptor, readFileDescriptor, readProjectDescriptor, workspaceHandlers } from './workspace.ts';
 import { WebMcpAdapter, detectNativeRegistrar } from '../webmcp-adapter.ts';
+import type { WorkspaceSnapshot } from '../playground-reads.ts';
+import type { OperationStore } from '../playground-operations.ts';
+import { waitForOperationDescriptor, waitForOperationHandler } from './operations.ts';
 
 export interface PageApiInstallation {
   readonly api: PlaygroundPageApi;
@@ -13,8 +17,10 @@ export interface PageApiInstallation {
 
 export interface InstallPageApiOptions {
   readStatus: () => PlaygroundStatus;
+  readWorkspace?: () => WorkspaceSnapshot | null;
   pageId?: string;
   native?: WebMcpAdapter;
+  operations?: OperationStore;
 }
 
 declare global {
@@ -35,9 +41,14 @@ export function installPageApi(el: HTMLElement, options: InstallPageApiOptions):
   if (installed) return installed;
   if (facadeHost.circPlayground) throw new Error('A different circ playground tool registry is already installed.');
 
-  const controller = createPlaygroundController({ read: options.readStatus } satisfies StatusReader);
+  const controller = createPlaygroundController({ read: options.readStatus } satisfies StatusReader, options.readWorkspace, options.operations);
+  const workspace = workspaceHandlers(controller);
   const registry = new AgentToolRegistry(options.pageId ?? pageId(), [
     { descriptor: statusDescriptor, handler: statusHandler(controller) },
+    { descriptor: listProjectsDescriptor, handler: (input) => workspace.listProjects(input as { cursor?: string; limit?: number }) },
+    { descriptor: readProjectDescriptor, handler: (input) => workspace.readProject(input as { projectId?: string; expectedRevision?: string; cursor?: string; limit?: number }) },
+    { descriptor: readFileDescriptor, handler: (input) => workspace.readFile(input as { projectId?: string; name: string; expectedSourceRevision?: string; offset?: number; maxCodeUnits?: number }) },
+    { descriptor: waitForOperationDescriptor, handler: waitForOperationHandler(controller) },
   ]);
   const native = options.native ?? new WebMcpAdapter(registry, detectNativeRegistrar());
   const api = Object.freeze({
@@ -51,6 +62,7 @@ export function installPageApi(el: HTMLElement, options: InstallPageApiOptions):
   const onPageHide = (event: PageTransitionEvent) => {
     if (event.persisted) {
       registry.suspend();
+      controller.cancelWaits('PAGE_SUSPENDED');
       void native.suspend();
     } else {
       void dispose();

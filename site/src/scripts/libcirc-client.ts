@@ -22,10 +22,14 @@ export class LibcircClient {
   private pending = new Map<number, Pending>();
   private nextId = 1;
   private initPromise: Promise<LibcircVersion> | null = null;
+  private initialized = false;
+  private failure: Error | null = null;
+  private readonly failureListeners = new Set<(error: Error) => void>();
 
   constructor(private readonly wasmUrl: string) {}
 
   private spawn(): Worker {
+    if (this.failure) throw this.failure;
     if (this.worker) return this.worker;
     const worker = new Worker(new URL('../workers/libcirc.worker.ts', import.meta.url), { type: 'module' });
     worker.onmessage = (ev: MessageEvent<WorkerReply>) => {
@@ -34,13 +38,30 @@ export class LibcircClient {
       this.pending.delete(ev.data.id);
       p.resolve(ev.data);
     };
-    worker.onerror = (ev) => {
-      const err = new Error(ev.message || 'libcirc worker crashed');
-      for (const p of this.pending.values()) p.reject(err);
-      this.pending.clear();
-    };
+    worker.onerror = (ev) => this.fail(new Error(ev.message || 'libcirc worker crashed'));
     this.worker = worker;
     return worker;
+  }
+
+  private fail(error: Error): void {
+    if (this.failure) return;
+    this.failure = error;
+    for (const p of this.pending.values()) p.reject(error);
+    this.pending.clear();
+    for (const listener of this.failureListeners) listener(error);
+  }
+
+  onFailure(listener: (error: Error) => void): () => void {
+    this.failureListeners.add(listener);
+    if (this.failure) listener(this.failure);
+    return () => this.failureListeners.delete(listener);
+  }
+
+  transportState(): { state: 'not_started' | 'starting' | 'available' | 'failed'; failure: string | null } {
+    if (this.failure) return { state: 'failed', failure: this.failure.message };
+    if (this.initialized) return { state: 'available', failure: null };
+    if (this.initPromise) return { state: 'starting', failure: null };
+    return { state: this.worker ? 'starting' : 'not_started', failure: null };
   }
 
   private send(msg: Omit<WorkerMsg, 'id'>): Promise<WorkerReply> {
@@ -56,6 +77,7 @@ export class LibcircClient {
   init(): Promise<LibcircVersion> {
     return (this.initPromise ??= this.send({ op: 'init', wasmUrl: this.wasmUrl }).then((r) => {
       if (r.status !== 0 || !r.text) throw new Error(r.error ?? `libcirc init failed (status ${r.status})`);
+      this.initialized = true;
       return JSON.parse(r.text) as LibcircVersion;
     }));
   }
@@ -77,6 +99,8 @@ export class LibcircClient {
     this.worker?.terminate();
     this.worker = null;
     this.initPromise = null;
+    this.initialized = false;
+    this.failure = null;
   }
 }
 
@@ -100,4 +124,3 @@ export function getSharedClient(wasmUrl: string): LibcircClient {
   }
   return client;
 }
-

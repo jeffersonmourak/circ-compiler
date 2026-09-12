@@ -29,3 +29,42 @@
 **Tests:** Chrome 153.0.0.0 returned `ok: true` for native and page-registry calls; page ID changed from `86096362-55d9-49b5-96a2-f160d16aea7c` to `b9d112a9-87f3-4ba2-b214-bf4aa8a5dd09` after reload; navigation to `about:blank` and back preserved the latter page ID and session across successful native/page-registry calls; result pass.
 **Next slice:** Review and commit Phase 0.
 **Notes:** The first call observed the expected startup `compiling` state without an artifact/session. The post-reload call observed the settled `live` state with a 23995-byte artifact and session. The reload command timed out waiting for DOM stabilization, but page replacement, native tool rediscovery, and both successful post-reload calls confirm that the reload completed and registration was recreated. The back navigation preserved page ID and session, demonstrating bfcache restore. No mutation was performed.
+
+## 2026-09-12 — Phase 1, Slice 1 — Revision and operation primitives
+
+**What shipped:** Added pure page-scoped revision allocation/tracking, detached source/image/input snapshots, byte-and-file-mapping artifact comparison, and bounded operation lifecycle/wait primitives.
+**Files touched:** `site/src/scripts/playground-contract.ts`, `site/src/scripts/playground-revisions.ts`, `site/src/scripts/playground-operations.ts`, `site/test/playground-revisions.test.ts`, `site/test/playground-operations.test.ts`, `DOCS/STATUS.md`
+**Tests:** `bun test test/playground-revisions.test.ts test/playground-operations.test.ts` (11 pass) and `bun --bun run typecheck` (pass).
+**Next slice:** Wire the project/source tracker into existing workspace mutation boundaries and expose bounded project/file read tools.
+**Notes:** The new primitives are not yet connected to the Astro island, compiler pipeline, or public registry. Phase 0 continues to return explicitly untracked status until those real input/output boundaries are covered.
+
+## 2026-09-12 — Phase 1, Slice 2 — Workspace reads
+
+**What shipped:** Registered bounded project/file read tools backed by an island-owned, revisioned in-memory workspace snapshot. Active editor buffers take precedence over persisted scratch records; inactive scratch and catalogue projects remain read-only and do not change selection.
+**Files touched:** `site/src/components/Playground.astro`, `site/src/scripts/playground-controller.ts`, `site/src/scripts/agent-tools/{registry,page-api,workspace}.ts`, `site/src/scripts/playground-contract.ts`, `site/test/{agent-tools,playground-controller}.test.ts`
+**Tests:** `bun test test/playground-revisions.test.ts test/playground-operations.test.ts test/playground-reads.test.ts test/playground-controller.test.ts test/agent-tools.test.ts` (24 pass) and `bun --bun run typecheck` (pass; existing hints only).
+**Next slice:** Connect captured analyze/compile request provenance and terminal outcomes before exposing tracked status or operation waits.
+**Notes:** `circ_get_status` deliberately remains untracked. Waiting is not public yet because no actual pipeline operation IDs are assigned at scheduling/publication boundaries.
+
+## 2026-09-12 — Phase 1, Slice 3 — Analyze and compile provenance
+
+**What shipped:** Analyze and compile now receive queued operation records at scheduling time with copied request bodies/options, transition to running before compiler readiness, and finalize as succeeded, diagnostics, refused, failed, or superseded. A later source/target/settings request supersedes its logical predecessor immediately; delayed worker replies cannot publish after ownership changes. Compile now sends `warnings_as_errors` and skips with a diagnostics outcome when fresh analysis proves it cannot succeed. The worker client records fatal transport failure and rejects future work.
+**Files touched:** `site/src/components/Playground.astro`, `site/src/scripts/libcirc-client.ts`, `site/test/island-smoke.test.ts`
+**Tests:** `bun test test/pipeline.test.ts test/playground-operations.test.ts test/playground-revisions.test.ts test/shared-client.test.ts test/agent-tools.test.ts test/playground-controller.test.ts` (40 pass); `bun --bun run typecheck` (pass; existing hints only).
+**Next slice:** Track independent preview/Truth/session operation provenance and runtime lifecycle before publishing tracked status or operation waits.
+**Notes:** The production build and rebuilt island smoke test remain blocked in this worktree because the installed Rollup package lacks `@rollup/rollup-darwin-x64`; `bun install --frozen-lockfile` reported no changes and did not repair the missing optional dependency. Public status and tool registration remain unchanged.
+
+## 2026-09-12 — Phase 1, Slices 4–5 — Derived observations and waits
+
+**What shipped:** Preview and compiler Truth requests now have their own captured operation records and output provenance. Lazy session construction has a runtime operation record and records a session identity/live-state revision. `circ_get_status` publishes tracked revision/output/operation/session/transport fields after bootstrap; `circ_wait_for_operation` observes retained records with bounded timeout and page-lifecycle cancellation. Native registration now registers the complete public catalogue rather than only status.
+**Files touched:** `site/src/components/Playground.astro`, `site/src/scripts/{playground-contract,playground-controller,webmcp-adapter}.ts`, `site/src/scripts/agent-tools/{operations,page-api,status}.ts`, `site/test/playground-controller.test.ts`
+**Tests:** `bun --bun run typecheck` (pass; existing hints only); targeted controller/registry/adapter/operation tests pass.
+**Notes:** Superseded worker work remains physical work; a wait timeout never claims preemption. Scratch Truth's synchronous bounded enumeration can delay JavaScript timer delivery until it returns.
+
+## 2026-09-12 — Phase 1 completion — lifecycle and integration closure
+
+**What shipped:** Fixed tracked built-island expectations and deduplicated compile metadata analysis against the optionless analyze request. Scratch Truth now records its own captured artifact/image/fixed-input provenance and terminal path. `SimSession` publishes isolated reset/run lifecycle observations, retains bounded initial/reset preload results, and discards a late reset runtime after destruction. Status now reports reset/build state, actual preload counts, image binding, and image freshness; waits distinguish suspension and disposal from caller cancellation. Added both Rollup host packages at the installed Rollup version so a rebuilt site can run on either macOS architecture.
+**Files touched:** `site/src/components/Playground.astro`, `site/src/scripts/{sim-session,truth-view,playground-contract,playground-controller,playground-operations}.ts`, `site/src/scripts/agent-tools/page-api.ts`, `site/test/{island-smoke,sim-session,truth-view,playground-controller}.test.ts`, `site/package.json`, `site/bun.lock`, `DOCS/{agent-playground,STATUS}.md`
+**Tests:** `bun --bun run typecheck && bun test && bun run bundle` (663 pass; `/playground` 57.4 KiB gzip under 120 KiB); rebuilt `bun --bun run build`; focused rebuilt island/lifecycle/Truth/controller run (66 pass).
+**Next slice:** Phase 2; Phase 1 exposes observations only and intentionally defers agent mutations, diagnostic payload retrieval, and simulation/memory controls.
+**Notes:** Chrome DevTools MCP on Chrome 153.0.0.0 served this worktree's `dist` at `http://127.0.0.1:4322/playground`. Native WebMCP discovered all five tools and returned tracked status; native/page-registry project, manifest, and bounded file reads succeeded. Waiting on session-build operation `7542c87d-77e7-4a64-a810-6ef7a5558137:operation:3` returned its terminal succeeded result with matching artifact/session/image provenance. No user project mutation was performed. IDs and operation records are page-memory-only.

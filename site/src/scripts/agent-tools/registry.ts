@@ -8,10 +8,11 @@ import {
   type ToolResult,
 } from '../playground-contract.ts';
 import { ControllerDisposedError } from '../playground-controller.ts';
+import type { DomainResult } from '../playground-contract.ts';
 
 export interface RegisteredTool {
   descriptor: ToolDescriptor;
-  handler: (input: Record<string, never>) => unknown | Promise<unknown>;
+  handler: (input: Record<string, unknown>) => unknown | Promise<unknown>;
 }
 
 const text = (value: unknown, fallback: string) =>
@@ -79,6 +80,17 @@ export class AgentToolRegistry {
       : this.error('RESULT_TOO_LARGE', 'The tool result exceeds the response limit.') as ToolResult<T>;
   }
 
+  private validInput(descriptor: ToolDescriptor, input: unknown): input is Record<string, unknown> {
+    if (!isPlainObject(input)) return false;
+    const properties = descriptor.inputSchema.properties;
+    if (Object.keys(input).some((key) => !(key in properties))) return false;
+    if (descriptor.inputSchema.required.some((key) => !(key in input))) return false;
+    return Object.entries(input).every(([key, value]) => {
+      const property = properties[key] as { type?: unknown } | undefined;
+      return property?.type === 'string' ? typeof value === 'string' : property?.type === 'number' ? typeof value === 'number' : false;
+    });
+  }
+
   async listTools(): Promise<ToolResult<ToolCatalogue>> {
     const gate = this.gate();
     if (gate) return gate;
@@ -94,14 +106,23 @@ export class AgentToolRegistry {
     if (gate) return gate;
     const tool = this.tools.get(name);
     if (!tool) return this.error('UNKNOWN_TOOL', `Unknown tool: ${text(name, 'unknown')}.`);
-    if (!isPlainObject(input) || Object.keys(input).length !== 0) {
-      return this.error('INVALID_ARGUMENT', 'This tool accepts exactly an empty object.');
+    if (!this.validInput(tool.descriptor, input)) {
+      return this.error('INVALID_ARGUMENT', 'The tool input does not match its schema.');
     }
     try {
-      return this.normalize(await tool.handler(input as Record<string, never>));
+      const result = await tool.handler(input);
+      if (isDomainResult(result)) {
+        if (!result.ok) return { apiVersion: AGENT_API_VERSION, pageId: this.pageId, ok: false, error: copy(result.error) };
+        return this.normalize(result.value);
+      }
+      return this.normalize(result);
     } catch (error) {
       if (error instanceof ControllerDisposedError) return this.error('PAGE_DISPOSED', error.message);
       return this.error('INTERNAL_ERROR', 'The tool could not complete.');
     }
   }
+}
+
+function isDomainResult(value: unknown): value is DomainResult<unknown> {
+  return isPlainObject(value) && typeof value.ok === 'boolean' && (value.ok ? 'value' in value : 'error' in value);
 }

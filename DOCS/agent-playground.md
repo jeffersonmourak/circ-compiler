@@ -4,17 +4,30 @@ The `/playground` page exposes a small browser-resident tool contract for agents
 
 Tool arguments and requested results are delivered to the connected agent through its browser integration or browser-control tooling. Treat source and results as data shared with that client and subject to its provider/tooling policies.
 
-## Phase 0 Capability
+## Phase 1 Capability
 
-`circ_get_status({})` is the only registered tool. It reads the visible project's identity, active entry file, reported pipeline state, existing artifact/session availability, persistence availability, and connection state. It does not compile, initialize the compiler, create a simulation session, edit the project, or write storage.
+All tools are read-only: they do not select a project, flush a debounce, compile, create a session, edit source, or write storage.
 
-Results are JSON-safe, bounded to 32 KiB, and include a page ID. Revision and artifact/session provenance are deliberately `untracked` in this release; a live-looking artifact is not proof that it matches current source.
+| Tool | Input | Result |
+| --- | --- | --- |
+| `circ_get_status` | `{}` | Tracked project/target revisions, output freshness/provenance, current operation IDs, session/preload status, and compiler transport health. |
+| `circ_list_projects` | `{ cursor?, limit? }` | A deterministic, revision-bound page of readable projects. |
+| `circ_read_project` | `{ projectId?, expectedRevision?, cursor?, limit? }` | A revision-bound file manifest without source bodies. |
+| `circ_read_file` | `{ projectId?, name, expectedSourceRevision?, offset?, maxCodeUnits? }` | Exact UTF-16 source chunks, including offsets and EOF metadata. |
+| `circ_wait_for_operation` | `{ operationId, timeoutMs? }` | A retained terminal outcome, or a bounded `timed_out` observation. |
+
+Results are JSON-safe, bounded to 32 KiB, and include a page ID. After bootstrap, status provenance is `tracked`: an output's producer operation and captured inputs distinguish a current result from a retained last-good result. IDs are page-memory-only and expire after reload; retained terminal operation history is bounded to 128 records.
+
+Source chunks use zero-based UTF-16 offsets and exclusive ends. The default chunk is 2,048 code units; `maxCodeUnits` is 2 through 4,096. A nonzero offset requires the prior `sourceRevision`, and changed source or paging state returns `REVISION_CONFLICT` rather than mixing revisions.
+
+Waits never start or cancel compiler/runtime work. They default to 5 seconds and allow 0 through 30 seconds. A timeout leaves work running. Suspension returns `PAGE_SUSPENDED`, disposal returns `PAGE_DISPOSED`, and a caller cancellation returns `WAIT_CANCELLED`.
 
 The page registry is available at `window.circPlayground`:
 
 ```js
 async () => window.circPlayground?.listTools()
 async () => window.circPlayground?.callTool('circ_get_status', {})
+async () => window.circPlayground?.callTool('circ_list_projects', { limit: 20 })
 ```
 
 Select the target tab through the installed browser tool before evaluating either expression. Discover schemas before calling tools. Pass user text as browser-tool arguments, never by interpolating it into evaluated JavaScript.
@@ -36,7 +49,7 @@ Use a clean browser profile for each client. A separately launched browser has s
 - Invalid inputs and unknown tools return structured application errors.
 - Native-provider rejection before the page callback is a provider error, not an application result.
 - The source/share fragment is scrubbed before deferred page integrations run, but this is not a claim that the page makes no network requests.
-- This phase does not expose source bodies, memory images, diagnostics, compilation, simulation, or exports.
+- Source is exposed only by explicit bounded `circ_read_file` calls. Memory images, diagnostics payloads, compilation, simulation mutations, and exports remain unavailable in this phase.
 
 ## Compatibility Evidence
 
@@ -47,6 +60,10 @@ Use a clean browser profile for each client. A separately launched browser has s
 | Claude Code 2.1.269 | Installed, no attached browser | Chrome DevTools MCP 1.9.0 not configured/attached | Not run | Page registry fallback | Pending actual client | Pending actual client | Blocked: no Chrome/browser-tool connection |
 
 The implementation’s automated tests prove the registry and adapter boundary only. They are not evidence that any listed client discovered or invoked a tool.
+
+### Phase 1 local acceptance, 2026-09-12
+
+Chrome DevTools MCP on Chrome 153.0.0.0 opened this worktree's built site at `http://127.0.0.1:4322/playground`. Native WebMCP discovered all five Phase 1 tools. Native and page-registry calls returned tracked status, a revision-bound project page, an active-project manifest, and a bounded source chunk without changing the selected project. Waiting through the page registry on the already scheduled session-build operation returned its terminal succeeded record with the same artifact, session, and image revisions status then reported. This was an observational acceptance run; no source, project, or runtime mutation was performed.
 
 ### ChatGPT Desktop acceptance, 2026-09-12
 
