@@ -4,6 +4,23 @@ The `/playground` page exposes a small browser-resident tool contract for agents
 
 Tool arguments and requested results are delivered to the connected agent through its browser integration or browser-control tooling. Treat source and results as data shared with that client and subject to its provider/tooling policies.
 
+## Phase 5 Capability
+
+Inspection and handoff use the same retained operations, compiler, session, source-image, view, and browser-download paths as the visible workbench. Read `circ_get_status.configuration` for `workbench.revision`, preview/Truth option revisions, and `presentationRevision` before changing controls.
+
+| Tool | Result |
+| --- | --- |
+| `circ_request_schematic` / `circ_get_schematic` | Starts or joins an exact preview and returns Unicode-safe retained text pages with explicit expansion settings and `color: never`. |
+| `circ_get_topology` | Pages bounded, artifact-local full-topology components or connections. IDs are inspection-only and cannot drive live components. |
+| `circ_request_truth_table` / `circ_get_truth_table` | Returns retained exhaustive or filtered rows with engine, held/unknown pins, cap, and provenance. RAM, missing filtered sessions, and projected work above 4,096 rows are refused. |
+| `circ_set_workbench_settings`, `circ_set_view`, `circ_highlight` | Persist/apply supported settings and visible view/Data state, or hold a transient root declaration highlight without moving selection. |
+| `circ_export_source`, `circ_create_share_link`, `circ_get_transcript` | Page revision-bound source, source-only share URLs, and immutable log/script lines without clipboard access. |
+| `circ_download_artifact`, `circ_download_memory` | Dispatch exactly one copied browser download and return a receipt. `dispatched` does not claim disk completion or a filesystem path. |
+
+Source and share exports contain ordered source only. WASM contains the compiled runtime/topology only. Neither carries source ROM images, live RAM, live pins, settings, or transcript data. Export required ROM preloads separately with `circ_download_memory` using `source_preload`; root live-memory exports use `live_root` and write undefined bits as zero in raw little-endian words.
+
+All inspection and text cursors bind a retained immutable snapshot. A cursor cannot start computation or cross artifacts/results. Results are bounded to 32 KiB at the registry boundary; topology is limited to a 4 MiB full section, 32,768 components, and 65,536 connections.
+
 ## Phase 4 Capability
 
 Read tools remain side-effect free. Live simulation tools explicitly identify the artifact, session, and live-state revision they observed; a stale mutation is refused rather than queued onto a newer session.

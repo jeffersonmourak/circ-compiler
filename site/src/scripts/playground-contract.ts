@@ -48,6 +48,19 @@ export type AgentErrorCode =
   | 'VERIFICATION_NOT_READY'
   | 'VERIFICATION_EXPIRED'
   | 'VERIFICATION_UNAVAILABLE'
+  | 'INSPECTION_NOT_READY'
+  | 'INSPECTION_UNAVAILABLE'
+  | 'INSPECTION_EXPIRED'
+  | 'TOPOLOGY_UNAVAILABLE'
+  | 'TRUTH_TOO_LARGE'
+  | 'TRUTH_NEEDS_SESSION'
+  | 'WORKBENCH_CONFLICT'
+  | 'HIGHLIGHT_NOT_FOUND'
+  | 'EXPORT_UNAVAILABLE'
+  | 'SHARE_TOO_LARGE'
+  | 'SHARE_CODEC_UNAVAILABLE'
+  | 'DOWNLOAD_FAILED'
+  | 'CURSOR_CONFLICT'
   | 'INTERNAL_ERROR';
 
 export interface AgentError {
@@ -268,6 +281,61 @@ export interface VerificationPage {
   imageRevision: Revision; summary: VerificationSummary; steps: VerificationStepResult[]; nextCursor: string | null;
 }
 
+export const MAX_TRUTH_COMPUTE_ROWS = 4096;
+export const MAX_TRUTH_RESULT_BYTES = 1024 * 1024;
+export const MAX_RETAINED_TRUTH_RESULTS = 8;
+export const MAX_RETAINED_TRUTH_BYTES = 2 * 1024 * 1024;
+export const DEFAULT_TRUTH_PAGE_ROWS = 32;
+export const MAX_TRUTH_PAGE_ROWS = 128;
+export const MAX_SCHEMATIC_RESULT_BYTES = 1024 * 1024;
+export const MAX_RETAINED_SCHEMATICS = 8;
+export const DEFAULT_TEXT_PAGE_CODE_UNITS = 12 * 1024;
+export const MAX_TEXT_PAGE_CODE_UNITS = 24 * 1024;
+export const MAX_TOPOLOGY_SECTION_BYTES = 4 * 1024 * 1024;
+export const MAX_TOPOLOGY_COMPONENTS = 32768;
+export const MAX_TOPOLOGY_CONNECTIONS = 65536;
+export const MAX_TOPOLOGY_ORIGIN_FRAMES = 131072;
+export const DEFAULT_TOPOLOGY_PAGE_ITEMS = 50;
+export const MAX_TOPOLOGY_PAGE_ITEMS = 200;
+
+export interface InspectionTicket { operationId: OperationId; disposition: 'started' | 'joined' | 'already_current'; inputs: WorkInputs; }
+export interface SchematicPage {
+  operationId: OperationId; inputs: WorkInputs; compiler: DiagnosticCompilerIdentity;
+  settings: { expandMacros: boolean; expandDisplay: boolean; color: 'never' };
+  dimensions: { rows: number; columns: number; codeUnits: number; utf8Bytes: number };
+  text: string; nextCursor: string | null;
+}
+export interface TopologyOrigin { alias: string; subcircuit: string; targetFileId: number; targetFile: string | null; }
+export interface TopologyComponent {
+  id: number; kind: string; width: number; name: string; origins: TopologyOrigin[];
+  slice: { start: number; end: number } | null; memory: { kind: 'rom' | 'ram'; addressWidth: number } | null;
+}
+export interface TopologyConnection { fromId: number; toId: number; port: number; portLabel: string | null; }
+export interface TopologyPage {
+  artifactId: ArtifactId; sourceRevision: Revision; topologyVersion: number; section: 'components' | 'connections'; scope: 'root' | 'flattened';
+  totalComponents: number; totalConnections: number; components?: TopologyComponent[]; connections?: TopologyConnection[]; nextCursor: string | null;
+}
+export interface TruthScope {
+  kind: 'exhaustive' | 'filtered'; engine: 'compiler' | 'scratch_session'; inputBits: number; enumeratedBits: number; rowCount: number; cap: number;
+  heldInputs: { name: string; state: SignalValue }[]; unknownInputs: { name: string; width: number }[]; partialBusPolicy: 'whole_bus_unknown';
+}
+export interface TruthPage {
+  operationId: OperationId; inputs: WorkInputs; compiler: DiagnosticCompilerIdentity; scope: TruthScope;
+  columns: { name: string; kind: 'in' | 'out'; width: number }[];
+  rows: { index: number; inputs: (string | null)[]; outputs: (string | null)[] }[]; nextCursor: string | null;
+}
+export type ExportOmission = 'source_images' | 'live_ram' | 'live_pin_state' | 'active_entry_selection' | 'settings' | 'transcript' | 'compiled_artifact';
+export interface TextExportPage {
+  exportId: string; contentType: string; text: string; nextCursor: string | null;
+  provenance: { target: TargetRef; sourceRevision: Revision; sessionId: SessionId | null };
+  contents: string[]; omissions: ExportOmission[];
+}
+export interface DownloadReceipt {
+  dispatchId: string; state: 'dispatched'; filename: string; mediaType: 'application/wasm' | 'application/octet-stream'; bytes: number;
+  provenance: { target: TargetRef; artifactId: ArtifactId | null; sessionId: SessionId | null; liveStateRevision: Revision | null; imageRevision: Revision | null };
+  contents: string[]; omissions: ExportOmission[]; completionKnown: false;
+}
+
 export type DomainResult<T> =
   | { ok: true; value: T }
   | { ok: false; error: AgentError };
@@ -372,7 +440,7 @@ export interface PlaygroundStatus {
   simulation?: SessionStatus;
   operationIds?: Record<OperationKind, OperationId | null>;
   compilerTransport?: { state: 'not_started' | 'starting' | 'available' | 'failed'; failure: string | null };
-  configuration?: { compile: CompileSettingsStatus };
+  configuration?: { compile: CompileSettingsStatus; workbench: { revision: Revision; previewOptionsRevision: Revision; truthOptionsRevision: Revision }; presentationRevision: Revision };
   persistence: { enabled: boolean };
   agentAccess: {
     pageRegistry: 'available';
@@ -404,4 +472,17 @@ export interface PlaygroundController extends ObservationMethods {
   setMemoryPreload(input: SetMemoryPreloadInput): DomainResult<SetMemoryPreloadResult>;
   runVerification(input: RunVerificationInput): DomainResult<VerificationTicket>;
   getVerification(input: { operationId: OperationId; cursor?: string; limit?: number }): DomainResult<VerificationPage>;
+  requestSchematic(input: { projectId: string; expectedSourceRevision: Revision; expectedTargetEpoch: Revision; expectedPreviewOptionsRevision: Revision }): DomainResult<InspectionTicket>;
+  getSchematic(input: { operationId: OperationId; cursor?: string; maxCodeUnits?: number }): DomainResult<SchematicPage>;
+  getTopology(input: { expectedArtifactId: ArtifactId; section: 'components' | 'connections'; scope?: 'root' | 'flattened'; cursor?: string; limit?: number }): Promise<DomainResult<TopologyPage>>;
+  requestTruthTable(input: { projectId: string; expectedSourceRevision: Revision; expectedTargetEpoch: Revision; expectedTruthOptionsRevision: Revision; expectedImageRevision: Revision; expectedArtifactId?: ArtifactId; expectedSessionId?: SessionId; expectedLiveStateRevision?: Revision }): DomainResult<InspectionTicket>;
+  getTruthTable(input: { operationId: OperationId; cursor?: string; limit?: number }): DomainResult<TruthPage>;
+  setWorkbenchSettings(input: { projectId: string; expectedTargetEpoch: Revision; expectedWorkbenchSettingsRevision: Revision; values: { expandMacros?: boolean; expandDisplay?: boolean; valueFormat?: 'binary' | 'hex' | 'decimal'; truthTableCap?: number; editor?: { wrapLines?: boolean; fontSize?: number; tabSize?: number } } }): DomainResult<WorkspaceChangeResult>;
+  setView(input: { expectedPresentationRevision: Revision; view?: 'schematic' | 'live' | 'truth'; dataOpen?: boolean }): DomainResult<{ view: 'schematic' | 'live' | 'truth'; dataOpen: boolean; presentationRevision: Revision; operationIds: Partial<Record<OperationKind, OperationId>>; persistence: PersistenceReceipt }>;
+  highlight(input: { expectedTargetEpoch: Revision; expectedSourceRevision: Revision; expectedArtifactId: ArtifactId | null; declaration: { name: string; kind: string } | null }): DomainResult<{ declaration: { name: string; kind: string } | null; surfaces: { source: boolean; canvas: boolean; truth: boolean } }>;
+  exportSource(input: { projectId: string; expectedSourceRevision: Revision; expectedTargetEpoch: Revision; format?: 'combined' | 'files'; cursor?: string; maxCodeUnits?: number }): DomainResult<TextExportPage>;
+  createShareLink(input: { projectId: string; expectedSourceRevision: Revision; expectedTargetEpoch: Revision }): Promise<DomainResult<{ url: string; key: 'src' | 'src0'; payloadChars: number; cap: number; provenance: TextExportPage['provenance']; contents: string[]; omissions: ExportOmission[] }>>;
+  downloadArtifact(input: { expectedArtifactId: ArtifactId }): DomainResult<DownloadReceipt>;
+  downloadMemory(input: { source: 'live_root'; projectId: string; expectedTargetEpoch: Revision; expectedArtifactId: ArtifactId; expectedSessionId: SessionId; expectedLiveStateRevision: Revision; memory: string } | { source: 'source_preload'; projectId: string; expectedSourceRevision: Revision; expectedImageRevision: Revision; file: string; declaration: string }): DomainResult<DownloadReceipt>;
+  getTranscript(input: { format: 'log' | 'script'; cursor?: string; limit?: number }): DomainResult<{ transcriptId: string; revision: Revision; truncated: boolean; lines: string[]; nextCursor: string | null; sessionId: SessionId | null }>;
 }

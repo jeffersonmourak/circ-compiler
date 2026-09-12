@@ -22,6 +22,9 @@ export interface AuthoringPort {
 
 export type SimulationPort = Pick<PlaygroundController,
   'getSimulation' | 'prepareSimulation' | 'drive' | 'reset' | 'readMemory' | 'updateMemory' | 'setMemoryPreload' | 'runVerification' | 'getVerification'>;
+export type InspectionPort = Pick<PlaygroundController, 'requestSchematic' | 'getSchematic' | 'getTopology' | 'requestTruthTable' | 'getTruthTable'>;
+export type WorkbenchPort = Pick<PlaygroundController, 'setWorkbenchSettings' | 'setView' | 'highlight'>;
+export type HandoffPort = Pick<PlaygroundController, 'exportSource' | 'createShareLink' | 'downloadArtifact' | 'downloadMemory' | 'getTranscript'>;
 
 function cloneStatus(status: PlaygroundStatus): PlaygroundStatus {
   return JSON.parse(JSON.stringify(status)) as PlaygroundStatus;
@@ -32,7 +35,7 @@ export class PlaygroundControllerImpl implements PlaygroundController {
 
   private abort = new AbortController();
   private readonly abortReasons = new WeakMap<AbortSignal, 'WAIT_CANCELLED' | 'PAGE_SUSPENDED' | 'PAGE_DISPOSED'>();
-  constructor(private readonly reader: StatusReader, private readonly workspace?: () => WorkspaceSnapshot | null, private readonly operations?: OperationStore, private readonly authoring?: AuthoringPort, private readonly simulation?: SimulationPort) {}
+  constructor(private readonly reader: StatusReader, private readonly workspace?: () => WorkspaceSnapshot | null, private readonly operations?: OperationStore, private readonly authoring?: AuthoringPort, private readonly simulation?: SimulationPort, private readonly inspection?: InspectionPort, private readonly workbench?: WorkbenchPort, private readonly handoff?: HandoffPort) {}
 
   getStatus(): PlaygroundStatus {
     if (this.disposed) throw new ControllerDisposedError();
@@ -90,6 +93,19 @@ export class PlaygroundControllerImpl implements PlaygroundController {
   setMemoryPreload(input: Parameters<PlaygroundController['setMemoryPreload']>[0]) { return this.simulate('setMemoryPreload', input); }
   runVerification(input: Parameters<PlaygroundController['runVerification']>[0]) { return this.simulate('runVerification', input); }
   getVerification(input: Parameters<PlaygroundController['getVerification']>[0]) { return this.simulate('getVerification', input); }
+  requestSchematic(input: Parameters<PlaygroundController['requestSchematic']>[0]) { return this.inspect('requestSchematic', input); }
+  getSchematic(input: Parameters<PlaygroundController['getSchematic']>[0]) { return this.inspect('getSchematic', input); }
+  getTopology(input: Parameters<PlaygroundController['getTopology']>[0]) { return this.inspect('getTopology', input); }
+  requestTruthTable(input: Parameters<PlaygroundController['requestTruthTable']>[0]) { return this.inspect('requestTruthTable', input); }
+  getTruthTable(input: Parameters<PlaygroundController['getTruthTable']>[0]) { return this.inspect('getTruthTable', input); }
+  setWorkbenchSettings(input: Parameters<PlaygroundController['setWorkbenchSettings']>[0]) { return this.control('setWorkbenchSettings', input); }
+  setView(input: Parameters<PlaygroundController['setView']>[0]) { return this.control('setView', input); }
+  highlight(input: Parameters<PlaygroundController['highlight']>[0]) { return this.control('highlight', input); }
+  exportSource(input: Parameters<PlaygroundController['exportSource']>[0]) { return this.handOff('exportSource', input); }
+  createShareLink(input: Parameters<PlaygroundController['createShareLink']>[0]) { return this.handOff('createShareLink', input); }
+  downloadArtifact(input: Parameters<PlaygroundController['downloadArtifact']>[0]) { return this.handOff('downloadArtifact', input); }
+  downloadMemory(input: Parameters<PlaygroundController['downloadMemory']>[0]) { return this.handOff('downloadMemory', input); }
+  getTranscript(input: Parameters<PlaygroundController['getTranscript']>[0]) { return this.handOff('getTranscript', input); }
 
   cancelWaits(reason: 'WAIT_CANCELLED' | 'PAGE_SUSPENDED' | 'PAGE_DISPOSED' = 'WAIT_CANCELLED'): void {
     this.abortReasons.set(this.abort.signal, reason);
@@ -118,6 +134,22 @@ export class PlaygroundControllerImpl implements PlaygroundController {
     return this.simulation[method](input as never) as ReturnType<SimulationPort[K]>;
   }
 
+  private inspect<K extends keyof InspectionPort>(method: K, input: Parameters<InspectionPort[K]>[0]): ReturnType<InspectionPort[K]> {
+    if (this.disposed) throw new ControllerDisposedError();
+    if (!this.inspection) return { ok: false, error: { code: 'NOT_READY', message: 'The playground has not finished installing inspection tools.', retryable: true } } as ReturnType<InspectionPort[K]>;
+    return this.inspection[method](input as never) as ReturnType<InspectionPort[K]>;
+  }
+  private control<K extends keyof WorkbenchPort>(method: K, input: Parameters<WorkbenchPort[K]>[0]): ReturnType<WorkbenchPort[K]> {
+    if (this.disposed) throw new ControllerDisposedError();
+    if (!this.workbench) return { ok: false, error: { code: 'NOT_READY', message: 'The playground has not finished installing workbench tools.', retryable: true } } as ReturnType<WorkbenchPort[K]>;
+    return this.workbench[method](input as never) as ReturnType<WorkbenchPort[K]>;
+  }
+  private handOff<K extends keyof HandoffPort>(method: K, input: Parameters<HandoffPort[K]>[0]): ReturnType<HandoffPort[K]> {
+    if (this.disposed) throw new ControllerDisposedError();
+    if (!this.handoff) return { ok: false, error: { code: 'NOT_READY', message: 'The playground has not finished installing handoff tools.', retryable: true } } as ReturnType<HandoffPort[K]>;
+    return this.handoff[method](input as never) as ReturnType<HandoffPort[K]>;
+  }
+
   dispose(): void {
     this.cancelWaits('PAGE_DISPOSED');
     this.disposed = true;
@@ -128,6 +160,6 @@ function readError(code: Extract<AgentErrorCode, 'INVALID_ARGUMENT' | 'PROJECT_N
   return { code, message, retryable: false };
 }
 
-export function createPlaygroundController(reader: StatusReader, workspace?: () => WorkspaceSnapshot | null, operations?: OperationStore, authoring?: AuthoringPort, simulation?: SimulationPort): PlaygroundController {
-  return new PlaygroundControllerImpl(reader, workspace, operations, authoring, simulation);
+export function createPlaygroundController(reader: StatusReader, workspace?: () => WorkspaceSnapshot | null, operations?: OperationStore, authoring?: AuthoringPort, simulation?: SimulationPort, inspection?: InspectionPort, workbench?: WorkbenchPort, handoff?: HandoffPort): PlaygroundController {
+  return new PlaygroundControllerImpl(reader, workspace, operations, authoring, simulation, inspection, workbench, handoff);
 }

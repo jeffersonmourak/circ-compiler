@@ -373,7 +373,7 @@ const groups = displayGroups(catalogue, []);
     import { formatBytes } from '../scripts/pipeline.ts';
     import { RevisionAllocator, RevisionTracker, type SourceFile } from '../scripts/playground-revisions.ts';
      import { OperationStore } from '../scripts/playground-operations.ts';
-      import type { OperationId, OperationKind, WorkInputs, WorkspaceChangeResult, PersistenceReceipt, CompileTicket, DiagnosticPage, SimulationSnapshot, SimulationRef, RootMemory, DriveInput, DriveResult, MemoryPage, UpdateMemoryInput, UpdateMemoryResult, SetMemoryPreloadInput, SetMemoryPreloadResult, RunVerificationInput, VerificationTicket } from '../scripts/playground-contract.ts';
+      import type { OperationId, OperationKind, WorkInputs, WorkspaceChangeResult, PersistenceReceipt, CompileTicket, DiagnosticPage, SimulationSnapshot, SimulationRef, RootMemory, DriveInput, DriveResult, MemoryPage, UpdateMemoryInput, UpdateMemoryResult, SetMemoryPreloadInput, SetMemoryPreloadResult, RunVerificationInput, VerificationTicket, TruthScope, DownloadReceipt } from '../scripts/playground-contract.ts';
      import type { WorkspaceSnapshot } from '../scripts/playground-reads.ts';
      import { planMutations, utf8Bytes, validFileName, validProjectName, isWellFormed } from '../scripts/playground-mutations.ts';
      import { convertDiagnostics, DiagnosticStore } from '../scripts/playground-diagnostics.ts';
@@ -389,7 +389,10 @@ const groups = displayGroups(catalogue, []);
   } from '../utils/rom-image.ts';
    import { sourceImageKey, type ImportedImages } from '../utils/source-images.ts';
    import { canonical, imageBytes, memoryShape, pinValue, parseHex, signal, validateDrive } from '../scripts/playground-simulation.ts';
-   import { VerificationResults, executeVerification, validateVerification } from '../scripts/playground-verification.ts';
+    import { VerificationResults, executeVerification, validateVerification } from '../scripts/playground-verification.ts';
+    import { SchematicResults, TruthResults, schematicDimensions } from '../scripts/playground-inspection.ts';
+    import { decodeTopology } from '../scripts/playground-topology.ts';
+    import { SOURCE_OMISSIONS, dispatchDownload, pageExport } from '../scripts/playground-handoff.ts';
   import {
     UNKNOWN,
     cellWidth,
@@ -592,6 +595,10 @@ const groups = displayGroups(catalogue, []);
     const revisions = new RevisionTracker(revisionIds);
     const operations = new OperationStore(agentPageId);
     const diagnosticStore = new DiagnosticStore();
+    const schematicResults = new SchematicResults();
+    const truthResults = new TruthResults();
+    let workbenchSettingsRevision = revisionIds.next('workbench-settings');
+    let presentationRevision = revisionIds.next('presentation');
     const diagnosticSetByOperation = new Map<OperationId, string>();
     const diagnosticProducerByRequest = new Map<string, { scheduled: ScheduledOperation; analysis: Analysis }>();
     const operationSlots: Partial<Record<OperationKind, OperationId>> = {};
@@ -752,6 +759,11 @@ const groups = displayGroups(catalogue, []);
       /** How long the last enumeration on the site took, for the record. */
       lastMs: null as number | null,
     };
+    const compilerIdentity = () => state.version ? {
+      version: state.version.version, revision: state.version.revision, parser: state.version.parser,
+      parserRuntimeSha256: state.version.parser_runtime_sha256, grammarSha256: state.version.grammar_sha256,
+      topologyVersion: state.version.topology_version, fullVersion: state.version.full_version,
+    } : null;
     // Slice 8 attaches the simulator here.
     const hooks = {
       onDataOpen: null as null | (() => void),
@@ -867,6 +879,7 @@ const groups = displayGroups(catalogue, []);
     };
 
     function showView(view: StoredView, opts: { persist?: boolean } = {}) {
+      const changed = state.view !== view;
       state.view = view;
       if (opts.persist !== false) store.update((draft) => { draft.view = view; });
       for (const b of viewTabs) {
@@ -889,6 +902,7 @@ const groups = displayGroups(catalogue, []);
       // Through the hook: `sim` is declared after the restore that calls this
       // at boot, and the artifact that lands later builds the canvas itself.
       if (view === 'live') hooks.onLive?.();
+      if (changed) { presentationRevision = revisionIds.next('presentation'); observe(); }
     }
     for (const b of viewTabs) {
       b.addEventListener('click', () => {
@@ -924,6 +938,7 @@ const groups = displayGroups(catalogue, []);
 
     /** The Data card: open over whichever view, its rows the session's. */
     function setDataOpen(open: boolean, opts: { persist?: boolean; focus?: boolean } = {}) {
+      const changed = state.dataOpen !== open;
       if (!open) cancelDataDrag();
       state.dataOpen = open;
       if (opts.persist !== false) store.update((draft) => { draft.dataOpen = open; });
@@ -935,6 +950,7 @@ const groups = displayGroups(catalogue, []);
         hooks.onDataOpen?.();
       }
       if (opts.focus !== false) (open ? dataCard : dataBtn).focus();
+      if (changed) { presentationRevision = revisionIds.next('presentation'); observe(); }
     }
     dataBtn.addEventListener('click', () => setDataOpen(!state.dataOpen));
     dataClose.addEventListener('click', () => setDataOpen(false));
@@ -1268,6 +1284,7 @@ const groups = displayGroups(catalogue, []);
       decls: [] as Declaration[],
       table: null as LinkTable | null,
       current: null as Declaration | null,
+      agent: null as Declaration | null,
     };
 
     /** Highlight the box a declaration draws as, or clear the highlight. */
@@ -1330,9 +1347,10 @@ const groups = displayGroups(catalogue, []);
       // adds the box. Before a canvas exists (a page refreshed onto the Truth
       // view) the table is null, and the declaration alone is enough.
       if (name === null) {
-        highlightComponent(link.current);
-        markInEditor(link.current ? (link.table?.byName.get(link.current.name) ?? link.current) : null);
-        markTableColumn(link.current);
+        const held = link.current ?? link.agent;
+        highlightComponent(held);
+        markInEditor(held ? (link.table?.byName.get(held.name) ?? held) : null);
+        markTableColumn(held);
         return;
       }
       const decl = link.decls.find((d) => d.name === name) ?? null;
@@ -1345,8 +1363,9 @@ const groups = displayGroups(catalogue, []);
     function setCurrentDeclaration(decl: Declaration | null) {
       if (decl === link.current) return;
       link.current = decl;
-      highlightComponent(decl);
-      markTableColumn(decl);
+      const held = decl ?? link.agent;
+      highlightComponent(held);
+      markTableColumn(held);
     }
 
     // ---- the status bar ----
@@ -2366,19 +2385,7 @@ const groups = displayGroups(catalogue, []);
 
     /** Hand the reader a file through a Blob link, revoked after the click. */
     function downloadBytes(name: string, bytes: Uint8Array, type: string) {
-      // A copy, not a view: a worker-transferred buffer or a runtime's staging
-      // buffer may be replaced while the download is still being written.
-      const blob = new Blob([bytes.slice() as BlobPart], { type });
-      const href = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = href;
-      link.download = name;
-      link.hidden = true;
-      // In the document for the click, so the page's own listeners see it.
-      navActions.appendChild(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(href), 1000);
+      dispatchDownload(navActions, name, bytes, type as 'application/wasm' | 'application/octet-stream');
     }
 
     downloadBtn.addEventListener('click', () => {
@@ -3119,6 +3126,8 @@ const groups = displayGroups(catalogue, []);
       set: (mutate) => {
         const before = settings().valueFormat;
         store.update((draft) => mutate(draft.settings));
+        workbenchSettingsRevision = revisionIds.next('workbench-settings');
+        observe();
         // The cap is a setting, so changing one can unblock or block the tab.
         applyTruthGate();
         // Both output panes read a setting, so both are re-run.
@@ -3837,6 +3846,12 @@ const groups = displayGroups(catalogue, []);
         renderSizeLine();
         operations.finish(scheduled.id, 'succeeded');
         publishOutput('preview', scheduled);
+        const compiler = compilerIdentity();
+        if (compiler) schematicResults.admit({ operationId: scheduled.id, page: {
+          operationId: scheduled.id, inputs: scheduled.inputs, compiler,
+          settings: { expandMacros: settings().expandMacros, expandDisplay: settings().expandDisplay, color: 'never' },
+          dimensions: schematicDimensions(r.text!), text: r.text!,
+        } });
         return;
       }
       // Leave the last good schematic in place and say so in the status bar.
@@ -4005,6 +4020,15 @@ const groups = displayGroups(catalogue, []);
       tableEl.textContent = text;
       applyTruthGate();
     }
+    function retainTruth(operationId: OperationId, inputs: WorkInputs, table: TruthRows, scope: TruthScope) {
+      const compiler = compilerIdentity();
+      if (!compiler) return false;
+      const columns = [...table.inputs.map((column) => ({ ...column, kind: 'in' as const })), ...table.outputs.map((column) => ({ ...column, kind: 'out' as const }))];
+      return truthResults.admit({ operationId, page: {
+        operationId, inputs, compiler, scope, columns,
+        rows: table.rows.map((row, index) => ({ index, inputs: row.in.map((cell) => cell === null ? null : `0x${cell.toString(16)}`), outputs: row.out.map((cell) => cell === null ? null : `0x${cell.toString(16)}`) })),
+      } });
+    }
 
     async function runTruth(seq: number) {
       if (!state.tabs.files.length || !state.version) return;
@@ -4018,6 +4042,11 @@ const groups = displayGroups(catalogue, []);
         return;
       }
       const overCap = capRefusal(rootInputBits(), settings()) !== null;
+      const bits = rootInputBits();
+      if (!overCap && bits !== null && bits > 12) {
+        showTruthNote('Truth table refused: the fixed 4,096-row safety budget would be exceeded. Set live pins to filter the table.');
+        return;
+      }
       if (overCap || hasImportedImages()) {
         await runScratchTruth(seq, overCap);
         return;
@@ -4055,9 +4084,11 @@ const groups = displayGroups(catalogue, []);
       if (!buildStage.isCurrent(seq) || !ownsOperation('truth_table', scheduled.id)) return;
       truth.filtered = false;
       truth.unknownBits = undefined;
-      await renderTruth(parseTruthTable(r.text!));
+      const table = parseTruthTable(r.text!);
+      await renderTruth(table);
       operations.finish(scheduled.id, 'succeeded', { truthScope: 'exhaustive', truthPath: 'compiler' });
       publishOutput('truth', scheduled);
+      retainTruth(scheduled.id, scheduled.inputs, table, { kind: 'exhaustive', engine: 'compiler', inputBits: rootInputBits() ?? 0, enumeratedBits: rootInputBits() ?? 0, rowCount: table.rows.length, cap: settings().truthTableCap, heldInputs: [], unknownInputs: table.inputs.map((column) => ({ name: column.name, width: column.width })), partialBusPolicy: 'whole_bus_unknown' });
     }
 
     /**
@@ -4090,6 +4121,15 @@ const groups = displayGroups(catalogue, []);
       // Scratch Truth has runtime-only inputs. Freeze them before lazy module
       // loads so a later pin/image edit cannot be published as this table.
       const fixedInputs = filtered ? inputPins().map(({ name, value }) => ({ name, width: value.width, value })) : [];
+      const enumeratedBits = filtered
+        ? fixedInputs.filter((pin) => (pin.value.defined & ((1n << BigInt(pin.width)) - 1n)) !== ((1n << BigInt(pin.width)) - 1n)).reduce((sum, pin) => sum + pin.width, 0)
+        : rootInputBits() ?? 0;
+      if (enumeratedBits > 12) {
+        truth.filtered = false;
+        showTruthNote('Truth table refused: the fixed 4,096-row safety budget would be exceeded.');
+        operations.finish(scheduled.id, 'refused', { truthPath: 'scratch', refusal: { message: tableEl.textContent ?? 'Truth table refused.', libraryStatus: null } });
+        return;
+      }
       const roms = currentRoms().map((rom) => ({ ...rom }));
       const images = new Map(romImages);
       const importedImages = copyImportedImages(state.artifact?.importedImages ?? { files: new Map(), images: new Map() });
@@ -4132,6 +4172,9 @@ const groups = displayGroups(catalogue, []);
       if (!buildStage.isCurrent(seq) || !ownsOperation('truth_table', scheduled.id)) return;
       operations.finish(scheduled.id, 'succeeded', { truthScope: filtered ? 'filtered' : 'exhaustive', truthPath: 'scratch' });
       publishOutput('truth', scheduled);
+      const heldInputs = fixedInputs.filter((pin) => (pin.value.defined & ((1n << BigInt(pin.width)) - 1n)) === ((1n << BigInt(pin.width)) - 1n)).map((pin) => ({ name: pin.name, state: signal(pin.value, pin.width) }));
+      const unknown = outcome.table.inputs.filter((column) => !heldInputs.some((pin) => pin.name === column.name)).map((column) => ({ name: column.name, width: column.width }));
+      retainTruth(scheduled.id, scheduled.inputs, outcome.table, { kind: filtered ? 'filtered' : 'exhaustive', engine: 'scratch_session', inputBits: rootInputBits() ?? 0, enumeratedBits: outcome.unknownBits, rowCount: outcome.table.rows.length, cap, heldInputs, unknownInputs: unknown, partialBusPolicy: 'whole_bus_unknown' });
     }
 
     /** The copies: the compiler's own markdown or CSV for its table, the
@@ -5306,6 +5349,155 @@ const groups = displayGroups(catalogue, []);
       const page = verificationResults.get(input.operationId, input.cursor, input.limit, observationRevision);
       return page.ok ? { ok: true as const, value: page.page } : simulationError(page.reason === 'invalid' ? 'INVALID_ARGUMENT' : 'VERIFICATION_EXPIRED', 'Verification result is unavailable.');
     }
+    let topologyCache: { artifactId: string; value: Awaited<ReturnType<typeof decodeTopology>> } | null = null;
+    const exactTarget = (input: { projectId: string; expectedSourceRevision: string; expectedTargetEpoch: string }) => agentPreconditions(input.projectId, input.expectedSourceRevision, input.expectedTargetEpoch);
+    function requestSchematicForAgent(input: any) {
+      const blocked = exactTarget(input); if (blocked) return blocked;
+      const options = optionsFor('preview', settings());
+      if (input.expectedPreviewOptionsRevision !== revisions.optionsRevision('preview', options)) return agentError('OPTIONS_CONFLICT', 'Preview settings changed; reread status.');
+      const current = operationSlots.preview ? operations.lookup(operationSlots.preview) : null;
+      if (current?.kind === 'found' && sameInputs(current.operation.inputs, inputsFor('preview', options))) {
+        return { ok: true as const, value: { operationId: current.operation.id, disposition: current.operation.state === 'queued' || current.operation.state === 'running' ? 'joined' as const : 'already_current' as const, inputs: current.operation.inputs } };
+      }
+      if (!state.version) return agentError('INSPECTION_NOT_READY', 'The compiler is not ready to render a schematic.', true);
+      void runPreview(buildStage.seq);
+      const id = operationSlots.preview;
+      const operation = id ? operations.lookup(id) : null;
+      return operation?.kind === 'found' ? { ok: true as const, value: { operationId: id!, disposition: 'started' as const, inputs: operation.operation.inputs } } : agentError('INSPECTION_UNAVAILABLE', 'The schematic operation could not start.', true);
+    }
+    function getSchematicForAgent(input: any) {
+      const page = schematicResults.get(input.operationId, input.cursor, input.maxCodeUnits);
+      if (page) return { ok: true as const, value: page };
+      const operation = operations.lookup(input.operationId);
+      if (operation.kind === 'not_found') return agentError('OPERATION_NOT_FOUND', 'The schematic operation is not known.');
+      if (operation.kind === 'expired') return agentError('INSPECTION_EXPIRED', 'The schematic payload expired.');
+      return agentError(operation.operation.state === 'queued' || operation.operation.state === 'running' ? 'INSPECTION_NOT_READY' : 'INSPECTION_UNAVAILABLE', 'The schematic payload is not available yet.', operation.operation.state === 'queued' || operation.operation.state === 'running');
+    }
+    async function getTopologyForAgent(input: any) {
+      if (!state.artifact || input.expectedArtifactId !== state.artifact.id) return agentError('ARTIFACT_CONFLICT', 'The compiled artifact changed; reread status.');
+      if (input.section !== 'components' && input.section !== 'connections' || input.scope !== undefined && input.scope !== 'root' && input.scope !== 'flattened') return agentError('INVALID_ARGUMENT', 'Topology section or scope is invalid.');
+      const limit = input.limit ?? 50; if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) return agentError('INVALID_ARGUMENT', 'Topology limit is invalid.');
+      if (!topologyCache || topologyCache.artifactId !== state.artifact.id) {
+        const files = new Map(state.analysis?.files.map((file) => [file.file_id, file.path]) ?? []);
+        topologyCache = { artifactId: state.artifact.id, value: await decodeTopology(state.artifact.bytes, files) };
+      }
+      const topology = topologyCache.value;
+      if (!topology) return agentError('TOPOLOGY_UNAVAILABLE', 'The artifact has no valid supported full topology.');
+      const scope = input.scope ?? 'flattened';
+      const components = scope === 'root' ? topology.components.filter((component) => component.origins.length === 0) : topology.components;
+      const kept = new Set(components.map((component) => component.id));
+      const connections = (scope === 'root' ? topology.connections.filter((connection) => kept.has(connection.fromId) && kept.has(connection.toId)) : topology.connections);
+      const values = input.section === 'components' ? components : connections;
+      const start = input.cursor === undefined ? 0 : Number(input.cursor);
+      if (!Number.isSafeInteger(start) || start < 0 || start > values.length) return agentError('CURSOR_CONFLICT', 'The topology cursor does not belong to this artifact snapshot.');
+      const next = start + Math.min(limit, values.length - start);
+      return { ok: true as const, value: { artifactId: state.artifact.id, sourceRevision: outputProvenance.artifact?.inputs.target.sourceRevision ?? revisions.currentTarget!.sourceRevision, topologyVersion: state.version?.full_version ?? 0, section: input.section, scope, totalComponents: components.length, totalConnections: connections.length, ...(input.section === 'components' ? { components: components.slice(start, next) } : { connections: connections.slice(start, next) }), nextCursor: next < values.length ? String(next) : null } };
+    }
+    function requestTruthForAgent(input: any) {
+      const blocked = exactTarget(input); if (blocked) return blocked;
+      const version = revisions.projectVersion(input.projectId);
+      if (!version || input.expectedImageRevision !== version.imageRevision) return agentError('IMAGE_CONFLICT', 'Source images changed; reread status.');
+      if (input.expectedTruthOptionsRevision !== revisions.optionsRevision('truth_table', optionsFor('truth_table', settings()))) return agentError('OPTIONS_CONFLICT', 'Truth settings changed; reread status.');
+      const bits = rootInputBits();
+      const filtered = bits !== null && bits > settings().truthTableCap;
+      if (filtered && (!sim.session || sim.lifecycle !== 'ready' || input.expectedArtifactId !== state.artifact?.id || input.expectedSessionId !== sim.id || input.expectedLiveStateRevision !== sim.liveStateRevision)) return agentError('TRUTH_NEEDS_SESSION', 'Filtered Truth requires the exact ready live session.', true);
+      if (!filtered && bits !== null && bits > 12) return agentError('TRUTH_TOO_LARGE', 'The projected Truth table exceeds the 4,096-row safety budget.');
+      const current = operationSlots.truth_table ? operations.lookup(operationSlots.truth_table) : null;
+      if (current?.kind === 'found' && current.operation.state !== 'failed' && current.operation.state !== 'refused') return { ok: true as const, value: { operationId: current.operation.id, disposition: current.operation.state === 'queued' || current.operation.state === 'running' ? 'joined' as const : 'already_current' as const, inputs: current.operation.inputs } };
+      if (!state.version || !state.artifact) return agentError('INSPECTION_NOT_READY', 'Compile a current artifact before requesting Truth.', true);
+      void runTruth(buildStage.seq);
+      const id = operationSlots.truth_table; const operation = id ? operations.lookup(id) : null;
+      return operation?.kind === 'found' ? { ok: true as const, value: { operationId: id!, disposition: 'started' as const, inputs: operation.operation.inputs } } : agentError('INSPECTION_UNAVAILABLE', 'The Truth operation could not start.', true);
+    }
+    function getTruthForAgent(input: any) {
+      const page = truthResults.get(input.operationId, input.cursor, input.limit);
+      if (page) return { ok: true as const, value: page };
+      const operation = operations.lookup(input.operationId);
+      if (operation.kind === 'not_found') return agentError('OPERATION_NOT_FOUND', 'The Truth operation is not known.');
+      if (operation.kind === 'expired') return agentError('INSPECTION_EXPIRED', 'The Truth result expired.');
+      return agentError(operation.operation.state === 'queued' || operation.operation.state === 'running' ? 'INSPECTION_NOT_READY' : 'INSPECTION_UNAVAILABLE', 'The Truth result is not available yet.', operation.operation.state === 'queued' || operation.operation.state === 'running');
+    }
+    function setWorkbenchSettingsForAgent(input: any) {
+      const target = revisions.currentTarget;
+      if (!target || input.projectId !== target.projectId || input.expectedTargetEpoch !== target.targetEpoch) return agentError('TARGET_CONFLICT', 'The visible target changed; reread status.');
+      if (input.expectedWorkbenchSettingsRevision !== workbenchSettingsRevision) return agentError('WORKBENCH_CONFLICT', 'Workbench settings changed; reread status.');
+      const values = input.values;
+      if (!values || typeof values !== 'object' || Array.isArray(values) || Object.keys(values).length === 0) return agentError('INVALID_ARGUMENT', 'values must contain at least one supported setting.');
+      const allowed = new Set(['expandMacros', 'expandDisplay', 'valueFormat', 'truthTableCap', 'editor']);
+      if (Object.keys(values).some((key) => !allowed.has(key))) return agentError('INVALID_ARGUMENT', 'values contains an unsupported setting.');
+      if (values.expandMacros !== undefined && typeof values.expandMacros !== 'boolean' || values.expandDisplay !== undefined && typeof values.expandDisplay !== 'boolean' || values.valueFormat !== undefined && !['binary', 'hex', 'decimal'].includes(values.valueFormat) || values.truthTableCap !== undefined && (!Number.isInteger(values.truthTableCap) || values.truthTableCap < 1 || values.truthTableCap > 24)) return agentError('INVALID_ARGUMENT', 'A workbench setting is invalid.');
+      if (values.editor !== undefined && (!values.editor || typeof values.editor !== 'object' || Object.keys(values.editor).some((key) => !['wrapLines', 'fontSize', 'tabSize'].includes(key)) || values.editor.wrapLines !== undefined && typeof values.editor.wrapLines !== 'boolean' || values.editor.fontSize !== undefined && (!Number.isInteger(values.editor.fontSize) || values.editor.fontSize < 10 || values.editor.fontSize > 24) || values.editor.tabSize !== undefined && (!Number.isInteger(values.editor.tabSize) || values.editor.tabSize < 1 || values.editor.tabSize > 8))) return agentError('INVALID_ARGUMENT', 'Editor settings are invalid.');
+      const before = JSON.stringify({ ...settings(), editor: store.envelope.editor });
+      store.update((draft) => { if (values.expandMacros !== undefined) draft.settings.expandMacros = values.expandMacros; if (values.expandDisplay !== undefined) draft.settings.expandDisplay = values.expandDisplay; if (values.valueFormat !== undefined) draft.settings.valueFormat = values.valueFormat; if (values.truthTableCap !== undefined) draft.settings.truthTableCap = values.truthTableCap; if (values.editor) draft.editor = { ...draft.editor, ...values.editor }; });
+      if (before === JSON.stringify({ ...settings(), editor: store.envelope.editor })) return agentResult('unchanged', null, null, [], false);
+      workbenchSettingsRevision = revisionIds.next('workbench-settings'); observe(); paintEditorPreferences(); editor?.setPreferences(store.envelope.editor);
+      if (values.valueFormat !== undefined) { sim.view?.view.setValueFormat?.(values.valueFormat); renderData(); renderMemory({ force: true }); if (truth.table) void renderTruth(truth.table); }
+      if (values.expandMacros !== undefined || values.expandDisplay !== undefined) void runPreview(buildStage.seq);
+      if (values.truthTableCap !== undefined && state.view === 'truth') void runTruth(buildStage.seq);
+      return agentResult('settings_updated', null, null, []);
+    }
+    function setViewForAgent(input: any) {
+      if (input.expectedPresentationRevision !== presentationRevision) return agentError('WORKBENCH_CONFLICT', 'Presentation changed; reread status.');
+      if (input.view !== undefined && !['schematic', 'live', 'truth'].includes(input.view) || input.dataOpen !== undefined && typeof input.dataOpen !== 'boolean') return agentError('INVALID_ARGUMENT', 'View input is invalid.');
+      if (input.view === 'truth' && truthBlock()) return agentError('INSPECTION_UNAVAILABLE', truthBlock()!);
+      if (input.view !== undefined) showView(input.view); if (input.dataOpen !== undefined) setDataOpen(input.dataOpen, { focus: false });
+      return { ok: true as const, value: { view: state.view, dataOpen: state.dataOpen, presentationRevision, operationIds: { preview: operationSlots.preview, truth_table: operationSlots.truth_table, session_build: operationSlots.session_build }, persistence: agentReceipt(true) } };
+    }
+    function highlightForAgent(input: any) {
+      const blocked = exactTarget({ projectId: store.envelope.activeId ?? '', expectedSourceRevision: input.expectedSourceRevision, expectedTargetEpoch: input.expectedTargetEpoch }); if (blocked) return blocked;
+      if (input.expectedArtifactId !== (state.artifact?.id ?? null)) return agentError('ARTIFACT_CONFLICT', 'The displayed artifact changed; reread status.');
+      if (input.declaration !== null && (!input.declaration || typeof input.declaration.name !== 'string' || typeof input.declaration.kind !== 'string')) return agentError('INVALID_ARGUMENT', 'declaration is invalid.');
+      const declaration = input.declaration === null ? null : link.decls.find((item) => item.name === input.declaration.name && item.kind === input.declaration.kind) ?? null;
+      if (input.declaration !== null && !declaration) return agentError('HIGHLIGHT_NOT_FOUND', 'No current top-level declaration matches that name and kind.');
+      link.agent = declaration; highlightByName(null);
+      return { ok: true as const, value: { declaration: declaration ? { name: declaration.name, kind: declaration.kind } : null, surfaces: { source: Boolean(editor && declaration), canvas: Boolean(sim.view && declaration && link.table?.byName.has(declaration.name)), truth: Boolean(declaration && tableEl.querySelector(`th[data-symbol-name="${CSS.escape(declaration.name)}"]`)) } } };
+    }
+    function exportSourceForAgent(input: any) {
+      const blocked = exactTarget(input); if (blocked) return blocked;
+      if (input.format !== undefined && input.format !== 'combined' && input.format !== 'files') return agentError('INVALID_ARGUMENT', 'Source export format is invalid.');
+      const target = revisions.currentTarget!;
+      const text = input.format === 'files' ? state.tabs.files.map((file) => `${file.name}\n${file.body}`).join('\n\u0000\n') : joinFiles(state.tabs.files);
+      const page = pageExport({ exportId: `${target.sourceRevision}:source:${input.format ?? 'combined'}`, contentType: input.format === 'files' ? 'application/vnd.circ.files+text' : 'text/plain', text, provenance: { target, sourceRevision: target.sourceRevision, sessionId: sim.id }, contents: input.format === 'files' ? ['ordered named source files'] : ['combined marker source'], omissions: SOURCE_OMISSIONS }, input.cursor, input.maxCodeUnits);
+      return page ? { ok: true as const, value: page } : agentError('CURSOR_CONFLICT', 'The source cursor is invalid.');
+    }
+    async function createShareLinkForAgent(input: any) {
+      const blocked = exactTarget(input); if (blocked) return blocked;
+      const target = revisions.currentTarget!; const result = await encodeShare(joinFiles(state.tabs.files), webStreamsCodec());
+      if (!result.ok) return agentError('SHARE_TOO_LARGE', `The encoded share payload has ${result.chars} characters; the cap is ${result.cap}.`, false, { chars: String(result.chars), cap: String(result.cap), key: result.key });
+      return { ok: true as const, value: { url: shareUrl(location.href, result.fragment), key: result.key, payloadChars: result.chars, cap: 8192, provenance: { target, sourceRevision: target.sourceRevision, sessionId: sim.id }, contents: ['combined marker source'], omissions: SOURCE_OMISSIONS } };
+    }
+    function downloadArtifactForAgent(input: any) {
+      if (!state.artifact || input.expectedArtifactId !== state.artifact.id) return agentError('ARTIFACT_CONFLICT', 'The artifact changed; reread status.');
+      const filename = artifactFileName(artifactLabel()); if (!dispatchDownload(navActions, filename, state.artifact.bytes, 'application/wasm')) return agentError('DOWNLOAD_FAILED', 'The browser could not dispatch the artifact download.', true);
+      const target = outputProvenance.artifact?.inputs.target ?? revisions.currentTarget!;
+      return { ok: true as const, value: { dispatchId: revisionIds.next('download'), state: 'dispatched', filename, mediaType: 'application/wasm', bytes: state.artifact.bytes.byteLength, provenance: { target, artifactId: state.artifact.id, sessionId: null, liveStateRevision: null, imageRevision: null }, contents: ['compiled WASM runtime and topology', state.stale ? 'identified stale last-good artifact' : 'current artifact'], omissions: ['source_images', 'live_ram', 'live_pin_state', 'settings', 'transcript'], completionKnown: false } satisfies DownloadReceipt };
+    }
+    function downloadMemoryForAgent(input: any) {
+      let bytes: Uint8Array; let filename: string; let provenance: DownloadReceipt['provenance']; let contents: string[];
+      if (input.source === 'live_root') {
+        const blocked = simulationPreconditions(input); if (blocked) return blocked;
+        const result = sim.session!.storeImage(input.memory); if (!result.ok) return simulationError('SIMULATION_REFUSED', 'Simulation refused the memory export.', false, { simCode: result.code, arg: result.arg });
+        bytes = result.bytes.slice(); filename = `${result.mem.name}.bin`; provenance = { target: revisions.currentTarget!, artifactId: state.artifact!.id, sessionId: sim.id, liveStateRevision: sim.liveStateRevision, imageRevision: sim.imageRevision }; contents = ['root live memory image', 'little-endian words with undefined bits written as zero'];
+      } else if (input.source === 'source_preload') {
+        const target = revisions.currentTarget; const version = revisions.projectVersion(input.projectId);
+        if (!target || target.projectId !== input.projectId || target.sourceRevision !== input.expectedSourceRevision) return agentError('REVISION_CONFLICT', 'Source changed; reread status.');
+        if (!version || version.imageRevision !== input.expectedImageRevision) return agentError('IMAGE_CONFLICT', 'Source images changed; reread status.');
+        const mem = sourceMemory(input.file, input.declaration); const hex = store.envelope.sourceImages[sourceImageKey(input.projectId, input.file)]?.[input.declaration];
+        if (!mem || mem.kind !== 'rom' || hex === undefined) return agentError('EXPORT_UNAVAILABLE', 'The requested source ROM preload is unavailable.');
+        const parsed = imageBytes(hex, mem); if (!parsed.ok) return agentError('EXPORT_UNAVAILABLE', parsed.message);
+        bytes = parsed.bytes.slice(); filename = `${input.declaration}.bin`; provenance = { target, artifactId: null, sessionId: null, liveStateRevision: null, imageRevision: version.imageRevision }; contents = ['source-owned ROM preload', 'little-endian words'];
+      } else return agentError('INVALID_ARGUMENT', 'Memory export source is invalid.');
+      if (!dispatchDownload(navActions, filename, bytes, 'application/octet-stream')) return agentError('DOWNLOAD_FAILED', 'The browser could not dispatch the memory download.', true);
+      return { ok: true as const, value: { dispatchId: revisionIds.next('download'), state: 'dispatched', filename, mediaType: 'application/octet-stream', bytes: bytes.byteLength, provenance, contents, omissions: ['source_images', 'live_ram', 'live_pin_state', 'settings', 'transcript', 'compiled_artifact'], completionKnown: false } satisfies DownloadReceipt };
+    }
+    function getTranscriptForAgent(input: any) {
+      if (input.format !== 'log' && input.format !== 'script') return agentError('INVALID_ARGUMENT', 'Transcript format is invalid.');
+      const limit = input.limit ?? 100; const start = input.cursor === undefined ? 0 : Number(input.cursor);
+      const lines = input.format === 'log' ? [...consoleState.transcript.lines] : scriptOf(consoleState.transcript.lines);
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500 || !Number.isSafeInteger(start) || start < 0 || start > lines.length) return agentError('CURSOR_CONFLICT', 'The transcript cursor is invalid.');
+      const end = Math.min(lines.length, start + limit);
+      return { ok: true as const, value: { transcriptId: `${agentPageId}:transcript`, revision: observationRevision, truncated: consoleState.transcript.length === consoleState.transcript.cap, lines: lines.slice(start, end), nextCursor: end < lines.length ? String(end) : null, sessionId: sim.id } };
+    }
     let agentInstallation: PageApiInstallation | null = null;
     agentInstallation = installPageApi(el, {
       pageId: agentPageId,
@@ -5313,6 +5505,9 @@ const groups = displayGroups(catalogue, []);
       operations,
       authoring: { createProject: createAgentProject, openProject: openAgentProject, updateProject: updateAgentProject, selectEntry: selectAgentEntry, setCompileSettings: setAgentCompileSettings, compile: compileAgentProject, getDiagnostics: diagnosticsForAgent },
       simulation: { getSimulation: getSimulationForAgent, prepareSimulation: prepareSimulationForAgent, drive: driveForAgent, reset: resetForAgent, readMemory: readMemoryForAgent, updateMemory: updateMemoryForAgent, setMemoryPreload: setMemoryPreloadForAgent, runVerification: runVerificationForAgent, getVerification: getVerificationForAgent },
+      inspection: { requestSchematic: requestSchematicForAgent, getSchematic: getSchematicForAgent, getTopology: getTopologyForAgent, requestTruthTable: requestTruthForAgent, getTruthTable: getTruthForAgent },
+      workbench: { setWorkbenchSettings: setWorkbenchSettingsForAgent, setView: setViewForAgent, highlight: highlightForAgent },
+      handoff: { exportSource: exportSourceForAgent, createShareLink: createShareLinkForAgent, downloadArtifact: downloadArtifactForAgent, downloadMemory: downloadMemoryForAgent, getTranscript: getTranscriptForAgent },
       help: {
         manifestUrl: el.dataset.agentReferenceManifest ?? '/agent-reference/manifest.json',
         corpusId: el.dataset.agentReferenceCorpus ?? '',
@@ -5403,7 +5598,7 @@ const groups = displayGroups(catalogue, []);
               verification: operationSlots.verification ?? null,
             },
             compilerTransport: client.transportState(),
-            configuration: { compile: { revision: revisions.optionsRevision('compile', optionsFor('compile', settings())), warningsAsErrors: settings().warningsAsErrors } },
+            configuration: { compile: { revision: revisions.optionsRevision('compile', optionsFor('compile', settings())), warningsAsErrors: settings().warningsAsErrors }, workbench: { revision: workbenchSettingsRevision, previewOptionsRevision: revisions.optionsRevision('preview', optionsFor('preview', settings())), truthOptionsRevision: revisions.optionsRevision('truth_table', optionsFor('truth_table', settings())) }, presentationRevision },
           } : {}),
           persistence: { enabled: store.enabled },
           agentAccess: {
