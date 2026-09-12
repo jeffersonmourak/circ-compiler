@@ -35,6 +35,19 @@ export type AgentErrorCode =
   | 'DIAGNOSTICS_NOT_READY'
   | 'DIAGNOSTICS_UNAVAILABLE'
   | 'DIAGNOSTICS_EXPIRED'
+  | 'ARTIFACT_CONFLICT'
+  | 'SESSION_NOT_READY'
+  | 'SESSION_CONFLICT'
+  | 'LIVE_STATE_CONFLICT'
+  | 'IMAGE_CONFLICT'
+  | 'SIMULATION_REFUSED'
+  | 'SIMULATION_FAILED'
+  | 'MEMORY_NOT_ROOT'
+  | 'PRELOAD_CONFLICT'
+  | 'VERIFICATION_INVALID'
+  | 'VERIFICATION_NOT_READY'
+  | 'VERIFICATION_EXPIRED'
+  | 'VERIFICATION_UNAVAILABLE'
   | 'INTERNAL_ERROR';
 
 export interface AgentError {
@@ -69,7 +82,8 @@ export type OperationKind =
   | 'preview'
   | 'truth_table'
   | 'session_build'
-  | 'session_reset';
+  | 'session_reset'
+  | 'verification';
 
 export interface WorkInputs {
   target: TargetRef;
@@ -167,6 +181,91 @@ export interface SessionStatus {
   matchesCurrentTarget: boolean; matchesCurrentImages: boolean;
   preloadState: 'none' | 'applied' | 'partial' | 'failed' | 'unknown'; operationId: OperationId | null;
   preload: { applied: number; errors: number };
+}
+
+export const MAX_SIM_ASSIGNMENTS = 64;
+export const MAX_SIM_QUERIES = 128;
+export const DEFAULT_MEMORY_READ_WORDS = 64;
+export const MAX_MEMORY_READ_WORDS = 256;
+export const MAX_VERIFICATION_CASES = 128;
+export const MAX_VERIFICATION_STEPS = 512;
+export const MAX_VERIFICATION_ACTIONS = 2048;
+export const MAX_VERIFICATION_ASSERTIONS = 2048;
+export const MAX_VERIFICATION_IMAGES = 16;
+export const DEFAULT_VERIFICATION_TIMEOUT_MS = 5_000;
+export const MAX_VERIFICATION_TIMEOUT_MS = 10_000;
+export const DEFAULT_VERIFICATION_PAGE_LIMIT = 20;
+export const MAX_VERIFICATION_PAGE_LIMIT = 100;
+
+export interface SignalValue { value: string; defined: string; width: number; }
+export interface SimulationPin { name: string; kind: 'in' | 'out'; width: number; state: SignalValue; }
+export interface RootMemory {
+  name: string; kind: 'rom' | 'ram'; width: number; addressWidth: number; words: number;
+  liveAccess: 'root'; sourceOwner: { projectId: string; file: string; declaration: string } | null;
+}
+export interface SimulationRef {
+  target: TargetRef; artifactId: ArtifactId; sessionId: SessionId; liveStateRevision: Revision;
+  imageRevision: Revision; initialization: 'page_boot_low' | 'reset_floating'; preloadState: SessionStatus['preloadState'];
+}
+export interface SimulationSnapshot { observationRevision: Revision; status: SessionStatus; simulation: SimulationRef | null; pins: SimulationPin[]; memories: RootMemory[]; }
+export interface SimulationOperationTicket { operationId: OperationId; kind: 'session_build' | 'session_reset'; disposition: 'started' | 'joined' | 'already_current'; inputs: WorkInputs; sessionId: SessionId | null; }
+export interface DriveInput {
+  projectId: string; expectedTargetEpoch: Revision; expectedArtifactId: ArtifactId; expectedSessionId: SessionId;
+  expectedLiveStateRevision: Revision; assignments: { pin: string; value: string; defined?: string }[]; queries?: string[];
+}
+export interface DriveResult {
+  simulation: SimulationRef; disposition: 'driven' | 'unchanged'; assignments: { pin: string; state: SignalValue }[];
+  values: SimulationPin[]; consoleRecord: { recorded: true; lines: number };
+}
+export type LiveMemoryAction = { kind: 'poke'; address: string; value: string; defined?: string } | { kind: 'clear' } | { kind: 'load'; hex: string };
+export interface MemoryCell { address: string; state: SignalValue; }
+export interface MemoryPage { simulation: SimulationRef; memory: RootMemory; start: string; cells: MemoryCell[]; nextStart: string | null; }
+export interface UpdateMemoryInput {
+  projectId: string; expectedTargetEpoch: Revision; expectedArtifactId: ArtifactId; expectedSessionId: SessionId;
+  expectedLiveStateRevision: Revision; memory: string; action: LiveMemoryAction;
+}
+export interface UpdateMemoryResult { simulation: SimulationRef; memory: RootMemory; action: 'poke' | 'clear' | 'load'; wordsLoaded: number | null; consoleRecord: { recorded: true; lines: number }; }
+export interface SetMemoryPreloadInput {
+  projectId: string; expectedSourceRevision: Revision; expectedImageRevision: Revision; expectedTargetEpoch: Revision;
+  file: string; declaration: string; hex: string | null;
+}
+export interface PreloadApplicationSummary {
+  state: 'not_running' | 'not_current' | 'applied' | 'partial' | 'failed'; rootApplied: boolean;
+  importedInstancesApplied: number; failedInstances: number; reportedFailures: { instance: string; message: string }[];
+  omittedFailureCount: number; sessionId: SessionId | null; liveStateRevision: Revision | null;
+}
+export interface SetMemoryPreloadResult extends WorkspaceChangeResult {
+  imageRevision: Revision; owner: { projectId: string; file: string; declaration: string };
+  image: { present: boolean; hex: string | null; words: number | null }; liveApplication: PreloadApplicationSummary;
+}
+export interface VerificationImage { memory: string; hex: string; }
+export type VerificationAction =
+  | { kind: 'drive'; pin: string; value: string; defined?: string }
+  | { kind: 'poke'; memory: string; address: string; value: string; defined?: string }
+  | { kind: 'clear'; memory: string }
+  | { kind: 'load'; memory: string; hex: string }
+  | { kind: 'reset' };
+export type VerificationExpectation =
+  | { kind: 'pin'; name: string; value: string; defined?: string }
+  | { kind: 'memory'; name: string; address: string; value: string; defined?: string };
+export interface VerificationStep { id: string; actions: VerificationAction[]; expect: VerificationExpectation[]; }
+export interface VerificationCase { id: string; initialization: 'floating' | 'low'; sourcePreloads: 'current' | 'none'; images?: VerificationImage[]; steps: VerificationStep[]; }
+export interface RunVerificationInput {
+  projectId: string; expectedSourceRevision: Revision; expectedTargetEpoch: Revision; expectedArtifactId: ArtifactId;
+  expectedImageRevision: Revision; timeoutMs?: number; stopOnFailure?: boolean; cases: VerificationCase[];
+}
+export interface VerificationTicket { operationId: OperationId; disposition: 'started' | 'joined' | 'already_complete'; inputs: WorkInputs; caseCount: number; stepCount: number; assertionCount: number; }
+export interface VerificationAssertionResult {
+  expectationIndex: number; expected: { kind: 'pin' | 'memory'; name: string; address: string | null; state: SignalValue };
+  actual: { kind: 'pin' | 'memory'; name: string; address: string | null; state: SignalValue } | null;
+  passed: boolean; error: { simCode: string; arg: string } | null;
+}
+export interface VerificationStepResult { caseId: string; stepId: string; state: 'passed' | 'failed' | 'error' | 'not_run'; actionsCompleted: number; assertions: VerificationAssertionResult[]; }
+export interface VerificationSummary { operationId: OperationId; state: 'passed' | 'failed' | 'error' | 'timed_out' | 'cancelled'; cases: number; steps: number; assertions: number; passedAssertions: number; failedAssertions: number; notRunSteps: number; elapsedMs: number; }
+export interface VerificationPage {
+  operationId: OperationId; resultId: string; observationRevision: Revision; inputs: WorkInputs;
+  artifactValidation: { operationId: OperationId; inputs: WorkInputs; counts: DiagnosticCounts | null } | null;
+  imageRevision: Revision; summary: VerificationSummary; steps: VerificationStepResult[]; nextCursor: string | null;
 }
 
 export type DomainResult<T> =
@@ -296,4 +395,13 @@ export interface PlaygroundController extends ObservationMethods {
   setCompileSettings(input: { projectId: string; expectedTargetEpoch: Revision; expectedOptionsRevision: Revision; warningsAsErrors: boolean }): DomainResult<WorkspaceChangeResult>;
   compile(input: { projectId: string; expectedSourceRevision: Revision; expectedTargetEpoch: Revision; expectedOptionsRevision: Revision }): DomainResult<CompileTicket>;
   getDiagnostics(input: { operationId: string; expectedSourceRevision?: Revision; cursor?: string; limit?: number }): DomainResult<DiagnosticPage>;
+  getSimulation(input: { expectedSessionId?: SessionId; expectedLiveStateRevision?: Revision }): DomainResult<SimulationSnapshot>;
+  prepareSimulation(input: { projectId: string; expectedSourceRevision: Revision; expectedTargetEpoch: Revision; expectedArtifactId: ArtifactId; expectedImageRevision: Revision }): DomainResult<SimulationOperationTicket>;
+  drive(input: DriveInput): DomainResult<DriveResult>;
+  reset(input: { projectId: string; expectedTargetEpoch: Revision; expectedArtifactId: ArtifactId; expectedSessionId: SessionId; expectedLiveStateRevision: Revision }): DomainResult<SimulationOperationTicket>;
+  readMemory(input: { expectedArtifactId: ArtifactId; expectedSessionId: SessionId; memory: string; start?: string; count?: number }): DomainResult<MemoryPage>;
+  updateMemory(input: UpdateMemoryInput): DomainResult<UpdateMemoryResult>;
+  setMemoryPreload(input: SetMemoryPreloadInput): DomainResult<SetMemoryPreloadResult>;
+  runVerification(input: RunVerificationInput): DomainResult<VerificationTicket>;
+  getVerification(input: { operationId: OperationId; cursor?: string; limit?: number }): DomainResult<VerificationPage>;
 }

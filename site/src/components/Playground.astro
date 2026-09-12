@@ -348,7 +348,7 @@ const groups = displayGroups(catalogue, []);
   import { ComponentKind } from 'circ-renderer/topology';
   // The session the faces share. Pulls nothing of the canvas: its imports are
   // the topology entry point and the rom-image module, both already here.
-  import { SimSession, type DriveAssign } from '../scripts/sim-session.ts';
+   import { SimSession, type DriveAssign, type MemRef } from '../scripts/sim-session.ts';
   // The console over the session: the grammar and the reply strings of
   // `--sim`, and the prompt's own memory. Small, and the session already
   // pulls their one shared dependency, so they ride in the eager bundle.
@@ -373,7 +373,7 @@ const groups = displayGroups(catalogue, []);
     import { formatBytes } from '../scripts/pipeline.ts';
     import { RevisionAllocator, RevisionTracker, type SourceFile } from '../scripts/playground-revisions.ts';
      import { OperationStore } from '../scripts/playground-operations.ts';
-     import type { OperationId, OperationKind, WorkInputs, WorkspaceChangeResult, PersistenceReceipt, CompileTicket, DiagnosticPage } from '../scripts/playground-contract.ts';
+      import type { OperationId, OperationKind, WorkInputs, WorkspaceChangeResult, PersistenceReceipt, CompileTicket, DiagnosticPage, SimulationSnapshot, SimulationRef, RootMemory, DriveInput, DriveResult, MemoryPage, UpdateMemoryInput, UpdateMemoryResult, SetMemoryPreloadInput, SetMemoryPreloadResult, RunVerificationInput, VerificationTicket } from '../scripts/playground-contract.ts';
      import type { WorkspaceSnapshot } from '../scripts/playground-reads.ts';
      import { planMutations, utf8Bytes, validFileName, validProjectName, isWellFormed } from '../scripts/playground-mutations.ts';
      import { convertDiagnostics, DiagnosticStore } from '../scripts/playground-diagnostics.ts';
@@ -387,7 +387,9 @@ const groups = displayGroups(catalogue, []);
      type ApplyResult,
      type MemorySymbol,
   } from '../utils/rom-image.ts';
-  import { sourceImageKey, type ImportedImages } from '../utils/source-images.ts';
+   import { sourceImageKey, type ImportedImages } from '../utils/source-images.ts';
+   import { canonical, imageBytes, memoryShape, pinValue, parseHex, signal, validateDrive } from '../scripts/playground-simulation.ts';
+   import { VerificationResults, executeVerification, validateVerification } from '../scripts/playground-verification.ts';
   import {
     UNKNOWN,
     cellWidth,
@@ -5118,12 +5120,199 @@ const groups = displayGroups(catalogue, []);
       const page = diagnosticStore.page(input.operationId, input.expectedSourceRevision, input.cursor, input.limit, observationRevision, current);
       return page.ok ? { ok: true as const, value: page.value as DiagnosticPage } : agentError(page.code, page.message);
     }
+    // Phase 4's public simulation boundary. Human controls continue to use the
+    // same SimSession; these methods only add revision checks and result shaping.
+    const verificationResults = new VerificationResults();
+    const sourceMemory = (file: string, declaration: string): MemorySymbol | null => {
+      const analysis = state.analysis;
+      if (!analysis) return null;
+      const id = analysis.files.find((item) => item.path === rootPathFor(file))?.file_id;
+      if (id === undefined) return null;
+      const symbol = analysis.symbols.find((item) => item.file_id === id && item.name === declaration && (item.kind === 'rom' || item.kind === 'ram'));
+      return symbol && typeof symbol.addr_width === 'number' ? { name: symbol.name, kind: symbol.kind as 'rom' | 'ram', width: symbol.width, addrWidth: symbol.addr_width } : null;
+    };
+    const simulationError = (code: any, message: string, retryable = false, details?: Record<string, string>) => agentError(code, message, retryable, details);
+    function currentSimulationRef(): SimulationRef | null {
+      const target = revisions.currentTarget;
+      if (!target || !state.artifact || !sim.session || !sim.id || !sim.liveStateRevision || !sim.imageRevision) return null;
+      return { target, artifactId: state.artifact.id, sessionId: sim.id, liveStateRevision: sim.liveStateRevision, imageRevision: sim.imageRevision, initialization: 'page_boot_low', preloadState: sim.preloadState };
+    }
+    function rootMemory(mem: MemRef): RootMemory {
+      const shape = memoryShape(mem);
+      const activeId = store.envelope.activeId;
+      return { ...shape, sourceOwner: mem.kind === 'rom' && activeId ? { projectId: activeId, file: activeFile(state.tabs).name, declaration: mem.name } : null };
+    }
+    function simulationPreconditions(input: { projectId?: unknown; expectedTargetEpoch?: unknown; expectedArtifactId?: unknown; expectedSessionId?: unknown; expectedLiveStateRevision?: unknown }, live = true) {
+      const target = revisions.currentTarget;
+      if (!target || input.projectId !== target.projectId || input.expectedTargetEpoch !== target.targetEpoch) return simulationError('TARGET_CONFLICT', 'The visible target changed; reread status.');
+      if (!state.artifact || input.expectedArtifactId !== state.artifact.id) return simulationError('ARTIFACT_CONFLICT', 'The compiled artifact changed; reread status and prepare it.');
+      if (!live) return null;
+      if (!sim.session || sim.lifecycle !== 'ready' || !sim.id || !sim.liveStateRevision) return simulationError('SESSION_NOT_READY', 'No ready simulation session exists.', true);
+      if (input.expectedSessionId !== sim.id) return simulationError('SESSION_CONFLICT', 'The simulation session changed; reread it.');
+      if (input.expectedLiveStateRevision !== sim.liveStateRevision) return simulationError('LIVE_STATE_CONFLICT', 'Live simulation state changed; reread it.');
+      return null;
+    }
+    function getSimulationForAgent(input: any) {
+      const session = sim.session;
+      const ref = currentSimulationRef();
+      if (input.expectedSessionId !== undefined && input.expectedSessionId !== sim.id) return simulationError('SESSION_CONFLICT', 'The observed session is no longer current.');
+      if (input.expectedLiveStateRevision !== undefined && input.expectedLiveStateRevision !== sim.liveStateRevision) return simulationError('LIVE_STATE_CONFLICT', 'The observed live state is no longer current.');
+      const status = {
+        state: sim.lifecycle, id: sim.id, artifactId: state.artifact?.id ?? null, liveStateRevision: sim.liveStateRevision, imageRevision: sim.imageRevision,
+        matchesCurrentTarget: Boolean(session && !state.stale), matchesCurrentImages: sim.imageRevision === (store.envelope.activeId ? revisions.projectVersion(store.envelope.activeId)?.imageRevision ?? null : null) && sim.preloadState !== 'partial' && sim.preloadState !== 'failed',
+        preloadState: sim.preloadState, operationId: sim.operationId, preload: { ...sim.preload },
+      } as const;
+      if (!session || !ref) return { ok: true as const, value: { observationRevision, status, simulation: null, pins: [], memories: [] } satisfies SimulationSnapshot };
+      return { ok: true as const, value: { observationRevision, status, simulation: ref, pins: session.pins.map((pin) => { const read = session.get(pin.name); return pinValue(pin, read.ok ? read.value : { value: 0n, defined: 0n, width: pin.width }); }), memories: session.mems.map(rootMemory) } satisfies SimulationSnapshot };
+    }
+    function prepareSimulationForAgent(input: any) {
+      const target = revisions.currentTarget;
+      const version = store.envelope.activeId ? revisions.projectVersion(store.envelope.activeId) : null;
+      if (!target || input.projectId !== target.projectId || input.expectedTargetEpoch !== target.targetEpoch || input.expectedSourceRevision !== target.sourceRevision) return simulationError('TARGET_CONFLICT', 'The visible target changed; reread status.');
+      if (!state.artifact || input.expectedArtifactId !== state.artifact.id) return simulationError('ARTIFACT_CONFLICT', 'The compiled artifact changed; reread status.');
+      if (!version || input.expectedImageRevision !== version.imageRevision) return simulationError('IMAGE_CONFLICT', 'Source images changed; reread status.');
+      const ready = currentSimulationRef();
+      if (ready && ready.imageRevision === version.imageRevision) {
+        const operationId = operationSlots.session_build ?? sim.operationId;
+        if (!operationId) return simulationError('SESSION_NOT_READY', 'The session has no build operation.', true);
+        const operation = operations.lookup(operationId);
+        return operation.kind === 'found' ? { ok: true as const, value: { operationId, kind: 'session_build' as const, disposition: 'already_current' as const, inputs: operation.operation.inputs, sessionId: ready.sessionId } } : simulationError('SESSION_NOT_READY', 'The session build record expired.', true);
+      }
+      void ensureSession();
+      const operationId = sim.operationId ?? operationSlots.session_build;
+      if (!operationId) return simulationError('SESSION_NOT_READY', 'Simulation preparation did not start.', true);
+      const operation = operations.lookup(operationId);
+      return operation.kind === 'found' ? { ok: true as const, value: { operationId, kind: 'session_build' as const, disposition: operation.operation.state === 'queued' || operation.operation.state === 'running' ? 'started' as const : 'joined' as const, inputs: operation.operation.inputs, sessionId: null } } : simulationError('SESSION_NOT_READY', 'Simulation preparation did not start.', true);
+    }
+    function driveForAgent(input: DriveInput) {
+      if (!Array.isArray(input.assignments) || input.assignments.length > 64 || (input.queries !== undefined && (!Array.isArray(input.queries) || input.queries.length > 128)) || (input.assignments.length === 0 && (!input.queries || input.queries.length === 0))) return simulationError('INVALID_ARGUMENT', 'assignments and queries exceed their limits.');
+      const blocked = simulationPreconditions(input); if (blocked) return blocked;
+      const session = sim.session!;
+      const queries = input.queries ?? session.pins.filter((pin) => pin.kind === 'out').map((pin) => pin.name);
+      const checked = validateDrive(session, input.assignments, queries);
+      if (!checked.ok) {
+        const failure = checked.failure;
+        return failure ? simulationError('SIMULATION_REFUSED', 'Simulation refused a pin operation.', false, { simCode: failure.code, arg: failure.arg }) : simulationError('INVALID_ARGUMENT', checked.message ?? 'Drive input is invalid.');
+      }
+      try {
+        const result = session.eval(checked.assignments, queries);
+        if (!result.ok) return simulationError('SIMULATION_REFUSED', 'Simulation refused a pin operation.', false, { simCode: result.code, arg: result.arg });
+        const ref = currentSimulationRef(); if (!ref) return simulationError('SESSION_CONFLICT', 'The session changed while driving.');
+        return { ok: true as const, value: { simulation: ref, disposition: input.assignments.length === 0 ? 'unchanged' as const : 'driven' as const, assignments: checked.assignments.map((item) => { const pin = session.pins.find((p) => p.name === item.pin)!; return { pin: item.pin, state: canonical(item.value, item.defined ?? ((1n << BigInt(pin.width)) - 1n), pin.width) }; }), values: result.values.map((item) => pinValue(item.pin, item.value)), consoleRecord: { recorded: true as const, lines: input.assignments.length * 2 } } satisfies DriveResult };
+      } catch {
+        return simulationError('SIMULATION_FAILED', 'The runtime failed while driving the session.');
+      }
+    }
+    function resetForAgent(input: any) {
+      const blocked = simulationPreconditions(input); if (blocked) return blocked;
+      const session = sim.session!;
+      const activeId = store.envelope.activeId!;
+      const scheduled = queueOperation('session_reset', {}, { artifactId: state.artifact!.id, imageRevision: revisions.projectVersion(activeId)?.imageRevision ?? null, liveStateRevision: sim.liveStateRevision });
+      sim.operationId = scheduled.id; sim.lifecycle = 'resetting'; sim.id = null; sim.liveStateRevision = null; sim.pins.clear(); operations.start(scheduled.id); observe();
+      void session.reset().catch((error) => failOperation(scheduled.id, error, 'runtime'));
+      return { ok: true as const, value: { operationId: scheduled.id, kind: 'session_reset' as const, disposition: 'started' as const, inputs: scheduled.inputs, sessionId: null } };
+    }
+    function readMemoryForAgent(input: any) {
+      if (!state.artifact || input.expectedArtifactId !== state.artifact.id) return simulationError('ARTIFACT_CONFLICT', 'The compiled artifact changed; reread status.');
+      if (!sim.session || sim.lifecycle !== 'ready') return simulationError('SESSION_NOT_READY', 'No ready simulation session exists.', true);
+      if (input.expectedSessionId !== sim.id) return simulationError('SESSION_CONFLICT', 'The simulation session changed; reread it.');
+      const mem = sim.session.mems.find((item) => item.name === input.memory);
+      if (!mem) return sourceMemory(activeFile(state.tabs).name, input.memory) ? simulationError('MEMORY_NOT_ROOT', 'That memory is not a root live memory.') : simulationError('SIMULATION_REFUSED', 'Simulation refused the memory name.', false, { simCode: 'E_NOMEM', arg: String(input.memory) });
+      const start = input.start === undefined ? 0n : parseHex(input.start);
+      const count = input.count ?? 64;
+      if (start === null || !Number.isSafeInteger(count) || count < 1 || count > 256) return simulationError('INVALID_ARGUMENT', 'Memory start or count is invalid.');
+      const page = sim.session.dumpMem(mem.name, start, BigInt(count));
+      if (!page.ok) return simulationError('SIMULATION_REFUSED', 'Simulation refused the memory read.', false, { simCode: page.code, arg: page.arg });
+      const ref = currentSimulationRef(); if (!ref) return simulationError('SESSION_CONFLICT', 'The session changed while reading.');
+      const next = start + BigInt(page.cells.length);
+      return { ok: true as const, value: { simulation: ref, memory: rootMemory(mem), start: `0x${start.toString(16)}`, cells: page.cells.map((cell) => ({ address: `0x${cell.addr.toString(16)}`, state: signal(cell.value, mem.width) })), nextStart: next < (1n << BigInt(mem.addrWidth)) ? `0x${next.toString(16)}` : null } satisfies MemoryPage };
+    }
+    function updateMemoryForAgent(input: UpdateMemoryInput) {
+      const blocked = simulationPreconditions(input); if (blocked) return blocked;
+      const session = sim.session!; const mem = session.mems.find((item) => item.name === input.memory);
+      if (!mem) return simulationError('SIMULATION_REFUSED', 'Simulation refused the memory name.', false, { simCode: 'E_NOMEM', arg: input.memory });
+      let result: any; let words: number | null = null;
+      if (!input.action || typeof input.action !== 'object') return simulationError('INVALID_ARGUMENT', 'Memory action is invalid.');
+      if (input.action.kind === 'poke') { const address = parseHex(input.action.address); const value = parseHex(input.action.value, mem.width); const defined = input.action.defined === undefined ? undefined : parseHex(input.action.defined, mem.width); if (address === null || value === null || (input.action.defined !== undefined && defined === null)) return simulationError('INVALID_ARGUMENT', 'Memory poke is invalid.'); result = session.poke(mem.name, address, value, defined ?? undefined); }
+      else if (input.action.kind === 'clear') result = session.clear(mem.name);
+      else if (input.action.kind === 'load') { const bytes = imageBytes(input.action.hex, mem); if (!bytes.ok) return simulationError('INVALID_ARGUMENT', bytes.message); result = session.loadImage(mem.name, bytes.bytes); if (result.ok) words = result.words; }
+      else return simulationError('INVALID_ARGUMENT', 'Memory action is invalid.');
+      if (!result.ok) return simulationError('SIMULATION_REFUSED', 'Simulation refused the memory mutation.', false, { simCode: result.code, arg: result.arg });
+      const ref = currentSimulationRef(); if (!ref) return simulationError('SESSION_CONFLICT', 'The session changed while updating memory.');
+      return { ok: true as const, value: { simulation: ref, memory: rootMemory(mem), action: input.action.kind, wordsLoaded: words, consoleRecord: { recorded: true, lines: input.action.kind === 'load' ? 1 : 2 } } satisfies UpdateMemoryResult };
+    }
+    function setMemoryPreloadForAgent(input: SetMemoryPreloadInput) {
+      const target = revisions.currentTarget; const version = revisions.projectVersion(input.projectId);
+      if (!target || target.projectId !== input.projectId || target.targetEpoch !== input.expectedTargetEpoch) return simulationError('TARGET_CONFLICT', 'The visible target changed; reread status.');
+      if (!version || version.sourceRevision !== input.expectedSourceRevision) return simulationError('REVISION_CONFLICT', 'Source changed; reread the project.');
+      if (version.imageRevision !== input.expectedImageRevision) return simulationError('IMAGE_CONFLICT', 'Images changed; reread the project.');
+      const mem = sourceMemory(input.file, input.declaration);
+      if (!mem || mem.kind !== 'rom') return simulationError('PRELOAD_CONFLICT', 'The source declaration is not a current ROM.');
+      if (input.hex !== null && !imageBytes(input.hex, mem).ok) return simulationError('INVALID_ARGUMENT', 'The ROM image is invalid.');
+      const key = sourceImageKey(input.projectId, input.file); const before = store.envelope.sourceImages[key]?.[input.declaration];
+      if (before === input.hex || (before === undefined && input.hex === null)) return simulationError('PRELOAD_CONFLICT', 'The requested preload is already current.');
+      store.update((draft) => { const images = { ...(draft.sourceImages[key] ?? {}) }; if (input.hex === null) delete images[input.declaration]; else images[input.declaration] = input.hex; if (Object.keys(images).length) draft.sourceImages[key] = images; else delete draft.sourceImages[key]; });
+      const context = imageContexts.get(key) ?? { images: new Map(Object.entries(store.envelope.sourceImages[key] ?? {})), implied: new Map(), files: new Map() };
+      imageContexts.set(key, context); if (input.hex === null) context.images.delete(input.declaration); else context.images.set(input.declaration, input.hex);
+      refreshWorkspaceSnapshot();
+      let application: SetMemoryPreloadResult['liveApplication'] = { state: 'not_running', rootApplied: false, importedInstancesApplied: 0, failedInstances: 0, reportedFailures: [], omittedFailureCount: 0, sessionId: null, liveStateRevision: null };
+      if (sim.session && sim.lifecycle === 'ready') {
+        const applied = sim.session.applyPreloads(); setPreloadStatus(applied); sim.imageRevision = revisions.projectVersion(input.projectId)?.imageRevision ?? null;
+        const imported = applied.applied.filter((name) => name.includes('#')).length;
+        application = { state: applied.errors.size ? applied.applied.length ? 'partial' : 'failed' : 'applied', rootApplied: applied.applied.includes(input.declaration), importedInstancesApplied: imported, failedInstances: applied.errors.size, reportedFailures: [...applied.errors].slice(0, 8).map(([instance, message]) => ({ instance: instance.replace(/#\d+$/, ''), message })), omittedFailureCount: Math.max(0, applied.errors.size - 8), sessionId: sim.id, liveStateRevision: sim.liveStateRevision };
+        sim.view?.view.refreshState(); if (state.dataOpen) renderData(); if (memVisible()) renderMemory();
+      }
+      const base = agentResult('updated', null, null, []);
+      const imageRevision = revisions.projectVersion(input.projectId)!.imageRevision;
+      const parsed = input.hex === null ? null : imageBytes(input.hex, mem);
+      return { ok: true as const, value: { ...base.value, imageRevision, owner: { projectId: input.projectId, file: input.file, declaration: input.declaration }, image: { present: input.hex !== null, hex: input.hex, words: parsed && parsed.ok ? parsed.words : null }, liveApplication: application } satisfies SetMemoryPreloadResult };
+    }
+    function verificationShape() {
+      const analysis = state.analysis; const root = analysis ? rootFileId(analysis.files, rootPathFor(activeFile(state.tabs).name)) : null;
+      const pins = root === null || !analysis ? [] : analysis.symbols.filter((symbol) => symbol.file_id === root && (symbol.kind === 'input' || symbol.kind === 'output')).map((symbol, index) => ({ name: symbol.name, id: index, width: symbol.width, kind: symbol.kind === 'input' ? 'in' as const : 'out' as const }));
+      return { pins, memories: currentRoms().map((mem, index) => ({ ...mem, id: index })) };
+    }
+    function runVerificationForAgent(input: RunVerificationInput) {
+      const target = revisions.currentTarget; const version = revisions.projectVersion(input.projectId);
+      if (!target || target.projectId !== input.projectId || target.targetEpoch !== input.expectedTargetEpoch || !version || version.sourceRevision !== input.expectedSourceRevision) return simulationError('TARGET_CONFLICT', 'The visible target changed; reread status.');
+      if (!state.artifact || state.artifact.id !== input.expectedArtifactId) return simulationError('ARTIFACT_CONFLICT', 'The compiled artifact changed; reread status.');
+      if (version.imageRevision !== input.expectedImageRevision) return simulationError('IMAGE_CONFLICT', 'Images changed; reread status.');
+      const timeout = input.timeoutMs ?? 5000;
+      if (!Number.isSafeInteger(timeout) || timeout < 1 || timeout > 10000 || typeof input.stopOnFailure !== 'undefined' && typeof input.stopOnFailure !== 'boolean') return simulationError('VERIFICATION_INVALID', 'Verification timeout or stop policy is invalid.');
+      const checked = validateVerification(input.cases, verificationShape()); if (!checked.ok) return simulationError('VERIFICATION_INVALID', checked.message);
+      const scheduled = queueOperation('verification', {}, { artifactId: state.artifact.id, imageRevision: version.imageRevision }); operations.start(scheduled.id);
+      const bytes = state.artifact.bytes; const roms = currentRoms().map((item) => ({ ...item })); const capturedImages = new Map(romImages); const capturedImported = copyImportedImages(state.artifact.importedImages);
+      void (async () => {
+        try {
+          const { CircRuntime: Runtime } = await loadRenderer();
+          const result = await executeVerification(scheduled.id, scheduled.inputs, version.imageRevision, input.cases, {
+            create: async (caseInput) => SimSession.build({ bytes, load: (artifact) => Runtime.loadFromBytes(artifact, { noInitialPinDrive: true }), roms, images: caseInput.sourcePreloads === 'current' ? new Map(capturedImages) : new Map(), importedImages: caseInput.sourcePreloads === 'current' ? copyImportedImages(capturedImported) : undefined }),
+            now: () => performance.now(), yield: () => new Promise((resolve) => setTimeout(resolve, 0)), cancelled: () => { const current = operations.lookup(scheduled.id); return current.kind !== 'found' || current.operation.state === 'superseded'; },
+          }, timeout, input.stopOnFailure ?? false);
+          if (!verificationResults.admit(result)) operations.finish(scheduled.id, 'failed', { failure: { kind: 'runtime', message: 'Verification result exceeded retention limits.', libraryStatus: null } });
+          else operations.finish(scheduled.id, 'succeeded');
+        } catch (error) { failOperation(scheduled.id, error, 'runtime'); }
+        observe();
+      })();
+      return { ok: true as const, value: { operationId: scheduled.id, disposition: 'started' as const, inputs: scheduled.inputs, caseCount: checked.caseCount, stepCount: checked.stepCount, assertionCount: checked.assertionCount } satisfies VerificationTicket };
+    }
+    function getVerificationForAgent(input: any) {
+      const operation = operations.lookup(input.operationId);
+      if (operation.kind === 'not_found') return simulationError('OPERATION_NOT_FOUND', 'The verification operation is not known.');
+      if (operation.kind === 'expired') return simulationError('VERIFICATION_EXPIRED', 'The verification operation expired.');
+      if (operation.operation.kind !== 'verification') return simulationError('VERIFICATION_UNAVAILABLE', 'That operation is not verification.');
+      if (operation.operation.state === 'queued' || operation.operation.state === 'running') return simulationError('VERIFICATION_NOT_READY', 'Verification is still running.', true);
+      if (operation.operation.state !== 'succeeded') return simulationError('VERIFICATION_UNAVAILABLE', 'Verification did not produce a result.');
+      const page = verificationResults.get(input.operationId, input.cursor, input.limit, observationRevision);
+      return page.ok ? { ok: true as const, value: page.page } : simulationError(page.reason === 'invalid' ? 'INVALID_ARGUMENT' : 'VERIFICATION_EXPIRED', 'Verification result is unavailable.');
+    }
     let agentInstallation: PageApiInstallation | null = null;
     agentInstallation = installPageApi(el, {
       pageId: agentPageId,
       readWorkspace: () => workspaceSnapshot,
       operations,
       authoring: { createProject: createAgentProject, openProject: openAgentProject, updateProject: updateAgentProject, selectEntry: selectAgentEntry, setCompileSettings: setAgentCompileSettings, compile: compileAgentProject, getDiagnostics: diagnosticsForAgent },
+      simulation: { getSimulation: getSimulationForAgent, prepareSimulation: prepareSimulationForAgent, drive: driveForAgent, reset: resetForAgent, readMemory: readMemoryForAgent, updateMemory: updateMemoryForAgent, setMemoryPreload: setMemoryPreloadForAgent, runVerification: runVerificationForAgent, getVerification: getVerificationForAgent },
       help: {
         manifestUrl: el.dataset.agentReferenceManifest ?? '/agent-reference/manifest.json',
         corpusId: el.dataset.agentReferenceCorpus ?? '',
@@ -5211,6 +5400,7 @@ const groups = displayGroups(catalogue, []);
               analyze: operationSlots.analyze ?? null, compile: operationSlots.compile ?? null,
               preview: operationSlots.preview ?? null, truth_table: operationSlots.truth_table ?? null,
               session_build: operationSlots.session_build ?? null, session_reset: operationSlots.session_reset ?? null,
+              verification: operationSlots.verification ?? null,
             },
             compilerTransport: client.transportState(),
             configuration: { compile: { revision: revisions.optionsRevision('compile', optionsFor('compile', settings())), warningsAsErrors: settings().warningsAsErrors } },

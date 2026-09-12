@@ -197,6 +197,15 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
         'circ_set_compile_settings',
         'circ_compile',
         'circ_get_diagnostics',
+        'circ_get_simulation',
+        'circ_prepare_simulation',
+        'circ_drive',
+        'circ_reset',
+        'circ_read_memory',
+        'circ_update_memory',
+        'circ_set_memory_preload',
+        'circ_run_verification',
+        'circ_get_verification',
         'circ_help',
     ]);
     const agentStatus = await agentApi!.callTool('circ_get_status', {}) as {

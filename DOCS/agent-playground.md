@@ -4,9 +4,9 @@ The `/playground` page exposes a small browser-resident tool contract for agents
 
 Tool arguments and requested results are delivered to the connected agent through its browser integration or browser-control tooling. Treat source and results as data shared with that client and subject to its provider/tooling policies.
 
-## Phase 3 Capability
+## Phase 4 Capability
 
-All tools are read-only: they do not select a project, flush a debounce, compile, create a session, edit source, or write storage.
+Read tools remain side-effect free. Live simulation tools explicitly identify the artifact, session, and live-state revision they observed; a stale mutation is refused rather than queued onto a newer session.
 
 | Tool | Input | Result |
 | --- | --- | --- |
@@ -38,6 +38,24 @@ Agents can now author and repair visible projects through the same page registry
 Mutation calls are revision guarded. Read `circ_get_status` and `circ_read_project` before a write, then use the returned project/source, target, workspace, and compile-setting revisions on the next call. A human edit or target change between the read and call returns a conflict and leaves the workspace unchanged. File-edit ranges are zero-based UTF-16, exclusive at the end, and may not split a surrogate pair. Rename warnings explicitly state that imports are not rewritten.
 
 Successful authoring results include a persistence receipt. `saved` means the accepted active source was written to local storage; `memory_only` means the visible in-memory change succeeded but reload survival is not claimed. Tool inputs are JSON-safe and limited to 128 KiB; results remain limited to 32 KiB.
+
+### Simulation and verification
+
+| Tool | Input | Result |
+| --- | --- | --- |
+| `circ_get_simulation` | Optional observed session/live-state IDs | Observes a ready session only; never creates one. |
+| `circ_prepare_simulation` | Current project/source/target/artifact/image revisions | Starts, joins, or reuses the exact live-session build. |
+| `circ_drive` | Session/live-state provenance, ordered root-input assignments, optional queries | Drives and settles each assignment in order, then returns exact values/masks. |
+| `circ_reset` | Session/live-state/artifact provenance | Starts a reset operation; completion has a new session identity and floating inputs. |
+| `circ_read_memory` | Ready session, root memory, bounded page | Reads 1-256 cells without changing the memory panel or live state. |
+| `circ_update_memory` | Session/live-state provenance and one `poke`, `clear`, or `load` | Mutates one root ROM/RAM and records the same completed console action as the page. |
+| `circ_set_memory_preload` | Source/image/target revisions plus file/declaration/image | Persists one ROM declaration image and applies it to a compatible running session when possible. |
+| `circ_run_verification` | Exact artifact/image inputs and bounded cases | Starts isolated disposable-session verification; it never alters live session/UI/console state. |
+| `circ_get_verification` | Operation ID and bounded cursor | Retrieves complete ordered case/step/assertion records. |
+
+Values, masks, memory addresses, and memory words use lowercase canonical `0x` hexadecimal strings. JSON numbers are never accepted for those values. `circ_drive` preserves `--sim` ordering: every assignment settles before the next. The page boots inputs low; reset and isolated `floating` cases leave them undefined. Live memory access is root-only. Source ROM preloads are declaration-owned and persist through the existing workspace receipt; live pokes/loads and RAM contents are page-memory-only.
+
+Verification cases are fresh sessions, while steps in a case retain state. A case declares `floating` or `low` initialization and `current` or `none` source preloads. Explicit root-memory images are applied in case order. Verification is bounded to 128 cases, 512 steps, 2,048 actions/assertions, a 10-second deadline, and paged retained results. It cooperatively yields between action batches but cannot claim to interrupt a synchronous WASM call already in progress.
 
 Diagnostic pages are tied to the operation's captured source and file map, not the current editor. Native ranges remain 1-based UTF-8-byte columns. When captured playground source is available, a file-local UTF-16 range and offsets are included; `currentlyEditable` is an observation at page time and can become false after a rename or later edit.
 

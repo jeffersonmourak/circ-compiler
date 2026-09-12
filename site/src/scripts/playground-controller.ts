@@ -20,6 +20,9 @@ export interface AuthoringPort {
   getDiagnostics(input: Parameters<PlaygroundController['getDiagnostics']>[0]): DomainResult<DiagnosticPage>;
 }
 
+export type SimulationPort = Pick<PlaygroundController,
+  'getSimulation' | 'prepareSimulation' | 'drive' | 'reset' | 'readMemory' | 'updateMemory' | 'setMemoryPreload' | 'runVerification' | 'getVerification'>;
+
 function cloneStatus(status: PlaygroundStatus): PlaygroundStatus {
   return JSON.parse(JSON.stringify(status)) as PlaygroundStatus;
 }
@@ -29,7 +32,7 @@ export class PlaygroundControllerImpl implements PlaygroundController {
 
   private abort = new AbortController();
   private readonly abortReasons = new WeakMap<AbortSignal, 'WAIT_CANCELLED' | 'PAGE_SUSPENDED' | 'PAGE_DISPOSED'>();
-  constructor(private readonly reader: StatusReader, private readonly workspace?: () => WorkspaceSnapshot | null, private readonly operations?: OperationStore, private readonly authoring?: AuthoringPort) {}
+  constructor(private readonly reader: StatusReader, private readonly workspace?: () => WorkspaceSnapshot | null, private readonly operations?: OperationStore, private readonly authoring?: AuthoringPort, private readonly simulation?: SimulationPort) {}
 
   getStatus(): PlaygroundStatus {
     if (this.disposed) throw new ControllerDisposedError();
@@ -78,6 +81,15 @@ export class PlaygroundControllerImpl implements PlaygroundController {
   setCompileSettings(input: Parameters<PlaygroundController['setCompileSettings']>[0]) { return this.write('setCompileSettings', input); }
   compile(input: Parameters<PlaygroundController['compile']>[0]) { return this.write('compile', input); }
   getDiagnostics(input: Parameters<PlaygroundController['getDiagnostics']>[0]) { return this.write('getDiagnostics', input); }
+  getSimulation(input: Parameters<PlaygroundController['getSimulation']>[0]) { return this.simulate('getSimulation', input); }
+  prepareSimulation(input: Parameters<PlaygroundController['prepareSimulation']>[0]) { return this.simulate('prepareSimulation', input); }
+  drive(input: Parameters<PlaygroundController['drive']>[0]) { return this.simulate('drive', input); }
+  reset(input: Parameters<PlaygroundController['reset']>[0]) { return this.simulate('reset', input); }
+  readMemory(input: Parameters<PlaygroundController['readMemory']>[0]) { return this.simulate('readMemory', input); }
+  updateMemory(input: Parameters<PlaygroundController['updateMemory']>[0]) { return this.simulate('updateMemory', input); }
+  setMemoryPreload(input: Parameters<PlaygroundController['setMemoryPreload']>[0]) { return this.simulate('setMemoryPreload', input); }
+  runVerification(input: Parameters<PlaygroundController['runVerification']>[0]) { return this.simulate('runVerification', input); }
+  getVerification(input: Parameters<PlaygroundController['getVerification']>[0]) { return this.simulate('getVerification', input); }
 
   cancelWaits(reason: 'WAIT_CANCELLED' | 'PAGE_SUSPENDED' | 'PAGE_DISPOSED' = 'WAIT_CANCELLED'): void {
     this.abortReasons.set(this.abort.signal, reason);
@@ -100,6 +112,12 @@ export class PlaygroundControllerImpl implements PlaygroundController {
     return this.authoring[method](input as never) as ReturnType<AuthoringPort[K]>;
   }
 
+  private simulate<K extends keyof SimulationPort>(method: K, input: Parameters<SimulationPort[K]>[0]): ReturnType<SimulationPort[K]> {
+    if (this.disposed) throw new ControllerDisposedError();
+    if (!this.simulation) return { ok: false, error: { code: 'NOT_READY', message: 'The playground has not finished installing simulation tools.', retryable: true } } as ReturnType<SimulationPort[K]>;
+    return this.simulation[method](input as never) as ReturnType<SimulationPort[K]>;
+  }
+
   dispose(): void {
     this.cancelWaits('PAGE_DISPOSED');
     this.disposed = true;
@@ -110,6 +128,6 @@ function readError(code: Extract<AgentErrorCode, 'INVALID_ARGUMENT' | 'PROJECT_N
   return { code, message, retryable: false };
 }
 
-export function createPlaygroundController(reader: StatusReader, workspace?: () => WorkspaceSnapshot | null, operations?: OperationStore, authoring?: AuthoringPort): PlaygroundController {
-  return new PlaygroundControllerImpl(reader, workspace, operations, authoring);
+export function createPlaygroundController(reader: StatusReader, workspace?: () => WorkspaceSnapshot | null, operations?: OperationStore, authoring?: AuthoringPort, simulation?: SimulationPort): PlaygroundController {
+  return new PlaygroundControllerImpl(reader, workspace, operations, authoring, simulation);
 }

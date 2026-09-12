@@ -11,6 +11,9 @@ import { helpDescriptor, helpHandler, type HelpToolOptions } from './help.ts';
 import { authoringHandlers, createProjectDescriptor, openProjectDescriptor, selectEntryDescriptor, setCompileSettingsDescriptor, updateProjectDescriptor } from './authoring.ts';
 import { compileDescriptor, compilerHandlers, diagnosticsDescriptor } from './compiler.ts';
 import type { AuthoringPort } from '../playground-controller.ts';
+import type { SimulationPort } from '../playground-controller.ts';
+import { getSimulationDescriptor, prepareSimulationDescriptor, driveDescriptor, resetDescriptor, readMemoryDescriptor, updateMemoryDescriptor, setMemoryPreloadDescriptor, simulationHandlers } from './simulation.ts';
+import { getVerificationDescriptor, runVerificationDescriptor, verificationHandlers } from './verification.ts';
 
 export interface PageApiInstallation {
   readonly api: PlaygroundPageApi;
@@ -27,6 +30,7 @@ export interface InstallPageApiOptions {
   operations?: OperationStore;
   help?: HelpToolOptions;
   authoring?: AuthoringPort;
+  simulation?: SimulationPort;
 }
 
 declare global {
@@ -47,10 +51,12 @@ export function installPageApi(el: HTMLElement, options: InstallPageApiOptions):
   if (installed) return installed;
   if (facadeHost.circPlayground) throw new Error('A different circ playground tool registry is already installed.');
 
-  const controller = createPlaygroundController({ read: options.readStatus } satisfies StatusReader, options.readWorkspace, options.operations, options.authoring);
+  const controller = createPlaygroundController({ read: options.readStatus } satisfies StatusReader, options.readWorkspace, options.operations, options.authoring, options.simulation);
   const workspace = workspaceHandlers(controller);
   const authoring = authoringHandlers(controller);
   const compiler = compilerHandlers(controller);
+  const simulation = simulationHandlers(controller);
+  const verification = verificationHandlers(controller);
   const registry = new AgentToolRegistry(options.pageId ?? pageId(), [
     { descriptor: statusDescriptor, handler: statusHandler(controller) },
     { descriptor: listProjectsDescriptor, handler: (input) => workspace.listProjects(input as { cursor?: string; limit?: number }) },
@@ -64,6 +70,15 @@ export function installPageApi(el: HTMLElement, options: InstallPageApiOptions):
     { descriptor: setCompileSettingsDescriptor, handler: authoring.setCompileSettings },
     { descriptor: compileDescriptor, handler: compiler.compile },
     { descriptor: diagnosticsDescriptor, handler: compiler.diagnostics },
+    { descriptor: getSimulationDescriptor, handler: simulation.get },
+    { descriptor: prepareSimulationDescriptor, handler: simulation.prepare },
+    { descriptor: driveDescriptor, handler: simulation.drive },
+    { descriptor: resetDescriptor, handler: simulation.reset },
+    { descriptor: readMemoryDescriptor, handler: simulation.readMemory },
+    { descriptor: updateMemoryDescriptor, handler: simulation.updateMemory },
+    { descriptor: setMemoryPreloadDescriptor, handler: simulation.setMemoryPreload },
+    { descriptor: runVerificationDescriptor, handler: verification.run },
+    { descriptor: getVerificationDescriptor, handler: verification.get },
     ...(options.help ? [{ descriptor: helpDescriptor, handler: helpHandler(options.help) }] : []),
   ]);
   const native = options.native ?? new WebMcpAdapter(registry, detectNativeRegistrar());

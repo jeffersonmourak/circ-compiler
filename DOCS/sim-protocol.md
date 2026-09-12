@@ -293,3 +293,18 @@ reset. Changing only the output view keeps the same session. Images are saved
 with the project when they fit the saved-state budget; the page reports when
 they are too large to survive a reload. Console memory commands still address
 only memories declared in the selected root file.
+
+## Agent simulation controls
+
+The playground agent contract uses the same session as the canvas, Data panel,
+memory panel, and console. `circ_drive` has the ordering of `eval`: assignments
+settle one at a time. It accepts and returns canonical lowercase `0x` strings
+for values and defined masks so 64-bit states do not cross JSON as numbers.
+`circ_reset` is the protocol reset and creates a new session identity. Root
+memory pages and mutations map to `peek`/`mem`, `poke`, `clear`, and `load`;
+source ROM preloads are separately addressed by project/file/declaration.
+
+`circ_run_verification` uses disposable sessions and writes no visible console
+records. It can run ordered vectors and stateful scenarios, but cannot read or
+copy live state. See `agent-playground.md` for revision preconditions, limits,
+and result paging.
