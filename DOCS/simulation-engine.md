@@ -349,6 +349,14 @@ const WIRE_PROPAGATION_DELAY: Timestamp = 1;
 
 `wire`, `output_pin`, `led`, `slice`, and `concat` use the wire delay; everything else uses the gate delay. A chain of `N` gates plus `M` wire-delay components (`wire`, `output_pin`, `led`, `slice`, `concat`) settles after `N*5 + M*1` time units.
 
+### Bounded settling
+
+`Circuit.MAX_SETTLE_WORK` is 1,000,000 work units per `propagate()` call. Both event pops (including deduplicated events) and downstream evaluations consume the same budget. It bounds repeated feedback without changing the per-timestamp commit/evaluate ordering of circuits that settle.
+
+Exhaustion returns `error.NoSettle`, sets `settle_failed`, and clears the pending event queue and timestamp scratch list. Subsequent propagation or memory mutations refuse until the circuit is rebuilt. `readState` returns undefined for a failed circuit so a partially processed timestamp cannot be mistaken for a settled value. Direct engine memory planes may contain partial writes and must not be consumed after failure. The CLI refuses value reads until reset; the WASM facade masks them as undefined and exposes `getSimulationStatus()`.
+
+This is a deterministic safety cap, not static oscillation analysis. `E008` still permits gate-based latches. The reported `feedback_register.circ` falling-edge hang and a gated oscillator exercise failure; the site's SR latch exercises successful set/hold/reset behavior.
+
 ### State snapshot
 
 ```zig

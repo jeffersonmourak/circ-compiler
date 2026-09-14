@@ -111,7 +111,7 @@ export fn reset() void {
 
 export fn run() void {
     if (!runtime_initialized) return;
-    runtime_circuit.propagate() catch return;
+    runtime_circuit.propagate() catch |err| { if (err == error.NoSettle) @trap(); return; };
 }
 
 export fn stop() void {
@@ -127,7 +127,7 @@ export fn setPin(component_id: i32, value: i64, defined: i64) void {
     const comp = component_table[id];
     const width = comp.state_handle.tier;
     const state = engine.BitVecState.fromRaw(@bitCast(value), @bitCast(defined), width);
-    runtime_circuit.propagateEvent(comp, state) catch return;
+    runtime_circuit.propagateEvent(comp, state) catch |err| { if (err == error.NoSettle) @trap(); return; };
 }
 
 export fn getOutputValue(component_id: i32) i64 {

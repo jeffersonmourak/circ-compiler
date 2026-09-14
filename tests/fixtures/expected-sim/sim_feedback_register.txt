@@ -1,0 +1,17 @@
+ready proto=1 pins=3 warnings=0
+pin dado in 1
+pin clock in 1
+pin s out 1
+ok
+ok
+ok
+ok
+err E_NOSETTLE settle work budget exceeded; reset required
+err E_NOSETTLE settle work budget exceeded; reset required
+err E_NOSETTLE settle work budget exceeded; reset required
+err E_NOSETTLE settle work budget exceeded; reset required
+ok
+ok 0x0 0x0
+ok
+ok
+ok bye

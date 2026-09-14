@@ -346,6 +346,7 @@ const groups = displayGroups(catalogue, []);
 
 <script>
   import { agentConnectPrompt } from '../scripts/agent-connect.ts';
+  import { loadSimulationRuntime } from '../scripts/simulation-runtime.ts';
   import { getSharedClient, type LibcircVersion, type WorkerReply } from '../scripts/libcirc-client.ts';
   // TYPE only: erased at build, so the renderer stays behind its dynamic import.
   import type { BitValue, CircRuntime, CircTheme, CircView } from 'circ-renderer';
@@ -1393,14 +1394,16 @@ const groups = displayGroups(catalogue, []);
       failure: null,
     };
     let lastKind = '';
+    let simulationFailure: string | null = null;
     function renderStatus() {
       const view = statusFor(pipe);
-      if (view.kind !== lastKind) {
-        statusLabel.textContent = view.label;
-        dot.dataset.state = view.kind;
-        lastKind = view.kind;
+      const kind = simulationFailure ? 'simulation-failed' : view.kind;
+      if (kind !== lastKind) {
+        statusLabel.textContent = simulationFailure ? 'Simulation stopped' : view.label;
+        dot.dataset.state = simulationFailure ? 'error' : view.kind;
+        lastKind = kind;
       }
-      statusDetail.textContent = view.detail;
+      statusDetail.textContent = simulationFailure ?? view.detail;
     }
 
     // ---- persistence ----
@@ -4175,7 +4178,7 @@ const groups = displayGroups(catalogue, []);
       try {
         scratch = await SimSession.build({
           bytes,
-          load: (b) => Runtime.loadFromBytes(b, { noInitialPinDrive: true }),
+          load: (b) => loadSimulationRuntime(Runtime, b),
           roms,
           images,
           importedImages,
@@ -4550,6 +4553,8 @@ const groups = displayGroups(catalogue, []);
       sim.liveStateRevision = null;
       sim.imageRevision = null;
       sim.lifecycle = 'absent';
+      simulationFailure = null;
+      renderStatus();
       sim.preloadState = 'none';
       sim.preload = { applied: 0, errors: 0 };
       refreshConsoleGate();
@@ -4614,7 +4619,7 @@ const groups = displayGroups(catalogue, []);
       try {
         session = await SimSession.build({
           bytes,
-          load: (b) => Runtime.loadFromBytes(b, { noInitialPinDrive: true }),
+          load: (b) => loadSimulationRuntime(Runtime, b),
           roms,
           images,
           importedImages,
@@ -4624,7 +4629,14 @@ const groups = displayGroups(catalogue, []);
           bootLow: true,
         });
       } catch (error) {
-        if (ownsOperation('session_build', scheduled.id)) sim.lifecycle = 'failed';
+        if (sim.bytes === bytes && ownsOperation('session_build', scheduled.id)) {
+          sim.lifecycle = 'failed';
+          simNote.textContent = `Simulation stopped: ${error instanceof Error ? error.message : String(error)}`;
+          simulationFailure = simNote.textContent;
+          renderStatus();
+          dataNote.textContent = simNote.textContent;
+          status.textContent = simNote.textContent;
+        }
         failOperation(scheduled.id, error, 'runtime');
         observe();
         return null;
@@ -4671,13 +4683,15 @@ const groups = displayGroups(catalogue, []);
           observe();
         } else if (event.kind === 'reset-finished') {
           sim.lifecycle = 'ready';
+          simulationFailure = null;
+          renderStatus();
           setPreloadStatus(event.preloads);
           const reset = sim.operationId ? operations.lookup(sim.operationId) : null;
           if (reset?.kind === 'found') sim.imageRevision = reset.operation.inputs.imageRevision;
           if (sim.operationId) operations.finish(sim.operationId, 'succeeded', { sessionId: sim.id, artifactId: artifact?.id ?? null });
           observe();
         } else if (event.kind === 'reset-failed') {
-          sim.lifecycle = session.isAlive ? 'ready' : 'failed';
+          sim.lifecycle = session.isAlive && !session.failedToSettle ? 'ready' : 'failed';
           if (session.isAlive) {
             sim.id = revisionIds.next('session');
             sim.liveStateRevision = revisionIds.next('live-state');
@@ -4685,6 +4699,29 @@ const groups = displayGroups(catalogue, []);
           if (sim.operationId) {
             operations.finish(sim.operationId, 'failed', { failure: { kind: 'runtime', message: event.message, libraryStatus: null } });
           }
+          observe();
+        } else if (event.kind === 'settle-failed') {
+          sim.lifecycle = 'failed';
+          simulationFailure = event.message;
+          renderStatus();
+          sim.liveStateRevision = revisionIds.next('live-state');
+          sim.pins.clear();
+          const message = `Simulation stopped: ${event.message}`;
+          status.textContent = message;
+          simNote.textContent = message;
+          dataNote.textContent = message;
+          consoleNote.textContent = message;
+          if (!consoleState.busy) consoleAppend([`err E_NOSETTLE settle work budget exceeded; reset required`]);
+          // Retire the canvas after the current input callback returns.
+          queueMicrotask(() => {
+            if (sim.session !== session || !session.failedToSettle) return;
+            sim.view?.destroy();
+            sim.view = null;
+            simMount.replaceChildren();
+            if (state.dataOpen) renderData();
+            if (memVisible()) renderMemory();
+            simNote.textContent = message;
+          });
           observe();
         } else if (event.kind === 'run-finished') {
           sim.liveStateRevision = revisionIds.next('live-state');
@@ -4712,12 +4749,16 @@ const groups = displayGroups(catalogue, []);
           // lines are already in the log (it is busy while they run).
           if (!consoleState.busy) consoleAppend(commandFor(event, session), 'page');
         } else if (event.kind === 'rebuilt') {
+          simNote.textContent = '';
+          dataNote.textContent = '';
+          consoleNote.textContent = '';
+          status.textContent = '';
           sim.id = revisionIds.next('session');
           sim.liveStateRevision = revisionIds.next('live-state');
           observe();
           // The protocol's reset: a new runtime, so a canvas over the old one
           // is rebuilt over the new, and the rows read the new.
-          if (sim.view) void buildCanvas();
+          if (sim.view || state.view === 'live') void buildCanvas();
           if (state.dataOpen) renderData();
           renderMemory();
           // The console says so after the reply that caused it, or at once
@@ -4740,7 +4781,7 @@ const groups = displayGroups(catalogue, []);
     /** The Simulate face: a canvas over the session's runtime. */
     async function buildCanvas() {
       const session = await ensureSession();
-      if (!session) return;
+      if (!session || session.failedToSettle) return;
       const [{ CircCanvas: Canvas }, themeMod] = await Promise.all([loadRenderer(), loadThemes()]);
       if (sim.session !== session) return;
       const { pickTheme, onAssetsReady } = themeMod;
@@ -5221,12 +5262,12 @@ const groups = displayGroups(catalogue, []);
       const activeId = store.envelope.activeId;
       return { ...shape, sourceOwner: mem.kind === 'rom' && activeId ? { projectId: activeId, file: activeFile(state.tabs).name, declaration: mem.name } : null };
     }
-    function simulationPreconditions(input: { projectId?: unknown; expectedTargetEpoch?: unknown; expectedArtifactId?: unknown; expectedSessionId?: unknown; expectedLiveStateRevision?: unknown }, live = true) {
+    function simulationPreconditions(input: { projectId?: unknown; expectedTargetEpoch?: unknown; expectedArtifactId?: unknown; expectedSessionId?: unknown; expectedLiveStateRevision?: unknown }, live = true, allowFailed = false) {
       const target = revisions.currentTarget;
       if (!target || input.projectId !== target.projectId || input.expectedTargetEpoch !== target.targetEpoch) return simulationError('TARGET_CONFLICT', 'The visible target changed; reread status.');
       if (!state.artifact || input.expectedArtifactId !== state.artifact.id) return simulationError('ARTIFACT_CONFLICT', 'The compiled artifact changed; reread status and prepare it.');
       if (!live) return null;
-      if (!sim.session || sim.lifecycle !== 'ready' || !sim.id || !sim.liveStateRevision) return simulationError('SESSION_NOT_READY', 'No ready simulation session exists.', true);
+      if (!sim.session || (sim.lifecycle !== 'ready' && !(allowFailed && sim.lifecycle === 'failed')) || !sim.id || !sim.liveStateRevision) return simulationError('SESSION_NOT_READY', 'No ready simulation session exists; reset a failed session.', true);
       if (input.expectedSessionId !== sim.id) return simulationError('SESSION_CONFLICT', 'The simulation session changed; reread it.');
       if (input.expectedLiveStateRevision !== sim.liveStateRevision) return simulationError('LIVE_STATE_CONFLICT', 'Live simulation state changed; reread it.');
       return null;
@@ -5251,6 +5292,7 @@ const groups = displayGroups(catalogue, []);
       if (!state.artifact || input.expectedArtifactId !== state.artifact.id) return simulationError('ARTIFACT_CONFLICT', 'The compiled artifact changed; reread status.');
       if (!version || input.expectedImageRevision !== version.imageRevision) return simulationError('IMAGE_CONFLICT', 'Source images changed; reread status.');
       const ready = currentSimulationRef();
+      if (sim.session?.failedToSettle) return simulationError('SIMULATION_FAILED', 'E_NOSETTLE: settle work budget exceeded; reset required');
       if (ready && ready.imageRevision === version.imageRevision) {
         const operationId = operationSlots.session_build ?? sim.operationId;
         if (!operationId) return simulationError('SESSION_NOT_READY', 'The session has no build operation.', true);
@@ -5283,7 +5325,7 @@ const groups = displayGroups(catalogue, []);
       }
     }
     function resetForAgent(input: any) {
-      const blocked = simulationPreconditions(input); if (blocked) return blocked;
+      const blocked = simulationPreconditions(input, true, true); if (blocked) return blocked;
       const session = sim.session!;
       const activeId = store.envelope.activeId!;
       const scheduled = queueOperation('session_reset', {}, { artifactId: state.artifact!.id, imageRevision: revisions.projectVersion(activeId)?.imageRevision ?? null, liveStateRevision: sim.liveStateRevision });
@@ -5365,7 +5407,7 @@ const groups = displayGroups(catalogue, []);
         try {
           const { CircRuntime: Runtime } = await loadRenderer();
           const result = await executeVerification(scheduled.id, scheduled.inputs, version.imageRevision, input.cases, {
-            create: async (caseInput) => SimSession.build({ bytes, load: (artifact) => Runtime.loadFromBytes(artifact, { noInitialPinDrive: true }), roms, images: caseInput.sourcePreloads === 'current' ? new Map(capturedImages) : new Map(), importedImages: caseInput.sourcePreloads === 'current' ? copyImportedImages(capturedImported) : undefined }),
+            create: async (caseInput) => SimSession.build({ bytes, load: (artifact) => loadSimulationRuntime(Runtime, artifact), roms, images: caseInput.sourcePreloads === 'current' ? new Map(capturedImages) : new Map(), importedImages: caseInput.sourcePreloads === 'current' ? copyImportedImages(capturedImported) : undefined }),
             now: () => performance.now(), yield: () => new Promise((resolve) => setTimeout(resolve, 0)), cancelled: () => { const current = operations.lookup(scheduled.id); return current.kind !== 'found' || current.operation.state === 'superseded'; },
           }, timeout, input.stopOnFailure ?? false);
           if (!verificationResults.admit(result)) operations.finish(scheduled.id, 'failed', { failure: { kind: 'runtime', message: 'Verification result exceeded retention limits.', libraryStatus: null } });
@@ -5618,7 +5660,7 @@ const groups = displayGroups(catalogue, []);
             simulationCompatible: version ? state.simulateEnabled : null,
           },
           reportedPipeline: {
-            kind: pipeline.kind,
+            kind: simulationFailure ? 'error' : pipeline.kind,
             analyzing: pipe.analyzing,
             building: pipe.building,
             analyzePending: analyzeStage.pending,
@@ -5626,7 +5668,7 @@ const groups = displayGroups(catalogue, []);
             errors: pipe.errors,
             warnings: pipe.warnings,
             stale: state.stale || pipe.stale,
-            failure: pipe.failure,
+            failure: simulationFailure ?? pipe.failure,
           },
           artifact: { present: state.artifact !== null, bytes: state.artifact?.size ?? null },
           session: { present: Boolean(sim.session?.isAlive) },

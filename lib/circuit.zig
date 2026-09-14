@@ -705,6 +705,11 @@ pub const Pool = struct {
 };
 
 pub const Circuit = struct {
+    /// Deterministic work cap per settle (event pops + downstream evaluations).
+    /// This is a safety budget, not a proof of oscillation or a wall-clock limit.
+    pub const MAX_SETTLE_WORK: usize = 1_000_000;
+    /// A budget failure invalidates this runtime until rebuilt/reset.
+    settle_failed: bool = false,
     nodes: std.ArrayList(*Component),
     event_queue: EventQueue,
     next_id: u32 = 0,
@@ -774,6 +779,7 @@ pub const Circuit = struct {
     /// Read the BitVecState at `handle`. Tier dispatch happens exactly once;
     /// everything above this line sees only the value type.
     pub fn readState(self: *const Circuit, handle: PoolHandle) BitVecState {
+        if (self.settle_failed) return BitVecState.undefined_(handle.tier);
         return self.tiers[handle.tier].?.read(handle.slot);
     }
 
@@ -883,6 +889,13 @@ pub const Circuit = struct {
     }
 
     pub fn propagate(self: *Circuit) !void {
+        if (self.settle_failed) return error.NoSettle;
+        var remaining: usize = MAX_SETTLE_WORK;
+        // No partially processed timestamp or queued oscillation survives failure.
+        errdefer {
+            self.event_queue.heap.clearRetainingCapacity();
+            self.changed_at_step.clearRetainingCapacity();
+        }
         // Two-phase processing per timestamp: first commit ALL state changes
         // at time T, then walk every changed component's outputs to schedule
         // downstream events. Without this batching, a downstream gate's
@@ -904,6 +917,7 @@ pub const Circuit = struct {
             // get queued for downstream notification.
             while (self.event_queue.peek()) |next_event| {
                 if (next_event.timestamp != step_time) break;
+                try self.consumeSettleWork(&remaining);
                 const event = self.event_queue.pop().?;
                 if (COLLECT_METRICS) self.metrics.events_popped += 1;
                 const component = event.component;
@@ -927,6 +941,7 @@ pub const Circuit = struct {
             // see consistent upstream state.
             for (self.changed_at_step.items) |component| {
                 for (component.outputs.items) |output| {
+                    try self.consumeSettleWork(&remaining);
                     if (comptime log.enabled(.info)) {
                         log.info("  -> Notifying downstream component id={d}", .{output.id});
                     }
@@ -953,7 +968,16 @@ pub const Circuit = struct {
         if (COLLECT_METRICS) self.metrics.final_time = self.current_time;
     }
 
+    fn consumeSettleWork(self: *Circuit, remaining: *usize) error{NoSettle}!void {
+        if (remaining.* == 0) {
+            self.settle_failed = true;
+            return error.NoSettle;
+        }
+        remaining.* -= 1;
+    }
+
     pub fn propagateEvent(self: *Circuit, component: *Component, new_state: BitVecState) !void {
+        if (self.settle_failed) return error.NoSettle;
         // Short-circuit no-op events: when the caller drives a component to
         // its current state, the event would just be popped and skipped at
         // Phase 1 (the `BitVecState.equals` dedup inside propagate), wasting
@@ -1011,6 +1035,7 @@ pub const Circuit = struct {
 
     /// Write one word, canonicalised to the data width like Pool.write.
     pub fn memoryWriteWord(self: *Circuit, comp: *Component, addr: usize, state: BitVecState) !void {
+        if (self.settle_failed) return error.NoSettle;
         const m = try memoryPayload(comp);
         if (addr >= m.cells.wordCount()) return error.AddressOutOfRange;
         const mask = widthMask(comp.state_handle.tier);
@@ -1021,6 +1046,7 @@ pub const Circuit = struct {
 
     /// Every cell becomes undefined.
     pub fn memoryClear(self: *Circuit, comp: *Component) !void {
+        if (self.settle_failed) return error.NoSettle;
         const m = try memoryPayload(comp);
         @memset(m.cells.values, 0);
         @memset(m.cells.defined, 0);
@@ -1030,6 +1056,7 @@ pub const Circuit = struct {
     /// Replace every cell from a raw image (see memimage). A rejected image
     /// leaves the cells and `out` untouched. Returns the words loaded.
     pub fn memoryLoadImage(self: *Circuit, comp: *Component, bytes: []const u8) !usize {
+        if (self.settle_failed) return error.NoSettle;
         const m = try memoryPayload(comp);
         const words = try memimage.decode(bytes, comp.state_handle.tier, m.cells.addr_width, m.cells.values, m.cells.defined);
         try self.memoryRefresh(comp);
@@ -1790,6 +1817,26 @@ test "Circuit: mixed-width components allocate in independent tiers" {
     try std.testing.expectEqual(@as(u64, 0b1111), circuit.readState(bus4.state_handle).defined);
     try std.testing.expect(circuit.readState(bus8.state_handle).equals(BitVecState.low(8)));
     try std.testing.expect(circuit.readState(scalar2.state_handle).equals(BitVecState.low(1)));
+}
+
+test "Circuit: oscillation exhausts a settle budget and cannot resume partial state" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+    const enable = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const gate = try circuit.createComponent(.{ .and_gate = .{} }, 1);
+    const inv = try circuit.createComponent(.{ .not_gate = .{} }, 1);
+    try circuit.connect(.{ enable, "out" }, .{ gate, "a" });
+    try circuit.connect(.{ inv, "out" }, .{ gate, "b" });
+    try circuit.connect(.{ gate, "out" }, .{ inv, "in" });
+    try circuit.propagateEvent(enable, BitVecState.low(1));
+    try std.testing.expect(!circuit.settle_failed);
+    try std.testing.expectError(error.NoSettle, circuit.propagateEvent(enable, BitVecState.high(1)));
+    try std.testing.expect(circuit.settle_failed);
+    try std.testing.expectEqual(@as(usize, 0), circuit.event_queue.heap.items.len);
+    try std.testing.expectEqual(@as(usize, 0), circuit.changed_at_step.items.len);
+    try std.testing.expect(circuit.readState(gate.state_handle).isUndefined());
+    try std.testing.expectError(error.NoSettle, circuit.propagate());
+    try std.testing.expectError(error.NoSettle, circuit.propagateEvent(enable, BitVecState.low(1)));
 }
 
 test "Circuit: lazy tier init only allocates tiers actually used" {

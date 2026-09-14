@@ -207,16 +207,22 @@ pub fn truthTable(allocator: std.mem.Allocator, req: Request) std.mem.Allocator.
         try json.writeError(buf.writer(allocator), text.items);
         return outcome(allocator, .refused, &buf);
     }
+    defer circuit.memory.reset();
     var table = modes.buildTruthTable(allocator, topology, .{
         .max_input_bits = req.options.truth_table_cap,
         .preloads = req.options.preloads,
     }, &failure) catch |err| switch (err) {
         error.OutOfMemory => return error.OutOfMemory,
-        error.Failed => return internal(allocator, &buf, failure),
+        error.Failed => {
+            if (failure.cause == error.NoSettle) {
+                try json.writeError(buf.writer(allocator), "E_NOSETTLE: settle work budget exceeded");
+                return outcome(allocator, .refused, &buf);
+            }
+            return internal(allocator, &buf, failure);
+        },
     };
     // The table's arena is separate from the engine arena; the engine
     // objects were freed by build()'s own deinit, so the arena can go.
-    defer circuit.memory.reset();
     defer table.deinit();
     modes.renderTruthTable(buf.writer(allocator), table, req.options.format, req.options.value_format, &failure) catch |err| switch (err) {
         error.OutOfMemory => return error.OutOfMemory,

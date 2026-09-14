@@ -1,0 +1,19 @@
+// registrador - flip-flop D mestre-escravo (mesma ideia do
+// circuito original de AND/OR/NOT com realimentação)
+// amostra 'dado' na borda de descida de 'clock'
+input dado, clock
+not nclk(in = clock)
+
+// latch mestre: aberto quando clock = 1
+and m1(a = dado, b = clock)
+and m2(a = qm, b = nclk.out)
+or  m_o(a = m1.out, b = m2.out)
+wire qm(in = m_o.out)
+
+// latch escravo: aberto quando clock = 0
+and s1(a = qm.out, b = nclk.out)
+and s2(a = qs, b = clock)
+or  s_o(a = s1.out, b = s2.out)
+wire qs(in = s_o.out)
+
+output s(in = qs.out)

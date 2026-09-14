@@ -94,6 +94,9 @@ export async function execute(session: SimSession, files: FileSource, line: stri
     return ['err E_PROTO malformed command'];
   }
   const cmd = parsed.command;
+  if (session.failedToSettle && !['quit', 'reset', 'pins', 'mems'].includes(cmd.verb)) {
+    return ['err E_NOSETTLE settle work budget exceeded; reset required'];
+  }
   switch (cmd.verb) {
     case 'quit':
       // There is no process to end: the console prints the CLI's farewell and
@@ -102,9 +105,10 @@ export async function execute(session: SimSession, files: FileSource, line: stri
       return ['ok bye'];
     case 'pins':
       return [`pins ${session.pins.length}`, ...session.pins.map(pinLine)];
-    case 'run':
-      session.run();
-      return ['ok'];
+    case 'run': {
+      const result = session.run();
+      return [result.ok ? 'ok' : err(result)];
+    }
     case 'reset':
       await session.reset();
       return ['ok'];
