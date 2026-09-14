@@ -1,0 +1,4 @@
+input enable
+and gate(a = enable, b = inv.out)
+not inv(in = gate.out)
+output out(in = gate.out)

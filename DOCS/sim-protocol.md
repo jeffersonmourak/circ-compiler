@@ -88,9 +88,10 @@ root-level memory of that name — including a pin name given to a memory verb),
 `E_MEMFMT <path>: <reason>` (the image breaks a raw-image rule: length not a
 whole number of words, more words than the memory holds, a word with bits at
 or above the data width, or a file over the 16 MiB read cap), `E_ADDR <mem>
-<addr>` (address `>= 2^A`). `E_NOSETTLE` is declared for a settle cap that
-`run` does not enforce (`run` swallows propagate errors and replies `ok`); the
-process never emits it.
+<addr>` (address `>= 2^A`). `E_NOSETTLE` means the circuit exhausted its
+settling work budget. `set`, `eval`, `run`, and memory mutations can report it.
+Afterward, reset the session before driving, reading values, or exporting memory.
+`pins`, `mems`, `reset`, and `quit` remain available.
 
 ## Settle model
 
@@ -101,6 +102,16 @@ and then drains to quiescence). The protocol has no clock to pump: a single
 across commands, so a scenario is just `set`/`get` repeated; only `reset`
 clears it. Because each `set` settles independently, `eval` applies its
 assignments in order, each settling, before reading its queries.
+
+Each settle permits at most 1,000,000 work units: one per popped event,
+inertial candidate validation, downstream evaluation, or rejected-target
+recalculation. Exhaustion returns
+`err E_NOSETTLE settle work budget exceeded; reset required`, discards pending
+events, and invalidates the session's values until reset. Earlier writes in
+an `eval` may already have occurred; this is not a rollback. The cap is a
+deterministic safety budget, not a wall-clock deadline or proof of oscillation.
+Gate feedback remains legal for latches; passing `E008` validation does not
+guarantee that every input sequence settles.
 
 ## Memories
 

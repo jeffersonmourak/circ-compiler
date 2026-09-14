@@ -206,7 +206,8 @@ export function rowsForPins(
     const r = captured ? { ok: true as const, value: captured } : live.get(pin.name);
     const value = r.ok ? r.value.value & widthMask(pin.width) : 0n;
     known.set(pin.name, value);
-    scratch.set(pin.name, value, widthMask(pin.width));
+    const driven = scratch.set(pin.name, value, widthMask(pin.width));
+    if (!driven.ok) throw new Error(`${driven.code}: ${driven.arg}`);
   }
 
   const rows: TruthRows['rows'] = [];
@@ -217,7 +218,8 @@ export function rowsForPins(
     for (const pin of unknown) {
       const value = (i >> shift) & widthMask(pin.width);
       assigned.set(pin.name, value);
-      scratch.set(pin.name, value, widthMask(pin.width));
+      const driven = scratch.set(pin.name, value, widthMask(pin.width));
+      if (!driven.ok) throw new Error(`${driven.code}: ${driven.arg}`);
       shift += BigInt(pin.width);
     }
     const row = {

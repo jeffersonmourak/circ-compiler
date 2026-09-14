@@ -36,9 +36,9 @@ Seven categories arrived later: unknown sub-circuit port (`E012`), missing sub-c
 
 **Decision.** A graph cycle check over the connection topology (`lib/validator/passes/combinational_loop.zig`) rejects, as `E008`, a component driving itself (e.g. `not a (in = a.out)`) and any cycle that runs only through *transparent* components (`wire`, `led`, `output`, `slice`, `concat`, `rom`, and sub-circuit boundaries). `and`, `not`, and `ram` are *cycle-breaking*: the check drops every edge touching one, so a ring through gates (a cross-coupled pair, an SR latch) passes as sequential logic.
 
-**Rationale.** A loop of pure wires has no delay element and would oscillate events forever — `propagate()` never terminates — so compile time is the only place to catch it. Gate rings are the building block of every latch and must compile; the gate delay is what lets them settle. A ring that never settles (an odd number of inverters) still compiles today. Detection is cheap (DFS over the connection graph).
+**Rationale.** Reject transparent cycles before execution while allowing gate rings used to construct latches. A gate delay permits sequential behavior but does not guarantee settling: an oscillator or a timing-sensitive latch can continue scheduling events. Detection is cheap (DFS over the connection graph).
 
-**Alternatives.** Runtime detection with a max-iterations cap. Catches the bug later, leaks into runtime API, and arbitrary cap values mean some legitimate-but-slow circuits get aborted.
+**Runtime backstop.** A reported master/slave D-register hung on a falling clock edge despite passing validation: a gate output computed from an old input snapshot committed at the same timestamp as its correcting input, and the pulse circulated through feedback. AND and NOT transitions now use inclusive inertial delay, staging each timestamp and rejecting targets unsupported by the post-timestamp inputs. The engine bounds event pops, inertial validation, and component recalculation and returns `NoSettle` for genuine oscillation or exhaustion. This supplements `E008` without reclassifying every gate cycle as a compiler error. The failed runtime must be reset, and no partial result is labeled settled.
 
 ### Warning categories (default: emit + warn)
 

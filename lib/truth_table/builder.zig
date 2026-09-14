@@ -92,6 +92,7 @@ pub const BuildOptions = struct {
 };
 
 pub const BuildError = error{
+    NoSettle,
     TooManyInputs,
     NoOutputs,
     OutOfMemory,
@@ -166,7 +167,7 @@ pub fn build(
     const session = try engine_session.Session.build(arena_alloc, &circuit, topology);
     for (options.preloads) |preload| {
         const mem = session.findMemory(preload.name) orelse return error.BadPreload;
-        _ = session.applyImage(mem, preload.bytes) catch return error.BadPreload;
+        _ = session.applyImage(mem, preload.bytes) catch |err| return if (err == error.NoSettle) error.NoSettle else error.BadPreload;
     }
     const inputs = session.inputs;
     const outputs = session.outputs;
@@ -188,7 +189,7 @@ pub fn build(
                 .width = pin.width,
             };
             const node = session.nodeById(pin.component_id) orelse return error.InvalidTopology;
-            circuit.propagateEvent(node, new_state) catch return error.InvalidTopology;
+            circuit.propagateEvent(node, new_state) catch |err| return if (err == error.NoSettle) error.NoSettle else error.InvalidTopology;
             bit_offset += pin.width;
         }
 

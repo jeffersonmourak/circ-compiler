@@ -138,6 +138,10 @@ pub const Component = struct {
     /// Forward edges. Every kind has exactly one output port (`"out"`), so
     /// the per-port map collapses to a single slice.
     outputs: std.ArrayList(*Component) = .{},
+    /// One replaceable pending output transaction for an inertial gate.
+    pending_value: u64 = 0,
+    pending_defined: u64 = 0,
+    pending_generation: u32 = 0,
 
     pub fn init(id: u32, kind: Kind) !*Component;
     pub fn deinit(self: *Component) void;
@@ -160,10 +164,12 @@ pub const Event = struct {
     timestamp: Timestamp,
     component: *Component,
     new_state: BitVecState,
+    generation: u32 = 0, // non-zero for replaceable gate transitions
+    sequence: u64 = 0,   // deterministic same-timestamp insertion order
 };
 ```
 
-Events live in a min-heap (`std.PriorityQueue`) ordered by `timestamp`, so the earliest event always fires first.
+Events live in a min-heap (`std.PriorityQueue`) ordered by `(timestamp, sequence)`, so the earliest event always fires first and transport collisions at one timestamp follow insertion order. A non-zero `generation` identifies the one live pending transition for an inertial gate; replaced or cancelled generations remain harmless stale queue entries.
 
 ### `PoolHandle` and `Pool`
 
@@ -197,6 +203,7 @@ You rarely construct `Pool` or `PoolHandle` directly; `Circuit.createComponent` 
 
 ```zig
 pub const Circuit = struct {
+    settle_failed: bool = false,
     nodes: std.ArrayList(*Component),
     event_queue: EventQueue,
     next_id: u32 = 0,
@@ -205,6 +212,9 @@ pub const Circuit = struct {
     /// Scratch buffer reused across propagate() calls so the first append in
     /// each propagation does not reallocate from zero capacity.
     changed_at_step: std.ArrayList(*Component) = .{},
+    /// Same-timestamp candidates retained through inertial validation.
+    staged_at_step: std.ArrayList(StagedEvent) = .{},
+    next_generation: u32 = 1,
     /// Width-tiered SoA pool for wire state. Each entry is `?Pool`, lazily
     /// allocated the first time a component of that width is created.
     /// Indexed by tier where `tier == width`; tier 0 is unused.
@@ -245,7 +255,7 @@ pub fn init() !Circuit;            // no allocator parameter; uses memory.alloca
 pub fn deinit(self: *Circuit) void;
 ```
 
-`deinit` walks `nodes` and calls `Component.deinit` on each (which frees its input lists), drops the event queue, releases the `changed_at_step` scratch buffer, and iterates the `tiers: [MAX_WIDTH + 1]?Pool` array, tearing down every lazily-allocated tier in place.
+`deinit` walks `nodes` and calls `Component.deinit` on each (which frees its input lists), drops the event queue, releases the `changed_at_step` and `staged_at_step` scratch buffers, and iterates the `tiers: [MAX_WIDTH + 1]?Pool` array, tearing down every lazily-allocated tier in place.
 
 ### State storage
 
@@ -309,10 +319,10 @@ pub fn propagate(self: *Circuit) !void;
 
 Drains the event queue in **two-phase batches per timestamp**. For each distinct timestamp `T` in ascending order:
 
-1. **Phase 1 (commit):** advance `current_time = T`, pop every queued event at timestamp `T`, write `event.new_state` to the component's pool slot via `writeState` (skipping no-op events whose new state already matches under `BitVecState.equals`), and remember the components that changed in `changed_at_step`.
+1. **Phase 1 (stage and commit):** advance `current_time = T`, pop every queued event at timestamp `T`, discard stale gate generations, and stage the remaining candidates in insertion order. Project the candidates into the state pool, then resolve gate acceptance in simultaneous rounds against their post-`T` inputs. Commit the supported candidates and remember the components that changed in `changed_at_step`.
 2. **Phase 2 (notify):** walk every changed component's `outputs` list, call the internal `recalculateAndReschedule` on each downstream component, then fire `notifyStateChange` for the optional listener.
 
-The batching is load-bearing: a downstream gate with multiple upstream events at the same `T` would otherwise read partially-updated upstream state in step 2, compute a transient value, and let the next event's dedup check (`if readState(c.state_handle).equals(event.new_state) continue`) silently drop the corrective re-enqueue, leaving the gate stuck on the wrong final value. The bug manifests in deep-fanout circuits where one control bit drives many parallel gates whose outputs feed a serial carry chain (e.g. a 4-bit ALU with shared `nx`/`ny` normalization).
+The batching is load-bearing: a downstream gate with multiple upstream events at the same `T` would otherwise read partially-updated upstream state in step 2, compute a transient value, and let the next event's dedup check silently drop the corrective re-enqueue, leaving the gate stuck on the wrong final value. Staging extends that rule to pending gate outputs: a gate event cannot commit from an old input snapshot while its correcting input event commits at the same timestamp.
 
 Stops when the queue is empty.
 
@@ -320,7 +330,7 @@ Stops when the queue is empty.
 
 ```zig
 fn recalculateAndReschedule(
-    circuit: *const Circuit,
+    circuit: *Circuit,
     component: *Component,
     queue: *EventQueue,
     current_time: Timestamp,
@@ -348,6 +358,16 @@ const WIRE_PROPAGATION_DELAY: Timestamp = 1;
 ```
 
 `wire`, `output_pin`, `led`, `slice`, and `concat` use the wire delay; everything else uses the gate delay. A chain of `N` gates plus `M` wire-delay components (`wire`, `output_pin`, `led`, `slice`, `concat`) settles after `N*5 + M*1` time units.
+
+`not_gate` and `and_gate` use inclusive inertial delay. Each gate retains one pending target and its original deadline while repeated evaluations request the same target; a changed target replaces it, and returning to the committed state cancels it. At the deadline, Phase 1 validates the target against the staged post-timestamp inputs before commit. An unsupported transition is rejected, so an input pulse whose width is less than or equal to the gate delay does not propagate. Wire-like kinds remain transport-delayed. Pending state is component-wide for a multi-bit gate event.
+
+### Bounded settling
+
+`Circuit.MAX_SETTLE_WORK` is 1,000,000 work units per `propagate()` call. Event pops (including stale events), inertial candidate validations, downstream evaluations, and rejected-target recalculations consume the same budget. It bounds repeated feedback without changing the per-timestamp commit/evaluate ordering of circuits that settle.
+
+Exhaustion returns `error.NoSettle`, sets `settle_failed`, and clears the pending event queue and timestamp scratch list. Subsequent propagation or memory mutations refuse until the circuit is rebuilt. `readState` returns undefined for a failed circuit so a partially processed timestamp cannot be mistaken for a settled value. Direct engine memory planes may contain partial writes and must not be consumed after failure. The CLI refuses value reads until reset; the WASM facade masks them as undefined and exposes `getSimulationStatus()`.
+
+This is a deterministic safety cap, not static oscillation analysis. `E008` still permits gate-based latches. Inclusive inertial delay lets the reported `feedback_register.circ` suppress its equal-delay handoff pulse and settle; a gated oscillator still exercises failure, and the site's SR latch exercises successful set/hold/reset behavior.
 
 ### State snapshot
 

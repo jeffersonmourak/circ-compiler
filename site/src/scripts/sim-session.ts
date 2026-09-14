@@ -19,6 +19,7 @@
 // The runtime is injected: `CircRuntime` on the page, a stub in a test.
 
 import { ComponentKind, widthMask, type BitValue } from 'circ-renderer/topology';
+import { NoSettleError, NO_SETTLE_MESSAGE } from './simulation-error.ts';
 import { applyImportedImages, type ImportedImages } from '../utils/source-images.ts';
 import {
   applyRomImages,
@@ -145,6 +146,7 @@ export type SessionListener = (event: SessionEvent) => void;
 
 /** Lifecycle bookkeeping is separate from the stable face/console event stream. */
 export type SessionLifecycleEvent =
+  | { kind: 'settle-failed'; message: string }
   | { kind: 'reset-started' }
   | { kind: 'reset-finished'; preloads: ApplyResult }
   | { kind: 'reset-failed'; message: string }
@@ -207,6 +209,8 @@ export class SimSession {
   private generation = 0;
   private resetting: Promise<void> | null = null;
   private preloads: ApplyResult = { applied: [], errors: new Map() };
+  private didNotSettle = false;
+  get failedToSettle(): boolean { return this.didNotSettle; }
 
   readonly pins: readonly PinRef[];
   readonly mems: readonly MemRef[];
@@ -222,15 +226,38 @@ export class SimSession {
     this.warnings = init.warnings ?? [];
     this.pins = collectPins(runtime.topology);
     this.mems = collectMems(runtime.topology);
+    this.observeRuntimeFailure(runtime);
+  }
+
+  private observeRuntimeFailure(runtime: RuntimeLike): void {
+    for (const method of ['setValue', 'run', 'writeMemWord', 'clearMem', 'loadMemImage'] as const) {
+      const original = runtime[method];
+      Object.defineProperty(runtime, method, { configurable: true, value: (...args: unknown[]) => {
+        try {
+          return Reflect.apply(original, runtime, args);
+        } catch (error) {
+          if (error instanceof NoSettleError && this.rt === runtime && this.alive && !this.didNotSettle) {
+            this.didNotSettle = true;
+            this.emitLifecycle({ kind: 'settle-failed', message: error.message });
+          }
+          throw error;
+        }
+      } });
+    }
   }
 
   /** Build over a fresh runtime and apply the preloads, as `--sim` does before its handshake. */
   static async build(init: SessionInit): Promise<SimSession> {
     const runtime = await init.load(init.bytes);
     const session = new SimSession(init, runtime);
-    session.applyPreloads({ silent: true });
-    if (init.bootLow) session.bootLow();
-    return session;
+    try {
+      session.applyPreloads({ silent: true });
+      if (init.bootLow) session.bootLow();
+      return session;
+    } catch (error) {
+      session.destroy();
+      throw error;
+    }
   }
 
   /** Every root input to 0, fully defined, then one settle. No event: nothing was watching yet. */
@@ -323,15 +350,18 @@ export class SimSession {
 
   /** Drive a root input and settle. An omitted `defined` is the full mask. */
   set(name: string, value: bigint, defined?: bigint): SimResult {
+    if (this.didNotSettle) return fail('E_NOSETTLE', NO_SETTLE_MESSAGE);
     const r = this.resolveDrive({ pin: name, value, defined });
     if (!r.ok) return r;
-    this.drive(r.pin, value, r.defined);
+    try { this.drive(r.pin, value, r.defined); }
+    catch (error) { if (error instanceof NoSettleError) return fail('E_NOSETTLE', NO_SETTLE_MESSAGE); throw error; }
     this.emitDrive([{ name, value, defined: r.defined }]);
     return { ok: true };
   }
 
   /** Read a root pin: outputs first, then inputs, as `doGet` looks them up. */
   get(name: string): SimResult<{ pin: PinRef; value: BitValue }> {
+    if (this.didNotSettle) return fail('E_NOSETTLE', NO_SETTLE_MESSAGE);
     const pin = this.output(name) ?? this.input(name);
     if (!pin) return fail('E_NOPIN', name);
     return { ok: true, pin, value: this.rt.readValue(pin.id) };
@@ -350,6 +380,7 @@ export class SimSession {
    * order, each settling, and the queries read.
    */
   eval(assigns: readonly Assign[], queries: readonly string[]): SimResult<{ values: { pin: PinRef; value: BitValue }[] }> {
+    if (this.didNotSettle) return fail('E_NOSETTLE', NO_SETTLE_MESSAGE);
     const resolved: { pin: PinRef; value: bigint; defined: bigint }[] = [];
     for (const a of assigns) {
       const r = this.resolveDrive(a);
@@ -359,7 +390,8 @@ export class SimSession {
     for (const q of queries) {
       if (!this.output(q) && !this.input(q)) return fail('E_NOPIN', q);
     }
-    for (const r of resolved) this.drive(r.pin, r.value, r.defined);
+    try { for (const r of resolved) this.drive(r.pin, r.value, r.defined); }
+    catch (error) { if (error instanceof NoSettleError) return fail('E_NOSETTLE', NO_SETTLE_MESSAGE); throw error; }
     if (resolved.length > 0) this.emitDrive(resolved.map((r) => ({ name: r.pin.name, value: r.value, defined: r.defined })));
     const values = queries.map((q) => {
       const pin = (this.output(q) ?? this.input(q))!;
@@ -369,9 +401,12 @@ export class SimSession {
   }
 
   /** Drain the event queue. Redundant after `set`; kept for parity with the artifact's `run()`. */
-  run(): void {
-    this.rt.run();
+  run(): SimResult {
+    if (this.didNotSettle) return fail('E_NOSETTLE', NO_SETTLE_MESSAGE);
+    try { this.rt.run(); }
+    catch (error) { if (error instanceof NoSettleError) return fail('E_NOSETTLE', NO_SETTLE_MESSAGE); throw error; }
     this.emitLifecycle({ kind: 'run-finished' });
+    return { ok: true };
   }
 
   // ---- preloads and reset ---------------------------------------------------
@@ -428,6 +463,8 @@ export class SimSession {
         }
         const old = this.rt;
         this.rt = fresh;
+        this.didNotSettle = false;
+        this.observeRuntimeFailure(fresh);
         old.destroy();
         const preloads = this.applyPreloads({ silent: true });
         this.emit({ kind: 'rebuilt' });
@@ -456,6 +493,7 @@ export class SimSession {
 
   /** Read one cell. */
   peek(name: string, addr: bigint): SimResult<{ mem: MemRef; value: BitValue }> {
+    if (this.didNotSettle) return fail('E_NOSETTLE', NO_SETTLE_MESSAGE);
     const mem = this.mem(name);
     if (!mem) return fail('E_NOMEM', name);
     if (addr < 0n || addr >= this.wordCount(mem)) return fail('E_ADDR', `${name} 0x${addr.toString(16)}`);
@@ -464,20 +502,24 @@ export class SimSession {
 
   /** Write one cell and settle, like `set`. An omitted `defined` is the full mask. */
   poke(name: string, addr: bigint, value: bigint, defined?: bigint): SimResult {
+    if (this.didNotSettle) return fail('E_NOSETTLE', NO_SETTLE_MESSAGE);
     const mem = this.mem(name);
     if (!mem) return fail('E_NOMEM', name);
     if (addr < 0n || addr >= this.wordCount(mem)) return fail('E_ADDR', `${name} 0x${addr.toString(16)}`);
     const mask = defined ?? widthMask(mem.width);
     if (!fits(mem.width, value, mask)) return fail('E_WIDTH', name);
-    const rc = this.rt.writeMemWord(mem.id, Number(addr), value, mask);
-    if (rc !== 0) return fail('E_PROTO', 'write failed');
-    this.rt.run();
+    try {
+      const rc = this.rt.writeMemWord(mem.id, Number(addr), value, mask);
+      if (rc !== 0) return fail('E_PROTO', 'write failed');
+      this.rt.run();
+    } catch (error) { if (error instanceof NoSettleError) return fail('E_NOSETTLE', NO_SETTLE_MESSAGE); throw error; }
     this.emit({ kind: 'memory', name, op: 'poke', addr, value, defined: mask });
     return { ok: true };
   }
 
   /** A range of cells; `start` past the end is `E_ADDR`, `count` is clipped. */
   dumpMem(name: string, start?: bigint, count?: bigint): SimResult<{ mem: MemRef; cells: { addr: bigint; value: BitValue }[] }> {
+    if (this.didNotSettle) return fail('E_NOSETTLE', NO_SETTLE_MESSAGE);
     const mem = this.mem(name);
     if (!mem) return fail('E_NOMEM', name);
     const total = this.wordCount(mem);
@@ -493,11 +535,14 @@ export class SimSession {
 
   /** Every cell undefined, and settle. */
   clear(name: string): SimResult {
+    if (this.didNotSettle) return fail('E_NOSETTLE', NO_SETTLE_MESSAGE);
     const mem = this.mem(name);
     if (!mem) return fail('E_NOMEM', name);
-    const rc = this.rt.clearMem(mem.id);
-    if (rc !== 0) return fail('E_PROTO', 'clear failed');
-    this.rt.run();
+    try {
+      const rc = this.rt.clearMem(mem.id);
+      if (rc !== 0) return fail('E_PROTO', 'clear failed');
+      this.rt.run();
+    } catch (error) { if (error instanceof NoSettleError) return fail('E_NOSETTLE', NO_SETTLE_MESSAGE); throw error; }
     this.emit({ kind: 'memory', name, op: 'clear' });
     return { ok: true };
   }
@@ -509,19 +554,23 @@ export class SimSession {
    * reported with its status.
    */
   loadImage(name: string, bytes: Uint8Array): SimResult<{ mem: MemRef; words: number }> {
+    if (this.didNotSettle) return fail('E_NOSETTLE', NO_SETTLE_MESSAGE);
     const mem = this.mem(name);
     if (!mem) return fail('E_NOMEM', name);
     const checked = validateImageBytes(bytes, mem);
     if (!checked.ok) return fail('E_MEMFMT', imageErrorReason(checked.error, mem));
-    const rc = this.rt.loadMemImage(mem.id, bytes);
-    if (rc !== 0) return fail('E_MEMFMT', `runtime refused the image (status ${rc})`);
-    this.rt.run();
+    try {
+      const rc = this.rt.loadMemImage(mem.id, bytes);
+      if (rc !== 0) return fail('E_MEMFMT', `runtime refused the image (status ${rc})`);
+      this.rt.run();
+    } catch (error) { if (error instanceof NoSettleError) return fail('E_NOSETTLE', NO_SETTLE_MESSAGE); throw error; }
     this.emit({ kind: 'memory', name, op: 'load', words: checked.words });
     return { ok: true, mem, words: checked.words };
   }
 
   /** The whole memory as a raw image, `value & defined` per word. */
   storeImage(name: string): SimResult<{ mem: MemRef; bytes: Uint8Array; words: number }> {
+    if (this.didNotSettle) return fail('E_NOSETTLE', NO_SETTLE_MESSAGE);
     const mem = this.mem(name);
     if (!mem) return fail('E_NOMEM', name);
     const bytes = this.rt.storeMemImage(mem.id);

@@ -156,6 +156,13 @@ pub fn serve(
             error.OutOfMemory => return err,
         };
 
+        if (circuit.settle_failed) switch (cmd) {
+            .reset, .quit, .pins, .mems => {},
+            else => {
+                try writeErr(writer, .nosettle, "settle work budget exceeded; reset required");
+                continue;
+            },
+        };
         switch (cmd) {
             .quit => {
                 try writer.writeAll("ok bye\n");
@@ -166,7 +173,10 @@ pub fn serve(
                 try writePinList(writer, &session);
             },
             .run => {
-                session.circuit.propagate() catch {};
+                session.circuit.propagate() catch |err| {
+                    try writeSimulationError(writer, err, "run failed");
+                    continue;
+                };
                 try writer.writeAll("ok\n");
             },
             .reset => {
@@ -232,6 +242,10 @@ fn doLoad(scratch: std.mem.Allocator, writer: anytype, session: *const engine_se
         },
     };
     const words = session.applyImage(mem, bytes) catch |err| switch (err) {
+        error.NoSettle => {
+            try writeSimulationError(writer, err, "load failed");
+            return;
+        },
         error.LengthNotWordMultiple, error.WordExceedsWidth, error.TooManyWords => |e| {
             try writer.print("err E_MEMFMT {s}: ", .{path});
             try writeImageError(writer, e, mem, bytes.len);
@@ -294,8 +308,8 @@ fn doPoke(writer: anytype, session: *const engine_session.Session, p: anytype) !
         return;
     }
     const node = session.nodeById(mem.component_id).?;
-    session.circuit.memoryWriteWord(node, @intCast(p.addr), .{ .value = p.value, .defined = mask, .width = mem.data_width }) catch {
-        try writeErr(writer, .proto, "write failed");
+    session.circuit.memoryWriteWord(node, @intCast(p.addr), .{ .value = p.value, .defined = mask, .width = mem.data_width }) catch |err| {
+        try writeSimulationError(writer, err, "write failed");
         return;
     };
     try writer.writeAll("ok\n");
@@ -324,8 +338,8 @@ fn doMemDump(writer: anytype, session: *const engine_session.Session, name: []co
 fn doClear(writer: anytype, session: *const engine_session.Session, name: []const u8) !void {
     const mem = (try resolveMem(writer, session, name)) orelse return;
     const node = session.nodeById(mem.component_id).?;
-    session.circuit.memoryClear(node) catch {
-        try writeErr(writer, .proto, "clear failed");
+    session.circuit.memoryClear(node) catch |err| {
+        try writeSimulationError(writer, err, "clear failed");
         return;
     };
     try writer.writeAll("ok\n");
@@ -357,8 +371,8 @@ fn resolveDrive(
 
 fn doSet(writer: anytype, session: *const engine_session.Session, a: protocol.Assign) !void {
     const drive = (try resolveDrive(writer, session, a)) orelse return;
-    session.circuit.propagateEvent(drive.node, drive.state) catch {
-        try writeErr(writer, .proto, "drive failed");
+    session.circuit.propagateEvent(drive.node, drive.state) catch |err| {
+        try writeSimulationError(writer, err, "drive failed");
         return;
     };
     try writer.writeAll("ok\n");
@@ -410,8 +424,8 @@ fn doEval(writer: anytype, session: *const engine_session.Session, e: anytype) !
     }
     for (e.assigns) |a| {
         const drive = (try resolveDrive(writer, session, a)).?;
-        session.circuit.propagateEvent(drive.node, drive.state) catch {
-            try writeErr(writer, .proto, "drive failed");
+        session.circuit.propagateEvent(drive.node, drive.state) catch |err| {
+            try writeSimulationError(writer, err, "drive failed");
             return;
         };
     }
@@ -427,8 +441,12 @@ fn doEval(writer: anytype, session: *const engine_session.Session, e: anytype) !
     try writer.writeByte('\n');
 }
 
-// ---------- Tests ----------
+fn writeSimulationError(writer: anytype, err: anyerror, fallback: []const u8) !void {
+    if (err == error.NoSettle) return writeErr(writer, .nosettle, "settle work budget exceeded; reset required");
+    try writeErr(writer, .proto, fallback);
+}
 
+// ---------- Tests ----------
 const t = std.testing;
 const FullComponentRecord = full_format.FullComponentRecord;
 const FullConnectionRecord = full_format.FullConnectionRecord;

@@ -33,6 +33,7 @@ const Fixture = struct {
 };
 
 const fixtures = [_]Fixture{
+    .{ .name = "sim_feedback_register", .root_path = "tests/fixtures/circuits/feedback_register.circ" },
     .{ .name = "sim_and_gate", .root_path = "tests/fixtures/circuits/and_gate.circ" },
     .{
         .name = "sim_rom_pc_walk",

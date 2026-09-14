@@ -1,0 +1,13 @@
+set dado 0
+set clock 0
+set dado 1
+set clock 1
+set clock 0
+get s
+run
+set clock 0
+reset
+get s
+set dado 0
+set clock 0
+quit

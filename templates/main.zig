@@ -67,6 +67,7 @@ fn memNode(component_id: i32) ?*engine.Component {
 }
 
 fn imageStatus(err: anyerror) i32 {
+    if (err == error.NoSettle) @trap();
     return switch (err) {
         error.LengthNotWordMultiple => -2,
         error.WordExceedsWidth => -3,
@@ -104,6 +105,7 @@ fn memLoad_impl(component_id: i32, len: i32) callconv(.c) i32 {
 }
 
 fn memStore_impl(component_id: i32) callconv(.c) i32 {
+    if (runtime_initialized and runtime_circuit.settle_failed) return -1;
     const comp = memNode(component_id) orelse return -1;
     const staging = mem_staging[@intCast(component_id)] orelse return -6;
     const written = runtime_circuit.memoryStoreImage(comp, staging) catch return -1;
@@ -112,7 +114,7 @@ fn memStore_impl(component_id: i32) callconv(.c) i32 {
 
 fn memClear_impl(component_id: i32) callconv(.c) i32 {
     const comp = memNode(component_id) orelse return -1;
-    runtime_circuit.memoryClear(comp) catch return -1;
+    runtime_circuit.memoryClear(comp) catch |err| return imageStatus(err);
     return 0;
 }
 
@@ -123,6 +125,7 @@ fn setMemWord_impl(component_id: i32, addr: i32, value: i64, defined: i64) callc
     if (index >= comp.kind.memory.cells.wordCount()) return -7;
     const state = engine.BitVecState.fromRaw(@bitCast(value), @bitCast(defined), comp.state_handle.tier);
     runtime_circuit.memoryWriteWord(comp, index, state) catch |err| return switch (err) {
+        error.NoSettle => @trap(),
         error.AddressOutOfRange => -7,
         else => -1,
     };
@@ -130,6 +133,7 @@ fn setMemWord_impl(component_id: i32, addr: i32, value: i64, defined: i64) callc
 }
 
 fn getMemValue_impl(component_id: i32, addr: i32) callconv(.c) i64 {
+    if (runtime_initialized and runtime_circuit.settle_failed) return 0;
     const comp = memNode(component_id) orelse return 0;
     const cells = engine.memoryCells(comp) orelse return 0;
     if (addr < 0) return 0;
@@ -139,6 +143,7 @@ fn getMemValue_impl(component_id: i32, addr: i32) callconv(.c) i64 {
 }
 
 fn getMemDefined_impl(component_id: i32, addr: i32) callconv(.c) i64 {
+    if (runtime_initialized and runtime_circuit.settle_failed) return 0;
     const comp = memNode(component_id) orelse return 0;
     const cells = engine.memoryCells(comp) orelse return 0;
     if (addr < 0) return 0;
@@ -149,7 +154,17 @@ fn getMemDefined_impl(component_id: i32, addr: i32) callconv(.c) i64 {
 
 fn run_impl() callconv(.c) void {
     if (!runtime_initialized) return;
-    runtime_circuit.propagate() catch return;
+    runtime_circuit.propagate() catch |err| {
+        if (err == error.NoSettle) @trap();
+        return;
+    };
+}
+
+/// Additive status query: -1 before init, 0 usable, 1 settle budget exhausted.
+/// The void drive/run ABI traps on exhaustion so older hosts cannot ignore it.
+fn getSimulationStatus_impl() callconv(.c) i32 {
+    if (!runtime_initialized) return -1;
+    return if (runtime_circuit.settle_failed) 1 else 0;
 }
 
 fn setPin_impl(component_id: i32, value: i64, defined: i64) callconv(.c) void {
@@ -162,7 +177,10 @@ fn setPin_impl(component_id: i32, value: i64, defined: i64) callconv(.c) void {
 
     const width = comp.state_handle.tier;
     const state = engine.BitVecState.fromRaw(@bitCast(value), @bitCast(defined), width);
-    runtime_circuit.propagateEvent(comp, state) catch return;
+    runtime_circuit.propagateEvent(comp, state) catch |err| {
+        if (err == error.NoSettle) @trap();
+        return;
+    };
 }
 
 fn getOutputValue_impl(component_id: i32) callconv(.c) i64 {
@@ -188,6 +206,7 @@ comptime {
         @export(&topology_alloc_impl, .{ .name = "topology_alloc", .linkage = .strong });
         @export(&init_impl, .{ .name = "init", .linkage = .strong });
         @export(&run_impl, .{ .name = "run", .linkage = .strong });
+        @export(&getSimulationStatus_impl, .{ .name = "getSimulationStatus", .linkage = .strong });
         @export(&setPin_impl, .{ .name = "setPin", .linkage = .strong });
         @export(&getOutputValue_impl, .{ .name = "getOutputValue", .linkage = .strong });
         @export(&getOutputDefined_impl, .{ .name = "getOutputDefined", .linkage = .strong });
@@ -203,7 +222,7 @@ comptime {
         // Old pipeline: compiled.zig defines the exports, so we just force its analysis.
         _ = compiled;
         @export(&topology_alloc_impl, .{ .name = "topology_alloc", .linkage = .strong });
-        
+
         // Expose init wrapper if compiled.zig doesn't expose it? No, compiled.zig exposes init().
     }
 }

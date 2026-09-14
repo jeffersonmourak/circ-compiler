@@ -115,7 +115,7 @@ pub fn emitRuntimeExports(allocator: std.mem.Allocator, module: *const ir.Module
     try writer.writeLine("export fn run() void {");
     writer.indent();
     try writer.writeLine("if (!runtime_initialized) return;");
-    try writer.writeLine("runtime_circuit.propagate() catch return;");
+    try writer.writeLine("runtime_circuit.propagate() catch |err| { if (err == error.NoSettle) @trap(); return; };");
     writer.dedent();
     try writer.writeLine("}");
     try writer.writeLine("");
@@ -135,7 +135,7 @@ pub fn emitRuntimeExports(allocator: std.mem.Allocator, module: *const ir.Module
     try writer.writeLine("const comp = component_table[id];");
     try writer.writeLine("const width = comp.state_handle.tier;");
     try writer.writeLine("const state = engine.BitVecState.fromRaw(@bitCast(value), @bitCast(defined), width);");
-    try writer.writeLine("runtime_circuit.propagateEvent(comp, state) catch return;");
+    try writer.writeLine("runtime_circuit.propagateEvent(comp, state) catch |err| { if (err == error.NoSettle) @trap(); return; };");
     writer.dedent();
     try writer.writeLine("}");
     try writer.writeLine("");

@@ -48,12 +48,15 @@ eight_bit_adder expanded I0=0 I1=0 I2=0 I3=0 X=317 B=306 S=97/224 C=124 F=0 size
 empty_ish opaque I0=0 I1=0 I2=0 I3=0 X=0 B=0 S=1/1 C=0 F=0 size=17x3
 fan_in opaque I0=0 I1=0 I2=0 I3=0 X=0 B=2 S=2/3 C=0 F=0 size=25x7
 fan_out opaque I0=0 I1=0 I2=0 I3=0 X=0 B=4 S=4/6 C=0 F=0 size=26x11
+feedback_register opaque I0=0 I1=0 I2=0 I3=0 X=9 B=26 S=5/14 C=1 F=0 size=71x21
+feedback_register expanded I0=0 I1=0 I2=0 I3=0 X=13 B=34 S=10/20 C=2 F=0 size=111x27
 five_bit_adder opaque I0=0 I1=0 I2=0 I3=0 X=97 B=100 S=12/50 C=39 F=0 size=188x79
 five_bit_adder expanded I0=0 I1=0 I2=0 I3=0 X=156 B=174 S=61/134 C=67 F=0 size=226x112
 four_bit_adder opaque I0=0 I1=0 I2=0 I3=0 X=47 B=76 S=8/39 C=27 F=0 size=146x56
 four_bit_adder expanded I0=0 I1=0 I2=0 I3=0 X=100 B=132 S=48/104 C=50 F=0 size=186x92
 full_adder_from_builtins opaque I0=0 I1=0 I2=0 I3=0 X=3 B=16 S=5/12 C=2 F=0 size=64x18
 full_adder_from_builtins expanded I0=0 I1=0 I2=0 I3=0 X=17 B=36 S=15/31 C=13 F=0 size=100x39
+gated_oscillator opaque I0=0 I1=0 I2=0 I3=0 X=0 B=6 S=2/4 C=0 F=0 size=34x9
 half_adder opaque I0=0 I1=0 I2=0 I3=0 X=2 B=6 S=3/6 C=1 F=0 size=32x11
 half_adder expanded I0=0 I1=0 I2=0 I3=0 X=3 B=14 S=7/14 C=3 F=0 size=58x19
 inverter opaque I0=0 I1=0 I2=0 I3=0 X=0 B=0 S=2/2 C=0 F=0 size=27x3
@@ -223,4 +226,4 @@ project-stress_deep_subcircuit opaque I0=0 I1=0 I2=0 I3=0 X=0 B=0 S=2/2 C=0 F=0 
 project-stress_deep_subcircuit expanded I0=0 I1=0 I2=0 I3=0 X=0 B=0 S=257/257 C=0 F=0 size=2577x3
 project-two_file opaque I0=0 I1=0 I2=0 I3=0 X=0 B=0 S=2/2 C=0 F=0 size=34x3
 project-two_file expanded I0=0 I1=0 I2=0 I3=0 X=0 B=0 S=1/1 C=0 F=0 size=17x3
-# totals: fixture-modes=223 skipped=66 I0=0 I1=22 I2=10 I3=0 X=5449 B=4500 S=1963/3759 C=6166 F=0
+# totals: fixture-modes=226 skipped=66 I0=0 I1=22 I2=10 I3=0 X=5471 B=4566 S=1980/3797 C=6169 F=0

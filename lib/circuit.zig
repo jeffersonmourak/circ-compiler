@@ -32,6 +32,7 @@ pub const Metrics = struct {
 
 const PROPAGATION_DELAY: Timestamp = 5;
 const WIRE_PROPAGATION_DELAY: Timestamp = 1;
+const STAGED_INERTIAL_FLAG: u32 = 1 << 31;
 
 const IN_PORT_NAME = "in";
 const A_PORT_NAME = "a";
@@ -99,7 +100,7 @@ pub fn memoryCells(comp: *const Component) ?*const MemCells {
 }
 
 fn recalculateAndReschedule(
-    circuit: *const Circuit,
+    circuit: *Circuit,
     component: *Component,
     queue: *EventQueue,
     current_time: Timestamp,
@@ -219,6 +220,10 @@ fn recalculateAndReschedule(
     }
 
     const current_state = circuit.readState(component.state_handle);
+    if (isInertial(component)) {
+        try circuit.scheduleInertial(component, calculated_state, current_time);
+        return;
+    }
     if (!current_state.equals(calculated_state)) {
         if (comptime log.enabled(.info)) {
             log.info(" - Component (id={d}, type={s}) output changed from {s} -> {s}. Scheduling new event.", .{ component.id, @tagName(component.kind), current_state.tagName(), calculated_state.tagName() });
@@ -432,11 +437,41 @@ pub const Event = struct {
     timestamp: Timestamp,
     component: *Component,
     new_state: BitVecState,
+    /// Non-zero only for a logical gate's replaceable inertial transition.
+    generation: u32 = 0,
+    sequence: u64 = 0,
 
     pub fn lessThan(_: void, lhs: Event, rhs: Event) std.math.Order {
-        return std.math.order(lhs.timestamp, rhs.timestamp);
+        const time_order = std.math.order(lhs.timestamp, rhs.timestamp);
+        if (time_order != .eq) return time_order;
+        return std.math.order(lhs.sequence, rhs.sequence);
     }
 };
+
+const StagedEvent = struct {
+    event: Event,
+    old_state: BitVecState,
+    accepted: bool = true,
+    next_accepted: bool = true,
+    validation_queued: bool = false,
+};
+
+fn isInertial(component: *const Component) bool {
+    return switch (component.kind) {
+        .not_gate, .and_gate => true,
+        else => false,
+    };
+}
+
+fn calculateInertialState(circuit: *const Circuit, component: *const Component) BitVecState {
+    const width = component.state_handle.tier;
+    return switch (component.kind) {
+        .not_gate => |gate| calculateDominantState(circuit, gate.inputs, width).flip(),
+        .and_gate => |gate| calculateDominantState(circuit, gate.inputs_a, width)
+            .bitAnd(calculateDominantState(circuit, gate.inputs_b, width)),
+        else => unreachable,
+    };
+}
 
 pub const ComponentType = enum { input_pin_gate, not_gate, led, and_gate, wire, output_pin, slice, concat, memory };
 
@@ -506,6 +541,11 @@ pub const Component = struct {
     /// one output port (`"out"`), so the per-port map collapses to a single
     /// slice. Phase 2 of propagate walks this list directly.
     outputs: std.ArrayList(*Component) = .{},
+    /// Logical gates keep one replaceable pending output transaction. A zero
+    /// generation means inactive; width comes from state_handle.tier.
+    pending_value: u64 = 0,
+    pending_defined: u64 = 0,
+    pending_generation: u32 = 0,
 
     const Kind = union(ComponentType) {
         input_pin_gate: struct { inputs: std.ArrayList(*Component) = .{} },
@@ -571,6 +611,7 @@ pub const Component = struct {
 
 const EventQueue = struct {
     heap: std.PriorityQueue(Event, void, Event.lessThan),
+    next_sequence: u64 = 0,
 
     pub fn init() EventQueue {
         return .{ .heap = std.PriorityQueue(Event, void, Event.lessThan).init(memory.allocator, {}) };
@@ -581,7 +622,10 @@ const EventQueue = struct {
     }
 
     pub fn add(self: *EventQueue, event: Event) !void {
-        try self.heap.add(event);
+        var sequenced = event;
+        sequenced.sequence = self.next_sequence;
+        self.next_sequence +%= 1;
+        try self.heap.add(sequenced);
     }
 
     pub fn pop(self: *EventQueue) ?Event {
@@ -705,6 +749,11 @@ pub const Pool = struct {
 };
 
 pub const Circuit = struct {
+    /// Deterministic cap over event pops, inertial validation, and recalculation.
+    /// This is a safety budget, not a proof of oscillation or a wall-clock limit.
+    pub const MAX_SETTLE_WORK: usize = 1_000_000;
+    /// A budget failure invalidates this runtime until rebuilt/reset.
+    settle_failed: bool = false,
     nodes: std.ArrayList(*Component),
     event_queue: EventQueue,
     next_id: u32 = 0,
@@ -715,6 +764,9 @@ pub const Circuit = struct {
     /// from zero capacity; instead the previous run's capacity is retained
     /// (length reset to 0 at the end of each per-timestamp iteration).
     changed_at_step: std.ArrayList(*Component) = .{},
+    /// Reused staging buffers for deterministic pre-commit validation.
+    staged_at_step: std.ArrayList(StagedEvent) = .{},
+    next_generation: u32 = 1,
     /// Width-tiered SoA pool array indexed by tier number (tier N owns
     /// width-N state slots). Tier 0 is reserved/unused; the convention
     /// `tier = width` makes `tiers[handle.tier]` the canonical lookup for
@@ -735,6 +787,7 @@ pub const Circuit = struct {
             .event_queue = EventQueue.init(),
             .listener = null,
             .changed_at_step = .{},
+            .staged_at_step = .{},
             .metrics = if (COLLECT_METRICS) Metrics{} else {},
         };
     }
@@ -746,6 +799,7 @@ pub const Circuit = struct {
         self.nodes.deinit(memory.allocator);
         self.event_queue.deinit();
         self.changed_at_step.deinit(memory.allocator);
+        self.staged_at_step.deinit(memory.allocator);
         for (&self.tiers) |*maybe_pool| {
             if (maybe_pool.* != null) maybe_pool.*.?.deinit();
         }
@@ -774,6 +828,7 @@ pub const Circuit = struct {
     /// Read the BitVecState at `handle`. Tier dispatch happens exactly once;
     /// everything above this line sees only the value type.
     pub fn readState(self: *const Circuit, handle: PoolHandle) BitVecState {
+        if (self.settle_failed) return BitVecState.undefined_(handle.tier);
         return self.tiers[handle.tier].?.read(handle.slot);
     }
 
@@ -811,8 +866,8 @@ pub const Circuit = struct {
         // `nodes`, so `deinit` (which never sees an in-flight component)
         // does not have to special-case the half-constructed state.
         new_component.state_handle = try self.allocateStateSlot(width);
-        self.next_id += 1;
         try self.nodes.append(memory.allocator, new_component);
+        self.next_id += 1;
         return new_component;
     }
 
@@ -883,6 +938,14 @@ pub const Circuit = struct {
     }
 
     pub fn propagate(self: *Circuit) !void {
+        if (self.settle_failed) return error.NoSettle;
+        var remaining: usize = MAX_SETTLE_WORK;
+        // No partially processed timestamp or queued oscillation survives failure.
+        errdefer {
+            self.event_queue.heap.clearRetainingCapacity();
+            self.clearStepScratch();
+            for (self.nodes.items) |component| component.pending_generation = 0;
+        }
         // Two-phase processing per timestamp: first commit ALL state changes
         // at time T, then walk every changed component's outputs to schedule
         // downstream events. Without this batching, a downstream gate's
@@ -899,27 +962,109 @@ pub const Circuit = struct {
             const step_time = first.timestamp;
             self.current_time = step_time;
 
-            // Phase 1: drain all events at this timestamp, applying state
-            // changes immediately. Components whose state actually flipped
-            // get queued for downstream notification.
+            // Phase 1: stage live candidates in deterministic sequence order.
+            // Gate candidates are projected into the pool, then resolved in
+            // simultaneous rounds when their post-T inputs no longer support
+            // the queued target. This is inclusive inertial delay: an input
+            // correction arriving exactly at the deadline cancels the pulse.
             while (self.event_queue.peek()) |next_event| {
                 if (next_event.timestamp != step_time) break;
+                try self.consumeSettleWork(&remaining);
                 const event = self.event_queue.pop().?;
                 if (COLLECT_METRICS) self.metrics.events_popped += 1;
                 const component = event.component;
 
-                // Dedup: a single BitVecState equality check decides
-                // whether this event commits or is a no-op. Width=1 reads
-                // are a single bit lookup on each side; equality is a
-                // bitmask AND plus two compares.
-                if (self.readState(component.state_handle).equals(event.new_state)) continue;
-                if (COLLECT_METRICS) self.metrics.events_committed += 1;
-
-                if (comptime log.enabled(.info)) {
-                    log.info("[Time: {d}] Updating component id={d} to {s}", .{ self.current_time, component.id, event.new_state.tagName() });
+                if (event.generation != 0) {
+                    if (component.pending_generation != event.generation or
+                        component.pending_value != event.new_state.value or
+                        component.pending_defined != event.new_state.defined) continue;
+                    component.pending_generation = 0;
                 }
-                self.writeState(component.state_handle, event.new_state);
-                try self.changed_at_step.append(memory.allocator, component);
+
+                try self.staged_at_step.append(memory.allocator, .{
+                    .event = event,
+                    .old_state = BitVecState.undefined_(component.state_handle.tier),
+                });
+            }
+
+            var inertial_count: usize = 0;
+            for (self.staged_at_step.items) |staged| {
+                if (staged.event.generation != 0) {
+                    inertial_count += 1;
+                }
+            }
+            // One half holds the current validation wave and one half holds
+            // its deduplicated successor. Reserve before projecting states so
+            // validation itself cannot fail with speculative state installed.
+            try self.changed_at_step.ensureTotalCapacity(
+                memory.allocator,
+                @max(self.staged_at_step.items.len, inertial_count * 2),
+            );
+
+            for (self.staged_at_step.items) |*staged| {
+                staged.old_state = self.readState(staged.event.component.state_handle);
+                if (!staged.old_state.equals(staged.event.new_state))
+                    self.writeState(staged.event.component.state_handle, staged.event.new_state);
+            }
+
+            for (self.staged_at_step.items, 0..) |*staged, index| {
+                if (staged.event.generation == 0) continue;
+                staged.event.component.pending_generation = STAGED_INERTIAL_FLAG | @as(u32, @intCast(index + 1));
+                staged.validation_queued = true;
+                try self.changed_at_step.append(memory.allocator, staged.event.component);
+            }
+
+            while (self.changed_at_step.items.len != 0) {
+                const wave_end = self.changed_at_step.items.len;
+                for (self.changed_at_step.items[0..wave_end]) |component| {
+                    const index = (component.pending_generation & ~STAGED_INERTIAL_FLAG) - 1;
+                    const staged = &self.staged_at_step.items[index];
+                    staged.validation_queued = false;
+                    try self.consumeSettleWork(&remaining);
+                    const expected = calculateInertialState(self, staged.event.component);
+                    staged.next_accepted = expected.equals(staged.event.new_state);
+                }
+
+                var validation_index: usize = 0;
+                while (validation_index < wave_end) : (validation_index += 1) {
+                    const component = self.changed_at_step.items[validation_index];
+                    const index = (component.pending_generation & ~STAGED_INERTIAL_FLAG) - 1;
+                    const staged = &self.staged_at_step.items[index];
+                    if (staged.next_accepted == staged.accepted) continue;
+                    staged.accepted = staged.next_accepted;
+                    self.writeState(
+                        staged.event.component.state_handle,
+                        if (staged.accepted) staged.event.new_state else staged.old_state,
+                    );
+                    for (staged.event.component.outputs.items) |downstream| {
+                        if ((downstream.pending_generation & STAGED_INERTIAL_FLAG) == 0) continue;
+                        const downstream_index = (downstream.pending_generation & ~STAGED_INERTIAL_FLAG) - 1;
+                        const downstream_staged = &self.staged_at_step.items[downstream_index];
+                        if (downstream_staged.validation_queued) continue;
+                        downstream_staged.validation_queued = true;
+                        try self.changed_at_step.append(memory.allocator, downstream);
+                    }
+                }
+                const next_wave_len = self.changed_at_step.items.len - wave_end;
+                std.mem.copyForwards(
+                    *Component,
+                    self.changed_at_step.items[0..next_wave_len],
+                    self.changed_at_step.items[wave_end..],
+                );
+                self.changed_at_step.items.len = next_wave_len;
+            }
+            for (self.staged_at_step.items) |staged| {
+                if ((staged.event.component.pending_generation & STAGED_INERTIAL_FLAG) != 0) {
+                    staged.event.component.pending_generation = 0;
+                }
+            }
+            for (self.staged_at_step.items) |staged| {
+                if (!staged.accepted or staged.old_state.equals(staged.event.new_state)) continue;
+                if (COLLECT_METRICS) self.metrics.events_committed += 1;
+                if (comptime log.enabled(.info)) {
+                    log.info("[Time: {d}] Updating component id={d} to {s}", .{ self.current_time, staged.event.component.id, staged.event.new_state.tagName() });
+                }
+                try self.changed_at_step.append(memory.allocator, staged.event.component);
             }
 
             // Phase 2: with all state at this timestamp committed, walk
@@ -927,6 +1072,7 @@ pub const Circuit = struct {
             // see consistent upstream state.
             for (self.changed_at_step.items) |component| {
                 for (component.outputs.items) |output| {
+                    try self.consumeSettleWork(&remaining);
                     if (comptime log.enabled(.info)) {
                         log.info("  -> Notifying downstream component id={d}", .{output.id});
                     }
@@ -936,7 +1082,17 @@ pub const Circuit = struct {
                     self.notifyStateChange(output, self.readState(output.state_handle));
                 }
             }
-            self.changed_at_step.clearRetainingCapacity();
+
+            // Re-evaluate final rejected targets against the committed batch;
+            // if a different transition is now needed, normal pending dedup
+            // prevents duplicates.
+            for (self.staged_at_step.items) |staged| {
+                if (staged.accepted) continue;
+                try self.consumeSettleWork(&remaining);
+                if (COLLECT_METRICS) self.metrics.recalcs += 1;
+                try recalculateAndReschedule(self, staged.event.component, &self.event_queue, self.current_time);
+            }
+            self.clearStepScratch();
 
             // Sample queue depth after Phase 2. This IS the iteration's true
             // peak: Phase 1 only pops (queue monotonically shrinks), Phase 2
@@ -953,7 +1109,51 @@ pub const Circuit = struct {
         if (COLLECT_METRICS) self.metrics.final_time = self.current_time;
     }
 
+    fn clearStepScratch(self: *Circuit) void {
+        for (self.staged_at_step.items) |staged| {
+            if ((staged.event.component.pending_generation & STAGED_INERTIAL_FLAG) != 0) {
+                staged.event.component.pending_generation = 0;
+            }
+        }
+        self.staged_at_step.clearRetainingCapacity();
+        self.changed_at_step.clearRetainingCapacity();
+    }
+
+    fn scheduleInertial(self: *Circuit, component: *Component, target: BitVecState, current_time: Timestamp) !void {
+        const current = self.readState(component.state_handle);
+        if (current.equals(target)) {
+            component.pending_generation = 0;
+            return;
+        }
+        if (component.pending_generation != 0 and
+            component.pending_value == target.value and component.pending_defined == target.defined) return;
+
+        const generation = self.next_generation;
+        self.next_generation +%= 1;
+        if (self.next_generation == 0 or self.next_generation >= STAGED_INERTIAL_FLAG) self.next_generation = 1;
+        const deadline = current_time + PROPAGATION_DELAY;
+        component.pending_generation = generation;
+        component.pending_value = target.value;
+        component.pending_defined = target.defined;
+        errdefer component.pending_generation = 0;
+        try self.event_queue.add(.{
+            .timestamp = deadline,
+            .component = component,
+            .new_state = target,
+            .generation = generation,
+        });
+    }
+
+    fn consumeSettleWork(self: *Circuit, remaining: *usize) error{NoSettle}!void {
+        if (remaining.* == 0) {
+            self.settle_failed = true;
+            return error.NoSettle;
+        }
+        remaining.* -= 1;
+    }
+
     pub fn propagateEvent(self: *Circuit, component: *Component, new_state: BitVecState) !void {
+        if (self.settle_failed) return error.NoSettle;
         // Short-circuit no-op events: when the caller drives a component to
         // its current state, the event would just be popped and skipped at
         // Phase 1 (the `BitVecState.equals` dedup inside propagate), wasting
@@ -1011,6 +1211,7 @@ pub const Circuit = struct {
 
     /// Write one word, canonicalised to the data width like Pool.write.
     pub fn memoryWriteWord(self: *Circuit, comp: *Component, addr: usize, state: BitVecState) !void {
+        if (self.settle_failed) return error.NoSettle;
         const m = try memoryPayload(comp);
         if (addr >= m.cells.wordCount()) return error.AddressOutOfRange;
         const mask = widthMask(comp.state_handle.tier);
@@ -1021,6 +1222,7 @@ pub const Circuit = struct {
 
     /// Every cell becomes undefined.
     pub fn memoryClear(self: *Circuit, comp: *Component) !void {
+        if (self.settle_failed) return error.NoSettle;
         const m = try memoryPayload(comp);
         @memset(m.cells.values, 0);
         @memset(m.cells.defined, 0);
@@ -1030,6 +1232,7 @@ pub const Circuit = struct {
     /// Replace every cell from a raw image (see memimage). A rejected image
     /// leaves the cells and `out` untouched. Returns the words loaded.
     pub fn memoryLoadImage(self: *Circuit, comp: *Component, bytes: []const u8) !usize {
+        if (self.settle_failed) return error.NoSettle;
         const m = try memoryPayload(comp);
         const words = try memimage.decode(bytes, comp.state_handle.tier, m.cells.addr_width, m.cells.values, m.cells.defined);
         try self.memoryRefresh(comp);
@@ -1790,6 +1993,202 @@ test "Circuit: mixed-width components allocate in independent tiers" {
     try std.testing.expectEqual(@as(u64, 0b1111), circuit.readState(bus4.state_handle).defined);
     try std.testing.expect(circuit.readState(bus8.state_handle).equals(BitVecState.low(8)));
     try std.testing.expect(circuit.readState(scalar2.state_handle).equals(BitVecState.low(1)));
+}
+
+test "Circuit: oscillation exhausts a settle budget and cannot resume partial state" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+    const enable = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const gate = try circuit.createComponent(.{ .and_gate = .{} }, 1);
+    const inv = try circuit.createComponent(.{ .not_gate = .{} }, 1);
+    try circuit.connect(.{ enable, "out" }, .{ gate, "a" });
+    try circuit.connect(.{ inv, "out" }, .{ gate, "b" });
+    try circuit.connect(.{ gate, "out" }, .{ inv, "in" });
+    try circuit.propagateEvent(enable, BitVecState.low(1));
+    try std.testing.expect(!circuit.settle_failed);
+    try std.testing.expectError(error.NoSettle, circuit.propagateEvent(enable, BitVecState.high(1)));
+    try std.testing.expect(circuit.settle_failed);
+    try std.testing.expectEqual(@as(usize, 0), circuit.event_queue.heap.items.len);
+    try std.testing.expectEqual(@as(usize, 0), circuit.changed_at_step.items.len);
+    try std.testing.expect(circuit.readState(gate.state_handle).isUndefined());
+    try std.testing.expectError(error.NoSettle, circuit.propagate());
+    try std.testing.expectError(error.NoSettle, circuit.propagateEvent(enable, BitVecState.low(1)));
+}
+
+test "Circuit: inertial gates reject pulses through the delay boundary" {
+    const Case = struct { fall_time: Timestamp, final_time: Timestamp };
+    const cases = [_]Case{
+        .{ .fall_time = PROPAGATION_DELAY, .final_time = PROPAGATION_DELAY + 1 },
+        .{ .fall_time = PROPAGATION_DELAY + 1, .final_time = PROPAGATION_DELAY + 1 },
+        .{ .fall_time = PROPAGATION_DELAY + 2, .final_time = (PROPAGATION_DELAY * 2) + 3 },
+    };
+
+    for (cases) |case| {
+        var circuit = try Circuit.init();
+        defer circuit.deinit();
+        const input = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+        const inv = try circuit.createComponent(.{ .not_gate = .{} }, 1);
+        const probe = try circuit.createComponent(.{ .wire = .{} }, 1);
+        try circuit.connect(input.port(OUT_PORT_NAME), inv.port(IN_PORT_NAME));
+        try circuit.connect(inv.port(OUT_PORT_NAME), probe.port(IN_PORT_NAME));
+        circuit.writeState(input.state_handle, BitVecState.low(1));
+        circuit.writeState(inv.state_handle, BitVecState.high(1));
+        circuit.writeState(probe.state_handle, BitVecState.high(1));
+
+        try circuit.event_queue.add(.{
+            .timestamp = 1,
+            .component = input,
+            .new_state = BitVecState.high(1),
+        });
+        try circuit.event_queue.add(.{
+            .timestamp = case.fall_time,
+            .component = input,
+            .new_state = BitVecState.low(1),
+        });
+        try circuit.propagate();
+
+        try std.testing.expect(circuit.readState(inv.state_handle).equals(BitVecState.high(1)));
+        try std.testing.expect(circuit.readState(probe.state_handle).equals(BitVecState.high(1)));
+        try std.testing.expectEqual(case.final_time, circuit.current_time);
+    }
+}
+
+test "Circuit: inertial cancellation applies to a whole multi-bit gate event" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+    const input = try circuit.createComponent(.{ .input_pin_gate = .{} }, 4);
+    const inv = try circuit.createComponent(.{ .not_gate = .{} }, 4);
+    try circuit.connect(input.port(OUT_PORT_NAME), inv.port(IN_PORT_NAME));
+    const low = BitVecState.low(4);
+    const high = BitVecState.high(4);
+    circuit.writeState(input.state_handle, low);
+    circuit.writeState(inv.state_handle, high);
+
+    try circuit.event_queue.add(.{
+        .timestamp = 1,
+        .component = input,
+        .new_state = .{ .value = 0b1010, .defined = 0b1111, .width = 4 },
+    });
+    try circuit.event_queue.add(.{
+        .timestamp = PROPAGATION_DELAY + 1,
+        .component = input,
+        .new_state = low,
+    });
+    try circuit.propagate();
+
+    try std.testing.expect(circuit.readState(inv.state_handle).equals(high));
+    try std.testing.expectEqual(@as(Timestamp, PROPAGATION_DELAY + 1), circuit.current_time);
+}
+
+test "Circuit: same-timestamp transport collisions follow insertion order" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+    const input = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+
+    try circuit.event_queue.add(.{
+        .timestamp = 1,
+        .component = input,
+        .new_state = BitVecState.low(1),
+    });
+    try circuit.event_queue.add(.{
+        .timestamp = 1,
+        .component = input,
+        .new_state = BitVecState.high(1),
+    });
+    try circuit.propagate();
+
+    try std.testing.expect(circuit.readState(input.state_handle).equals(BitVecState.high(1)));
+}
+
+test "Circuit: identical pending gate targets retain their deadline" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+    const gate = try circuit.createComponent(.{ .not_gate = .{} }, 1);
+
+    try circuit.scheduleInertial(gate, BitVecState.high(1), 1);
+    const generation = gate.pending_generation;
+    try circuit.scheduleInertial(gate, BitVecState.high(1), 3);
+
+    try std.testing.expectEqual(generation, gate.pending_generation);
+    try std.testing.expectEqual(@as(usize, 1), circuit.event_queue.heap.items.len);
+
+    try circuit.scheduleInertial(gate, BitVecState.low(1), 3);
+    try std.testing.expect(gate.pending_generation != generation);
+    try std.testing.expectEqual(@as(usize, 2), circuit.event_queue.heap.items.len);
+
+    // Returning to the committed undefined state cancels both queued
+    // generations; they drain later as stale events without changing state.
+    try circuit.scheduleInertial(gate, BitVecState.undefined_(1), 4);
+    try std.testing.expectEqual(@as(u32, 0), gate.pending_generation);
+    try circuit.propagate();
+    try std.testing.expect(circuit.readState(gate.state_handle).isUndefined());
+}
+
+test "Circuit: wire-like components retain transport delay" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+    const input = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const wire = try circuit.createComponent(.{ .wire = .{} }, 1);
+    try circuit.connect(input.port(OUT_PORT_NAME), wire.port(IN_PORT_NAME));
+    circuit.writeState(input.state_handle, BitVecState.low(1));
+    circuit.writeState(wire.state_handle, BitVecState.low(1));
+
+    try circuit.event_queue.add(.{
+        .timestamp = 1,
+        .component = input,
+        .new_state = BitVecState.high(1),
+    });
+    try circuit.event_queue.add(.{
+        .timestamp = PROPAGATION_DELAY + 1,
+        .component = input,
+        .new_state = BitVecState.low(1),
+    });
+    try circuit.propagate();
+
+    try std.testing.expect(circuit.readState(wire.state_handle).equals(BitVecState.low(1)));
+    try std.testing.expectEqual(@as(Timestamp, PROPAGATION_DELAY + WIRE_PROPAGATION_DELAY + 1), circuit.current_time);
+}
+
+test "Circuit: staged gates can become valid after an upstream rejection" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+    const input = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const upstream = try circuit.createComponent(.{ .not_gate = .{} }, 1);
+    const downstream = try circuit.createComponent(.{ .not_gate = .{} }, 1);
+    try circuit.connect(input.port(OUT_PORT_NAME), upstream.port(IN_PORT_NAME));
+    try circuit.connect(upstream.port(OUT_PORT_NAME), downstream.port(IN_PORT_NAME));
+    circuit.writeState(input.state_handle, BitVecState.low(1));
+    circuit.writeState(upstream.state_handle, BitVecState.high(1));
+    circuit.writeState(downstream.state_handle, BitVecState.high(1));
+
+    // Both low targets initially project. The upstream target is unsupported
+    // by input=low, which restores upstream=high and makes downstream=low
+    // supported in the next simultaneous validation round.
+    try circuit.scheduleInertial(upstream, BitVecState.low(1), 0);
+    try circuit.scheduleInertial(downstream, BitVecState.low(1), 0);
+    try circuit.propagate();
+
+    try std.testing.expect(circuit.readState(upstream.state_handle).equals(BitVecState.high(1)));
+    try std.testing.expect(circuit.readState(downstream.state_handle).equals(BitVecState.low(1)));
+    try std.testing.expectEqual(@as(Timestamp, PROPAGATION_DELAY), circuit.current_time);
+}
+
+test "Circuit: rejected gates retain corrective transitions scheduled after validation" {
+    var circuit = try Circuit.init();
+    defer circuit.deinit();
+    const input = try circuit.createComponent(.{ .input_pin_gate = .{} }, 1);
+    const gate = try circuit.createComponent(.{ .not_gate = .{} }, 1);
+    try circuit.connect(input.port(OUT_PORT_NAME), gate.port(IN_PORT_NAME));
+    circuit.writeState(input.state_handle, BitVecState.low(1));
+
+    // The low target is rejected at t=5. Recalculation then schedules the
+    // supported high target for t=10; timestamp scratch cleanup must retain it.
+    try circuit.scheduleInertial(gate, BitVecState.low(1), 0);
+    try circuit.propagate();
+
+    try std.testing.expect(circuit.readState(gate.state_handle).equals(BitVecState.high(1)));
+    try std.testing.expectEqual(@as(u32, 0), gate.pending_generation);
+    try std.testing.expectEqual(PROPAGATION_DELAY * 2, circuit.current_time);
 }
 
 test "Circuit: lazy tier init only allocates tiers actually used" {

@@ -22,6 +22,7 @@ memory:             WebAssembly.Memory
 topology_alloc:     (len: i32) => i32                      // host buffer for topology bytes; returns ptr (or -1 on OOM)
 init:               ()        => void                       // construct circuit from the topology buffer
 run:                ()        => void                       // drain the event queue until the circuit settles
+getSimulationStatus: ()       => i32                        // -1 before init, 0 usable, 1 settle budget exhausted (new artifacts)
 setPin:             (id: i32, value: i64, defined: i64) => void
 getOutputValue:     (id: i32) => i64                        // BitVecState.value of the component's output
 getOutputDefined:   (id: i32) => i64                        // BitVecState.defined of the component's output
@@ -60,9 +61,17 @@ The compiled `.wasm` carries the circuit topology as a `circ.topology.v0.min` cu
 
 ### `run()`
 
-Drains the engine's event queue until empty. Settling delays are `5` time-units per gate (memories included) and `1` per `wire`/`output_pin`/`led`/`slice`/`concat` (see `lib/circuit.zig`); a single `run()` call is enough to settle any cascade, with no "tick" semantics to worry about.
+Drains the engine's event queue until empty or its settling work budget is exhausted. Settling delays are `5` time-units per gate (memories included) and `1` per `wire`/`output_pin`/`led`/`slice`/`concat` (see `lib/circuit.zig`); successful calls settle the cascade without host-driven ticks.
 
 `run()` is a no-op if `init()` has not run successfully.
+
+### Settling failures and `getSimulationStatus()`
+
+New artifacts cap each settle at 1,000,000 work units (event pops, inertial candidate validations, downstream evaluations, and rejected-target recalculations). Gate-feedback circuits still compile, but a non-settling drive cannot keep the host inside WASM forever. This is a work budget, not a hard wall-clock limit; very large finite circuits can also exceed it.
+
+On exhaustion, `run`, `setPin`, `memLoad`, `memClear`, and `setMemWord` trap rather than silently returning success. The pending queue is discarded and the runtime remains failed: valid subsequent mutations and `run` trap until the host creates a fresh instance. `init()` remains idempotent and does not clear this failure. Output/memory value and defined-mask getters return zero; `memStore` refuses with `-1`. These undefined values are failure placeholders, not settled results.
+
+The additive `getSimulationStatus()` export distinguishes this failure from an unrelated WASM trap: `-1` means not initialized, `0` means usable, and `1` means the settle budget was exhausted. Hosts must feature-detect it for older artifacts. The playground maps status `1` to `E_NOSETTLE`, shows the failure, and supports reset. Existing artifacts need regeneration to receive the bound; the compiler/runtime/topology calling signatures otherwise remain unchanged.
 
 ### `setPin(component_id, value, defined)`
 
