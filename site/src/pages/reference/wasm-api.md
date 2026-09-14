@@ -71,7 +71,7 @@ Drains the engine's event queue until empty or its settling work budget is exhau
 
 ### Settling failures and `getSimulationStatus()`
 
-New artifacts cap each settle at 1,000,000 work units (event pops plus downstream evaluations). Gate-feedback circuits still compile, but a non-settling drive cannot keep the host inside WASM forever. This is a work budget, not a hard wall-clock limit; very large finite circuits can also exceed it.
+New artifacts cap each settle at 1,000,000 work units (event pops, inertial candidate validations, downstream evaluations, and rejected-target recalculations). Gate-feedback circuits still compile, but a non-settling drive cannot keep the host inside WASM forever. This is a work budget, not a hard wall-clock limit; very large finite circuits can also exceed it.
 
 On exhaustion, `run`, `setPin`, `memLoad`, `memClear`, and `setMemWord` trap rather than silently returning success. The pending queue is discarded and the runtime remains failed: valid subsequent mutations and `run` trap until the host creates a fresh instance. `init()` remains idempotent and does not clear this failure. Output/memory value and defined-mask getters return zero; `memStore` refuses with `-1`. These undefined values are failure placeholders, not settled results.
 

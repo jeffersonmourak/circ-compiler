@@ -6,10 +6,10 @@ ok
 ok
 ok
 ok
-err E_NOSETTLE settle work budget exceeded; reset required
-err E_NOSETTLE settle work budget exceeded; reset required
-err E_NOSETTLE settle work budget exceeded; reset required
-err E_NOSETTLE settle work budget exceeded; reset required
+ok
+ok 0x1 0x1
+ok
+ok
 ok
 ok 0x0 0x0
 ok

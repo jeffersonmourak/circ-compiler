@@ -85,13 +85,15 @@ propagate()
     while queue non-empty:
         T = peek.timestamp
         current_time = T
-        # Phase 1 — drain every event at timestamp T, commit state, collect changed.
-        changed = []
+        # Phase 1 — stage every event at T and project candidate state.
+        staged = []
         while peek.timestamp == T:
             event = pop_min(queue)
-            if event.component.output_state == event.new_state: continue
-            event.component.output_state = event.new_state
-            changed.append(event.component)
+            if event is a stale gate generation: continue
+            staged.append(event)
+        project(staged)
+        reject gate events unsupported by post-T inputs in simultaneous rounds
+        changed = commit_survivors(staged)
         # Phase 2 — walk outputs of changed components; recalc + notify.
         for c in changed:
             for downstream in c.outputs:
@@ -99,7 +101,7 @@ propagate()
                 notifyStateChange(downstream)
 ```
 
-The per-timestamp batching matters: without it, a downstream gate with multiple upstream events at the same `T` could read partial state, dedup the corrective re-enqueue, and get stuck on the wrong final value. See `simulation-engine.md` for the full rationale.
+The per-timestamp batching matters: without it, a downstream gate with multiple upstream events at the same `T` could read partial state, dedup the corrective re-enqueue, and get stuck on the wrong final value. AND and NOT transitions are replaceable and validated before commit, giving gates inclusive inertial delay; wire-like components retain transport delay. See `simulation-engine.md` for the full rationale.
 
 Delays are compile-time constants (`PROPAGATION_DELAY = 5`, `WIRE_PROPAGATION_DELAY = 1`); the delay switch in `lib/circuit.zig` is the source of truth for which component kinds take the wire delay versus the gate delay. See [simulation-engine.md](simulation-engine.md) for the full timing model.
 
