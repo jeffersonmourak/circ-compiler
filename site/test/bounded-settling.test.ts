@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { resolve } from 'node:path';
 
-test('shipped compiler bounds feedback in CLI-equivalent, canvas, raw WASM, and Truth paths while latches still settle', async () => {
+test('shipped compiler settles inertial feedback while bounding a genuine oscillator', async () => {
   const child = Bun.spawn([process.execPath, resolve(import.meta.dir, 'settling-probe.ts')], { stdout: 'pipe', stderr: 'pipe' });
   let timedOut = false;
   const timeout = setTimeout(() => { timedOut = true; child.kill(); }, 10_000);
@@ -11,10 +11,8 @@ test('shipped compiler bounds feedback in CLI-equivalent, canvas, raw WASM, and 
   expect(stderr).toBe('');
   expect(exit).toBe(0);
   const result = JSON.parse(stdout);
-  const failure = 'err E_NOSETTLE settle work budget exceeded; reset required';
-  expect(result.transcript).toEqual(['ok', 'ok', 'ok', 'ok', failure, failure, failure, failure, 'ok', 'ok 0x0 0x0', 'ok', 'ok']);
-  expect(result.events).toContain('settle-failed');
-  expect(result.events.filter((event: string) => event === 'settle-failed')).toHaveLength(1);
+  expect(result.transcript).toEqual(['ok', 'ok', 'ok', 'ok', 'ok', 'ok 0x1 0x1', 'ok', 'ok', 'ok', 'ok 0x0 0x0', 'ok', 'ok']);
+  expect(result.events).not.toContain('settle-failed');
   expect(result.canvasError).toContain('E_NOSETTLE');
   expect(result.poisoned).toBe(true);
   expect([result.beforeInit, result.afterInit, result.afterFailure]).toEqual([-1, 0, 1]);

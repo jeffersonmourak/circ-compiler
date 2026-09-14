@@ -103,8 +103,9 @@ across commands, so a scenario is just `set`/`get` repeated; only `reset`
 clears it. Because each `set` settles independently, `eval` applies its
 assignments in order, each settling, before reading its queries.
 
-Each settle permits at most 1,000,000 work units: one per popped event and
-one per downstream evaluation. Exhaustion returns
+Each settle permits at most 1,000,000 work units: one per popped event,
+inertial candidate validation, downstream evaluation, or rejected-target
+recalculation. Exhaustion returns
 `err E_NOSETTLE settle work budget exceeded; reset required`, discards pending
 events, and invalidates the session's values until reset. Earlier writes in
 an `eval` may already have occurred; this is not a rollback. The cap is a

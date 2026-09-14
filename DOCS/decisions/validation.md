@@ -38,7 +38,7 @@ Seven categories arrived later: unknown sub-circuit port (`E012`), missing sub-c
 
 **Rationale.** Reject transparent cycles before execution while allowing gate rings used to construct latches. A gate delay permits sequential behavior but does not guarantee settling: an oscillator or a timing-sensitive latch can continue scheduling events. Detection is cheap (DFS over the connection graph).
 
-**Runtime backstop.** A reported master/slave D-register hung on a falling clock edge despite passing validation. The engine now bounds event pops and downstream evaluations and returns `NoSettle` on exhaustion. This supplements `E008` without reclassifying every gate cycle as a compiler error. It is explicitly a work limit: legitimate but unusually expensive circuits can also exceed it. The failed runtime must be reset, and no partial result is labeled settled.
+**Runtime backstop.** A reported master/slave D-register hung on a falling clock edge despite passing validation: a gate output computed from an old input snapshot committed at the same timestamp as its correcting input, and the pulse circulated through feedback. AND and NOT transitions now use inclusive inertial delay, staging each timestamp and rejecting targets unsupported by the post-timestamp inputs. The engine bounds event pops, inertial validation, and component recalculation and returns `NoSettle` for genuine oscillation or exhaustion. This supplements `E008` without reclassifying every gate cycle as a compiler error. The failed runtime must be reset, and no partial result is labeled settled.
 
 ### Warning categories (default: emit + warn)
 
