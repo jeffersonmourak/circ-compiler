@@ -130,8 +130,10 @@ export interface DriveAssign {
 }
 
 export type SessionEvent =
-  /** Pins were driven, by any face; `names` is `assigns` by name, for a face that only refreshes. */
-  | { kind: 'drive'; names: readonly string[]; assigns: readonly DriveAssign[] }
+  /** Pins were driven, by any face; `names` is `assigns` by name, for a face that only refreshes.
+   *  `origin: 'clock'` marks a run of clock edges reported as one event: `assigns` holds the
+   *  level the pin was left at and `edges` how many were driven to get there. */
+  | { kind: 'drive'; names: readonly string[]; assigns: readonly DriveAssign[]; origin?: 'clock'; edges?: number }
   /** One cell written. */
   | { kind: 'memory'; name: string; op: 'poke'; addr: bigint; value: bigint; defined: bigint }
   /** Every cell unknown. */
@@ -357,6 +359,38 @@ export class SimSession {
     catch (error) { if (error instanceof NoSettleError) return fail('E_NOSETTLE', NO_SETTLE_MESSAGE); throw error; }
     this.emitDrive([{ name, value, defined: r.defined }]);
     return { ok: true };
+  }
+
+  /**
+   * Drive a one-bit input through `levels` in order, settling after each, and
+   * report the run as ONE drive event marked as the clock's. A free-running
+   * clock makes hundreds of edges a second; a face that redraws or logs per
+   * event must hear of them once per frame, not once per edge. `stop` is asked
+   * before every edge, so the caller can bound a frame by time. Returns how
+   * many edges were driven.
+   */
+  clock(name: string, levels: readonly (0 | 1)[], stop?: () => boolean): SimResult<{ edges: number }> {
+    if (this.didNotSettle) return fail('E_NOSETTLE', NO_SETTLE_MESSAGE);
+    const r = this.resolveDrive({ pin: name, value: 0n, defined: 1n });
+    if (!r.ok) return r;
+    if (r.pin.width !== 1) return fail('E_WIDTH', name);
+    let edges = 0;
+    let failure: SimFailure | null = null;
+    try {
+      for (const level of levels) {
+        if (edges > 0 && stop?.()) break;
+        this.drive(r.pin, BigInt(level), 1n);
+        edges += 1;
+      }
+    } catch (error) {
+      if (!(error instanceof NoSettleError)) throw error;
+      failure = fail('E_NOSETTLE', NO_SETTLE_MESSAGE);
+    }
+    if (edges > 0) {
+      const assign = { name, value: BigInt(levels[edges - 1]), defined: 1n };
+      this.emit({ kind: 'drive', names: [name], assigns: [assign], origin: 'clock', edges });
+    }
+    return failure ?? { ok: true, edges };
   }
 
   /** Read a root pin: outputs first, then inputs, as `doGet` looks them up. */
