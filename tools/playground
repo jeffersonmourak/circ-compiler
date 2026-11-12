@@ -1,0 +1,11 @@
+#!/bin/sh
+# The playground as a compiler development tool: projects on disk, compiler
+# rebuilt from the working tree. See DOCS/dev-playground.md.
+#
+#   tools/playground [dir] [astro dev flags]
+#
+# `dir` defaults to tests/fixtures/projects and is resolved against the
+# directory this script is run from.
+set -e
+repo=$(cd "$(dirname "$0")/.." && pwd)
+CIRC_PLAYGROUND_CWD=$(pwd) exec bun run --cwd "$repo/site" playground "$@"

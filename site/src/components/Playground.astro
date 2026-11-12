@@ -13,6 +13,9 @@ interface Props {
 }
 const { manifest, supportedVersions, agentReference } = Astro.props;
 const wasmHref = url('/wasm/libcirc.wasm');
+// Set by `bun run playground` only: the dev playground keeps its projects on
+// disk (scripts/dev-playground.ts). Never true in a build.
+const diskWorkspace = import.meta.env.DEV && !!process.env.CIRC_PLAYGROUND_ROOT;
 const agentReferenceHref = url('/agent-reference/manifest.json');
 // One call feeds the sidebar rows, the embedded blob and the default pick, so
 // they cannot drift from each other or from the shipped content.
@@ -24,6 +27,7 @@ const groups = displayGroups(catalogue, []);
   class="pg"
   style="--pg-term-h: 40px"
   data-libcirc-wasm={wasmHref}
+  data-disk-workspace={diskWorkspace ? 'true' : undefined}
   data-supported-versions={supportedVersions.join(',')}
   data-manifest-full-version={manifest.full_version.toString()}
   data-manifest-version={manifest.version}
@@ -391,7 +395,7 @@ const groups = displayGroups(catalogue, []);
   // The console over the session: the grammar and the reply strings of
   // `--sim`, and the prompt's own memory. Small, and the session already
   // pulls their one shared dependency, so they ride in the eager bundle.
-  import { execute, handshake } from '../scripts/sim-executor.ts';
+  import { execute, handshake, type FileSource } from '../scripts/sim-executor.ts';
   import { HELP_VERB, HistoryRing, MemoryTabFiles, Transcript, commandFor, helpLines, promptEcho, scriptOf } from '../scripts/console.ts';
   import { summaryOf, memoryHeader, legendFor, imageLine } from '../scripts/terminal-line.ts';
   import { addressedWord } from '../scripts/memory-panel.ts';
@@ -460,13 +464,16 @@ const groups = displayGroups(catalogue, []);
   } from '../scripts/source-link.ts';
   import { decodeShare, encodeShare, readHash, shareUrl, webStreamsCodec } from '../utils/share-link.ts';
   import { generateSillyName } from '../utils/sillyname.ts';
+  import { DiskFileSource, diskWorkspace, httpDiskApi } from '../scripts/disk-storage.ts';
   import {
     ClockPacer, RateMeter, DEFAULT_HZ,
     clockable, formatHz, hzToSlider, nextLevel, parseHz, pickClockPin, sliderToHz,
   } from '../scripts/clock.ts';
   import {
+    browserStorage,
     createStore,
     describeNote,
+    liftStoreLimits,
     createScratch,
     deleteScratch,
     duplicateScratch,
@@ -478,6 +485,7 @@ const groups = displayGroups(catalogue, []);
     uniqueName,
     NEW_PROJECT_SOURCE,
     type CatalogueItem,
+    type PlaygroundStore,
     type View as StoredView,
     type FooterTab,
   } from '../utils/playground-store.ts';
@@ -1137,7 +1145,7 @@ const groups = displayGroups(catalogue, []);
     const consoleState = {
       transcript: new Transcript(),
       history: new HistoryRing(),
-      files: new MemoryTabFiles(),
+      files: new MemoryTabFiles() as FileSource,
       /** A line is running: the prompt waits, and a `rebuilt` waits for its reply. */
       busy: false,
       /** The session was rebuilt while a line ran; announce it after the reply. */
@@ -1447,7 +1455,26 @@ const groups = displayGroups(catalogue, []);
     // ---- persistence ----
     // One key, one envelope. Phase 3 populates layout.ratios only; the other
     // fields ship with their defaults for later phases to fill.
-    const store = createStore();
+    // The dev playground (`bun run playground`) keeps the reader's projects in
+    // a directory instead; the branch is dead code in a build.
+    let store: PlaygroundStore;
+    if (import.meta.env.DEV && el.dataset.diskWorkspace === 'true') {
+      liftStoreLimits();
+      const workspace = diskWorkspace(browserStorage(), httpDiskApi(), {
+        onError: (message) => { console.error(`[playground] ${message}`); status.textContent = `Disk: ${message}`; },
+        onSkipped: (skipped) => {
+          for (const s of skipped) console.warn(`[playground] left out ${s.dir}: ${s.reason}`);
+        },
+      });
+      store = createStore({ storage: workspace.storage });
+      // The console's `load` and `save` reach the workspace here, and only
+      // here: a path is relative to the open project's directory.
+      consoleState.files = new DiskFileSource(() => workspace.dirFor(store.envelope.activeId));
+      // A file changed outside the page: write what is pending, then reread.
+      import.meta.hot?.on('circ:disk-changed', () => { store.flush(); location.reload(); });
+    } else {
+      store = createStore();
+    }
     store.onNote((note) => { status.textContent = describeNote(note); });
 
     // One rendered position over per-project intent. Resizing only borrows

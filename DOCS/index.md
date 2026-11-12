@@ -31,6 +31,7 @@ output out(in=inv.out)
 | [logisim-import.md](logisim-import.md)       | Mapping Logisim `ROM`/`RAM` components onto `rom`/`ram`                 |
 | [benchmark.md](benchmark.md)                 | `zig build bench`: engine regression gate, counters, golden workflow    |
 | [agent-playground.md](agent-playground.md)   | Browser-agent playground setup, tool contract, limits, and compatibility evidence |
+| [dev-playground.md](dev-playground.md)       | `tools/playground`: the playground over a directory on disk, with the compiler rebuilt from the working tree |
 | [Agent-driven playground archive](archive/plan-agent-driven-playground.md) | WebMCP implementation, project handoff, client evidence, and deferred acceptance checks |
 | [Home page archive](archive/plan-home-page.md) | Live-circuit landing page, language and preview sections, gallery tiles and install flow |
 | [decisions/](decisions/index.md)             | Architectural decisions for the `.circ` compiler                        |

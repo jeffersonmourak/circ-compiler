@@ -1,9 +1,14 @@
 import { defineConfig } from 'astro/config';
 import { circLang } from './src/utils/circ-lang.mjs';
 import { shikiThemes } from './src/utils/shiki-themes.mjs';
+import { devPlayground } from './scripts/dev-playground/plugin.mjs';
 
 const base = process.env.BASE_PATH ?? '/';
 const site = process.env.SITE_URL;
+// Set only by `bun run playground` (scripts/dev-playground.ts): the playground
+// then keeps its projects in this directory and runs a freshly built compiler.
+const playgroundRoot = process.env.CIRC_PLAYGROUND_ROOT;
+const repoRoot = process.env.CIRC_REPO_ROOT;
 
 export default defineConfig({
   base,
@@ -33,6 +38,7 @@ export default defineConfig({
   // subdomain (Vite accepts suffix patterns this way). No effect on the
   // production build — these are dev-only.
   vite: {
+    plugins: playgroundRoot && repoRoot ? [devPlayground({ workspace: playgroundRoot, repoRoot })] : [],
     server: {
       allowedHosts: ['.ngrok-free.app', '.ngrok.app', '.ngrok.io'],
     },

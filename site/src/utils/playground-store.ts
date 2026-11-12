@@ -24,6 +24,28 @@ export const MAX_ENVELOPE_BYTES = 256 * 1024;
 export const WRITE_DEBOUNCE_MS = 500;
 
 /**
+ * The caps in force. They exist because the envelope lives in localStorage,
+ * where one origin's quota is small. The dev playground keeps its projects on
+ * disk instead (`scripts/disk-storage.ts`) and lifts them, so that no project
+ * is ever evicted or skipped there: a project missing from a write would read
+ * as a deletion.
+ */
+const limits = { scratch: MAX_SCRATCH, sourceBytes: MAX_SOURCE_BYTES, envelopeBytes: MAX_ENVELOPE_BYTES };
+
+export function liftStoreLimits(): void {
+  limits.scratch = Number.MAX_SAFE_INTEGER;
+  limits.sourceBytes = Number.MAX_SAFE_INTEGER;
+  limits.envelopeBytes = Number.MAX_SAFE_INTEGER;
+}
+
+/** Test seam: back to the localStorage caps. */
+export function restoreStoreLimits(): void {
+  limits.scratch = MAX_SCRATCH;
+  limits.sourceBytes = MAX_SOURCE_BYTES;
+  limits.envelopeBytes = MAX_ENVELOPE_BYTES;
+}
+
+/**
  * The canvas region's three views. Data is not among them: it is a panel that
  * can be open over any view (Phase 5), and diagnostics belong to the source,
  * in the footer under the editor.
@@ -297,11 +319,11 @@ function normalizeScratch(raw: unknown): ScratchProject[] {
     if (typeof id !== 'string' || typeof name !== 'string' || typeof source !== 'string') continue;
     if (typeof updatedAt !== 'number' || !Number.isFinite(updatedAt)) continue;
     // Drop the project rather than silently truncating someone's source.
-    if (utf8Bytes(source) > MAX_SOURCE_BYTES) continue;
+    if (utf8Bytes(source) > limits.sourceBytes) continue;
     kept.push({ id, name, source, updatedAt });
   }
   kept.sort((a, b) => b.updatedAt - a.updatedAt);
-  return kept.slice(0, MAX_SCRATCH);
+  return kept.slice(0, limits.scratch);
 }
 
 function normalizeRatios(raw: unknown): Record<string, number> {
@@ -431,7 +453,7 @@ export function writeEnvelope(
   // never as a record with a missing source, which `normalize` would drop on
   // the next read with no note at all. It stays in memory, so the reader keeps
   // typing and only loses persistence for that one project.
-  const skipped = env.scratch.filter((p) => utf8Bytes(p.source) > MAX_SOURCE_BYTES);
+  const skipped = env.scratch.filter((p) => utf8Bytes(p.source) > limits.sourceBytes);
   const skippedIds = new Set(skipped.map((p) => p.id));
   // Images must never evict source projects. Fit them only after the source
   // envelope is within its existing budget; oversized images stay in memory.
@@ -439,13 +461,13 @@ export function writeEnvelope(
   const serialize = (includeImages = true) => {
     const base = { ...env, sourceImages: {}, scratch: env.scratch.filter((p) => !skippedIds.has(p.id)) };
     const text = JSON.stringify({ ...base, sourceImages: includeImages ? env.sourceImages : {} });
-    imagesSkipped = includeImages && utf8Bytes(text) > MAX_ENVELOPE_BYTES && Object.keys(env.sourceImages).length > 0;
+    imagesSkipped = includeImages && utf8Bytes(text) > limits.envelopeBytes && Object.keys(env.sourceImages).length > 0;
     return imagesSkipped ? JSON.stringify(base) : text;
   };
 
   const evicted: string[] = [];
   let text = serialize(false);
-  while (utf8Bytes(text) > MAX_ENVELOPE_BYTES) {
+  while (utf8Bytes(text) > limits.envelopeBytes) {
     const name = evictOldest(env, keep);
     if (name === null) break;
     evicted.push(name);
@@ -500,7 +522,7 @@ export function describeNote(note: StoreNote, context: 'save' | 'import' = 'save
         ? 'Saved playground settings were from an older version and have been reset.'
         : 'Saved playground settings could not be read and have been reset.';
     case 'skipped':
-      if (context === 'import') return `Could not import ${note.names.join(', ')}: each circuit must fit in ${MAX_SOURCE_BYTES / 1024} KiB.`;
+      if (context === 'import') return `Could not import ${note.names.join(', ')}: each circuit must fit in ${limits.sourceBytes / 1024} KiB.`;
       return `${note.names.length === 1 ? 'One project is' : `${note.names.length} projects are`} too large to save (${note.names.join(', ')}); they stay open but will not survive a reload.`;
     case 'evicted':
       return `Storage was full, so ${note.names.length === 1 ? 'the oldest saved project' : 'the oldest saved projects'} (${note.names.join(', ')}) ${note.names.length === 1 ? 'was' : 'were'} removed.`;
@@ -710,7 +732,7 @@ export interface ScratchEdit {
 function trimToMax(list: ScratchProject[], keep?: PickId | null): { list: ScratchProject[]; evicted: ScratchProject[] } {
   const evicted: ScratchProject[] = [];
   const out = [...list];
-  while (out.length > MAX_SCRATCH) {
+  while (out.length > limits.scratch) {
     let oldest = -1;
     for (let i = 0; i < out.length; i += 1) {
       if (keep && out[i].id === keep) continue;
@@ -732,7 +754,7 @@ export function createScratch(
     source: init.source,
     updatedAt: init.now,
   };
-  if (utf8Bytes(created.source) > MAX_SOURCE_BYTES) {
+  if (utf8Bytes(created.source) > limits.sourceBytes) {
     // Over the per-source cap at birth: report it rather than storing
     // something the next read would silently drop.
     return { list: [...list], evicted: [], skipped: [created], created: null };
@@ -774,7 +796,7 @@ export function touchScratch(
 ): ScratchEdit {
   const existing = list.find((p) => p.id === id);
   if (!existing) return { list: [...list], evicted: [], skipped: [] };
-  if (utf8Bytes(source) > MAX_SOURCE_BYTES) {
+  if (utf8Bytes(source) > limits.sourceBytes) {
     return { list: [...list], evicted: [], skipped: [{ ...existing, source }] };
   }
   return {

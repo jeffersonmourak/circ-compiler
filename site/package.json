@@ -11,6 +11,7 @@
     "llm-mirror": "bun run scripts/build-llm-mirror.ts",
     "agent-reference": "bun run scripts/build-agent-reference.ts",
     "libcirc": "bun run scripts/build-libcirc.ts",
+    "playground": "bun run scripts/dev-playground.ts",
     "bundle": "bun run scripts/check-bundle.ts",
     "test": "bun test",
     "typecheck": "astro check"
