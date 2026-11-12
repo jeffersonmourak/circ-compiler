@@ -173,6 +173,8 @@ project-and_or_network opaque I0=0 I1=0 I2=0 I3=0 X=0 B=14 S=8/15 C=0 F=0 size=6
 project-and_or_network expanded I0=0 I1=0 I2=0 I3=0 X=0 B=14 S=17/24 C=0 F=0 size=88x31
 project-and_pair opaque I0=0 I1=0 I2=0 I3=0 X=0 B=6 S=4/7 C=0 F=0 size=49x15
 project-and_pair expanded I0=0 I1=0 I2=0 I3=0 X=0 B=6 S=4/7 C=0 F=0 size=37x15
+project-clean_register_feedback opaque I0=0 I1=3 I2=1 I3=0 X=0 B=8 S=2/5 C=0 F=0 size=44x10
+project-clean_register_feedback expanded I0=0 I1=0 I2=0 I3=0 X=5 B=22 S=8/17 C=0 F=0 size=88x17
 project-clean_two_file opaque I0=0 I1=0 I2=0 I3=0 X=0 B=0 S=2/2 C=0 F=0 size=34x3
 project-clean_two_file expanded I0=0 I1=0 I2=0 I3=0 X=0 B=0 S=1/1 C=0 F=0 size=17x3
 project-deep_chain opaque I0=0 I1=0 I2=0 I3=0 X=0 B=0 S=2/2 C=0 F=0 size=31x3
@@ -226,4 +228,4 @@ project-stress_deep_subcircuit opaque I0=0 I1=0 I2=0 I3=0 X=0 B=0 S=2/2 C=0 F=0 
 project-stress_deep_subcircuit expanded I0=0 I1=0 I2=0 I3=0 X=0 B=0 S=257/257 C=0 F=0 size=2577x3
 project-two_file opaque I0=0 I1=0 I2=0 I3=0 X=0 B=0 S=2/2 C=0 F=0 size=34x3
 project-two_file expanded I0=0 I1=0 I2=0 I3=0 X=0 B=0 S=1/1 C=0 F=0 size=17x3
-# totals: fixture-modes=226 skipped=66 I0=0 I1=22 I2=10 I3=0 X=5471 B=4566 S=1980/3797 C=6169 F=0
+# totals: fixture-modes=228 skipped=67 I0=0 I1=25 I2=11 I3=0 X=5476 B=4596 S=1990/3819 C=6169 F=0

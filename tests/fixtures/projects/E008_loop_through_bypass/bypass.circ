@@ -1,0 +1,5 @@
+// `gated` crosses a gate; `thru` is a bare pass-through of the same input.
+input d
+not inv(in = d)
+output gated(in = inv.out)
+output thru(in = d)

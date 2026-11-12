@@ -1,0 +1,8 @@
+// Feeding `gated` back is legal; feeding `thru` back is a loop.
+import bypass "bypass.circ"
+wire ok_back(in = ok.gated)
+bypass ok(d = ok_back.out)
+wire bad_back(in = bad.thru)
+bypass bad(d = bad_back.out)
+output z(in = ok.thru)
+output y(in = bad.gated)

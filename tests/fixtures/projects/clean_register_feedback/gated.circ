@@ -1,0 +1,9 @@
+// A gated D latch: every path from an input to q crosses a gate.
+input d, en
+and pass(a = d, b = en)
+and hold(a = state.out, b = not(in = en).out)
+not pass_n(in = pass.out)
+not hold_n(in = hold.out)
+and both_n(a = pass_n.out, b = hold_n.out)
+not state(in = both_n.out)
+output q(in = state.out)
