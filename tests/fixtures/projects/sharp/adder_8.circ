@@ -1,0 +1,18 @@
+// Stand-in for Logisim's 8-bit Adder: a ripple-carry chain.
+import full_adder "full_adder.circ"
+
+input[8] a, b
+
+// Logisim leaves the carry-in unconnected, so bit 0 is a half adder.
+xor sum_0(a = a[0], b = b[0])
+and carry_0(a = a[0], b = b[0])
+full_adder bit_1(a = a[1], b = b[1], c_in = carry_0.out)
+full_adder bit_2(a = a[2], b = b[2], c_in = bit_1.c_out)
+full_adder bit_3(a = a[3], b = b[3], c_in = bit_2.c_out)
+full_adder bit_4(a = a[4], b = b[4], c_in = bit_3.c_out)
+full_adder bit_5(a = a[5], b = b[5], c_in = bit_4.c_out)
+full_adder bit_6(a = a[6], b = b[6], c_in = bit_5.c_out)
+full_adder bit_7(a = a[7], b = b[7], c_in = bit_6.c_out)
+
+output[8] s(in = {sum_0.out, bit_1.s, bit_2.s, bit_3.s, bit_4.s, bit_5.s, bit_6.s, bit_7.s})
+output c_out(in = bit_7.c_out)

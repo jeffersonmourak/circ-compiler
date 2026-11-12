@@ -1,0 +1,10 @@
+// Stand-in for Logisim's D Flip-Flop (rising edge, asynchronous Clear): a
+// master latch open while clk is low feeds a slave latch open while it is high.
+import latch "latch.circ"
+
+input d, clk, clr
+
+latch master(d = d, en = not(in = clk).out, clr = clr)
+latch slave(d = master.q, en = clk, clr = clr)
+
+output q(in = slave.q)

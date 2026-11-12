@@ -1,0 +1,42 @@
+// MEM_STORE_UNIT: opcode 3, STORE.
+//   step 3   MAR <- IR operand, MDR <- OUT
+//   step 4   RAM[MAR] <- MDR
+// Carry rises at step 5: the instruction is over.
+//
+// Control word, bit 0 first:
+//    0 MAR.WE     1 MAR.OE    2 RAM.Store   3 RAM.Load
+//    4 MDR.WE     5 MDR.OE    6 PC.Load     7 IR.WE
+//    8 IR.OE      9 PC.OE    10 PC.Count   11 OUT.WE
+//   12 X.WE      13 Y.WE     14 OUT.OE     15 ALU.OE
+import tri_16 "tri_16.circ"
+
+input[3] instruction_step_input
+
+wire s0(in = instruction_step_input[0])
+wire s1(in = instruction_step_input[1])
+wire s2(in = instruction_step_input[2])
+
+// Logisim Constants. circ has none, so 0 is a signal ANDed with its inverse.
+and lo(a = s0, b = not(in = s0).out)
+not hi(in = lo)
+
+// step_a also decodes steps 1 and 2; the unit stays silent until step 3.
+or  low_bits(a = s1, b = s0)
+and step_a(a = not(in = s2).out, b = low_bits.out)
+nor low_clear(a = s1, b = s0)
+and step_b(a = s2, b = low_clear.out)
+
+tri_16 word_a(in = {hi, lo, lo, lo,  hi, lo, lo, lo,  hi, lo, lo, lo,  lo, lo, hi, lo}, en = step_a.out)
+tri_16 word_b(in = {lo, hi, hi, lo,  lo, hi, lo, lo,  lo, lo, lo, lo,  lo, lo, lo, lo}, en = step_b.out)
+or words[16](a = word_a.out, b = word_b.out)
+
+// From step 3 on the unit owns its outputs.
+and step_3(a = and(a = not(in = s2).out, b = s1).out, b = s0)
+or  active(a = s2, b = step_3.out)
+tri_16 data_drive(in = words.out, en = active.out)
+and done(a = not(in = step_a.out).out, b = not(in = step_b.out).out)
+and carry_drive(a = done.out, b = active.out)
+
+output[16] data(in = data_drive.out)
+output carry(in = carry_drive.out)
+output[3] instruction_step_passthrough(in = instruction_step_input)

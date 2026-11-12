@@ -1,0 +1,11 @@
+// One bit of adder_8.circ.
+input a, b, c_in
+
+xor half(a = a, b = b)
+xor sum(a = half.out, b = c_in)
+and carry_ab(a = a, b = b)
+and carry_hc(a = half.out, b = c_in)
+or  carry(a = carry_ab.out, b = carry_hc.out)
+
+output s(in = sum.out)
+output c_out(in = carry.out)

@@ -1,0 +1,14 @@
+// ALU: the 8 Bit ALU. It only adds. ALU_Result is the raw sum; Dout is the
+// same sum on the internal data bus, gated by OE.
+import adder_8 "adder_8.circ"
+import tri_8 "tri_8.circ"
+
+input oe
+input[8] reg_x, reg_y
+
+adder_8 sum(a = reg_x, b = reg_y)
+tri_8 drive(in = sum.s, en = oe)
+
+output[8] dout(in = drive.out)
+output[8] alu_result(in = sum.s)
+output carry(in = sum.c_out)

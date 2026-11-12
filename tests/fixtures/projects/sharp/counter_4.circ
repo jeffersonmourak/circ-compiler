@@ -1,0 +1,35 @@
+// Stand-in for the 4-bit Logisim Counter that serves as the program counter.
+// On a rising clk edge it loads d when ld is high, else adds one when en is
+// high, else holds. Logisim leaves Clear unconnected; here it takes reset.
+import dff "dff.circ"
+
+input[4] d
+input clk, clr, ld, en
+
+not count(in = ld)
+
+// q + en
+xor inc_0(a = q0.out, b = en)
+and carry_1(a = q0.out, b = en)
+xor inc_1(a = q1.out, b = carry_1.out)
+and carry_2(a = q1.out, b = carry_1.out)
+xor inc_2(a = q2.out, b = carry_2.out)
+and carry_3(a = q2.out, b = carry_2.out)
+xor inc_3(a = q3.out, b = carry_3.out)
+
+or next_0(a = and(a = d[0], b = ld).out, b = and(a = inc_0.out, b = count.out).out)
+or next_1(a = and(a = d[1], b = ld).out, b = and(a = inc_1.out, b = count.out).out)
+or next_2(a = and(a = d[2], b = ld).out, b = and(a = inc_2.out, b = count.out).out)
+or next_3(a = and(a = d[3], b = ld).out, b = and(a = inc_3.out, b = count.out).out)
+
+dff bit_0(d = next_0.out, clk = clk, clr = clr)
+dff bit_1(d = next_1.out, clk = clk, clr = clr)
+dff bit_2(d = next_2.out, clk = clk, clr = clr)
+dff bit_3(d = next_3.out, clk = clk, clr = clr)
+
+wire q0(in = bit_0.q)
+wire q1(in = bit_1.q)
+wire q2(in = bit_2.q)
+wire q3(in = bit_3.q)
+
+output[4] q(in = {q0.out, q1.out, q2.out, q3.out})

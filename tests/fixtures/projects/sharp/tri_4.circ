@@ -1,0 +1,6 @@
+// Stand-in for Logisim's 4-bit Controlled Buffer. circ has no tri-state, so
+// a disabled buffer drives 0 and every net that buffers share becomes an OR.
+input[4] in
+input en
+and[4] gate(a = in, b = {en, en, en, en})
+output[4] out(in = gate.out)

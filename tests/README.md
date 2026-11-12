@@ -44,6 +44,7 @@ printf '\252\273'         > tests/fixtures/mem/rom_pc_walk_alt.bin  # aa bb
 head -c 17 /dev/zero      > tests/fixtures/mem/too_many_words.bin   # one word past a 16-cell rom
 python3 -c "open('tests/fixtures/mem/rom_lookup.bin','wb').write(bytes((i*0x11)&0xff for i in range(16)))"        # bench: word i = i * 0x11
 python3 -c "open('tests/fixtures/mem/rom_lookup_8bit.bin','wb').write(bytes((i*37)&0xff for i in range(256)))"     # bench: a 256-word permutation
+printf '\014\035\040\074\116\0\0\0\0\0\0\0\010\005\100\0' > tests/fixtures/mem/sharp_ram_ra.bin  # 0c 1d 20 3c 4e, 7 zeros, 08 05 40 00
 ```
 
 `rom_lookup.bin` and `rom_lookup_8bit.bin` preload the `rom_lookup` / `rom_lookup_8bit` rows of the engine bench (`zig build bench`, see `DOCS/benchmark.md`).
