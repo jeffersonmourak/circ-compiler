@@ -1,0 +1,9 @@
+// The latch reads its own inverted output. The loop crosses only
+// sub-circuit instances in this file (`gated` and the `nor` macro), and
+// the gates inside them break it.
+import gated "gated.circ"
+input en
+wire q(in = cell.q)
+nor flip(a = q.out, b = q.out)
+gated cell(d = flip.out, en = en)
+output o(in = q.out)

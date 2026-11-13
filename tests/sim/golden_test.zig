@@ -42,6 +42,11 @@ const fixtures = [_]Fixture{
     },
     .{ .name = "sim_ram_write_read", .root_path = "tests/fixtures/circuits/sim_ram_write_read.circ" },
     .{ .name = "sim_mem_errors", .root_path = "tests/fixtures/circuits/sim_ram_write_read.circ" },
+    .{
+        .name = "sim_sharp_ram_ra",
+        .root_path = "tests/fixtures/projects/sharp/sharp.circ",
+        .preloads = &.{.{ .name = "mem", .path = "tests/fixtures/mem/sharp_ram_ra.bin" }},
+    },
 };
 
 fn updateModeEnabled() bool {

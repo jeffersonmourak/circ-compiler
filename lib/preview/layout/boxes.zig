@@ -19,14 +19,35 @@ pub const PrimitiveSize = sizing.PrimitiveSize;
 
 pub const Ports = struct {
     in_ports: []const PortSlot,
+    /// The first (for a primitive, the only) output port.
     out_port: PortCoord,
+    /// Every output port: none for a sink, one for a source or a gate, one
+    /// per declared output for a chip.
+    out_ports: []const PortSlot,
 };
 
 pub fn resolvePortCoords(arena: std.mem.Allocator, node: VirtualNode, x: u32, y: u32, w: u32, h: u32) !Ports {
     const slots = ports.inputSlots(node);
     const in_list = try arena.alloc(PortSlot, slots.len);
-    for (slots, 0..) |s, i| in_list[i] = .{ .port_name = s.name, .coord = .{ .x = x -| 1, .y = y + s.row } };
-    return .{ .in_ports = in_list, .out_port = .{ .x = x + w, .y = y + ports.outputRow(node, h) } };
+    for (slots, 0..) |s, i| in_list[i] = .{ .port_name = s.name, .port = s.port, .coord = .{ .x = x -| 1, .y = y + s.row } };
+    const out_byte: u8 = @intFromEnum(full_format.PortName.out);
+    const out_list: []PortSlot = switch (node.kind) {
+        .subcircuit => blk: {
+            const list = try arena.alloc(PortSlot, node.out_slots.len);
+            for (node.out_slots, 0..) |s, i| list[i] = .{ .port_name = s.name, .port = s.port, .coord = .{ .x = x + w, .y = y + s.row } };
+            break :blk list;
+        },
+        .primitive => |p| switch (p) {
+            .output_pin, .led, .wire, .slice, .concat => &.{},
+            else => blk: {
+                const list = try arena.alloc(PortSlot, 1);
+                list[0] = .{ .port_name = "out", .port = out_byte, .coord = .{ .x = x + w, .y = y + ports.outputRow(node, h, out_byte) } };
+                break :blk list;
+            },
+        },
+    };
+    const first: PortCoord = if (out_list.len > 0) out_list[0].coord else .{ .x = x + w, .y = y + h / 2 };
+    return .{ .in_ports = in_list, .out_port = first, .out_ports = out_list };
 }
 
 /// Pre-compose the displayed label for a node so its memory is arena-owned
@@ -93,30 +114,42 @@ pub fn sizeOf(node: VirtualNode, opts: layout.LayoutOptions) sizing.PrimitiveSiz
             .slice, .concat => sizing.primitive_sizing.get(p),
             else => sizing.primitive_sizing.get(p),
         },
-        .subcircuit => |sub| sizing.macroSize(
-            sub.len + node.name.len + 3, // [, :, ]
-            countActiveSubcircuitInputs(node),
-        ),
+        .subcircuit => |sub| chipSize(sub, node),
     };
 }
 
-fn countActiveSubcircuitInputs(node: VirtualNode) u32 {
-    var has_in = false;
-    var has_a = false;
-    var has_b = false;
-    for (node.inputs) |edge| {
-        switch (edge.dst_port) {
-            @intFromEnum(full_format.PortName.in) => has_in = true,
-            @intFromEnum(full_format.PortName.a) => has_a = true,
-            @intFromEnum(full_format.PortName.b) => has_b = true,
-            else => {},
+/// A chip box: tall enough for one port on every other row, and wide enough
+/// for its `[<chip>:<name>]` title. With port labels it is also wide enough
+/// for each row's input and output names side by side, and for the title to
+/// clear the names that share its row.
+fn chipSize(sub: []const u8, node: VirtualNode) sizing.PrimitiveSize {
+    const title: u32 = @intCast(sub.len + node.name.len + 3); // [, :, ]
+    const height = types.chipHeight(node.in_slots.len, node.out_slots.len);
+    var width = sizing.macroSize(title, 1).width;
+    if (!node.port_labels) return .{ .width = width, .height = height };
+
+    const mid = height / 2;
+    var row: u32 = 1;
+    while (row + 1 < height) : (row += 1) {
+        const in_len = labelLenAt(node.in_slots, row);
+        const out_len = labelLenAt(node.out_slots, row);
+        // Two names on one row keep a cell between them.
+        var need = in_len + out_len + @as(u32, if (in_len > 0 and out_len > 0) 1 else 0);
+        // The title is centred, so it clears the longer name on both sides.
+        if (row == mid) {
+            const side = @max(in_len, out_len);
+            need = title + if (side > 0) 2 * (side + 1) else 0;
         }
+        width = @max(width, need + 2);
     }
-    var n: u32 = 0;
-    if (has_a) n += 1;
-    if (has_in) n += 1;
-    if (has_b) n += 1;
-    return n;
+    return .{ .width = width, .height = height };
+}
+
+fn labelLenAt(slots: []const types.Slot, row: u32) u32 {
+    for (slots) |s| {
+        if (s.row == row) return @intCast(s.name.len);
+    }
+    return 0;
 }
 
 // ---------- Tests ----------
@@ -136,11 +169,20 @@ test "boxes: port coordinates equal the ports table plus the box origin" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const a = arena.allocator();
+    // A chip with three inputs and two outputs: seven rows, the outputs
+    // centred on rows 2 and 4.
+    var chip_in = [_]types.Slot{ .{ .name = "d", .port = 16, .row = 0 }, .{ .name = "clk", .port = 17, .row = 0 }, .{ .name = "en", .port = 18, .row = 0 } };
+    var chip_out = [_]types.Slot{ .{ .name = "q", .port = 16, .row = 0 }, .{ .name = "nq", .port = 17, .row = 0 } };
+    types.assignChipRows(&chip_in, &chip_out);
+    var chip = mk(.{ .subcircuit = "m" }, &.{});
+    chip.in_slots = &chip_in;
+    chip.out_slots = &chip_out;
+    chip.port_labels = true;
     const cases = [_]struct { n: VirtualNode, w: u32, h: u32 }{
         .{ .n = mk(.{ .primitive = .input_pin }, &.{}), .w = 5, .h = 3 },
         .{ .n = mk(.{ .primitive = .and_gate }, &.{ in_a, in_b }), .w = 5, .h = 5 },
         .{ .n = mk(.{ .primitive = .ram }, &.{}), .w = 12, .h = 9 },
-        .{ .n = mk(.{ .subcircuit = "m" }, &.{ in_a, in_in, in_b }), .w = 7, .h = 7 },
+        .{ .n = chip, .w = 7, .h = 7 },
     };
     for (cases) |c| {
         const got = try resolvePortCoords(a, c.n, 10, 20, c.w, c.h);
@@ -152,8 +194,22 @@ test "boxes: port coordinates equal the ports table plus the box origin" {
             try std.testing.expectEqual(20 + s.row, pp.coord.y);
         }
         try std.testing.expectEqual(10 + c.w, got.out_port.x);
-        try std.testing.expectEqual(20 + ports.outputRow(c.n, c.h), got.out_port.y);
+        try std.testing.expect(got.out_ports.len > 0);
+        try std.testing.expectEqual(got.out_ports[0].coord, got.out_port);
+        try std.testing.expectEqual(20 + ports.outputRow(c.n, c.h, got.out_ports[0].port), got.out_port.y);
     }
+    const chip_p = try resolvePortCoords(a, chip, 10, 20, 7, 7);
+    try std.testing.expectEqual(@as(usize, 3), chip_p.in_ports.len);
+    try std.testing.expectEqual(@as(u32, 25), chip_p.in_ports[2].coord.y);
+    try std.testing.expectEqual(@as(usize, 2), chip_p.out_ports.len);
+    try std.testing.expectEqual(@as(u32, 22), chip_p.out_ports[0].coord.y);
+    try std.testing.expectEqual(@as(u32, 24), chip_p.out_ports[1].coord.y);
+    // Tall enough for three inputs; wide enough for `clk` beside `[m:g]`
+    // on the middle row: 5 + 2 * (3 + 1) + 2.
+    try std.testing.expectEqual(@as(u32, 7), sizeOf(chip, .{}).height);
+    try std.testing.expectEqual(@as(u32, 15), sizeOf(chip, .{}).width);
+    // A sink has no output port.
+    try std.testing.expectEqual(@as(usize, 0), (try resolvePortCoords(a, mk(.{ .primitive = .led }, &.{}), 0, 0, 5, 3)).out_ports.len);
     // The and gate's well-known offsets, spelled out.
     const and_p = try resolvePortCoords(a, mk(.{ .primitive = .and_gate }, &.{ in_a, in_b }), 10, 0, 5, 5);
     try std.testing.expectEqual(@as(u32, 1), and_p.in_ports[0].coord.y);

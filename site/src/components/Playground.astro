@@ -13,6 +13,9 @@ interface Props {
 }
 const { manifest, supportedVersions, agentReference } = Astro.props;
 const wasmHref = url('/wasm/libcirc.wasm');
+// Set by `bun run playground` only: the dev playground keeps its projects on
+// disk (scripts/dev-playground.ts). Never true in a build.
+const diskWorkspace = import.meta.env.DEV && !!process.env.CIRC_PLAYGROUND_ROOT;
 const agentReferenceHref = url('/agent-reference/manifest.json');
 // One call feeds the sidebar rows, the embedded blob and the default pick, so
 // they cannot drift from each other or from the shipped content.
@@ -24,6 +27,7 @@ const groups = displayGroups(catalogue, []);
   class="pg"
   style="--pg-term-h: 40px"
   data-libcirc-wasm={wasmHref}
+  data-disk-workspace={diskWorkspace ? 'true' : undefined}
   data-supported-versions={supportedVersions.join(',')}
   data-manifest-full-version={manifest.full_version.toString()}
   data-manifest-version={manifest.version}
@@ -211,6 +215,7 @@ const groups = displayGroups(catalogue, []);
           <input id="pg-set-cap" type="number" min="1" max="24" step="1" data-setting="truthTableCap" aria-describedby="pg-cap-hint" />
           <span class="visually-hidden" id="pg-cap-hint">2^cap rows; once the enumeration starts, it runs to the end.</span>
         </div>
+        <button type="button" class="pg-clock-btn" aria-expanded="false" aria-controls="pg-clock-card">Clock <span class="pg-clock-rate"></span></button>
         <button type="button" class="pg-data-btn" aria-expanded="false" aria-controls="pg-data-card">Data <span class="pg-data-count"></span></button>
       </div>
       <div class="pg-view-panel" id="pg-view-schematic" data-view-panel="schematic" role="tabpanel" hidden><pre class="pg-preview"></pre></div>
@@ -238,6 +243,36 @@ const groups = displayGroups(catalogue, []);
         <div class="pg-data-footer" hidden>
           <span class="pg-data-hint">edits settle the circuit and echo in the console</span>
           <button type="button" class="pg-data-reset" title="Every pin unknown, ROM images re-applied">Reset</button>
+        </div>
+      </div>
+      {/* A free-running clock on one input of the same session: a pin, a
+          frequency, start and stop. Non-modal, like the Data card. */}
+      <div class="pg-clock-card" id="pg-clock-card" role="dialog" aria-label="Clock" tabindex="-1" hidden>
+        <div class="pg-clock-head">
+          <strong>Clock</strong><span class="pg-clock-state"></span>
+          <button type="button" class="pg-clock-close" aria-label="Close Clock">✕</button>
+        </div>
+        <div class="pg-clock-note"></div>
+        <div class="pg-clock-body" hidden>
+          <label class="pg-clock-row" for="pg-clock-pin">
+            <span>Pin</span>
+            <select class="pg-clock-pin" id="pg-clock-pin"></select>
+          </label>
+          <label class="pg-clock-row" for="pg-clock-hz">
+            <span>Frequency</span>
+            <span class="pg-clock-freq">
+              <input class="pg-clock-hz" id="pg-clock-hz" type="text" inputmode="decimal" spellcheck="false" autocomplete="off" aria-describedby="pg-clock-hint" />
+              <span aria-hidden="true">Hz</span>
+            </span>
+          </label>
+          <input class="pg-clock-slider" type="range" min="0" max="1000" step="1" aria-label="Frequency, on a logarithmic scale" />
+          <div class="pg-clock-actions">
+            <button type="button" class="pg-clock-run">Start</button>
+            <button type="button" class="pg-clock-step" title="Drive one edge">Step</button>
+          </div>
+        </div>
+        <div class="pg-clock-footer">
+          <span class="pg-clock-hint" id="pg-clock-hint">0.1 Hz to 10 kHz · one cycle is two edges</span>
         </div>
       </div>
       <div class="pg-hint"></div>
@@ -360,7 +395,7 @@ const groups = displayGroups(catalogue, []);
   // The console over the session: the grammar and the reply strings of
   // `--sim`, and the prompt's own memory. Small, and the session already
   // pulls their one shared dependency, so they ride in the eager bundle.
-  import { execute, handshake } from '../scripts/sim-executor.ts';
+  import { execute, handshake, type FileSource } from '../scripts/sim-executor.ts';
   import { HELP_VERB, HistoryRing, MemoryTabFiles, Transcript, commandFor, helpLines, promptEcho, scriptOf } from '../scripts/console.ts';
   import { summaryOf, memoryHeader, legendFor, imageLine } from '../scripts/terminal-line.ts';
   import { addressedWord } from '../scripts/memory-panel.ts';
@@ -429,9 +464,16 @@ const groups = displayGroups(catalogue, []);
   } from '../scripts/source-link.ts';
   import { decodeShare, encodeShare, readHash, shareUrl, webStreamsCodec } from '../utils/share-link.ts';
   import { generateSillyName } from '../utils/sillyname.ts';
+  import { DiskFileSource, diskWorkspace, httpDiskApi } from '../scripts/disk-storage.ts';
   import {
+    ClockPacer, RateMeter, DEFAULT_HZ,
+    clockable, formatHz, hzToSlider, nextLevel, parseHz, pickClockPin, sliderToHz,
+  } from '../scripts/clock.ts';
+  import {
+    browserStorage,
     createStore,
     describeNote,
+    liftStoreLimits,
     createScratch,
     deleteScratch,
     duplicateScratch,
@@ -443,6 +485,7 @@ const groups = displayGroups(catalogue, []);
     uniqueName,
     NEW_PROJECT_SOURCE,
     type CatalogueItem,
+    type PlaygroundStore,
     type View as StoredView,
     type FooterTab,
   } from '../utils/playground-store.ts';
@@ -777,6 +820,9 @@ const groups = displayGroups(catalogue, []);
     const hooks = {
       onDataOpen: null as null | (() => void),
       onCircuitChanged: null as null | (() => void),
+      /** The session is gone, or a new one is in place: the Clock card's. */
+      onSessionDropped: null as null | (() => void),
+      onSessionReady: null as null | (() => void),
       onArtifact: null as null | ((bytes: Uint8Array | null, reason: 'built' | 'files-changed') => void),
       /** The Live view was shown: build or note. Set once the simulator is
        *  wired, which is after the restore from the envelope runs — a restore
@@ -1099,7 +1145,7 @@ const groups = displayGroups(catalogue, []);
     const consoleState = {
       transcript: new Transcript(),
       history: new HistoryRing(),
-      files: new MemoryTabFiles(),
+      files: new MemoryTabFiles() as FileSource,
       /** A line is running: the prompt waits, and a `rebuilt` waits for its reply. */
       busy: false,
       /** The session was rebuilt while a line ran; announce it after the reply. */
@@ -1409,7 +1455,26 @@ const groups = displayGroups(catalogue, []);
     // ---- persistence ----
     // One key, one envelope. Phase 3 populates layout.ratios only; the other
     // fields ship with their defaults for later phases to fill.
-    const store = createStore();
+    // The dev playground (`bun run playground`) keeps the reader's projects in
+    // a directory instead; the branch is dead code in a build.
+    let store: PlaygroundStore;
+    if (import.meta.env.DEV && el.dataset.diskWorkspace === 'true') {
+      liftStoreLimits();
+      const workspace = diskWorkspace(browserStorage(), httpDiskApi(), {
+        onError: (message) => { console.error(`[playground] ${message}`); status.textContent = `Disk: ${message}`; },
+        onSkipped: (skipped) => {
+          for (const s of skipped) console.warn(`[playground] left out ${s.dir}: ${s.reason}`);
+        },
+      });
+      store = createStore({ storage: workspace.storage });
+      // The console's `load` and `save` reach the workspace here, and only
+      // here: a path is relative to the open project's directory.
+      consoleState.files = new DiskFileSource(() => workspace.dirFor(store.envelope.activeId));
+      // A file changed outside the page: write what is pending, then reread.
+      import.meta.hot?.on('circ:disk-changed', () => { store.flush(); location.reload(); });
+    } else {
+      store = createStore();
+    }
     store.onNote((note) => { status.textContent = describeNote(note); });
 
     // One rendered position over per-project intent. Resizing only borrows
@@ -4539,6 +4604,7 @@ const groups = displayGroups(catalogue, []);
 
     /** End the canvas and the session, in that order: the canvas holds the runtime the session owns. */
     function dropSession() {
+      hooks.onSessionDropped?.();
       sim.unsubscribe?.();
       sim.unsubscribe = null;
       sim.lifecycleUnsubscribe?.();
@@ -4648,6 +4714,7 @@ const groups = displayGroups(catalogue, []);
       }
       sim.session = session;
       sim.sessionBytes = bytes;
+      hooks.onSessionReady?.();
       sim.id = revisionIds.next('session');
       sim.liveStateRevision = revisionIds.next('live-state');
       sim.imageRevision = scheduled.inputs.imageRevision;
@@ -4747,7 +4814,10 @@ const groups = displayGroups(catalogue, []);
           // The console is the record of every face: what another face did
           // is logged as the line that would have done it. The console's own
           // lines are already in the log (it is busy while they run).
-          if (!consoleState.busy) consoleAppend(commandFor(event, session), 'page');
+          // A running clock is the exception: hundreds of `set` lines a second
+          // would bury the log, so the Clock card logs its start and stop.
+          const clocked = event.kind === 'drive' && event.origin === 'clock';
+          if (!consoleState.busy && !clocked) consoleAppend(commandFor(event, session), 'page');
         } else if (event.kind === 'rebuilt') {
           simNote.textContent = '';
           dataNote.textContent = '';
@@ -5029,6 +5099,218 @@ const groups = displayGroups(catalogue, []);
       }).finally(() => { dataReset.disabled = false; });
     });
 
+    // ---- the Clock card ----
+    // A clock is one more face on the session: it drives a one-bit input low
+    // and high at a set frequency. The edges due are worked out per animation
+    // frame (`ClockPacer`) and driven as one batch (`SimSession.clock`), so a
+    // fast clock costs the other faces one redraw a frame, not one an edge.
+    const clockBtn = el.querySelector<HTMLButtonElement>('.pg-clock-btn')!;
+    const clockRate = el.querySelector<HTMLElement>('.pg-clock-rate')!;
+    const clockCard = el.querySelector<HTMLElement>('.pg-clock-card')!;
+    const clockClose = el.querySelector<HTMLButtonElement>('.pg-clock-close')!;
+    const clockState = el.querySelector<HTMLElement>('.pg-clock-state')!;
+    const clockNote = el.querySelector<HTMLElement>('.pg-clock-note')!;
+    const clockBody = el.querySelector<HTMLElement>('.pg-clock-body')!;
+    const clockPin = el.querySelector<HTMLSelectElement>('.pg-clock-pin')!;
+    const clockHz = el.querySelector<HTMLInputElement>('.pg-clock-hz')!;
+    const clockSlider = el.querySelector<HTMLInputElement>('.pg-clock-slider')!;
+    const clockRun = el.querySelector<HTMLButtonElement>('.pg-clock-run')!;
+    const clockStep = el.querySelector<HTMLButtonElement>('.pg-clock-step')!;
+    /** A frame's share of the main thread, and a cap for a circuit that settles instantly. */
+    const CLOCK_FRAME_BUDGET_MS = 8;
+    const CLOCK_MAX_EDGES_PER_FRAME = 4096;
+    const clock = {
+      open: false,
+      pin: null as string | null,
+      hz: DEFAULT_HZ,
+      running: false,
+      session: null as SimSession | null,
+      pacer: null as ClockPacer | null,
+      meter: new RateMeter(),
+      edges: 0,
+      frame: 0,
+      timer: 0,
+    };
+
+    /** The next frame while the page is on screen. A hidden page gets no
+     *  animation frames, so there the clock crawls on a timer instead of
+     *  stopping; the pacer does not make up the time lost. */
+    function scheduleClock() {
+      if (document.visibilityState === 'visible') clock.frame = requestAnimationFrame(clockFrame);
+      else clock.timer = window.setTimeout(() => clockFrame(performance.now()), 100);
+    }
+    function unscheduleClock() {
+      cancelAnimationFrame(clock.frame);
+      window.clearTimeout(clock.timer);
+    }
+
+    const clockSession = (): SimSession | null =>
+      sim.session && sim.session.isAlive && !sim.session.failedToSettle ? sim.session : null;
+
+    function clockLevel(session: SimSession, name: string): number {
+      const r = session.get(name);
+      if (!r.ok || (r.value.defined & 1n) === 0n) return 2;
+      return (r.value.value & 1n) === 1n ? 1 : 0;
+    }
+
+    function renderClock() {
+      const session = clockSession();
+      const pins = session ? clockable(session.pins) : [];
+      if (clock.pin === null || !pins.some((p) => p.name === clock.pin)) clock.pin = pickClockPin(pins);
+      const shape = pins.map((p) => p.name).join('|');
+      if (clockPin.dataset.shape !== shape) {
+        clockPin.dataset.shape = shape;
+        clockPin.replaceChildren(...pins.map((p) => {
+          const option = document.createElement('option');
+          option.value = p.name;
+          option.textContent = p.name;
+          return option;
+        }));
+      }
+      if (clock.pin !== null) clockPin.value = clock.pin;
+      clockNote.textContent = !session
+        ? (state.simulateEnabled ? 'Compile a circuit first.' : '')
+        : pins.length === 0 ? 'This circuit has no one-bit input to clock.' : '';
+      clockNote.hidden = clockNote.textContent === '';
+      clockBody.hidden = !session || pins.length === 0;
+      clockPin.disabled = clock.running;
+      clockRun.textContent = clock.running ? 'Stop' : 'Start';
+      clockRun.dataset.running = String(clock.running);
+      clockStep.disabled = clock.running;
+      clockBtn.dataset.running = String(clock.running);
+      if (document.activeElement !== clockHz) clockHz.value = formatHz(clock.hz);
+      clockHz.removeAttribute('aria-invalid');
+      clockSlider.value = String(hzToSlider(clock.hz));
+      renderClockReadout(null);
+    }
+
+    function renderClockReadout(now: number | null) {
+      if (!clock.running) {
+        clockState.textContent = '';
+        clockRate.textContent = '';
+        return;
+      }
+      const cycles = Math.floor(clock.edges / 2);
+      const measured = now === null ? null : clock.meter.hz(now);
+      // Say so when the circuit cannot keep up with the setting.
+      const behind = measured !== null && measured < clock.hz * 0.9;
+      clockState.textContent = `${cycles} cycle${cycles === 1 ? '' : 's'}${behind ? ` · running at ${formatHz(measured!)} Hz` : ''}`;
+      clockState.dataset.behind = String(behind);
+      clockRate.textContent = `${formatHz(behind ? measured! : clock.hz)} Hz`;
+    }
+
+    function stopClock(reason: string | null = null) {
+      if (!clock.running) return;
+      unscheduleClock();
+      clock.running = false;
+      const cycles = Math.floor(clock.edges / 2);
+      const session = clock.session;
+      clock.session = null;
+      clock.pacer = null;
+      if (session && session === sim.session && session.isAlive) {
+        consoleAppend([`# clock ${clock.pin}: stopped after ${cycles} cycle${cycles === 1 ? '' : 's'}${reason ? ` (${reason})` : ''}`], 'page');
+      }
+      if (reason) status.textContent = `Clock stopped: ${reason}.`;
+      renderClock();
+    }
+
+    function clockFrame(now: number) {
+      if (!clock.running) return;
+      const session = clock.session;
+      const name = clock.pin;
+      if (!session || !name || session !== sim.session || !session.isAlive) { stopClock('the circuit changed'); return; }
+      const due = Math.min(clock.pacer!.due(now), CLOCK_MAX_EDGES_PER_FRAME);
+      if (due > 0) {
+        let level = nextLevel(clockLevel(session, name));
+        const levels: (0 | 1)[] = [];
+        for (let i = 0; i < due; i += 1) { levels.push(level); level = level === 1 ? 0 : 1; }
+        const started = performance.now();
+        // Edges the budget leaves undriven are dropped, not owed: a circuit
+        // too slow for the setting runs at its own pace and the card says so.
+        const r = session.clock(name, levels, () => performance.now() - started > CLOCK_FRAME_BUDGET_MS);
+        if (!r.ok) { stopClock(r.code === 'E_NOSETTLE' ? 'the circuit did not settle' : r.code); return; }
+        clock.edges += r.edges;
+        clock.meter.add(now, r.edges);
+      } else {
+        clock.meter.add(now, 0);
+      }
+      renderClockReadout(now);
+      scheduleClock();
+    }
+
+    function startClock() {
+      const session = clockSession();
+      if (clock.running || !session || clock.pin === null) return;
+      clock.running = true;
+      clock.session = session;
+      clock.pacer = new ClockPacer(clock.hz);
+      clock.meter = new RateMeter();
+      clock.edges = 0;
+      consoleAppend([`# clock ${clock.pin}: started at ${formatHz(clock.hz)} Hz`], 'page');
+      status.textContent = '';
+      renderClock();
+      scheduleClock();
+    }
+
+    /** One edge, as a typed `set` would drive it: logged like any other. */
+    function stepClock() {
+      const session = clockSession();
+      if (clock.running || !session || clock.pin === null) return;
+      const r = session.set(clock.pin, BigInt(nextLevel(clockLevel(session, clock.pin))), 1n);
+      if (!r.ok) status.textContent = `Clock: ${r.code}.`;
+    }
+
+    function setClockHz(hz: number) {
+      clock.hz = hz;
+      clock.pacer?.setHz(hz);
+      if (document.activeElement !== clockHz) clockHz.value = formatHz(hz);
+      clockSlider.value = String(hzToSlider(hz));
+      renderClockReadout(null);
+    }
+
+    async function showClock() {
+      renderClock();
+      const bytes = sim.bytes;
+      await ensureSession();
+      if (clock.open && sim.bytes === bytes) renderClock();
+    }
+
+    function setClockOpen(open: boolean, opts: { focus?: boolean } = {}) {
+      clock.open = open;
+      clockCard.hidden = !open;
+      clockBtn.setAttribute('aria-expanded', String(open));
+      if (open) void showClock();
+      if (opts.focus !== false) (open ? clockCard : clockBtn).focus();
+    }
+
+    clockBtn.addEventListener('click', () => setClockOpen(!clock.open));
+    clockClose.addEventListener('click', () => setClockOpen(false));
+    clockCard.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setClockOpen(false);
+    });
+    clockPin.addEventListener('change', () => { clock.pin = clockPin.value || null; });
+    clockRun.addEventListener('click', () => { if (clock.running) stopClock(); else startClock(); });
+    clockStep.addEventListener('click', stepClock);
+    clockSlider.addEventListener('input', () => setClockHz(sliderToHz(Number(clockSlider.value))));
+    clockHz.addEventListener('input', () => {
+      const hz = parseHz(clockHz.value);
+      if (hz === null) { clockHz.setAttribute('aria-invalid', 'true'); return; }
+      clockHz.removeAttribute('aria-invalid');
+      setClockHz(hz);
+    });
+    clockHz.addEventListener('blur', () => { clockHz.removeAttribute('aria-invalid'); clockHz.value = formatHz(clock.hz); });
+    clockHz.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      clockHz.blur();
+      if (!clock.running) startClock();
+    });
+
+    hooks.onSessionDropped = () => { stopClock('the circuit changed'); if (clock.open) renderClock(); };
+    hooks.onSessionReady = () => { if (clock.open) renderClock(); };
     hooks.onCircuitChanged = () => { sim.pins.clear(); };
     hooks.onDataOpen = () => { void showData(); };
     hooks.onLive = () => {

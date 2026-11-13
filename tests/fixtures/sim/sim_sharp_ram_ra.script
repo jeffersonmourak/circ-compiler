@@ -1,0 +1,185 @@
+# The SHARP CPU (tests/fixtures/projects/sharp) running the program its
+# author wrote for it in Logisim. `mem` is preloaded from
+# tests/fixtures/mem/sharp_ram_ra.bin the way `--mem=mem=...` would:
+#    0: 0c  LOAD X, [12]      3: 3c  STORE [12], OUT    12: 08
+#    1: 1d  LOAD Y, [13]      4: 4e  JMP 14             13: 05
+#    2: 20  ADD              14: 40  JMP 0
+# Each pass through the loop adds 5 to the byte at address 12.
+mems
+# Power-on: clock low, then a reset pulse defines every flip-flop.
+set cpu_clock 0
+set reset 1
+set reset 0
+dump out
+# ---- Pass 1 ----
+# LOAD X, [12]: 7 clocks.
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+get x
+# LOAD Y, [13]: 7 clocks.
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+get y
+get alu_result
+# ADD: 5 clocks.
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+get out
+# STORE [12], OUT: 6 clocks.
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+peek mem 12
+# JMP 14: 5 clocks.
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+get pc
+# JMP 0: 5 clocks.
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+get pc
+dump out
+# ---- Pass 2 ----
+# LOAD X, [12]: 7 clocks.
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+get x
+# LOAD Y, [13]: 7 clocks.
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+get y
+get alu_result
+# ADD: 5 clocks.
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+get out
+# STORE [12], OUT: 6 clocks.
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+peek mem 12
+# JMP 14: 5 clocks.
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+get pc
+# JMP 0: 5 clocks.
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+set cpu_clock 1
+set cpu_clock 0
+get pc
+dump out
+# Only address 12 has changed.
+mem mem

@@ -1,0 +1,16 @@
+// MEM_CEL: one stored bit. The flip-flop reloads its own value unless WE
+// selects Din; Dout is the bus side (gated by OE), Sdata the always-on tap.
+import dff "dff.circ"
+
+input clock, we, din, oe, reset
+
+and keep(a = cell.q, b = not(in = we).out)
+and load(a = we, b = din)
+or  next(a = keep.out, b = load.out)
+dff cell(d = next.out, clk = clock, clr = reset)
+
+// Controlled Buffer in Logisim.
+and drive(a = cell.q, b = oe)
+
+output dout(in = drive.out)
+output sdata(in = cell.q)

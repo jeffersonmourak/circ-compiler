@@ -1,0 +1,28 @@
+// Stand-in for the 3-bit Logisim Counter that steps the control unit. It
+// counts on every rising clk edge (Logisim wires Enable to the clock itself).
+//
+// One deliberate difference: Logisim clears this counter asynchronously, so
+// the step that raises Carry lasts no time at all. Built from gates, that
+// loop would clear on any decode glitch, so clr is synchronous here and the
+// Carry step lasts one idle clock. reset keeps the asynchronous clear.
+import dff "dff.circ"
+
+input clk, clr, reset
+
+not run(in = clr)
+
+// q + 1
+not inc_0(in = q0.out)
+xor inc_1(a = q1.out, b = q0.out)
+and carry_2(a = q1.out, b = q0.out)
+xor inc_2(a = q2.out, b = carry_2.out)
+
+dff bit_0(d = and(a = inc_0.out, b = run.out).out, clk = clk, clr = reset)
+dff bit_1(d = and(a = inc_1.out, b = run.out).out, clk = clk, clr = reset)
+dff bit_2(d = and(a = inc_2.out, b = run.out).out, clk = clk, clr = reset)
+
+wire q0(in = bit_0.q)
+wire q1(in = bit_1.q)
+wire q2(in = bit_2.q)
+
+output[3] q(in = {q0.out, q1.out, q2.out})

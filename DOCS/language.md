@@ -439,9 +439,8 @@ and  g2(a = na.out, b = b2)
 ### 5.2 Wires and cycles
 
 Wires are *transparent* to cycle detection: a cycle that runs only through
-`wire`, `led`, `output`, `slice`, `concat`, `rom`, and sub-circuit boundaries
-has no delay element and is a hard error (`E008`), as is any component
-driving itself. A pair of wires that drive each other's `in` is the simplest
+`wire`, `led`, `output`, `slice`, `concat`, and `rom` has no delay element
+and is a hard error (`E008`), as is any component driving itself. A pair of wires that drive each other's `in` is the simplest
 case:
 
 ```
@@ -462,6 +461,16 @@ wire w1(in = n1.out)
 not  n2(in = w1.out)
 wire w2(in = n2.out)   // closes the ring; legal because it passes through gates
 ```
+
+A sub-circuit instance is as transparent as its contents. The check follows
+each input of the instance to the outputs it reaches inside the callee
+without crossing an `and`, a `not`, or a `ram`, and treats only those paths
+as transparent. A register built as a sub-circuit therefore breaks a loop in
+the file that instantiates it, as do the built-in macros (`or`, `xor`, and
+the rest), which expand to gates. A sub-circuit that hands an input straight
+to an output stays transparent along that path, and a loop through it is
+`E008` (`E008_loop_through_subcircuit`, `E008_loop_through_bypass`).
+`--inspect` checks one file alone and assumes every instance is transparent.
 
 The check says nothing about whether such a ring settles: a ring with an odd
 number of inverters compiles and oscillates at run time.

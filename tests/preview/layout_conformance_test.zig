@@ -58,9 +58,8 @@ test "layout_conformance_corpus" {
 // nets meet other than as a clean crossing, I3 nets that are not a tree from
 // their source — plus crossings, bends, straight wires and the grid size.
 // Every fixture-mode is listed, zero rows included, so the corpus itself is
-// visible in the golden; the totals line closes it. I0 and I3 are zero on
-// every row and I1 and I2 on every row without a multi-driven sink port —
-// asserted, not ratcheted; the table stays as the record of crossings,
+// visible in the golden; the totals line closes it. I0, I1, I2 and I3 are
+// zero on every row — asserted, not ratcheted; the table stays as the record of crossings,
 // bends, straight wires, ordering crossings, fallbacks and size.
 
 pub const INVARIANTS_GOLDEN = "tests/fixtures/preview/layout-invariants.golden";
@@ -92,16 +91,15 @@ fn corpusInvariantsTable(out: std.mem.Allocator) ![]const u8 {
         try writer.print("{s} {s} I0={d} I1={d} I2={d} I3={d} X={d} B={d} S={d}/{d} C={d} F={d} size={d}x{d}\n", .{
             entry.name, entry.mode.name(), r.body, r.shared, r.junction, r.tree, r.crossings, r.bends, r.straight, r.wires, c, st.plan.fallbacks, grid.width, grid.height,
         });
-        // The gates (DOCS/PLANS_PROMPT.md decision 10): no wire in a box and
-        // every net a tree, always; no shared cell and no junction unless the
-        // topology itself drives one port from two nets (a macro port the
-        // collapse stage could not name — DOCS/decisions/preview-layout.md).
+        // The gates: no wire in a box, every net a tree, no shared cell and
+        // no junction, on every fixture-mode (a chip has one port per
+        // declared pin — DOCS/decisions/preview-layout.md).
         if (r.body != 0 or r.tree != 0) {
             std.debug.print("layout invariant broken: {s} {s} I0={d} I3={d}\n", .{ entry.name, entry.mode.name(), r.body, r.tree });
             return error.LayoutInvariantBroken;
         }
-        if ((r.shared != 0 or r.junction != 0) and (try multiDrivenPorts(s, st.layered)) == 0) {
-            std.debug.print("layout invariant broken: {s} {s} I1={d} I2={d} with no multi-driven port\n", .{ entry.name, entry.mode.name(), r.shared, r.junction });
+        if (r.shared != 0 or r.junction != 0) {
+            std.debug.print("layout invariant broken: {s} {s} I1={d} I2={d}\n", .{ entry.name, entry.mode.name(), r.shared, r.junction });
             return error.LayoutInvariantBroken;
         }
         total.body += r.body;
@@ -204,16 +202,15 @@ test "channels_corpus_plan" {
         if (md > 0) {
             multi_driven_modes += 1;
             std.debug.print("multi-driven ports: {s} {s} ({d})\n", .{ entry.name, entry.mode.name(), md });
+            return error.MultiDrivenPort;
         }
     }
     std.debug.print("channels corpus: spacers={d} return_lanes={d} doglegs={d} fallbacks={d} widest={d} tracks ({s}) multi_driven_modes={d}\n", .{ spacers, lanes, doglegs, fallbacks, widest, widest_name, multi_driven_modes });
 }
 
-/// Sink ports that more than one net drives. The collapse stage maps every
-/// macro input port whose name is not `a`, `in` or `b` onto `in`, so a
-/// parametric macro with two such inputs receives two nets on one port
-/// cell — a topology-level fan-in no router can draw without the two
-/// wires sharing that cell (`DOCS/decisions/preview-layout.md`).
+/// Sink ports that more than one net drives. There are none: a chip has one
+/// port per declared input, so no two nets end on one port cell
+/// (`DOCS/decisions/preview-layout.md`). The corpus asserts it.
 fn multiDrivenPorts(arena: std.mem.Allocator, layered: layout_types.LayeredGraph) !usize {
     const Key = struct { dst: usize, port: u8 };
     var drivers = std.AutoHashMap(Key, std.AutoHashMap(u64, void)).init(arena);

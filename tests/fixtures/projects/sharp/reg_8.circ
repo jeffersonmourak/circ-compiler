@@ -1,0 +1,18 @@
+// REG_8: the 8 Bit Register, eight MEM_CELs sharing Clock, WE, OE and Reset.
+import mem_cel "mem_cel.circ"
+
+input clock, we
+input[8] din
+input reset, oe
+
+mem_cel m0(clock = clock, we = we, din = din[0], oe = oe, reset = reset)
+mem_cel m1(clock = clock, we = we, din = din[1], oe = oe, reset = reset)
+mem_cel m2(clock = clock, we = we, din = din[2], oe = oe, reset = reset)
+mem_cel m3(clock = clock, we = we, din = din[3], oe = oe, reset = reset)
+mem_cel m4(clock = clock, we = we, din = din[4], oe = oe, reset = reset)
+mem_cel m5(clock = clock, we = we, din = din[5], oe = oe, reset = reset)
+mem_cel m6(clock = clock, we = we, din = din[6], oe = oe, reset = reset)
+mem_cel m7(clock = clock, we = we, din = din[7], oe = oe, reset = reset)
+
+output[8] dout(in = {m0.dout, m1.dout, m2.dout, m3.dout, m4.dout, m5.dout, m6.dout, m7.dout})
+output[8] sdata(in = {m0.sdata, m1.sdata, m2.sdata, m3.sdata, m4.sdata, m5.sdata, m6.sdata, m7.sdata})

@@ -855,16 +855,23 @@ function nsChipPart(args, body) {
     inDotYs.push(portY);
     nsTail(ctx, cell, leftEdge, slot.coord.x * cell + cell / 2, portY, inSigs[i] ?? 2, t, (inputValues[i]?.width ?? 1) > 1);
   }
-  const outDotY = c.outPort.y * cell + cell / 2;
-  nsTail(ctx, cell, rightEdge, c.outPort.x * cell + cell / 2, outDotY, outSig, t, (c.bitWidth ?? 1) > 1);
+  // One tail per output port: a memory has one, a chip one per declared
+  // output, each in the colour of what that output carries.
+  const outs = c.outPorts?.length ? c.outPorts : [{ coord: c.outPort }];
+  const outSigs = outs.map((_, i) => args.outputSignals?.[i] ?? outSig);
+  const outDotYs = outs.map((slot) => slot.coord.y * cell + cell / 2);
+  for (let i = 0; i < outs.length; i++) {
+    const bus = (args.outputValues?.[i]?.width ?? c.bitWidth ?? 1) > 1;
+    nsTail(ctx, cell, rightEdge, outs[i].coord.x * cell + cell / 2, outDotYs[i], outSigs[i], t, bus);
+  }
   body(ctx, t, cell, c, inDotYs, args);
   for (let i = 0; i < c.inPorts.length; i++) nsDot(ctx, cell, leftEdge, inDotYs[i], inSigs[i] ?? 2, t);
-  nsDot(ctx, cell, rightEdge, outDotY, outSig, t);
+  for (let i = 0; i < outs.length; i++) nsDot(ctx, cell, rightEdge, outDotYs[i], outSigs[i], t);
 }
 
 /**
  * User subcircuit: the chip with the subcircuit name in capitals in the
- * header and the instance name in the body. The header is what separates
+ * header, the instance name in the body, and each port's name beside its pin. The header is what separates
  * "a box I wrote" from the gate family at a glance.
  */
 function nsUserSubcircuit(ctx, t, cell, c) {
@@ -878,6 +885,24 @@ function nsUserSubcircuit(ctx, t, cell, c) {
   ctx.fillStyle = t.label;
   ctx.font = nsFont(cell, 500);
   ctx.fillText(c.name ?? '', bx + bw / 2, y0 + head + (h - head) / 2);
+  nsPortNames(ctx, t, cell, c, bx, bw);
+}
+
+/**
+ * A chip's port names, each beside its pin: inputs inside the left edge,
+ * outputs inside the right. The layout sets `portLabels` on a chip whose
+ * ports need naming and sizes the box to hold them.
+ */
+function nsPortNames(ctx, t, cell, c, bx, bw) {
+  if (!c.portLabels) return;
+  const pad = cell * 0.45;
+  ctx.fillStyle = t.labelMuted;
+  ctx.font = nsFont(cell, 500);
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'left';
+  for (const slot of c.inPorts) ctx.fillText(slot.portName, bx + pad, slot.coord.y * cell + cell / 2);
+  ctx.textAlign = 'right';
+  for (const slot of c.outPorts ?? []) ctx.fillText(slot.portName, bx + bw - pad, slot.coord.y * cell + cell / 2);
 }
 
 /**

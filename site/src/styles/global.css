@@ -925,6 +925,32 @@ hr {
   white-space: nowrap;
 }
 .pg-data-btn:hover { border-color: var(--accent); }
+/* The Clock button sits before Data and takes its place at the row's end. */
+.pg-clock-btn {
+  margin-left: auto;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.3;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--pane-bg);
+  color: var(--fg);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pg-clock-btn + .pg-data-btn { margin-left: 0; }
+.pg-clock-btn:hover { border-color: var(--accent); }
+.pg-clock-btn[data-running='true'] { border-color: var(--accent); }
+[data-layout='app'] .pg-clock-btn[aria-expanded='true'] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+.pg-clock-rate { color: var(--accent); }
+.pg-clock-rate:empty { display: none; }
+[data-layout='app'] .pg-clock-btn[aria-expanded='true'] .pg-clock-rate { color: var(--bg); opacity: 0.8; }
 [data-layout='app'] .pg-data-btn[aria-expanded='true'] { background: var(--accent); border-color: var(--accent); color: var(--bg); }
 .pg-data-count { color: var(--muted); }
 .pg-data-count:empty { display: none; }
@@ -936,10 +962,10 @@ hr {
   min-height: 0;
 }
 .pg-view-panel[hidden] { display: none; }
-/* While the Data card is open the view keeps clear of it (design file: the
-   region takes `padding-right: 344px`). */
-[data-layout='app'] .pg-output[data-data-open='true'] { padding-right: 344px; }
-[data-layout='app'] .pg-output[data-data-open='true'] .pg-view-panel { right: 344px; }
+/* The Data card floats over the view. The region once kept a 344px gutter
+   clear for it, from when the card was docked at the right edge; the card is
+   draggable now, and a gutter that stays where the card started only cuts
+   the canvas. */
 /* The Live view covers the whole region under the furniture: the canvas
    draws the dot grid itself, in world space, and the fit keeps the bands
    clear through its padding. The region's static dots yield while a canvas
@@ -1001,6 +1027,68 @@ hr {
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
 }
 [data-layout='app'] .pg-data-card[hidden] { display: none; }
+/* The Clock card: the Data card's material, on the left under the view
+   switch, so the two can be open at once. */
+[data-layout='app'] .pg-clock-card {
+  position: absolute;
+  top: 52px;
+  left: 16px;
+  z-index: 6;
+  width: 264px;
+  max-width: calc(100% - 32px);
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-mono);
+  background: var(--pane-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+}
+[data-layout='app'] .pg-clock-card[hidden],
+[data-layout='app'] .pg-clock-body[hidden],
+[data-layout='app'] .pg-clock-note[hidden] { display: none; }
+[data-layout='app'] .pg-clock-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; font-size: 11px; border-bottom: 1px solid var(--border); }
+[data-layout='app'] .pg-clock-head strong { font-weight: 600; }
+[data-layout='app'] .pg-clock-state { color: var(--muted); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+[data-layout='app'] .pg-clock-state[data-behind='true'] { color: var(--warn, var(--accent)); }
+[data-layout='app'] .pg-clock-close { margin-left: auto; flex: none; border: 0; padding: 0; background: transparent; color: var(--muted); font: inherit; cursor: pointer; }
+[data-layout='app'] .pg-clock-note { padding: 10px 12px; font-size: 11px; color: var(--muted); }
+[data-layout='app'] .pg-clock-body { display: grid; gap: 8px; padding: 10px 12px; font-size: 12px; }
+[data-layout='app'] .pg-clock-row { display: grid; grid-template-columns: 76px minmax(0, 1fr); align-items: center; gap: 8px; color: var(--muted); }
+[data-layout='app'] .pg-clock-freq { display: flex; align-items: center; gap: 6px; }
+[data-layout='app'] .pg-clock-pin,
+[data-layout='app'] .pg-clock-hz {
+  font: inherit;
+  width: 100%;
+  min-width: 0;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--code-bg);
+  color: var(--fg);
+}
+[data-layout='app'] .pg-clock-hz { text-align: right; }
+[data-layout='app'] .pg-clock-hz[aria-invalid='true'] { border-color: var(--danger); }
+[data-layout='app'] .pg-clock-pin:disabled { opacity: 0.6; }
+[data-layout='app'] .pg-clock-slider { width: 100%; margin: 0; accent-color: var(--accent); }
+[data-layout='app'] .pg-clock-actions { display: flex; gap: 8px; }
+[data-layout='app'] .pg-clock-run,
+[data-layout='app'] .pg-clock-step {
+  font: 11.5px var(--font-mono);
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
+}
+[data-layout='app'] .pg-clock-run { flex: 1; background: var(--accent); border-color: var(--accent); color: var(--bg); }
+[data-layout='app'] .pg-clock-run[data-running='true'] { background: transparent; color: var(--fg); }
+[data-layout='app'] .pg-clock-step:hover,
+[data-layout='app'] .pg-clock-run[data-running='true']:hover { border-color: var(--accent); }
+[data-layout='app'] .pg-clock-step:disabled { opacity: 0.5; cursor: default; }
+[data-layout='app'] .pg-clock-footer { padding: 8px 12px; border-top: 1px solid var(--border); }
+[data-layout='app'] .pg-clock-hint { font-size: 10px; line-height: 1.4; color: var(--muted); }
 /* ---------- the diagnostics footer ----------
    Under the editor (design file 3b: a 30px bar, mono 11px in --muted; the
    counts in --fg with a caret when either is non-zero). Its body opens on the
@@ -2602,11 +2690,10 @@ a.install-line:hover {
   [data-layout='app'] .pg-body { grid-template-columns: 1fr; }
   [data-layout='app'] .pg { flex: none; min-height: 100dvh; grid-template-rows: auto auto var(--pg-term-h, 40px) auto; }
   [data-layout='app'] .pg-editor { height: 60vh; }
-  [data-layout='app'] .pg-output,
-  [data-layout='app'] .pg-output[data-data-open='true'] { padding: 60px 16px 40px; }
+  [data-layout='app'] .pg-output { padding: 60px 16px 40px; }
   [data-layout='app'] .pg-output .pg-view-panel { position: relative; inset: auto; order: 2; flex: 1 0 50vh; min-height: 50vh; }
-  [data-layout='app'] .pg-output[data-data-open='true'] .pg-view-panel { right: auto; }
   [data-layout='app'] .pg-data-card { position: static; width: auto; max-width: none; max-height: none; order: 1; flex: none; margin-bottom: 16px; }
+  [data-layout='app'] .pg-clock-card { position: static; width: auto; max-width: none; order: 1; flex: none; margin-bottom: 16px; }
   [data-layout='app'] .pg-data-grip { display: none; }
   [data-layout='app'] .pg-drawer[data-mem] { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(120px, 1fr) 1px minmax(120px, 1fr); overflow: auto; }
   [data-layout='app'] .pg-nav { height: auto; min-height: 48px; flex-wrap: wrap; padding: 8px 12px; }

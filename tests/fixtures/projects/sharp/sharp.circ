@@ -1,0 +1,119 @@
+// The SHARP CPU (SHittier As Rapidly Possible), translated by hand from the
+// Logisim-evolution design SHARP.circ. One file per Logisim circuit; Logisim
+// built-ins that circ lacks have stand-ins (dff, counter_3, counter_4,
+// adder_8, tri_4, tri_8, tri_16).
+//
+// An instruction is one byte: opcode in the high nibble, operand in the low.
+//   0x0a LOAD X, [a]    0x1a LOAD Y, [a]    0x20 ADD (OUT <- X + Y)
+//   0x3a STORE [a], OUT 0x4a JMP a
+//
+// Where the translation departs from Logisim:
+//   * No tri-state. A Controlled Buffer is an AND with its enable and a
+//     shared bus is the OR of its drivers, so an idle bus reads 0.
+//   * reset is new. Logisim powers up with every flip-flop at 0 and leaves
+//     the Reset pins unconnected; circ powers up undefined, so reset feeds
+//     them all. Drive cpu_clock low, pulse reset, then clock.
+//   * The step counter clears synchronously (see counter_3.circ), so each
+//     instruction takes one idle clock more than it does in Logisim.
+//   * RAM contents are loaded by the host into `mem` (see language.md, 6.5).
+//
+// The root is sharp.circ, not root.circ: the preview corpus lays out every
+// projects/*/root.circ, and this circuit's expanded layout is too slow for it.
+import control_unit "control_unit.circ"
+import reg_8 "reg_8.circ"
+import mar "mar.circ"
+import alu "alu.circ"
+import counter_4 "counter_4.circ"
+import tri_4 "tri_4.circ"
+import tri_8 "tri_8.circ"
+
+input cpu_clock, reset
+
+// Stands in for the OE pins Logisim leaves unconnected.
+and zero(a = reset, b = not(in = reset).out)
+
+// ---- Control ---------------------------------------------------------
+// The control unit steps on the falling clock edge, so the control word is
+// steady when the registers latch on the rising edge.
+not cu_clock(in = cpu_clock)
+// Logisim picks the opcode nibble with a Bit Selector.
+control_unit cu(reset = reset, clock = cu_clock.out, instruction_input = ir_sdata.out[4..8])
+
+wire[16] control(in = cu.data)
+wire mar_we(in = control.out[0])
+wire mar_oe(in = control.out[1])
+wire ram_store(in = control.out[2])
+wire ram_load(in = control.out[3])
+wire mdr_we(in = control.out[4])
+wire mdr_oe(in = control.out[5])
+wire pc_load(in = control.out[6])
+wire ir_we(in = control.out[7])
+wire ir_oe(in = control.out[8])
+wire pc_oe(in = control.out[9])
+wire pc_count(in = control.out[10])
+wire out_we(in = control.out[11])
+wire x_we(in = control.out[12])
+wire y_we(in = control.out[13])
+wire out_oe(in = control.out[14])
+wire alu_oe(in = control.out[15])
+
+// ---- Address bus -----------------------------------------------------
+// Driven by the program counter or by the operand nibble of IR.
+counter_4 pc_counter(d = address_bus.out, clk = cpu_clock, clr = reset, ld = pc_load.out, en = pc_count.out)
+tri_4 pc_drive(in = pc_counter.q, en = pc_oe.out)
+wire[8] ir_dout(in = ir_reg.dout)
+or address_drivers[4](a = pc_drive.out, b = ir_dout.out[0..4])
+wire[4] address_bus(in = address_drivers.out)
+
+mar cpu_mar(clock = cpu_clock, we = mar_we.out, din = address_bus.out, oe = mar_oe.out, reset = reset)
+
+// ---- External data bus -----------------------------------------------
+// RAM and MDR. MDR latches on the falling edge.
+ram mem[8, 4](addr = cpu_mar.dout, din = external_bus.out, we = ram_store.out, clk = cpu_clock)
+tri_8 mem_drive(in = mem.out, en = ram_load.out)
+
+not mdr_clock(in = cpu_clock)
+reg_8 mdr_reg(clock = mdr_clock.out, we = mdr_we.out, din = external_bus.out, reset = reset, oe = mdr_oe.out)
+
+// ---- Internal data bus -----------------------------------------------
+// IR, X, Y, OUT and the ALU.
+reg_8 ir_reg(clock = cpu_clock, we = ir_we.out, din = internal_bus.out, reset = reset, oe = ir_oe.out)
+wire[8] ir_sdata(in = ir_reg.sdata)
+
+reg_8 x_reg(clock = cpu_clock, we = x_we.out, din = internal_bus.out, reset = reset, oe = zero.out)
+reg_8 y_reg(clock = cpu_clock, we = y_we.out, din = internal_bus.out, reset = reset, oe = zero.out)
+// X and Y never drive a bus: Dout is unconnected in Logisim.
+wire[8] x_nc(in = x_reg.dout)
+wire[8] y_nc(in = y_reg.dout)
+
+alu cpu_alu(oe = alu_oe.out, reg_x = x_reg.sdata, reg_y = y_reg.sdata)
+wire carry_nc(in = cpu_alu.carry)
+
+reg_8 out_reg(clock = cpu_clock, we = out_we.out, din = internal_bus.out, reset = reset, oe = out_oe.out)
+
+// ---- Bus bridge ------------------------------------------------------
+// Two Controlled Buffers join the buses: external to internal while MDR.OE
+// is high, internal to external otherwise. Each side forwards only the other
+// side's own drivers, which keeps the pair free of a combinational loop.
+or internal_drivers[8](a = cpu_alu.dout, b = out_reg.dout)
+or external_drivers[8](a = mem_drive.out, b = mdr_reg.dout)
+tri_8 to_internal(in = external_drivers.out, en = mdr_oe.out)
+tri_8 to_external(in = internal_drivers.out, en = not(in = mdr_oe.out).out)
+or internal_all[8](a = internal_drivers.out, b = to_internal.out)
+or external_all[8](a = external_drivers.out, b = to_external.out)
+wire[8] internal_bus(in = internal_all.out)
+wire[8] external_bus(in = external_all.out)
+
+led[8] internal_data_bus(in = internal_bus.out)
+led[8] external_data_bus(in = external_bus.out)
+
+// ---- Probes ----------------------------------------------------------
+output[4] pc(in = pc_counter.q)
+output[4] mar(in = cpu_mar.sdata)
+output[8] mdr(in = mdr_reg.sdata)
+output[8] ir(in = ir_sdata.out)
+output[4] opcode(in = cu.instruction_passthrough)
+output[8] x(in = x_reg.sdata)
+output[8] y(in = y_reg.sdata)
+output[8] alu_result(in = cpu_alu.alu_result)
+output[8] out(in = out_reg.sdata)

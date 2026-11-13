@@ -1,0 +1,13 @@
+// Transparent D latch with an asynchronous clear: q follows d while en is
+// high and holds while en is low. Half of dff.circ.
+input d, en, clr
+
+and pass(a = d, b = en)
+and hold(a = state.out, b = not(in = en).out)
+// Consensus term: keeps q steady while pass hands over to hold.
+and keep(a = d, b = state.out)
+or  held(a = hold.out, b = keep.out)
+or  next(a = pass.out, b = held.out)
+and state(a = next.out, b = not(in = clr).out)
+
+output q(in = state.out)

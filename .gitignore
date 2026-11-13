@@ -3,3 +3,6 @@ zig-out/
 example/
 node_modules/
 .claude/
+
+# Files the dev playground removed (tools/playground); see DOCS/dev-playground.md
+.circ-trash/

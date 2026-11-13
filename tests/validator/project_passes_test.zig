@@ -108,6 +108,38 @@ test "project validator: E008 combinational loop through sub-circuit" {
     try std.testing.expect(found_e008);
 }
 
+test "project validator: a loop through a gated sub-circuit is sequential, not E008" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const project = try resolveProject(allocator, fixtureRoot("clean_register_feedback"));
+    var diag_list = try validator_run_project.run(allocator, &project);
+    defer diag_list.deinit(allocator);
+
+    try std.testing.expectEqual(@as(usize, 0), diag_list.items.len);
+}
+
+test "project validator: E008 follows only the transparent path of a sub-circuit" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const project = try resolveProject(allocator, fixtureRoot("E008_loop_through_bypass"));
+    var diag_list = try validator_run_project.run(allocator, &project);
+    defer diag_list.deinit(allocator);
+
+    // `ok` feeds back its gated output and passes; `bad` feeds back its
+    // pass-through output and is the one loop reported, at its feedback wire.
+    var loops: usize = 0;
+    for (diag_list.items) |d| {
+        if (d.code != .E008) continue;
+        loops += 1;
+        try std.testing.expectEqual(@as(u32, 5), d.span.start_line);
+    }
+    try std.testing.expectEqual(@as(usize, 1), loops);
+}
+
 test "project validator: W003 unused import in project" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();

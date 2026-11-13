@@ -1,0 +1,74 @@
+// CONTROL_UNIT: a step counter and five microcode units. The fetch unit
+// drives the control word for steps 0..2; from step 3 on the opcode picks the
+// unit that drives it. A unit ends its instruction by raising Carry, which
+// clears the step counter.
+//
+//   opcode 0, 1   LOAD X, LOAD Y   load_reg_unit (bit 0 picks the register)
+//   opcode 2      ADD              alu_add_unit
+//   opcode 3      STORE            mem_store_unit
+//   opcode 4      JMP              jmp_unit
+import counter_3 "counter_3.circ"
+import mem_fetch_unit "mem_fetch_unit.circ"
+import jmp_unit "jmp_unit.circ"
+import alu_add_unit "alu_add_unit.circ"
+import mem_store_unit "mem_store_unit.circ"
+import load_reg_unit "load_reg_unit.circ"
+import tri_16 "tri_16.circ"
+
+input clock, reset
+input[4] instruction_input
+
+counter_3 step(clk = clock, clr = clear.out, reset = reset)
+
+// The step passes down the chain of units.
+mem_fetch_unit fetch(instruction_step_input = step.q)
+jmp_unit jmp(instruction_step_input = fetch.instruction_step_passthrough)
+alu_add_unit add(instruction_step_input = jmp.instruction_step_passthrough)
+mem_store_unit store(instruction_step_input = add.instruction_step_passthrough)
+load_reg_unit load(
+    instruction_step_input = store.instruction_step_passthrough,
+    register_selector = instruction_input[0]
+)
+// The last unit's passthrough is unconnected in Logisim.
+wire[3] step_nc(in = load.instruction_step_passthrough)
+
+// Opcode decode.
+and is_jmp(a = not(in = instruction_input[3]).out, b = instruction_input[2])
+and has_bit_1(a = not(in = is_jmp.out).out, b = instruction_input[1])
+and is_add(a = not(in = instruction_input[0]).out, b = has_bit_1.out)
+and is_store(a = has_bit_1.out, b = instruction_input[0])
+and is_load(
+    a = and(a = not(in = instruction_input[1]).out, b = not(in = instruction_input[2]).out).out,
+    b = not(in = instruction_input[3]).out
+)
+
+// One unit at a time drives the control word.
+not run_fetch(in = fetch.carry)
+and run_jmp(a = fetch.carry, b = is_jmp.out)
+and run_add(a = fetch.carry, b = is_add.out)
+and run_store(a = fetch.carry, b = is_store.out)
+and run_load(a = fetch.carry, b = is_load.out)
+
+tri_16 fetch_word(in = fetch.data, en = run_fetch.out)
+tri_16 jmp_word(in = jmp.data, en = run_jmp.out)
+tri_16 add_word(in = add.data, en = run_add.out)
+tri_16 store_word(in = store.data, en = run_store.out)
+tri_16 load_word(in = load.data, en = run_load.out)
+or word_fj[16](a = fetch_word.out, b = jmp_word.out)
+or word_as[16](a = add_word.out, b = store_word.out)
+or word_fjas[16](a = word_fj.out, b = word_as.out)
+or word[16](a = word_fjas.out, b = load_word.out)
+
+// The running unit's Carry clears the step counter. Logisim also drives this
+// net from Reset; here reset goes to the counter directly (see counter_3.circ).
+and jmp_done(a = jmp.carry, b = run_jmp.out)
+and add_done(a = add.carry, b = run_add.out)
+and store_done(a = store.carry, b = run_store.out)
+and load_done(a = load.carry, b = run_load.out)
+or done_ja(a = jmp_done.out, b = add_done.out)
+or done_sl(a = store_done.out, b = load_done.out)
+or done(a = done_ja.out, b = done_sl.out)
+wire clear(in = done.out)
+
+output[4] instruction_passthrough(in = instruction_input)
+output[16] data(in = word.out)
