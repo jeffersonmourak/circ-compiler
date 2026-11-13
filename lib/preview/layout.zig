@@ -8,6 +8,8 @@ pub const PortCoord = struct {
 
 pub const PortSlot = struct {
     port_name: []const u8,
+    /// The byte a wire's `src_port` or `dst_port` names this port by.
+    port: u8 = 0,
     coord: PortCoord,
 };
 
@@ -26,7 +28,13 @@ pub const PlacedComponent = struct {
     width: u32,
     height: u32,
     in_ports: []const PortSlot,
+    /// The first (for a primitive, the only) output port.
     out_port: PortCoord,
+    /// Every output port: none for a sink, one per declared output for a
+    /// chip, one for anything else.
+    out_ports: []const PortSlot = &.{},
+    /// A chip that draws its port names inside its box.
+    port_labels: bool = false,
     /// Signal bit-width carried by this component, threaded from the
     /// topology's per-component width byte. Renderers append a `[N]`
     /// annotation to the pin label when this is > 1. Default 1 so
@@ -90,7 +98,7 @@ test "layout: public types compile and have expected fields" {
         std.debug.assert(port_coord_info.fields.len == 2);
 
         const placed_info = @typeInfo(PlacedComponent).@"struct";
-        std.debug.assert(placed_info.fields.len == 12);
+        std.debug.assert(placed_info.fields.len == 14);
 
         const layout_grid_info = @typeInfo(LayoutGrid).@"struct";
         std.debug.assert(layout_grid_info.fields.len == 4);

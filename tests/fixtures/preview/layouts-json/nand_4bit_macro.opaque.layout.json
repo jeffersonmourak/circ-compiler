@@ -2,10 +2,10 @@
   "width": 38,
   "height": 7,
   "components": [
-    { "id": 0, "kind": { "tag": "primitive", "kind": 0 }, "name": "a", "x": 0, "y": 0, "width": 8, "height": 3, "inPorts": [], "outPort": { "x": 8, "y": 1 }, "bitWidth": 4 },
-    { "id": 1, "kind": { "tag": "primitive", "kind": 0 }, "name": "b", "x": 0, "y": 4, "width": 8, "height": 3, "inPorts": [], "outPort": { "x": 8, "y": 5 }, "bitWidth": 4 },
-    { "id": 2, "kind": { "tag": "primitive", "kind": 5 }, "name": "out", "x": 28, "y": 1, "width": 10, "height": 3, "inPorts": [{ "portName": "in", "coord": { "x": 27, "y": 2 } }], "outPort": { "x": 38, "y": 2 }, "bitWidth": 4 },
-    { "id": 8, "kind": { "tag": "subcircuit", "subcircuit": "nand" }, "name": "g", "x": 13, "y": 0, "width": 10, "height": 5, "inPorts": [{ "portName": "a", "coord": { "x": 12, "y": 1 } }, { "portName": "b", "coord": { "x": 12, "y": 3 } }], "outPort": { "x": 23, "y": 2 }, "bitWidth": 1 }
+    { "id": 0, "kind": { "tag": "primitive", "kind": 0 }, "name": "a", "x": 0, "y": 0, "width": 8, "height": 3, "inPorts": [], "outPort": { "x": 8, "y": 1 }, "outPorts": [{ "portName": "out", "port": 3, "coord": { "x": 8, "y": 1 } }], "portLabels": false, "bitWidth": 4 },
+    { "id": 1, "kind": { "tag": "primitive", "kind": 0 }, "name": "b", "x": 0, "y": 4, "width": 8, "height": 3, "inPorts": [], "outPort": { "x": 8, "y": 5 }, "outPorts": [{ "portName": "out", "port": 3, "coord": { "x": 8, "y": 5 } }], "portLabels": false, "bitWidth": 4 },
+    { "id": 2, "kind": { "tag": "primitive", "kind": 5 }, "name": "out", "x": 28, "y": 1, "width": 10, "height": 3, "inPorts": [{ "portName": "in", "port": 0, "coord": { "x": 27, "y": 2 } }], "outPort": { "x": 38, "y": 2 }, "outPorts": [], "portLabels": false, "bitWidth": 4 },
+    { "id": 8, "kind": { "tag": "subcircuit", "subcircuit": "nand" }, "name": "g", "x": 13, "y": 0, "width": 10, "height": 5, "inPorts": [{ "portName": "a", "port": 1, "coord": { "x": 12, "y": 1 } }, { "portName": "b", "port": 2, "coord": { "x": 12, "y": 3 } }], "outPort": { "x": 23, "y": 2 }, "outPorts": [{ "portName": "out", "port": 3, "coord": { "x": 23, "y": 2 } }], "portLabels": false, "bitWidth": 1 }
   ],
   "wires": [
     { "srcId": 0, "srcPort": 3, "dstId": 8, "dstPort": 1, "segments": [{ "from": { "x": 8, "y": 1 }, "to": { "x": 12, "y": 1 } }] },

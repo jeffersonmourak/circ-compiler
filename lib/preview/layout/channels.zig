@@ -66,9 +66,9 @@ fn inputRow(graph: VirtualGraph, layered: LayeredGraph, coords: Coords, ni: u32,
 }
 
 /// Absolute row of a node's output port (a dummy's own row).
-fn outputRow(graph: VirtualGraph, layered: LayeredGraph, coords: Coords, ni: u32) u32 {
+fn outputRow(graph: VirtualGraph, layered: LayeredGraph, coords: Coords, ni: u32, src_port: u8) u32 {
     const ln = layered.nodes[ni];
-    if (ln.real) |ri| return coords.y[ni] + ports.outputRow(graph.nodes[ri], coords.h[ni]);
+    if (ln.real) |ri| return coords.y[ni] + ports.outputRow(graph.nodes[ri], coords.h[ni], src_port);
     return coords.y[ni];
 }
 
@@ -113,7 +113,7 @@ pub fn extractNets(arena: std.mem.Allocator, graph: VirtualGraph, layered: Layer
         const sinks = sinks_of.items[i].items;
         if (sinks.len == 0) continue;
         std.mem.sort(Terminal, sinks, {}, lessTerminalByRow);
-        const src_row = outputRow(graph, layered, coords, key.src_node);
+        const src_row = outputRow(graph, layered, coords, key.src_node, key.port);
         var lo = src_row;
         var hi = src_row;
         var straight = true;
@@ -519,7 +519,7 @@ fn appendReturnLaneNets(
         const l_dst = layered.nodes[dst_node].layer;
         if (l_dst == 0) return error.BackEdgeIntoLayerZero;
         const return_row = coords.height + @as(u32, @intCast(i));
-        const src_row = outputRow(graph, layered, coords, src_node);
+        const src_row = outputRow(graph, layered, coords, src_node, o.src_port);
         const dst_row = inputRow(graph, layered, coords, dst_node, o.dst_port) orelse continue;
         if (l_src == k) {
             const sinks = try arena.alloc(Terminal, 1);

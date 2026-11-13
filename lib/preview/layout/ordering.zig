@@ -21,14 +21,22 @@ const LayerEdge = types.LayerEdge;
 const Ordering = types.Ordering;
 const RowAssignment = types.RowAssignment;
 
+const End = union(enum) { source: u8, sink: u8 };
+
 /// Sort key of an edge end inside its layer: the node's position, then the
-/// port's slot on that node (0 for an output, a dummy, or an unknown port).
-fn endKey(graph: VirtualGraph, layered: LayeredGraph, pos: []const u32, node: u32, dst_port: ?u8) u64 {
+/// port's slot on that node (0 for a dummy or an unknown port; a chip's
+/// outputs count down its right edge as its inputs do its left).
+fn endKey(graph: VirtualGraph, layered: LayeredGraph, pos: []const u32, node: u32, end: End) u64 {
     const ln = layered.nodes[node];
     var slot_idx: u32 = 0;
-    if (dst_port) |dp| {
-        if (ln.real) |ri| {
-            if (ports.slotIndex(graph.nodes[ri], dp)) |s| slot_idx = s;
+    if (ln.real) |ri| {
+        switch (end) {
+            .sink => |dp| if (ports.slotIndex(graph.nodes[ri], dp)) |s| {
+                slot_idx = s;
+            },
+            .source => |sp| for (graph.nodes[ri].out_slots, 0..) |s, i| {
+                if (s.port == sp) slot_idx = @intCast(i);
+            },
         }
     }
     return @as(u64, pos[node]) * ports.SLOT_KEY_BASE + slot_idx;
@@ -40,8 +48,8 @@ fn countBilayer(arena: std.mem.Allocator, graph: VirtualGraph, layered: LayeredG
     for (layered.edges) |e| {
         if (layered.nodes[e.src].layer != l) continue;
         try scratch.append(arena, .{
-            endKey(graph, layered, pos, e.src, null),
-            endKey(graph, layered, pos, e.dst, e.dst_port),
+            endKey(graph, layered, pos, e.src, .{ .source = e.src_port }),
+            endKey(graph, layered, pos, e.dst, .{ .sink = e.dst_port }),
         });
     }
     var n: u64 = 0;
@@ -191,8 +199,8 @@ fn sweepLayer(
         for (edges) |ei| {
             const e = layered.edges[ei];
             b.sum += switch (dir) {
-                .down => endKey(graph, layered, pos, e.src, null),
-                .up => endKey(graph, layered, pos, e.dst, e.dst_port),
+                .down => endKey(graph, layered, pos, e.src, .{ .source = e.src_port }),
+                .up => endKey(graph, layered, pos, e.dst, .{ .sink = e.dst_port }),
             };
             b.count += 1;
         }

@@ -12,19 +12,13 @@ const types = @import("layout_types");
 
 const VirtualNode = types.VirtualNode;
 
-pub const Slot = struct {
-    name: []const u8,
-    /// The `dst_port` byte as `full_format.PortName`.
-    port: u8,
-    /// Row offset from the box's top edge.
-    row: u32,
-};
+pub const Slot = types.Slot;
 
-/// No node exposes more input ports than this (`ram` has four).
-pub const MAX_INPUTS: u32 = 4;
+/// No node exposes more input ports than this: a port index fits a byte.
+pub const MAX_INPUTS: u32 = 256;
 /// Multiplier that keeps a neighbour's position and its port slot in one
 /// integer key (`pos * SLOT_KEY_BASE + slot`); must exceed `MAX_INPUTS`.
-pub const SLOT_KEY_BASE: u32 = 16;
+pub const SLOT_KEY_BASE: u32 = 512;
 
 comptime {
     std.debug.assert(SLOT_KEY_BASE > MAX_INPUTS);
@@ -40,16 +34,9 @@ const IN_1 = [_]Slot{slot("in", .in, 1)};
 const AND_AB = [_]Slot{ slot("a", .a, 1), slot("b", .b, 3) };
 const ROM_ADDR = [_]Slot{slot("addr", .addr, 1)};
 const RAM_4 = [_]Slot{ slot("addr", .addr, 1), slot("din", .din, 3), slot("we", .we, 5), slot("clk", .clk, 7) };
-const SUB_A = [_]Slot{slot("a", .a, 1)};
-const SUB_IN = [_]Slot{slot("in", .in, 1)};
-const SUB_B = [_]Slot{slot("b", .b, 1)};
-const SUB_A_IN = [_]Slot{ slot("a", .a, 1), slot("in", .in, 3) };
-const SUB_A_B = [_]Slot{ slot("a", .a, 1), slot("b", .b, 3) };
-const SUB_IN_B = [_]Slot{ slot("in", .in, 1), slot("b", .b, 3) };
-const SUB_A_IN_B = [_]Slot{ slot("a", .a, 1), slot("in", .in, 3), slot("b", .b, 5) };
 
-/// The node's input ports in border order (top to bottom). Static slices —
-/// nothing is allocated.
+/// The node's input ports in border order (top to bottom). Nothing is
+/// allocated: a primitive's are static, a chip's live on the node.
 pub fn inputSlots(node: VirtualNode) []const Slot {
     return switch (node.kind) {
         .primitive => |p| switch (p) {
@@ -61,26 +48,8 @@ pub fn inputSlots(node: VirtualNode) []const Slot {
             // Collapsed in stage 1; never placed.
             .wire, .slice, .concat => &.{},
         },
-        .subcircuit => blk: {
-            // Active inputs land on consecutive non-corner border rows in
-            // canonical order a, in, b (place.zig's rule).
-            var has_in = false;
-            var has_a = false;
-            var has_b = false;
-            for (node.inputs) |edge| {
-                if (edge.dst_port == @intFromEnum(P.in)) has_in = true;
-                if (edge.dst_port == @intFromEnum(P.a)) has_a = true;
-                if (edge.dst_port == @intFromEnum(P.b)) has_b = true;
-            }
-            if (has_a and has_in and has_b) break :blk &SUB_A_IN_B;
-            if (has_a and has_in) break :blk &SUB_A_IN;
-            if (has_a and has_b) break :blk &SUB_A_B;
-            if (has_in and has_b) break :blk &SUB_IN_B;
-            if (has_a) break :blk &SUB_A;
-            if (has_in) break :blk &SUB_IN;
-            if (has_b) break :blk &SUB_B;
-            break :blk &.{};
-        },
+        // Stage 1 lists a chip's declared inputs, in declaration order.
+        .subcircuit => node.in_slots,
     };
 }
 
@@ -94,10 +63,10 @@ pub fn slotIndex(node: VirtualNode, dst_port: u8) ?u8 {
     return null;
 }
 
-/// Row offset of the output port from the box's top edge, given the box
-/// height (`ram` and subcircuits centre it; everything else is row 1 or, for
-/// `and`, row 2).
-pub fn outputRow(node: VirtualNode, height: u32) u32 {
+/// Row offset of the output port `src_port` from the box's top edge, given
+/// the box height (`ram` centres it; a chip looks it up among its outputs
+/// and centres an unknown one; everything else is row 1 or, for `and`, row 2).
+pub fn outputRow(node: VirtualNode, height: u32, src_port: u8) u32 {
     return switch (node.kind) {
         .primitive => |p| switch (p) {
             .and_gate => 2,
@@ -107,7 +76,12 @@ pub fn outputRow(node: VirtualNode, height: u32) u32 {
             .output_pin, .led => height / 2,
             .wire, .slice, .concat => height / 2,
         },
-        .subcircuit => height / 2,
+        .subcircuit => blk: {
+            for (node.out_slots) |s| {
+                if (s.port == src_port) break :blk s.row;
+            }
+            break :blk height / 2;
+        },
     };
 }
 

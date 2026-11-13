@@ -58,7 +58,7 @@ The render path is fully in-memory: parse → resolve → translate → topology
 | `not_gate` | `╭───╮` / `┤NOT├○` / `╰───╯` — input `┤` left, output `├○` right | 5×3 |
 | `and_gate` | `╭───╮` / `┤   │` / `│AND├○` / `┤   │` / `╰───╯` — two stacked input ports flanking the label row | 5×5 |
 | `led` | `╭───╮` / `┤LED│` / `╰───╯` — input port `┤` on the left edge like every sink; a multi-bit LED shows `0x?` (one `?` per nibble) or, with `--expand-display`, one `·` per bit | 5×3 (wider for the multi-bit labels) |
-| `subcircuit` (opaque) | `╭─...─╮` / `┤     │` / `│[<sub>:<alias>]├○` / `┤     │` / `╰─...─╯` — width grows to fit the label, one input port per odd border row | max(8, label width + 2) × (2·inputs + 1, at least 3) |
+| `subcircuit` (opaque) | `╭─...─╮` / `┤     │` / `│[<sub>:<alias>]├○` / `┤     │` / `╰─...─╯` — one input port per declared input and one output port per declared output, each on every other border row; an imported chip also names each port inside its border (see below) | wide enough for the label and the port names × (2·max(inputs, outputs) + 1, at least 3) |
 | `rom` | `╭─...─╮` / `┤ rom <name>[W,A] ├○` / `╰─...─╯` — one input port `addr` | (label width + 4) × 3 |
 | `ram` | same label as `rom`; input ports `addr`, `din`, `we`, `clk` on rows 1, 3, 5, 7 | (label width + 4) × 9 |
 
@@ -99,6 +99,20 @@ The preview is static, so it never knows a signal's value; an LED's label depend
 | `0x?…?` (one `?` per nibble) | width > 1 (default) |
 | `····` (one `·` per bit, LSB left) | width 2..7 with `--expand-display`; width 8 or more keeps the hex form and warns once on stderr |
 
+### Imported chips
+
+A box has one pin for every input and every output its subcircuit declares, in declaration order. Inputs take every other row down the left edge; outputs do the same down the right edge, centred on the box. A box whose ports are a gate's (inputs among `a`, `in`, and `b`; the one output `out`) reads as a gate and carries no names, which is every built-in macro. Any other box names each port beside its pin:
+
+```
+╭───╮       ╭────────────────╮
+│ a ├○─────▶┤a            sum├○╮
+╰───╯       │[half_adder:ha1]│ │
+        ╭──▶┤b          carry├○┼───▶
+╭───╮   │   ╰────────────────╯ │
+│ b ├○──╯                      ╰───▶
+╰───╯
+```
+
 ## Macro modes
 
 Built-in macros (`or`, `nand`, `nor`, `xor`, `xnor`) and user-imported subcircuits expand into primitive gates during compilation. The renderer can display them two ways:
@@ -134,6 +148,6 @@ Every stage is deterministic: the same topology produces byte-identical output. 
 ## Known limitations
 
 - The `--color` flag has no effect outside `--preview` mode (no other mode renders to a terminal). It's accepted in any mode but harmlessly stored.
-- **A macro input port the topology cannot name is drawn as one port.** The collapse stage maps every subcircuit input whose name is not `a`, `in`, or `b` onto `in`, so a parametric macro with inputs such as `data` and `select` receives two wires on one port cell; the two rails necessarily share that cell (a `●` merge in the picture). The six such fixtures are the only rows of `layout-invariants.golden` with a non-zero I1/I2, exempted by name of the cause, not of the fixture.
+- **A bus joined from several chips shows one driver.** The collapse stage folds a concat away and keeps the last of its operands as the source, so of eight one-bit chips feeding an eight-bit output only the last is wired to it in the picture; the other seven show an output pin with no wire. The canvas in `circ-renderer` draws the concat as a box and shows every operand.
 - Dense circuits get taller and wider than they did under the fixed-gutter layout: every wire now owns its cells, a gap is as wide as its track count, and a return lane adds a row per back edge (`stress_grid_10x10` is 47×599 cells). The layout has no wrapping and no height cap.
 - A `+` glyph in the rendered output indicates a routed cell with no connecting neighbours — a router bug rather than a stylistic fallback. If one appears, check the relevant fixture against the goldens under `tests/fixtures/preview/renders/`.
