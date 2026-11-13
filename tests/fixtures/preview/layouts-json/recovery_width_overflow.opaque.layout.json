@@ -2,7 +2,7 @@
   "width": 10,
   "height": 3,
   "components": [
-    { "id": 0, "kind": { "tag": "primitive", "kind": 0 }, "name": "b", "x": 0, "y": 0, "width": 10, "height": 3, "inPorts": [], "outPort": { "x": 10, "y": 1 }, "bitWidth": 255 }
+    { "id": 0, "kind": { "tag": "primitive", "kind": 0 }, "name": "b", "x": 0, "y": 0, "width": 10, "height": 3, "inPorts": [], "outPort": { "x": 10, "y": 1 }, "outPorts": [{ "portName": "out", "port": 3, "coord": { "x": 10, "y": 1 } }], "portLabels": false, "bitWidth": 255 }
   ],
   "wires": []
 }

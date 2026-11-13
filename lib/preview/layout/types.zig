@@ -16,6 +16,38 @@ pub const OutputEdge = struct {
     dst_port: u8,
 };
 
+/// One port of a node: its name, the port byte wires address it by, and its
+/// row offset from the box's top edge.
+pub const Slot = struct {
+    name: []const u8,
+    port: u8,
+    row: u32,
+};
+
+/// A collapsed chip's port bytes. A port named like a primitive port keeps
+/// that port's `full_format.PortName` byte; any other takes
+/// `CHIP_PORT_BASE` plus its index among the chip's inputs (or outputs), so
+/// the two never collide.
+pub const CHIP_PORT_BASE: u8 = 16;
+
+/// Height in rows of a chip box with this many inputs and outputs: one port
+/// on every other row, starting under the top border.
+pub fn chipHeight(n_in: usize, n_out: usize) u32 {
+    const n: u32 = @intCast(@max(n_in, n_out));
+    return if (n <= 1) 3 else 2 * n + 1;
+}
+
+/// Inputs take every other row from the top; outputs do the same, centred
+/// on the box, so a lone output sits on the middle row as a gate's does.
+pub fn assignChipRows(ins: []Slot, outs: []Slot) void {
+    const h = chipHeight(ins.len, outs.len);
+    for (ins, 0..) |*s, i| s.row = @intCast(2 * i + 1);
+    if (outs.len == 0) return;
+    const span: u32 = @intCast(2 * outs.len - 1);
+    const first = (h - span) / 2;
+    for (outs, 0..) |*s, j| s.row = first + @as(u32, @intCast(2 * j));
+}
+
 pub const VirtualNode = struct {
     id: u32,
     kind: NodeKind,
@@ -30,6 +62,15 @@ pub const VirtualNode = struct {
     /// Address width of a memory node (from the topology's `Aux.memory`);
     /// 0 for every other kind.
     addr_width: u8 = 0,
+    /// A collapsed chip's declared inputs and outputs, in declaration order
+    /// (stage 1 fills them); empty for a primitive, whose ports are fixed
+    /// by its kind (`ports.zig`).
+    in_slots: []const Slot = &.{},
+    out_slots: []const Slot = &.{},
+    /// The chip draws its port names inside its box. False for a chip
+    /// shaped like a built-in gate (inputs among `a`, `in`, `b`; one
+    /// output `out`), which reads as a gate without them.
+    port_labels: bool = false,
 };
 
 pub const VirtualGraph = struct {
@@ -189,7 +230,7 @@ pub const RoutePlan = struct {
 
 test "types: pipeline structs compile" {
     comptime {
-        std.debug.assert(@typeInfo(VirtualNode).@"struct".fields.len == 8);
+        std.debug.assert(@typeInfo(VirtualNode).@"struct".fields.len == 11);
         std.debug.assert(@typeInfo(VirtualGraph).@"struct".fields.len == 2);
         std.debug.assert(@typeInfo(ColumnAssignment).@"struct".fields.len == 2);
         std.debug.assert(@typeInfo(RowAssignment).@"struct".fields.len == 2);

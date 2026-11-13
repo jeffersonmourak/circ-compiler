@@ -2,10 +2,10 @@
   "width": 24,
   "height": 9,
   "components": [
-    { "id": 0, "kind": { "tag": "primitive", "kind": 1 }, "name": "n1", "x": 6, "y": 0, "width": 5, "height": 3, "inPorts": [{ "portName": "in", "coord": { "x": 5, "y": 1 } }], "outPort": { "x": 11, "y": 1 }, "bitWidth": 1 },
-    { "id": 2, "kind": { "tag": "primitive", "kind": 1 }, "name": "n2", "x": 16, "y": 0, "width": 5, "height": 3, "inPorts": [{ "portName": "in", "coord": { "x": 15, "y": 1 } }], "outPort": { "x": 21, "y": 1 }, "bitWidth": 1 },
-    { "id": 4, "kind": { "tag": "primitive", "kind": 1 }, "name": "n3", "x": 6, "y": 4, "width": 5, "height": 3, "inPorts": [{ "portName": "in", "coord": { "x": 5, "y": 5 } }], "outPort": { "x": 11, "y": 5 }, "bitWidth": 1 },
-    { "id": 6, "kind": { "tag": "primitive", "kind": 1 }, "name": "n4", "x": 16, "y": 4, "width": 5, "height": 3, "inPorts": [{ "portName": "in", "coord": { "x": 15, "y": 5 } }], "outPort": { "x": 21, "y": 5 }, "bitWidth": 1 }
+    { "id": 0, "kind": { "tag": "primitive", "kind": 1 }, "name": "n1", "x": 6, "y": 0, "width": 5, "height": 3, "inPorts": [{ "portName": "in", "port": 0, "coord": { "x": 5, "y": 1 } }], "outPort": { "x": 11, "y": 1 }, "outPorts": [{ "portName": "out", "port": 3, "coord": { "x": 11, "y": 1 } }], "portLabels": false, "bitWidth": 1 },
+    { "id": 2, "kind": { "tag": "primitive", "kind": 1 }, "name": "n2", "x": 16, "y": 0, "width": 5, "height": 3, "inPorts": [{ "portName": "in", "port": 0, "coord": { "x": 15, "y": 1 } }], "outPort": { "x": 21, "y": 1 }, "outPorts": [{ "portName": "out", "port": 3, "coord": { "x": 21, "y": 1 } }], "portLabels": false, "bitWidth": 1 },
+    { "id": 4, "kind": { "tag": "primitive", "kind": 1 }, "name": "n3", "x": 6, "y": 4, "width": 5, "height": 3, "inPorts": [{ "portName": "in", "port": 0, "coord": { "x": 5, "y": 5 } }], "outPort": { "x": 11, "y": 5 }, "outPorts": [{ "portName": "out", "port": 3, "coord": { "x": 11, "y": 5 } }], "portLabels": false, "bitWidth": 1 },
+    { "id": 6, "kind": { "tag": "primitive", "kind": 1 }, "name": "n4", "x": 16, "y": 4, "width": 5, "height": 3, "inPorts": [{ "portName": "in", "port": 0, "coord": { "x": 15, "y": 5 } }], "outPort": { "x": 21, "y": 5 }, "outPorts": [{ "portName": "out", "port": 3, "coord": { "x": 21, "y": 5 } }], "portLabels": false, "bitWidth": 1 }
   ],
   "wires": [
     { "srcId": 0, "srcPort": 3, "dstId": 2, "dstPort": 0, "segments": [{ "from": { "x": 11, "y": 1 }, "to": { "x": 15, "y": 1 } }] },

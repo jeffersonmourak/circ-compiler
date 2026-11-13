@@ -33,9 +33,14 @@ pub fn drawComponent(canvas: *Canvas, placed: PlacedComponent) void {
 
 fn stampPortBorders(canvas: *Canvas, placed: PlacedComponent) void {
     const tag = colorTagFor(placed.kind);
-    // Source port: out_port lives one cell EAST of the right border, so the
-    // border cell is at (out_port.x - 1, out_port.y).
-    if (hasOutPort(placed)) {
+    // Source ports: each lives one cell EAST of the right border, so the
+    // border cell is at (x - 1, y). A component built without `out_ports`
+    // (a test literal) falls back to its single `out_port`.
+    if (placed.out_ports.len > 0) {
+        for (placed.out_ports) |slot| {
+            if (slot.coord.x >= 1) canvas.setCell(slot.coord.x - 1, slot.coord.y, "├", tag);
+        }
+    } else if (hasOutPort(placed)) {
         if (placed.out_port.x >= 1) {
             canvas.setCell(placed.out_port.x - 1, placed.out_port.y, "├", tag);
         }
@@ -126,8 +131,9 @@ pub fn drawLed(canvas: *Canvas, placed: PlacedComponent) void {
     drawLabeledBox(canvas, placed.x, placed.y, placed.width, placed.height, label, .led);
 }
 
-/// Macro box: variable W × H (height grows with input count). Border uses
-/// `╭╮╰╯─│`, label `[<sub>:<name>]` centered on the middle row. Ports replace
+/// Chip box: variable W × H (height grows with the port count). Border uses
+/// `╭╮╰╯─│`, label `[<sub>:<name>]` centered on the middle row; a chip with
+/// `port_labels` also names each port inside the border. Ports replace
 /// border cells per the renderer's wire-draw pass; this function only draws
 /// the box and label.
 pub fn drawMacroBox(canvas: *Canvas, placed: PlacedComponent, sub: []const u8) void {
@@ -161,6 +167,23 @@ pub fn drawMacroBox(canvas: *Canvas, placed: PlacedComponent, sub: []const u8) v
             col += 1;
         }
         canvas.setCell(col, mid_y, "]", tag);
+    }
+
+    if (!placed.port_labels) return;
+    // Port names, each on its port's row: inputs from the left border,
+    // outputs up to the right border. Sizing left room for them.
+    for (placed.in_ports) |slot| {
+        for (slot.port_name, 0..) |_, i| {
+            const cx = x + 1 + @as(u32, @intCast(i));
+            if (cx + 1 < x + w) canvas.setCell(cx, slot.coord.y, slot.port_name[i .. i + 1], tag);
+        }
+    }
+    for (placed.out_ports) |slot| {
+        const len: u32 = @intCast(slot.port_name.len);
+        if (len + 2 > w) continue;
+        for (slot.port_name, 0..) |_, i| {
+            canvas.setCell(x + w - 1 - len + @as(u32, @intCast(i)), slot.coord.y, slot.port_name[i .. i + 1], tag);
+        }
     }
 }
 
@@ -367,6 +390,50 @@ test "glyphs_draws_led_box" {
         \\╰───╯
         \\
     , out);
+}
+
+test "glyphs: a chip names its ports inside the border and stamps one pin each" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    const ins = [_]PortSlot{
+        .{ .port_name = "d", .port = 16, .coord = .{ .x = 0, .y = 1 } },
+        .{ .port_name = "clk", .port = 17, .coord = .{ .x = 0, .y = 3 } },
+    };
+    const outs = [_]PortSlot{
+        .{ .port_name = "q", .port = 16, .coord = .{ .x = 18, .y = 1 } },
+        .{ .port_name = "nq", .port = 17, .coord = .{ .x = 18, .y = 3 } },
+    };
+    const placed = PlacedComponent{
+        .id = 0,
+        .kind = .{ .subcircuit = "dff" },
+        .name = "r",
+        .origin = &.{},
+        .x = 1,
+        .y = 0,
+        .width = 17,
+        .height = 5,
+        .in_ports = &ins,
+        .out_port = outs[0].coord,
+        .out_ports = &outs,
+        .port_labels = true,
+    };
+
+    var canvas = try Canvas.init(a, 18, 5);
+    drawComponent(&canvas, placed);
+    var buf: std.ArrayList(u8) = .{};
+    defer buf.deinit(std.testing.allocator);
+    try canvas.writeOut(buf.writer(std.testing.allocator), false);
+
+    try std.testing.expectEqualStrings(
+        \\ ╭───────────────╮
+        \\ ┤d             q├
+        \\ │    [dff:r]    │
+        \\ ┤clk          nq├
+        \\ ╰───────────────╯
+        \\
+    , buf.items);
 }
 
 test "glyphs_draws_macro_box" {

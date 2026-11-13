@@ -16,7 +16,8 @@ const RoutedWire = layout_mod.RoutedWire;
 ///
 ///   { width, height,
 ///     components[]: { id, kind, name, x, y, width, height,
-///                     inPorts[]: { portName, coord{x,y} }, outPort{x,y}, bitWidth },
+///                     inPorts[]: { portName, port, coord{x,y} }, outPort{x,y},
+///                     outPorts[]: { portName, port, coord{x,y} }, portLabels, bitWidth },
 ///     wires[]:      { srcId, srcPort, dstId, dstPort, segments[]: { from{x,y}, to{x,y} } } }
 ///
 /// `kind` is `{"tag":"primitive","kind":<u8>}` (the wire-format numbering from
@@ -63,17 +64,24 @@ fn writeComponent(writer: anytype, comp: PlacedComponent) !void {
     try writer.print(", \"x\": {d}, \"y\": {d}, \"width\": {d}, \"height\": {d}, \"inPorts\": [", .{
         comp.x, comp.y, comp.width, comp.height,
     });
-    for (comp.in_ports, 0..) |port, i| {
-        if (i > 0) try writer.writeAll(", ");
-        try writer.writeAll("{ \"portName\": ");
-        try writeJsonString(writer, port.port_name);
-        try writer.writeAll(", \"coord\": ");
-        try writeCoord(writer, port.coord);
-        try writer.writeAll(" }");
-    }
+    try writeSlots(writer, comp.in_ports);
     try writer.writeAll("], \"outPort\": ");
     try writeCoord(writer, comp.out_port);
+    try writer.writeAll(", \"outPorts\": [");
+    try writeSlots(writer, comp.out_ports);
+    try writer.print("], \"portLabels\": {}", .{comp.port_labels});
     try writer.print(", \"bitWidth\": {d} }}", .{comp.signal_width});
+}
+
+fn writeSlots(writer: anytype, slots: []const layout_mod.PortSlot) !void {
+    for (slots, 0..) |slot, i| {
+        if (i > 0) try writer.writeAll(", ");
+        try writer.writeAll("{ \"portName\": ");
+        try writeJsonString(writer, slot.port_name);
+        try writer.print(", \"port\": {d}, \"coord\": ", .{slot.port});
+        try writeCoord(writer, slot.coord);
+        try writer.writeAll(" }");
+    }
 }
 
 fn writeWire(writer: anytype, w: RoutedWire) !void {
@@ -124,12 +132,14 @@ test "dump_json: emits the contract shape and parses back as JSON" {
     defer buf.deinit(allocator);
 
     const in_ports = [_]layout_mod.PortSlot{
-        .{ .port_name = "a", .coord = .{ .x = 9, .y = 1 } },
-        .{ .port_name = "b", .coord = .{ .x = 9, .y = 3 } },
+        .{ .port_name = "a", .port = 1, .coord = .{ .x = 9, .y = 1 } },
+        .{ .port_name = "b", .port = 2, .coord = .{ .x = 9, .y = 3 } },
     };
+    const pin_out = [_]layout_mod.PortSlot{.{ .port_name = "out", .port = 3, .coord = .{ .x = 5, .y = 1 } }};
+    const xor_out = [_]layout_mod.PortSlot{.{ .port_name = "out", .port = 3, .coord = .{ .x = 17, .y = 2 } }};
     const components = [_]PlacedComponent{
-        .{ .id = 0, .kind = .{ .primitive = .input_pin }, .name = "a", .origin = &.{}, .x = 0, .y = 0, .width = 5, .height = 3, .in_ports = &.{}, .out_port = .{ .x = 5, .y = 1 } },
-        .{ .id = 1, .kind = .{ .subcircuit = "xor" }, .name = "g", .origin = &.{}, .x = 10, .y = 0, .width = 7, .height = 5, .in_ports = &in_ports, .out_port = .{ .x = 17, .y = 2 }, .signal_width = 4 },
+        .{ .id = 0, .kind = .{ .primitive = .input_pin }, .name = "a", .origin = &.{}, .x = 0, .y = 0, .width = 5, .height = 3, .in_ports = &.{}, .out_port = .{ .x = 5, .y = 1 }, .out_ports = &pin_out },
+        .{ .id = 1, .kind = .{ .subcircuit = "xor" }, .name = "g", .origin = &.{}, .x = 10, .y = 0, .width = 7, .height = 5, .in_ports = &in_ports, .out_port = .{ .x = 17, .y = 2 }, .out_ports = &xor_out, .signal_width = 4 },
     };
     const segments = [_]layout_mod.Segment{
         .{ .from = .{ .x = 5, .y = 1 }, .to = .{ .x = 9, .y = 1 } },
@@ -146,8 +156,8 @@ test "dump_json: emits the contract shape and parses back as JSON" {
         \\  "width": 18,
         \\  "height": 5,
         \\  "components": [
-        \\    { "id": 0, "kind": { "tag": "primitive", "kind": 0 }, "name": "a", "x": 0, "y": 0, "width": 5, "height": 3, "inPorts": [], "outPort": { "x": 5, "y": 1 }, "bitWidth": 1 },
-        \\    { "id": 1, "kind": { "tag": "subcircuit", "subcircuit": "xor" }, "name": "g", "x": 10, "y": 0, "width": 7, "height": 5, "inPorts": [{ "portName": "a", "coord": { "x": 9, "y": 1 } }, { "portName": "b", "coord": { "x": 9, "y": 3 } }], "outPort": { "x": 17, "y": 2 }, "bitWidth": 4 }
+        \\    { "id": 0, "kind": { "tag": "primitive", "kind": 0 }, "name": "a", "x": 0, "y": 0, "width": 5, "height": 3, "inPorts": [], "outPort": { "x": 5, "y": 1 }, "outPorts": [{ "portName": "out", "port": 3, "coord": { "x": 5, "y": 1 } }], "portLabels": false, "bitWidth": 1 },
+        \\    { "id": 1, "kind": { "tag": "subcircuit", "subcircuit": "xor" }, "name": "g", "x": 10, "y": 0, "width": 7, "height": 5, "inPorts": [{ "portName": "a", "port": 1, "coord": { "x": 9, "y": 1 } }, { "portName": "b", "port": 2, "coord": { "x": 9, "y": 3 } }], "outPort": { "x": 17, "y": 2 }, "outPorts": [{ "portName": "out", "port": 3, "coord": { "x": 17, "y": 2 } }], "portLabels": false, "bitWidth": 4 }
         \\  ],
         \\  "wires": [
         \\    { "srcId": 0, "srcPort": 3, "dstId": 1, "dstPort": 1, "segments": [{ "from": { "x": 5, "y": 1 }, "to": { "x": 9, "y": 1 } }] }

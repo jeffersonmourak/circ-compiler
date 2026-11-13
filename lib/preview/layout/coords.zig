@@ -135,7 +135,7 @@ pub fn assign(
                 }
                 const e = layered.edges[es[0]];
                 const sink_row = inputPortRow(graph, layered, y, e.dst, e.dst_port) orelse continue;
-                const out_off = outputOffset(graph, layered, h, ni);
+                const out_off = outputOffset(graph, layered, h, ni, e.src_port);
                 if (sink_row < out_off) continue;
                 const target = sink_row - out_off;
                 if (target <= y[ni]) continue;
@@ -189,9 +189,9 @@ pub fn assign(
 }
 
 /// Row offset of a node's output port from its top (0 for a dummy).
-fn outputOffset(graph: VirtualGraph, layered: LayeredGraph, h: []const u32, ni: u32) u32 {
+fn outputOffset(graph: VirtualGraph, layered: LayeredGraph, h: []const u32, ni: u32, src_port: u8) u32 {
     const ln = layered.nodes[ni];
-    if (ln.real) |ri| return ports.outputRow(graph.nodes[ri], h[ni]);
+    if (ln.real) |ri| return ports.outputRow(graph.nodes[ri], h[ni], src_port);
     return 0;
 }
 
@@ -208,9 +208,9 @@ fn inputPortRow(graph: VirtualGraph, layered: LayeredGraph, y: []const u32, ni: 
 }
 
 /// Absolute row of a node's output port (a dummy's own row).
-fn outputPortRow(graph: VirtualGraph, layered: LayeredGraph, y: []const u32, h: []const u32, ni: u32) u32 {
+fn outputPortRow(graph: VirtualGraph, layered: LayeredGraph, y: []const u32, h: []const u32, ni: u32, src_port: u8) u32 {
     const ln = layered.nodes[ni];
-    if (ln.real) |ri| return y[ni] + ports.outputRow(graph.nodes[ri], h[ni]);
+    if (ln.real) |ri| return y[ni] + ports.outputRow(graph.nodes[ri], h[ni], src_port);
     return y[ni];
 }
 
@@ -234,12 +234,13 @@ fn preferredRow(graph: VirtualGraph, layered: LayeredGraph, ins: [][]const u32, 
         }
         const s = best_slot orelse return null;
         const e = layered.edges[best_edge];
-        const src_row = outputPortRow(graph, layered, y, h, e.src);
+        const src_row = outputPortRow(graph, layered, y, h, e.src, e.src_port);
         const port_row = ports.inputSlots(node)[s].row;
         return src_row -| port_row;
     }
     // A dummy: straight from its source.
-    return outputPortRow(graph, layered, y, h, layered.edges[edges[0]].src);
+    const first = layered.edges[edges[0]];
+    return outputPortRow(graph, layered, y, h, first.src, first.src_port);
 }
 
 /// Every node at or below row `at` moves down one row; the grid grows by one.
@@ -301,6 +302,8 @@ pub fn toPlaced(
             .height = ph,
             .in_ports = pc.in_ports,
             .out_port = pc.out_port,
+            .out_ports = pc.out_ports,
+            .port_labels = node.port_labels,
             .signal_width = node.signal_width,
             .display_label = try boxes.composeDisplayLabel(arena, node, opts),
         };

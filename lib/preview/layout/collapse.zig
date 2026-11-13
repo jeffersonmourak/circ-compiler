@@ -12,6 +12,7 @@ const VirtualGraph = types.VirtualGraph;
 const InputEdge = types.InputEdge;
 const OutputEdge = types.OutputEdge;
 const NodeKind = types.NodeKind;
+const Slot = types.Slot;
 
 const GroupKey = struct {
     alias: []const u8,
@@ -130,6 +131,46 @@ pub fn collapse(arena: std.mem.Allocator, topology: FullTopology, opts: layout.L
         }
     }
 
+    // ---------- 4b. A collapsed chip's ports ----------
+    // The chip's own pins (origin depth 1) are its ports, in declaration
+    // order. Each gets a port byte, so two inputs never share a slot and two
+    // outputs never share a pin.
+    const group_ins = try arena.alloc(std.ArrayList(Slot), group_keys.items.len);
+    const group_outs = try arena.alloc(std.ArrayList(Slot), group_keys.items.len);
+    for (group_ins) |*l| l.* = .{};
+    for (group_outs) |*l| l.* = .{};
+    var port_of_pin = std.AutoHashMap(u32, u8).init(arena);
+    for (topology.components) |comp| {
+        const group_idx = group_of_id.get(comp.id) orelse continue;
+        if (comp.origin.len != 1) continue;
+        const list = switch (comp.kind) {
+            .input_pin => &group_ins[group_idx],
+            .output_pin => &group_outs[group_idx],
+            else => continue,
+        };
+        const port = chipPortByte(comp.name, list.items.len);
+        try port_of_pin.put(comp.id, port);
+        try list.append(arena, .{ .name = comp.name, .port = port, .row = 0 });
+    }
+    for (group_ins, group_outs) |*ins, *outs| types.assignChipRows(ins.items, outs.items);
+
+    // A chip's output pin is a tap: whatever reads the output outside the
+    // chip is wired to the pin's driver inside it, not to the pin. So the
+    // port a wire leaves by is the output pin its source drives (the first,
+    // when one signal is exported twice).
+    var out_port_of_driver = std.AutoHashMap(u32, u8).init(arena);
+    for (topology.connections) |conn| {
+        if (kind_of.get(conn.to_id) != .output_pin) continue;
+        const port = port_of_pin.get(conn.to_id) orelse continue;
+        var driver = conn.from_id;
+        if (isPassthrough(driver, kind_of, is_inner_pin, opts.expand_macros)) {
+            driver = resolved_source.get(driver) orelse continue;
+        }
+        const driver_group = group_of_id.get(driver) orelse continue;
+        if (driver_group != group_of_id.get(conn.to_id).?) continue;
+        if (!out_port_of_driver.contains(driver)) try out_port_of_driver.put(driver, port);
+    }
+
     // ---------- 5. Walk connections, accumulate edges per virtual node ----------
     var node_inputs = std.AutoHashMap(u32, std.ArrayList(InputEdge)).init(arena);
     var node_outputs = std.AutoHashMap(u32, std.ArrayList(OutputEdge)).init(arena);
@@ -163,11 +204,11 @@ pub fn collapse(arena: std.mem.Allocator, topology: FullTopology, opts: layout.L
 
         // Boundary remap: when the destination is a collapsed group, the
         // raw `conn.port` describes the *internal* component's port (e.g.
-        // an input_pin's `in`), not the macro's external port. Re-key by
-        // the internal pin's name (`a`, `b`, …) so each macro input lands
-        // on a distinct slot. Same idea on the source side for completeness.
-        const dst_port = remappedPort(conn.port, conn.to_id, dst_vid, kind_of, name_of);
-        const src_port = remappedPort(SRC_PORT_OUT, effective_source, src_vid, kind_of, name_of);
+        // an input_pin's `in`), not the chip's external port. Re-key by
+        // the internal pin's port byte so each chip input lands on its own
+        // slot, and each chip output leaves from its own pin.
+        const dst_port = port_of_pin.get(conn.to_id) orelse conn.port;
+        const src_port = out_port_of_driver.get(effective_source) orelse SRC_PORT_OUT;
 
         if (node_outputs.getPtr(src_vid)) |outputs| {
             try outputs.append(arena, .{
@@ -220,6 +261,9 @@ pub fn collapse(arena: std.mem.Allocator, topology: FullTopology, opts: layout.L
             .origin = &.{},
             .inputs = inputs_list.items,
             .outputs = outputs_list.items,
+            .in_slots = group_ins[idx].items,
+            .out_slots = group_outs[idx].items,
+            .port_labels = !gateShaped(group_ins[idx].items, group_outs[idx].items),
         });
     }
 
@@ -255,22 +299,20 @@ fn isPassthrough(
     return is_inner_pin.contains(id);
 }
 
-/// When `real_id` was collapsed into a macro group (`real_id != vid`) and the
-/// underlying primitive is an `input_pin` / `output_pin` whose `name` matches a
-/// known `PortName` (`a`, `b`, `in`, `out`), return that name's port byte.
-/// Otherwise return `default_port` unchanged.
-fn remappedPort(
-    default_port: u8,
-    real_id: u32,
-    vid: u32,
-    kind_of: std.AutoHashMap(u32, full_format.ComponentKind),
-    name_of: std.AutoHashMap(u32, []const u8),
-) u8 {
-    if (real_id == vid) return default_port; // not collapsed.
-    const inner_kind = kind_of.get(real_id) orelse return default_port;
-    if (inner_kind != .input_pin and inner_kind != .output_pin) return default_port;
-    const inner_name = name_of.get(real_id) orelse return default_port;
-    return portByteFromName(inner_name) orelse default_port;
+/// The port byte of a chip pin: see `types.CHIP_PORT_BASE`.
+fn chipPortByte(name: []const u8, index: usize) u8 {
+    if (portByteFromName(name)) |known| return known;
+    return types.CHIP_PORT_BASE + @as(u8, @intCast(@min(index, 255 - @as(usize, types.CHIP_PORT_BASE))));
+}
+
+/// True for a chip with a built-in gate's ports: inputs among `a`, `in`,
+/// `b`, and the one output `out`.
+fn gateShaped(ins: []const Slot, outs: []const Slot) bool {
+    if (outs.len != 1 or !std.mem.eql(u8, outs[0].name, "out")) return false;
+    for (ins) |s| {
+        if (portByteFromName(s.name) == null or std.mem.eql(u8, s.name, "out")) return false;
+    }
+    return true;
 }
 
 fn portByteFromName(name: []const u8) ?u8 {
@@ -450,4 +492,95 @@ test "collapse_expanded_subcircuit" {
     try std.testing.expectEqual(@as(usize, 1), graph.nodes[1].outputs.len);
     try std.testing.expectEqual(@as(usize, 1), graph.nodes[2].outputs.len);
     try std.testing.expectEqual(@as(usize, 1), graph.nodes[3].inputs.len);
+}
+
+test "collapse: a chip has one port per declared pin, and a wire leaves by the output its source drives" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    // half_adder h(a, b) -> (sum, carry). The chip's pins are components 2..5;
+    // its output pins are taps, so the leds outside read the gates (6, 7).
+    const o = [_]OriginFrame{.{ .alias = "h", .subcircuit = "half_adder", .target_file = 1 }};
+    const in: u8 = @intFromEnum(full_format.PortName.in);
+    const pa: u8 = @intFromEnum(full_format.PortName.a);
+    const pb: u8 = @intFromEnum(full_format.PortName.b);
+    const components = [_]FullComponentRecord{
+        .{ .id = 0, .kind = .input_pin, .width = 1, .name = "x", .origin = &.{} },
+        .{ .id = 1, .kind = .input_pin, .width = 1, .name = "y", .origin = &.{} },
+        .{ .id = 2, .kind = .input_pin, .width = 1, .name = "a", .origin = &o },
+        .{ .id = 3, .kind = .input_pin, .width = 1, .name = "b", .origin = &o },
+        .{ .id = 4, .kind = .output_pin, .width = 1, .name = "sum", .origin = &o },
+        .{ .id = 5, .kind = .output_pin, .width = 1, .name = "carry", .origin = &o },
+        .{ .id = 6, .kind = .not_gate, .width = 1, .name = "s", .origin = &o },
+        .{ .id = 7, .kind = .and_gate, .width = 1, .name = "c", .origin = &o },
+        .{ .id = 8, .kind = .led, .width = 1, .name = "ls", .origin = &.{} },
+        .{ .id = 9, .kind = .led, .width = 1, .name = "lc", .origin = &.{} },
+    };
+    const connections = [_]FullConnectionRecord{
+        .{ .from_id = 0, .to_id = 2, .port = in },
+        .{ .from_id = 1, .to_id = 3, .port = in },
+        .{ .from_id = 2, .to_id = 6, .port = in },
+        .{ .from_id = 2, .to_id = 7, .port = pa },
+        .{ .from_id = 3, .to_id = 7, .port = pb },
+        .{ .from_id = 6, .to_id = 4, .port = in },
+        .{ .from_id = 7, .to_id = 5, .port = in },
+        .{ .from_id = 6, .to_id = 8, .port = in },
+        .{ .from_id = 7, .to_id = 9, .port = in },
+    };
+    const graph = try collapse(a, .{ .components = &components, .connections = &connections }, .{});
+    const chip = graph.nodes[graph.nodes.len - 1];
+    try std.testing.expect(chip.kind == .subcircuit);
+
+    // Declaration order; `a` and `b` keep the gate bytes, the outputs take
+    // the chip range; two outputs on rows 1 and 3 of a five-row box.
+    try std.testing.expectEqual(@as(usize, 2), chip.in_slots.len);
+    try std.testing.expectEqualStrings("a", chip.in_slots[0].name);
+    try std.testing.expectEqual(pa, chip.in_slots[0].port);
+    try std.testing.expectEqual(pb, chip.in_slots[1].port);
+    try std.testing.expectEqual(@as(usize, 2), chip.out_slots.len);
+    try std.testing.expectEqualStrings("sum", chip.out_slots[0].name);
+    try std.testing.expectEqual(types.CHIP_PORT_BASE, chip.out_slots[0].port);
+    try std.testing.expectEqual(types.CHIP_PORT_BASE + 1, chip.out_slots[1].port);
+    try std.testing.expectEqual(@as(u32, 1), chip.out_slots[0].row);
+    try std.testing.expectEqual(@as(u32, 3), chip.out_slots[1].row);
+    try std.testing.expect(chip.port_labels);
+
+    // x lands on `a`, y on `b`; each led reads its own output port.
+    try std.testing.expectEqual(pa, graph.nodes[0].outputs[0].dst_port);
+    try std.testing.expectEqual(pb, graph.nodes[1].outputs[0].dst_port);
+    try std.testing.expectEqual(@as(usize, 2), chip.outputs.len);
+    try std.testing.expectEqual(types.CHIP_PORT_BASE, chip.outputs[0].src_port);
+    try std.testing.expectEqual(@as(u32, 8), chip.outputs[0].dst_id);
+    try std.testing.expectEqual(types.CHIP_PORT_BASE + 1, chip.outputs[1].src_port);
+    try std.testing.expectEqual(@as(u32, 9), chip.outputs[1].dst_id);
+}
+
+test "collapse: a chip shaped like a gate keeps a gate's ports and draws no names" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    const o = [_]OriginFrame{.{ .alias = "g", .subcircuit = "xor", .target_file = 1 }};
+    const in: u8 = @intFromEnum(full_format.PortName.in);
+    const components = [_]FullComponentRecord{
+        .{ .id = 0, .kind = .input_pin, .width = 1, .name = "a", .origin = &o },
+        .{ .id = 1, .kind = .input_pin, .width = 1, .name = "b", .origin = &o },
+        .{ .id = 2, .kind = .output_pin, .width = 1, .name = "out", .origin = &o },
+        .{ .id = 3, .kind = .and_gate, .width = 1, .name = "n", .origin = &o },
+        .{ .id = 4, .kind = .led, .width = 1, .name = "l", .origin = &.{} },
+    };
+    const connections = [_]FullConnectionRecord{
+        .{ .from_id = 0, .to_id = 3, .port = @intFromEnum(full_format.PortName.a) },
+        .{ .from_id = 1, .to_id = 3, .port = @intFromEnum(full_format.PortName.b) },
+        .{ .from_id = 3, .to_id = 2, .port = in },
+        .{ .from_id = 3, .to_id = 4, .port = in },
+    };
+    const graph = try collapse(a, .{ .components = &components, .connections = &connections }, .{});
+    const chip = graph.nodes[graph.nodes.len - 1];
+    try std.testing.expect(!chip.port_labels);
+    // One output, centred on a five-row box, by the `out` byte.
+    try std.testing.expectEqual(@as(usize, 1), chip.out_slots.len);
+    try std.testing.expectEqual(@as(u32, 2), chip.out_slots[0].row);
+    try std.testing.expectEqual(SRC_PORT_OUT, chip.outputs[0].src_port);
 }

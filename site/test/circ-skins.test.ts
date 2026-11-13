@@ -37,12 +37,13 @@ function valueOf(sig: Signal, width: number): BitValue {
 
 const X = 2;
 const Y = 2;
-const port = (name: string, dy: number) => ({ portName: name, coord: { x: X - 1, y: Y + dy } });
+const port = (name: string, dy: number) => ({ portName: name, port: 0, coord: { x: X - 1, y: Y + dy } });
 const prim = (kind: ComponentKind) => ({ tag: 'primitive' as const, kind });
 
 /** One fixed component per kind the site registers a skin for. */
 function component(kind: string, bitWidth: number): PlacedComponent {
-  const base = { id: 7, origin: [], x: X, y: Y, bitWidth };
+  // `outPorts` is left empty: a skin falls back to the single `outPort`.
+  const base = { id: 7, origin: [], x: X, y: Y, bitWidth, outPorts: [], portLabels: false };
   switch (kind) {
     case 'input_pin':
       return { ...base, kind: prim(ComponentKind.InputPin), name: 'a', width: 5, height: 3, inPorts: [], outPort: { x: X + 5, y: Y + 1 } };
@@ -318,6 +319,48 @@ describe('circ-skins', () => {
     }
   });
 
+  test('a chip draws one tail per output, in that output\'s colour, and names its ports', () => {
+    // half_adder with a = b = 1: `sum` is low and `carry` is high. Each
+    // output leaves by its own pin, coloured by what it carries.
+    const theme = themeWith(true);
+    const base = component('subcircuit_user', 1);
+    const c: PlacedComponent = {
+      ...base,
+      kind: { tag: 'subcircuit', subcircuit: 'half_adder' },
+      width: 18,
+      outPorts: [
+        { portName: 'sum', port: 16, coord: { x: X + 18, y: Y + 1 } },
+        { portName: 'carry', port: 17, coord: { x: X + 18, y: Y + 3 } },
+      ],
+      outPort: { x: X + 18, y: Y + 1 },
+      portLabels: true,
+    };
+    const { ctx, ops } = recordingContext(20);
+    skinFor(theme, c)({
+      ctx, theme, cell: 20, component: c,
+      inputSignals: [1, 1], outputSignal: 0,
+      inputValues: [valueOf(1, 1), valueOf(1, 1)], outputValue: valueOf(0, 1),
+      outputSignals: [0, 1], outputValues: [valueOf(0, 1), valueOf(1, 1)],
+      hovered: false,
+    });
+    // Tails come first: two inputs, then `sum` idle and `carry` active.
+    const strokes = ops.filter((op) => op[0] === 'set' && op[1] === 'strokeStyle').map((op) => op[2]);
+    expect(strokes.slice(0, 4)).toEqual([colorsDark.wireActive, colorsDark.wireActive, colorsDark.wireIdle, colorsDark.wireActive]);
+    const texts = ops.filter((op) => op[0] === 'fillText').map((op) => op[1]);
+    expect(texts).toEqual(['HALF_ADDER', 'u', 'a', 'b', 'sum', 'carry']);
+
+    // Without `portLabels` the same chip draws no names.
+    const plain = recordingContext(20);
+    skinFor(theme, { ...c, portLabels: false })({
+      ctx: plain.ctx, theme, cell: 20, component: { ...c, portLabels: false },
+      inputSignals: [1, 1], outputSignal: 0,
+      inputValues: [valueOf(1, 1), valueOf(1, 1)], outputValue: valueOf(0, 1),
+      outputSignals: [0, 1], outputValues: [valueOf(0, 1), valueOf(1, 1)],
+      hovered: false,
+    });
+    expect(plain.ops.filter((op) => op[0] === 'fillText').map((op) => op[1])).toEqual(['HALF_ADDER', 'u']);
+  });
+
   test('a bus tail is heavier and in the bus colour', () => {
     // An and gate fed by two 8-bit buses draws its input tails in wireBus at
     // 1.5× the wire weight; its 1-bit output tail stays in the signal colour.
@@ -398,7 +441,7 @@ describe('circ-skins', () => {
         ...base,
         kind: { tag: 'subcircuit', subcircuit: name },
         height: two ? 5 : 3,
-        inPorts: two ? base.inPorts : [{ portName: 'in', coord: { x: X - 1, y: Y + 1 } }],
+        inPorts: two ? base.inPorts : [{ portName: 'in', port: 0, coord: { x: X - 1, y: Y + 1 } }],
         outPort: { x: X + base.width, y: Y + (two ? 2 : 1) },
       };
       const { ctx, ops } = recordingContext(10);
@@ -529,7 +572,7 @@ describe('circ-skins', () => {
       const c: PlacedComponent = {
         ...base,
         height: 2 * n + 1,
-        inPorts: Array.from({ length: n }, (_, i) => ({ portName: `op${i}`, coord: { x: X - 1, y: Y + 1 + 2 * i } })),
+        inPorts: Array.from({ length: n }, (_, i) => ({ portName: `op${i}`, port: i, coord: { x: X - 1, y: Y + 1 + 2 * i } })),
         outPort: { x: X + 5, y: Y + Math.floor((2 * n + 1) / 2) },
       };
       const { ctx, ops } = recordingContext(10);
