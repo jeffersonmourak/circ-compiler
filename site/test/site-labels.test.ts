@@ -148,4 +148,22 @@ describe('the site calls each page one thing', () => {
     expect(mirror).toContain(`label: '${h1}'`);
     expect(mirror).not.toContain('Examples gallery');
   });
+
+  test('the markdown twin of the download page links the same release assets', () => {
+    // The page links the files the tag workflow attaches to the GitHub
+    // release. The twin once built its own names and a host path that never
+    // existed, so every link in it was dead.
+    const page = read('src', 'pages', 'download.astro');
+    const mirror = read('scripts', 'build-llm-mirror.ts');
+    const platforms = [...page.matchAll(/label: "([^"]+)",\s*ext: "([^"]*)"/g)].map((m) => [m[1], m[2]]);
+    expect(platforms.length).toBe(3);
+    for (const [label, ext] of platforms) {
+      expect(mirror).toContain(`label: '${label}', ext: '${ext}'`);
+    }
+    expect(page).toContain('`circ-compile-${tag}-${p.label}${p.ext}`');
+    expect(mirror).toContain('`circ-compile-v${version}-${p.label}${p.ext}`');
+    expect(page).toContain('`${GITHUB_REPO}/releases/download/${tag}/${file}`');
+    expect(mirror).toContain('`${GITHUB_REPO}/releases/download/v${version}/${file}`');
+    expect(mirror).not.toContain('/downloads/');
+  });
 });

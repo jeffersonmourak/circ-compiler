@@ -201,16 +201,16 @@ type Platform = {
   os: string;
   arch: string;
   label: string;
-  ext: 'tar.gz' | 'zip';
+  ext: '' | '.exe';
   minOs: string;
 };
 
 // Mirror of `src/pages/download.astro`. Same source of truth caveat as the
 // landing page applies.
 const PLATFORMS: Platform[] = [
-  { os: 'Linux', arch: 'x86_64', label: 'linux-x86_64', ext: 'tar.gz', minOs: 'Kernel 3.2+' },
-  { os: 'macOS', arch: 'aarch64 (Apple Silicon)', label: 'macos-aarch64', ext: 'tar.gz', minOs: '11 (Big Sur)' },
-  { os: 'Windows', arch: 'x86_64', label: 'windows-x86_64', ext: 'zip', minOs: '10' },
+  { os: 'Linux', arch: 'x86_64', label: 'linux-x86_64', ext: '', minOs: 'Kernel 3.2+' },
+  { os: 'macOS', arch: 'aarch64 (Apple Silicon)', label: 'macos-aarch64', ext: '', minOs: '11 (Big Sur)' },
+  { os: 'Windows', arch: 'x86_64', label: 'windows-x86_64', ext: '.exe', minOs: '10' },
 ];
 
 function readVersion(): string {
@@ -224,8 +224,10 @@ function emitDownloadTwin(): void {
   const tableHeader = '| OS | Architecture | File | Min OS |';
   const tableSep = '| --- | --- | --- | --- |';
   const tableRows = PLATFORMS.map((p) => {
-    const file = `circ-compile-${version}-${p.label}.${p.ext}`;
-    const downloadUrl = `${SITE_URL}/downloads/${file}`;
+    // The same names and URLs as src/pages/download.astro: the assets the
+    // tag workflow attaches to the GitHub release `v<VERSION>`.
+    const file = `circ-compile-v${version}-${p.label}${p.ext}`;
+    const downloadUrl = `${GITHUB_REPO}/releases/download/v${version}/${file}`;
     return `| ${p.os} | ${p.arch} | [\`${file}\`](${downloadUrl}) | ${p.minOs} |`;
   });
 
