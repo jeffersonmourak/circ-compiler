@@ -15,11 +15,13 @@ pub const AllocMetrics = struct {
 };
 
 /// `std.mem.Allocator` wrapper that counts successful `alloc()` calls and
-/// bytes. `resize`/`remap`/`free` pass straight through without counting:
-/// the backing arena treats `free` as a no-op anyway, and `std.ArrayList`
-/// growth ultimately calls `alloc()` for fresh buffers (the old buffer is
-/// abandoned in the arena), so `alloc()`-only is a faithful proxy for engine
-/// heap pressure.
+/// bytes. It refuses every `resize` and `remap`, so a buffer that grows
+/// always comes back as a fresh `alloc()`. Whether the arena can grow a
+/// buffer in place depends on how the operating system's page allocator
+/// extends a mapping, which differs between Linux and macOS; passing the
+/// request through made the counts differ by platform. Refused, the counts
+/// depend only on what the engine asks for. `free` passes through uncounted:
+/// the backing arena treats it as a no-op.
 const Counter = struct {
     inner: std.mem.Allocator,
     metrics: AllocMetrics = .{},
@@ -34,14 +36,12 @@ const Counter = struct {
         return result;
     }
 
-    fn resize(ctx: *anyopaque, mem: []u8, alignment: std.mem.Alignment, new_len: usize, ret_addr: usize) bool {
-        const self: *Counter = @ptrCast(@alignCast(ctx));
-        return self.inner.vtable.resize(self.inner.ptr, mem, alignment, new_len, ret_addr);
+    fn resize(_: *anyopaque, _: []u8, _: std.mem.Alignment, _: usize, _: usize) bool {
+        return false;
     }
 
-    fn remap(ctx: *anyopaque, mem: []u8, alignment: std.mem.Alignment, new_len: usize, ret_addr: usize) ?[*]u8 {
-        const self: *Counter = @ptrCast(@alignCast(ctx));
-        return self.inner.vtable.remap(self.inner.ptr, mem, alignment, new_len, ret_addr);
+    fn remap(_: *anyopaque, _: []u8, _: std.mem.Alignment, _: usize, _: usize) ?[*]u8 {
+        return null;
     }
 
     fn free(ctx: *anyopaque, mem: []u8, alignment: std.mem.Alignment, ret_addr: usize) void {
