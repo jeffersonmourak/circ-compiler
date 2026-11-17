@@ -2794,6 +2794,31 @@ const groups = displayGroups(catalogue, []);
           memPanel.querySelector<HTMLButtonElement>(`.pg-mem-item[data-name="${CSS.escape(mem.name)}"] .pg-mem-load`)?.focus();
         });
         buttons.appendChild(toggle);
+      } else {
+        // A ram has no image to keep, so a file goes straight into the running
+        // circuit, as `--sim`'s `load` does, and a reset drops it.
+        const picker = document.createElement('input');
+        picker.type = 'file';
+        picker.className = 'pg-mem-file';
+        picker.hidden = true;
+        picker.setAttribute('aria-label', `Load a binary image into ${mem.name}`);
+        picker.addEventListener('change', () => {
+          const chosen = picker.files?.[0];
+          // Emptied first, so choosing the same file again still fires.
+          picker.value = '';
+          if (chosen) void loadLiveImage(mem, chosen);
+        });
+        const load = document.createElement('button');
+        load.type = 'button';
+        load.className = 'pg-mem-btn pg-mem-load';
+        load.dataset.mem = 'load';
+        load.textContent = 'Load image…';
+        load.title = source.live
+          ? `Load a binary file into ${mem.name}; a reset empties it again`
+          : 'Open Live or Data to load an image into the circuit';
+        load.disabled = !source.live;
+        load.addEventListener('click', () => picker.click());
+        buttons.append(load, picker);
       }
       buttons.appendChild(save);
       controls.appendChild(buttons);
@@ -3146,6 +3171,27 @@ const groups = displayGroups(catalogue, []);
         ? `${mem.name}[${formatAddress(addr, mem.addrWidth)}] ${defined === 0n ? 'is unknown again' : 'set'}.`
         : `${mem.name} refused the write (${r.code} ${r.arg}).`;
       renderMemory({ force: true });
+    }
+
+    /** `load <mem> <path>` for the page: a chosen file's bytes, into the
+     *  running circuit. The session checks them as the compiler would, settles,
+     *  and tells the other faces. */
+    async function loadLiveImage(mem: MemorySymbol, file: File) {
+      const session = sim.session;
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      // The read is async: the circuit may have been rebuilt meanwhile.
+      if (!session || sim.session !== session || memIdOf(mem) === null) {
+        status.textContent = `${mem.name} is not running.`;
+        return;
+      }
+      const r = session.loadImage(mem.name, bytes);
+      if (r.ok) {
+        status.textContent = `Loaded ${file.name} into ${mem.name} (${r.words} word${r.words === 1 ? '' : 's'}).`;
+      } else {
+        const message = `${file.name}: ${r.arg}`;
+        status.textContent = message;
+        setMemError(mem, message);
+      }
     }
 
     /** `save <mem> <path>` for the page: the same bytes, to a download. */

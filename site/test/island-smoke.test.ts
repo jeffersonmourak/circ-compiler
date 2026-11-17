@@ -1792,6 +1792,79 @@ describe.skipIf(!hasBuild)('the built islands run', () => {
     }
   }));
 
+  test('a ram takes a binary file from the memory panel while it runs', async () => driveAsync(async (doc) => {
+    const island = (doc.querySelector('.pg') as unknown as { __playground: {
+      state: { version: LibcircVersion | null; artifact: unknown };
+      compiler: LibcircClient;
+      hooks: { onArtifact(bytes: Uint8Array | null, reason: string): void };
+      flushPipeline(): Promise<void>; getSession(): Promise<SimSession | null>;
+    } }).__playground;
+    const wasm = await instantiateLibcirc(readFileSync(resolve(SITE, 'public/wasm/libcirc.wasm')));
+    const decoder = new TextDecoder();
+    const oldInit = island.compiler.init, oldCall = island.compiler.call, oldVersion = island.state.version;
+    const previous = doc.querySelector('.pg-switch-project[aria-current="true"]')!.getAttribute('data-pick')!;
+    const click = (selector: string) => (doc.querySelector(selector) as unknown as HTMLElement).click();
+    const open = () => { if (doc.querySelector('.pg-switch')!.hasAttribute('hidden')) click('.pg-crumb'); };
+    island.compiler.init = async () => JSON.parse(decoder.decode(callVersion(wasm).bytes));
+    island.compiler.call = async (op, request) => {
+      const result = callOp(wasm, op, request);
+      return op === 'compile' && result.status === 0
+        ? { id: 1, op, status: 0, bytes: result.bytes }
+        : { id: 1, op, status: result.status, text: decoder.decode(result.bytes) };
+    };
+    island.state.version = null;
+    const DiskFile = lastWindow!.File;
+    const choose = async (name: string, bytes: number[]) => {
+      const picker = doc.querySelector('.pg-mem-buttons .pg-mem-file') as unknown as HTMLInputElement;
+      Object.defineProperty(picker, 'files', { configurable: true, value: [new DiskFile([new Uint8Array(bytes)], name)] });
+      picker.dispatchEvent(new Event('change', { bubbles: true }));
+      for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 1));
+    };
+    try {
+      open();
+      const projects = doc.querySelector('.pg-switch-picker') as unknown as HTMLInputElement;
+      const source = 'input[4] a\ninput[8] d\ninput we\ninput clk\nram data[8, 4](addr = a, din = d, we = we, clk = clk)\noutput[8] q(in = data.out)\n';
+      Object.defineProperty(projects, 'files', { configurable: true, value: [new DiskFile([source], 'ram-project.circ')] });
+      projects.dispatchEvent(new Event('change', { bubbles: true }));
+      for (let i = 0; i < 100 && projects.disabled; i++) await new Promise((r) => setTimeout(r, 1));
+      await island.flushPipeline();
+      // Truth builds a session without needing a canvas in this harness.
+      click('.pg-view-tab[data-view="truth"]');
+      await island.flushPipeline();
+      const session = (await island.getSession())!;
+      click('.pg-term-mem');
+      const load = doc.querySelector('.pg-mem-load') as unknown as HTMLButtonElement;
+      expect(load.textContent).toBe('Load image…');
+      expect(Array.from(doc.querySelectorAll('.pg-mem-tools [data-mem]'), (b) => b.getAttribute('data-mem'))).toEqual(['refresh', 'clear', 'load', 'save']);
+      expect(load.disabled).toBe(false);
+      expect(doc.querySelector('.pg-mem-hex')).toBeNull();
+
+      await choose('prog.bin', [0xab, 0xcd]);
+      expect(session.peek('data', 0n)).toMatchObject({ ok: true, value: { value: 0xabn, defined: 255n } });
+      expect(session.peek('data', 1n)).toMatchObject({ ok: true, value: { value: 0xcdn, defined: 255n } });
+      expect(session.peek('data', 2n)).toMatchObject({ ok: true, value: { defined: 0n } });
+      expect(doc.querySelector('.pg-status')?.textContent).toBe('Loaded prog.bin into data (2 words).');
+      expect(Array.from(doc.querySelectorAll('.pg-mem-cell')).slice(0, 2).map((c) => c.textContent)).toEqual(['10101011', '11001101']);
+
+      // A file the memory cannot hold is refused beside the grid, and the
+      // contents stay.
+      await choose('big.bin', new Array(17).fill(1));
+      expect(doc.querySelector('.pg-mem-error')?.textContent).toBe('big.bin: 17 words exceed capacity 16');
+      expect(session.peek('data', 0n)).toMatchObject({ ok: true, value: { value: 0xabn } });
+
+      // A reset empties a ram: the file was contents, not a preload.
+      await session.reset();
+      expect((await island.getSession())!.peek('data', 0n)).toMatchObject({ ok: true, value: { defined: 0n } });
+    } finally {
+      click('.pg-view-tab[data-view="schematic"]');
+      open(); click(`.pg-switch-project[data-pick="${previous}"]`);
+      await island.flushPipeline();
+      island.hooks.onArtifact(null, 'files-changed');
+      island.state.artifact = null; island.state.version = oldVersion;
+      island.compiler.init = oldInit; island.compiler.call = oldCall;
+    }
+  }));
+
   test('file selection rebuilds the active circuit and rejects late parent replies', async () => driveAsync(async (doc) => {
     const island = (doc.querySelector('.pg') as unknown as { __playground: {
       state: { tabs: FileTabsState; version: LibcircVersion | null; artifact: { hash: number; bytes: Uint8Array } | null; analysis: { symbols: { name: string }[] } | null };
