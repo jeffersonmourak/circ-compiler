@@ -271,10 +271,13 @@ browser having no process, no working directory and no stdin.
   err E_IO snapshot.bin: save images from the memory panel
   ```
 
-  The memory panel's `Load image…` opens the ROM file picker and hex editor;
-  `Save` downloads `<mem>.bin` with the bytes `save` would
-  write. Preloads are the memory panel's ROM images: they are applied when the
-  session is built and again on every `reset`, as `--mem` is.
+  The memory panel's `Load image…` does the work of `load`. On a ROM it opens
+  the file picker and hex editor, and the image is kept. On a RAM it opens a
+  file picker and writes the file into the running circuit; a `reset` empties
+  the RAM again, as it does after a `load`. `Save` downloads `<mem>.bin` with
+  the bytes `save` would write. Preloads are the memory panel's ROM images:
+  they are applied when the session is built and again on every `reset`, as
+  `--mem` is.
 - **`help` is a browser-only verb.** It prints the command table as `#`
   comment lines. The CLI answers `help` itself with `err E_PROTO malformed
   command`, so a copied script that contains it prints one error and goes on.
